@@ -1,0 +1,251 @@
+# 09: Implementation Phases
+
+## How to use this plan
+
+- Phases are **sequential**. Work packages (WP) **within** a phase can run in parallel unless a dependency is noted.
+- Each WP is sized for roughly one PR.
+- A phase is complete when **all its acceptance criteria (AC) pass in CI** and the **exit demo** works on a fresh `docker compose up`.
+- Every WP must satisfy the Definition of Done in [10-quality](10-quality.md) §1.
+- AC are written to be automatable. Each AC maps to at least one test, named with the AC ID: `test('AC-2.7 …')`.
+
+```
+P0 Foundations ─► P1 Auth & orgs ─► P2 List core ─► P3 Detail pane & subtasks ─► P4 PWA/offline/realtime/mobile ─► P5 Views, search, import  ══► v1.0 (switch-over)
+                                                                                                                                                  │
+   P6 Collaboration ─► P7 Notification delivery ─► P8 CLI & PATs & public API ─► P9 TUI & MCP ─► P10 Recurrence, attachments, iCal ─► P11 Hardening ══► v2.0
+```
+
+P8 depends only on v1.0. It can start in parallel with P6 and P7 if capacity allows, because it is a separate app consuming a stable API.
+
+---
+
+## Phase 0: Foundations
+
+**Goal:** an empty but production-shaped skeleton. Green CI, Docker image, design tokens, i18n, kitchen sink.
+
+| WP | Content |
+|---|---|
+| 0.1 Monorepo | pnpm workspace with catalogs, `tsconfig.base.json` (strict), Biome config, root scripts (`dev`, `build`, `test`, `lint`, `typecheck`, `gen:api`, `e2e`), `.editorconfig`, `.nvmrc` (24), and `AGENTS.md` / `CLAUDE.md` / `README.md` per the spec. |
+| 0.2 Server skeleton | `config.ts` (zod env, `_FILE` support, exit code 78), the `createApp(deps)` factory, pino with request IDs, problem+json error handler, `/healthz`, `/readyz`, `/api/v1/meta`, `/api/v1/openapi.json`, `/api/docs`, static serving of the web build with SPA fallback, `secureHeaders` with CSP, and graceful shutdown. |
+| 0.3 DB | Drizzle setup, pragmas, migration runner at boot, the pre-migration backup function, the `instance_setting` table, the `PRAGMA optimize` job, and a test helper `createTestDb()` (in-memory, migrated). |
+| 0.4 Web skeleton | Vite 8 + React 19 + TanStack Router + Query, Tailwind 4 wired to `packages/tokens`, Geist fonts, the i18n init (en/sv) with a language switch, and the `/_dev/ui` kitchen sink route (dev builds only). |
+| 0.5 Coop components v0 | Button, IconButton, Input, Checkbox (task round), Chip, Kbd, Tooltip, Popover, Menu, Toast region, Avatar, Skeleton, Sync pill: every state rendered in the kitchen sink. Brand assets: logo, favicon and app icons (03 §2.10). |
+| 0.6 packages/core | Zod schema module structure, the UUIDv7 helper, the `fractional-indexing` re-export plus helpers, and the date utilities scaffold (`today(tz)`, `formatRelative`, `dueState`) with tests. |
+| 0.7 Docker & CI | Dockerfile (multi-stage, distroless nonroot), `compose.yaml`, healthcheck, and proxy snippets. CI workflow: install → lint → typecheck → unit → build → e2e smoke → docker build. Ships a GitHub Actions file plus generic `scripts/ci.sh` so it is CI-vendor neutral. |
+
+**Acceptance criteria**
+- AC-0.1 `pnpm i && pnpm build && pnpm test && pnpm lint && pnpm typecheck` succeed on a clean clone.
+- AC-0.2 `docker compose up` with a minimal `.env` starts. `/readyz` returns 200 and `/api/docs` renders.
+- AC-0.3 A missing `ROOSTER_BASE_URL` makes the process exit with code 78 and a readable error.
+- AC-0.4 `/_dev/ui` shows every Coop v0 component in all states. The axe scan has 0 violations.
+- AC-0.5 Switching the language to Svenska changes all kitchen-sink strings, with no missing keys (the CI i18n key-parity check passes).
+- AC-0.6 The image runs as non-root, is under 200 MB, and passes the healthcheck.
+
+**Exit demo:** open the app and see a styled "Hello rooster" page in both languages.
+
+---
+
+## Phase 1: Auth, users, orgs
+
+**Goal:** sign in with Google or OIDC, get a Personal org, create and join a business org, and see orgs in the sidebar.
+
+| WP | Content |
+|---|---|
+| 1.1 better-auth | Instance config (04 §4.4), the Drizzle adapter tables plus additional fields, Google and genericOAuth from env, the session cookie, and the allowlist hook with a `/not-invited` page. |
+| 1.2 Bootstrap | The personal org plus Inbox plus default groups on user creation (localised), and the `org_member_pref` row. |
+| 1.3 Org service and API | Orgs CRUD, members, invites (email and link), accept flow, last-owner rule, personal-org restrictions, and org order. |
+| 1.4 Web shell | Login page (provider buttons from `/meta`), app frame (sidebar with org sections, collapse to rail, user menu), routing `/o/:slug/my` (empty list placeholder), org create popover (inline: name, emoji), org settings page (members, invites), and the invite accept page. |
+| 1.5 Settings | Profile (language, timezone, week start, date and time format), sessions list and revoke. |
+| 1.6 Admin | Allowlist management and the users list with disable. |
+| 1.7 Test IdP | A mock OIDC issuer for tests (`oauth2-mock-server`, or a tiny in-repo issuer) with a Playwright login fixture. |
+
+**Acceptance criteria**
+- AC-1.1 A user not on the allowlist is rejected at the OIDC callback and sees `/not-invited`. No user row is created.
+- AC-1.2 The first login creates exactly one personal org with Inbox, Today, Prio and Upcoming (Swedish names when the browser language is sv-SE).
+- AC-1.3 Owner A creates "Northwind" and invites B by link. B (not otherwise allowlisted) can sign in through the invite and becomes a member. A second use of a single-use link fails.
+- AC-1.4 The personal org rejects invites (`409 personal_org`) and cannot be deleted.
+- AC-1.5 The sidebar shows both orgs. Dragging B's org above Personal persists across reload.
+- AC-1.6 The authorisation matrix tests pass for every P1 route (10 §3.3).
+- AC-1.7 Revoking a session in Settings logs that browser out on its next request.
+
+**Exit demo:** two browsers, two users, a shared org, each with their own sidebar order.
+
+---
+
+## Phase 2: The list core (the heart)
+
+**Goal:** a fully keyboard-driven My tasks with groups, inline tasks, due dates, NL parsing, drag and drop, completion and undo, with no detail pane yet.
+
+| WP | Content | Depends on |
+|---|---|---|
+| 2.1 Data and services | `task`, `task_group` and `placement` tables; GroupService, TaskService (create, patch with LWW and field clocks, complete, delete and restore, bulk), PlacementService.reconcile, OrderingService (with rebalance), idempotency middleware, the `my-list` endpoint, the trash endpoints and the purge job. | — |
+| 2.2 Date engine | `packages/core/dates`: the NL parser EN+SV (02 §8 full table as test cases), `formatRelative` EN/SV, `dueState`, and week-start-aware helpers. A property test checks that `parse(format(d)) == d` for explicit dates. | — |
+| 2.3 List rendering | Flat row model selector, TaskRow, GroupHeader, AddRow, sticky headers, Inbox behaviour, empty states, skeletons, and "show completed". | 2.1 API types |
+| 2.4 Editing model | The Navigate/Edit modes, the keymap registry plus cheat sheet, draft rows, Enter/Shift+Enter/Backspace rules (02 §3.4–3.5), paste multi-line, title token highlighting (dates and `>Group`; `#tag` and `@` come later), and the selection and multi-select bulk bar. | 2.3 |
+| 2.5 Date popover | DateCell, DatePopover (NL input, chips, calendar, time), and commit and close rules. | 2.2, 2.3 |
+| 2.6 DnD | `useListDnd()` on dnd-kit: tasks within and between groups, collapsed-group hover-expand, group reordering with temporary collapse, multi-drag, keyboard drag, the keyboard move shortcuts, auto-scroll, live-region announcements. | 2.3 |
+| 2.7 Mutation pipeline v1 | Optimistic reducers in `packages/core/reducers`, the mutation wrapper with Idempotency-Key and edit time, the undo stack with inverse ops, and toasts. (The outbox persistence comes in P4, but the API shape is final here.) | 2.1 |
+| 2.8 Group ops | Create at the cursor (Tab+N split), colon-to-group, rename, collapse, delete popover (move or delete), and restore. | 2.4 |
+| 2.9 Backups (early safety net) | The nightly `VACUUM INTO` job with rotation, and the admin endpoints to list, create and download backups (06 §2.10). A minimal Admin → Backups page. Daily use starts in this phase, so data must be protected from day one. | 2.1 |
+
+**Acceptance criteria**
+- AC-2.1 Typing "Buy milk", Enter, "Call Bob fri", Enter, then Esc creates 2 tasks in order. The second is due on the next Friday and its title is "Call Bob". Reload preserves everything.
+- AC-2.2 Shift+Enter inserts above. Ctrl+↑/↓ reorders. Ctrl+Shift+↓ moves the task to the start of the next group. The order is identical after reload and in a second browser.
+- AC-2.3 Mouse drag of a task from Prio into a collapsed "Upcoming" (hovering expands it) lands at the indicated position. Keyboard drag (Space, arrows, Space) works, and both are announced in the live region.
+- AC-2.4 Dragging a group header reorders groups. The Inbox cannot be moved and is hidden when empty.
+- AC-2.5 Completing shows the pop animation, hides the task after 1.5 s, and offers an undo toast. Undo restores the same position. Ctrl+Z works too.
+- AC-2.6 Backspace on a fresh empty row deletes only that row, even when held down. Backspace on an empty title of a task with a description does not delete it.
+- AC-2.7 The date popover closes on a day click. "next week", "imorgon" (sv UI) and "12 okt" resolve correctly. The labels and colours match 03 §2.3 for each state (visual regression snapshot).
+- AC-2.8 Tab+N on the 2nd of 4 tasks creates a new group containing tasks 3 and 4, with the caret in the name. A single undo reverts the split.
+- AC-2.9 Deleting a non-empty group with "Move to Prio" appends its tasks to Prio in their order. "Delete tasks too" moves them to Trash, and restore brings back both the group and the tasks.
+- AC-2.10 Two concurrent `move` requests between the same neighbours produce a deterministic total order, with no duplicate positions within a group.
+- AC-2.11 Replaying an identical `Idempotency-Key` returns the same response with no duplicate effect.
+- AC-2.12 Interaction latency: with 500 tasks, keypress to paint for create, complete and move is under 50 ms on a mid-range laptop (Playwright trace budget).
+
+**Exit demo:** a user works in rooster for a day on desktop (no pane yet).
+
+---
+
+## Phase 3: Detail pane, subtasks, tags
+
+| WP | Content |
+|---|---|
+| 3.1 Pane frame | The split layout (D-29), resize, full-screen, URL sync, the follow-selection behaviour, Space peek, and save state indicators. |
+| 3.2 Properties | Due, start and time; group select; created-by info. |
+| 3.3 Description | Tiptap with `@tiptap/markdown`, the bubble toolbar, Markdown shortcuts, collapse past 12 lines, and **Markdown round-trip tests** (a corpus of 40 samples). |
+| 3.4 Subtasks | Data rules (depth limit, cycle check), inline expansion in the list (chevron, persisted), the subtask list in the pane with the same row and keyboard model, sibling reorder DnD, orphan-subtask rows with breadcrumb (reconcile rules from 05 §4.1), and the counters in parent rows. |
+| 3.5 Tags | Tag service, `#tag` token in titles with autocomplete, the tag picker popover (Tab+T / T), chips in rows, Settings → Tags (rename, recolour, merge, delete), and the tag filter in the header. |
+| 3.6 Duplicate | Ctrl+D, including subtasks. |
+
+**Acceptance criteria**
+- AC-3.1 Clicking a row body opens the pane and the URL becomes `/o/:slug/t/:id`. ↑/↓ in the list switches the pane content. Esc returns focus to the list, and Esc again closes the pane.
+- AC-3.2 A description containing a heading, nested list, checklist, code block and link survives save, reload and edit with identical Markdown.
+- AC-3.3 Expanding a parent shows its subtasks indented. Enter in a subtask creates a sibling subtask. Completing a subtask updates the parent's "2/5" counter immediately.
+- AC-3.4 Typing `#urgent` creates the tag "urgent" on first use, shows a chip, and filtering by it shows only the matching tasks.
+- AC-3.5 Setting `parent_id` to a descendant gets `422`. A depth over 5 gets `422`.
+
+---
+
+## Phase 4: PWA, offline, realtime, mobile
+
+| WP | Content |
+|---|---|
+| 4.1 Persistence | `persistQueryClient` to IndexedDB, `storage.persist()`, and cold-start rendering from the cache. |
+| 4.2 Outbox | The IndexedDB outbox, the flusher with Web Locks leader election, BroadcastChannel, backoff, the error classification of 04 §6.2, the sync pill, and the "couldn't apply" toast. |
+| 4.3 SSE | The server hub with per-user targeting, heartbeat, `hello` version; the client EventSource with reconnect, invalidation and origin-skip. |
+| 4.4 Service worker | injectManifest `sw.ts`, precache, navigation fallback, the update prompt with the outbox guard, manifest and icons, and the install prompts (Android toast, iOS tip sheet). |
+| 4.5 Mobile layout | Breakpoints, header org switcher sheet, view segmented control, bottom nav (My tasks · Search · Settings; the Inbox tab comes in P6), FAB, the accessory bar above the keyboard (`visualViewport`), 52 px rows, full-screen detail sheet with history integration, safe areas, and pull to refresh. |
+| 4.6 Gestures | Swipe right/left with configurable actions, long-press drag (350 ms, haptics), the long-press selection mode with the bulk bar, and the quick date sheet. |
+| 4.7 Tablet | The icon-rail sidebar and the overlay pane. |
+
+**Acceptance criteria**
+- AC-4.1 Load the app, go offline (Playwright `setOffline`), then reload: the app shell and My tasks for every org render from the cache.
+- AC-4.2 Offline: create 3 tasks, complete 1 and move 1 → the pill reads "Offline · 5 pending". Back online, the changes sync in order, a second device shows the result within 2 s, and there are no duplicates even if the connection drops mid-flush.
+- AC-4.3 LWW: device A (offline) renames a task at t1. Device B (online) renames it at t2 > t1. When A comes online, B's title remains and A's client converges to it after its sync.
+- AC-4.4 An op targeting a task deleted elsewhere is dropped with a toast, and the client state is corrected.
+- AC-4.5 On an iPhone 15 profile (WebKit), swipe right completes, swipe left opens the date sheet, long-press drag reorders, and the FAB creates a task with the accessory bar visible above the keyboard. Inputs are ≥ 16 px (no zoom).
+- AC-4.6 The Lighthouse PWA installability checks pass. Manifest icons, including maskable ones, are valid.
+- AC-4.7 After a deploy, an open client shows "New version available". Reload is deferred while the outbox is non-empty.
+
+---
+
+## Phase 5: Smart views, search, palette, import → **v1.0**
+
+| WP | Content |
+|---|---|
+| 5.1 Smart views | Selectors in `packages/core/views.ts` (shared with the server `?view=`), the sidebar counts, the Today / Next 7 days / Overdue / No date screens, and inline add with date inheritance and the `>Group` token. |
+| 5.2 Search | FTS5 table and service maintenance, the reindex command, and `/search`. |
+| 5.3 Command palette | The Ctrl+K panel, actions from the keymap registry, recent tasks, prefixes, and offline client-side filtering. |
+| 5.6 Export and Trash UI | JSON and Markdown export; the Trash list with restore and permanent delete. |
+| 5.7 Release | `CHANGELOG`, the 1.0.0 image, the README quick start, and the OIDC setup docs. |
+
+**Acceptance criteria**
+- AC-5.1 Today shows overdue and today tasks from all groups, each with a group chip. Creating a task there sets due = today and places it in the Inbox. Completing one there removes it from My tasks too.
+- AC-5.2 Searching "tand" finds "Boka tandläkare" (prefix match). "rapport" matches a description. Results never include tasks from orgs the user is not a member of (test).
+- AC-5.3 Ctrl+K → ">dark" shows no results gracefully. ">move" lists the move action for the selected task.
+
+**v1.0 exit demo, the switch-over:** move the open tasks over, then use rooster on desktop and the installed iPhone PWA for a week. The previous tool is no longer needed for daily use.
+
+---
+
+## Phase 6: Collaboration
+
+| WP | Content |
+|---|---|
+| 6.1 Assignment | The assignee field (Tab+A / A, `@name` token), reassignment → the other person's Inbox (placement reconcile), unassigned tasks, and the avatar in rows where relevant. |
+| 6.2 Everyone's tasks | The view, filters, inline add per member, and drag between members to reassign. |
+| 6.3 Comments and activity | Comment service, mentions (`@[Name](user:id)` storage, an autocomplete in the composer), the activity writer hooked into services, grouped rendering, and the sticky composer. |
+| 6.4 Followers | Auto-follow rules, follow/unfollow, the avatar stack. |
+| 6.5 In-app notifications | Fan-out from domain events, the `/inbox` view (plus the mobile bottom-nav Inbox tab), the bell badge via SSE, mark read and unread, and the preference matrix (in-app column). |
+| 6.6 Collaboration hidden in the personal org | FR-COL-6. |
+
+**Acceptance criteria**
+- AC-6.1 A assigns a task to B. It appears at the top of B's Inbox (live via SSE) and disappears from A's groups. B gets a notification, and A gets none (actor exclusion).
+- AC-6.2 A subtask of A's task assigned to B appears in B's list as a row with the breadcrumb "Parent ›". When the parent is later assigned to B, the separate row disappears and the subtask shows under the parent.
+- AC-6.3 Mentioning @B in a comment notifies B and makes B a follower.
+- AC-6.4 Removing B from the org unassigns B's tasks. They show under "Unassigned" in Everyone's tasks, and B's groups for that org are gone.
+
+---
+
+## Phase 7: Notification delivery
+
+| WP | Content |
+|---|---|
+| 7.1 Web Push | VAPID bootstrap, subscription management UI (per device, a test button), SW `push` and `notificationclick`, removal of expired subscriptions on 404/410, and the iOS hint ("install first"). |
+| 7.2 Email | nodemailer transport, react-email templates (EN/SV, Coop tokens, plain-text alternative), invite emails (P1 invites gain email delivery), immediate and batched notifications, the daily digest, and unsubscribe links (signed tokens). |
+| 7.3 Scheduler | Due reminders and digest jobs keyed by user-local time, with `job_run` idempotency. |
+| 7.4 Preferences | The full matrix UI (event × channel), reminder and digest times. |
+
+**Acceptance criteria**
+- AC-7.1 With push enabled and the due reminder set to 08:00 Europe/Stockholm, a user with 3 tasks due today gets exactly one push at 08:00 local time, even across a container restart at 07:59:30.
+- AC-7.2 The digest email renders correctly in EN and SV (snapshot), and its unsubscribe link disables only the digest.
+- AC-7.3 Without SMTP configured, email options are hidden and invites fall back to copyable links.
+
+---
+
+## Phase 8: CLI, PATs, public API polish
+
+| WP | Content |
+|---|---|
+| 8.1 API polish | OpenAPI descriptions and examples for every route, the `/api/docs` landing, the `api-client` package build, and contract tests for every route. |
+| 8.2 PATs and devices | The api-key plugin integration, scopes, the Settings UI (create, shown once, revoke), the device approval page `/device`, and the devices list. |
+| 8.3 CLI core | Config and profiles, keychain, login (device flow) and `--with-token`, ref resolution, every command in 07 §4 except tui and mcp, human and JSON output, exit codes, and completions. |
+| 8.4 Distribution | Bun-compiled binaries in CI for 5 targets, and the README section. |
+
+**Acceptance criteria**
+- AC-8.1 `rooster login` on a headless machine completes the device flow approved from a phone, and `rooster whoami` prints the user.
+- AC-8.2 `rooster add "Pay invoice tom #finance >Prio"` creates a task in Prio with tomorrow's due date and the finance tag. `rooster ls --json | jq` returns it.
+- AC-8.3 A read-only PAT can run `ls` and `show`, but `add` exits with code 3 and a clear message.
+- AC-8.4 Every API response in the e2e suite validates against the OpenAPI schema.
+
+---
+
+## Phase 9: TUI & MCP
+
+**Acceptance criteria**
+- AC-9.1 The TUI lists, creates, completes, dates, moves, and switches views and orgs. A change made in the web appears in the TUI within 2 s.
+- AC-9.2 An MCP inspector session can call `list_tasks`, `create_task` (NL due date) and `complete_task`. `--read-only` hides the mutating tools. Activity entries show `via: mcp`.
+
+---
+
+## Phase 10: Recurrence, attachments, iCal
+
+| WP | Content |
+|---|---|
+| 10.1 Recurrence | `packages/core/recurrence` with exhaustive tests; the picker "Repeat" section with presets and custom; NL phrases EN/SV; next-instance creation on completion (same group, directly after; copies per FR-REC-3); "this / this and following" on delete; the row icon. |
+| 10.2 Attachments | BlobStore local and S3, streaming upload with a limit, mime sniffing, sharp thumbnails, the pane grid, the lightbox, paste and drop, and purge with the task. |
+| 10.3 iCal | Feed tokens, the ICS generator (all-day vs timed VEVENTs, `X-WR-CALNAME` "rooster – Personal"), caching, and the settings UI. |
+
+**Acceptance criteria**
+- AC-10.1 "Water plants every mon" completed on Monday 2026-10-05 creates the next instance due 2026-10-12, in the same group directly below the old task's position. "every 3 days after done" completed on Oct 7 gives Oct 10.
+- AC-10.2 Uploading 30 MB with a 25 MB limit returns 413. Images show thumbnails. A non-member cannot download (404).
+- AC-10.3 The ICS validates (icalendar validator), and Google Calendar subscribes successfully (manual check).
+
+---
+
+## Phase 11: Hardening → v2.0
+
+- Security review (OWASP ASVS L2 checklist subset), with the dependency audit clean.
+- Full accessibility audit (keyboard and screen reader passes with VoiceOver iOS and NVDA), with fixes.
+- Performance pass: 2,000-task org; bundle budget (10 §4).
+- Backup and restore drill automated in CI. The Admin → System page. The Litestream overlay documented.
+- Documentation: a user guide (keyboard cheat sheet, NL dates, CLI), an operator guide, and a contributing guide.
