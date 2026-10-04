@@ -7,6 +7,7 @@
       "!**/routeTree.gen.ts",
       "!**/migrations",
       "!packages/api-client/src/schema.d.ts",
+      "!apps/server/openapi.json",
       "!**/dist"
     ]
   },

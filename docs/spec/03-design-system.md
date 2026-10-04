@@ -97,7 +97,7 @@ The date label colour is set by `dueState()` in `packages/core`. The same functi
 | `tomorrow` | due = today + 1 | amber-700 | 400 | label "Tomorrow" |
 | `thisWeek` | today + 2 … today + 6 | violet-700 | 400 | weekday label |
 | `later` | > today + 6 | n-600 | 400 | — |
-| `done` | task completed | n-400 | 400 | strikethrough row |
+| `done` | task completed | n-500 (`--color-text-muted`) | 400 | strikethrough row (n-400 would fail 4.5:1) |
 | `start-range` | has a start date | per due state | — | "Oct 10 – 12" |
 
 Because the brand accent is red-ish (D-21), **overdue never uses coral**. It uses rose-700 plus the icon plus weight 500. Coral never appears in date labels.
@@ -314,7 +314,7 @@ Inline `Geist Mono` `--text-xs`, 1 px border n-300, a bottom border of 2 px, `--
 - Offline: neutral with `cloud-off`.
 - Pending: amber-50 background, amber-700 text and "· 3".
 - Syncing: a `refresh-cw` spin.
-- Error: rose-50 background, rose-700 text, clickable "Retry".
+- Error (sync problem after 3 failed retries, 02 §14): amber-50 background, amber-700 text, clickable "Sync problem · Retry". Rose is reserved for individual "Couldn't save" toasts.
 
 ### 3.16 Skeleton
 n-100 blocks with `--radius-xs`. Title widths vary between 40 % and 75 % (deterministic per index). Shimmer is a 1.2 s linear gradient sweep, which is off under reduced motion.

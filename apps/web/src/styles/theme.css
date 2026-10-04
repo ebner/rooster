@@ -1,0 +1,357 @@
+/*
+ * Coop → Tailwind v4 mapping (docs/spec/03-design-system.md). Binding for all UI code.
+ *
+ * Values live in @rooster/tokens/tokens.css. This file only tells Tailwind which
+ * tokens exist; utilities compile to `var(--token)`, so redefining a token (e.g.
+ * a future dark theme) restyles everything. Tailwind's default palette, type
+ * scale, spacing multiples, radii, shadows, breakpoints and easings are removed,
+ * so an off-token class such as `text-red-500`, `p-7` or `rounded-2xl` generates
+ * nothing.
+ *
+ * Class naming: utility prefix + token name without its namespace prefix.
+ *
+ *   Colours (--color-<name>)      bg-<name>  text-<name>  border-<name>  outline-<name>
+ *                                 fill-<name>  stroke-<name>  divide-<name>  ring-<name>
+ *     e.g. bg-bg-app  bg-bg-subtle  bg-bg-selected  bg-bg-accent  text-text  text-text-muted
+ *          text-text-secondary  text-text-on-accent  border-border  border-border-strong
+ *          outline-border-focus  bg-selection-bar  bg-check-done  bg-overlay  bg-bg-inverse
+ *   Due dates (--color-date-*)    text-date-overdue  text-date-today  text-date-tomorrow
+ *                                 text-date-this-week  text-date-later  text-date-done
+ *   Tags (--tag-<name>-bg/fg)     bg-tag-<name>-bg  text-tag-<name>-fg
+ *                                 (gray red orange amber green teal blue indigo purple pink)
+ *   Font size (--text-*)          text-xs  text-sm  text-base  text-md  text-group  text-lg
+ *                                 text-xl  text-2xl  (each sets line height; group and
+ *                                 lg+ also set weight 600 and tracking)
+ *   Font family                   font-sans  font-mono
+ *   Spacing (--space-*)           p-/m-/gap-/inset-/space-/size- with 0 0.5 1 1.5 2 3 4 5
+ *                                 6 8 10 12 16 only (4 px base)
+ *   Heights (--h-*)               h-control-sm  h-control  h-control-lg  h-row  h-row-mobile
+ *                                 h-row-subtask  h-group  h-group-mobile  h-chip  h-pill
+ *                                 h-toolbar  h-sheet-header  h-property-row
+ *   Squares (--size-*)            size-checkbox  size-hit  size-hit-touch  size-calendar-cell
+ *   Layout widths (--w-*)         w-/max-w-/min-w-: list-max  list-min  sidebar  rail  pane
+ *                                 pane-min  pane-max  pane-overlay  date-popover  palette
+ *                                 toast  date-cell  label-col  illustration
+ *   Radius (--radius-*)           rounded-2xs  rounded-xs  rounded-sm  rounded-md  rounded-lg
+ *                                 rounded-full
+ *   Shadow (--shadow-*)           shadow-sm  shadow-md  shadow-lg  shadow-pane
+ *   Easing (--ease-*)             ease-standard  ease-exit  ease-spring
+ *   Animation                     animate-spin  animate-check-pop  animate-popover-in
+ *                                 animate-fade-in  animate-toast-in  skeleton-shimmer
+ *   Breakpoints                   tablet: (≥768)  desktop: (≥1200)  wide: (≥1600),
+ *                                 max-tablet: = mobile only; pointer-coarse: for touch
+ *   Durations / z-index / odd     duration-(--dur-fast|base|slow|pop|fade)
+ *   borders (var shorthand)       z-(--z-popover|toast|…)  border-(length:--border-check)
+ *
+ * State variants: `hover:` and `pressed:` also match `data-force~="hover|pressed"`,
+ * and `focus-ring:` matches :focus-visible, React Aria's [data-focus-visible] and
+ * `data-force~="focus"`, so the kitchen sink can render each state statically.
+ */
+
+@import "tailwindcss";
+@import "@rooster/tokens/tokens.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+/* Remove Tailwind defaults that would bypass the tokens. */
+@theme {
+  --color-*: initial;
+  --text-*: initial;
+  --font-*: initial;
+  --spacing: initial;
+  --spacing-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+  --breakpoint-*: initial;
+  --container-*: initial;
+  --ease-*: initial;
+  --animate-*: initial;
+
+  --breakpoint-tablet: 768px;
+  --breakpoint-desktop: 1200px;
+  --breakpoint-wide: 1600px;
+
+  --animate-spin: spin 1s linear infinite;
+  --animate-check-pop: check-pop var(--dur-pop) var(--ease-spring);
+  --animate-popover-in: popover-in var(--dur-base) var(--ease-standard);
+  --animate-fade-in: fade-in var(--dur-fade) var(--ease-standard);
+  --animate-toast-in: popover-in var(--dur-base) var(--ease-standard);
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes check-pop {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    40% {
+      transform: scale(1.2);
+    }
+  }
+  @keyframes popover-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--popover-enter-offset, calc(var(--space-1) * -1)));
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 100% 0;
+    }
+    to {
+      background-position: -100% 0;
+    }
+  }
+}
+
+/* Tokens whose names already match Tailwind namespaces: register only, never re-declare. */
+@theme reference {
+  --color-bg-app: var(--color-bg-app);
+  --color-bg-sidebar: var(--color-bg-sidebar);
+  --color-bg-subtle: var(--color-bg-subtle);
+  --color-bg-muted: var(--color-bg-muted);
+  --color-bg-elevated: var(--color-bg-elevated);
+  --color-bg-selected: var(--color-bg-selected);
+  --color-bg-accent: var(--color-bg-accent);
+  --color-bg-accent-hover: var(--color-bg-accent-hover);
+  --color-bg-accent-subtle: var(--color-bg-accent-subtle);
+  --color-bg-success-subtle: var(--color-bg-success-subtle);
+  --color-bg-warning-subtle: var(--color-bg-warning-subtle);
+  --color-bg-danger-subtle: var(--color-bg-danger-subtle);
+  --color-bg-info-subtle: var(--color-bg-info-subtle);
+  --color-bg-danger: var(--color-bg-danger);
+  --color-bg-danger-hover: var(--color-bg-danger-hover);
+  --color-bg-inverse: var(--color-bg-inverse);
+  --color-bg-inverse-muted: var(--color-bg-inverse-muted);
+  --color-text: var(--color-text);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+  --color-text-disabled: var(--color-text-disabled);
+  --color-text-on-accent: var(--color-text-on-accent);
+  --color-text-on-danger: var(--color-text-on-danger);
+  --color-text-accent: var(--color-text-accent);
+  --color-text-accent-hover: var(--color-text-accent-hover);
+  --color-text-danger: var(--color-text-danger);
+  --color-text-success: var(--color-text-success);
+  --color-text-warning: var(--color-text-warning);
+  --color-text-info: var(--color-text-info);
+  --color-text-inverse: var(--color-text-inverse);
+  --color-text-inverse-muted: var(--color-text-inverse-muted);
+  --color-text-inverse-accent: var(--color-text-inverse-accent);
+  --color-icon-subtle: var(--color-icon-subtle);
+  --color-icon-danger: var(--color-icon-danger);
+  --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
+  --color-border-hover: var(--color-border-hover);
+  --color-border-focus: var(--color-border-focus);
+  --color-border-danger: var(--color-border-danger);
+  --color-border-inverse: var(--color-border-inverse);
+  --color-selection-bar: var(--color-selection-bar);
+  --color-drop-indicator: var(--color-drop-indicator);
+  --color-drop-target-outline: var(--color-drop-target-outline);
+  --color-check-done: var(--color-check-done);
+  --color-brand: var(--color-brand);
+  --color-overlay: var(--color-overlay);
+  --color-date-overdue: var(--color-date-overdue);
+  --color-date-today: var(--color-date-today);
+  --color-date-tomorrow: var(--color-date-tomorrow);
+  --color-date-this-week: var(--color-date-this-week);
+  --color-date-later: var(--color-date-later);
+  --color-date-done: var(--color-date-done);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --text-xs: var(--text-xs);
+  --text-xs--line-height: var(--text-xs--line-height);
+  --text-sm: var(--text-sm);
+  --text-sm--line-height: var(--text-sm--line-height);
+  --text-base: var(--text-base);
+  --text-base--line-height: var(--text-base--line-height);
+  --text-md: var(--text-md);
+  --text-md--line-height: var(--text-md--line-height);
+  --text-group: var(--text-group);
+  --text-group--line-height: var(--text-group--line-height);
+  --text-group--font-weight: var(--text-group--font-weight);
+  --text-lg: var(--text-lg);
+  --text-lg--line-height: var(--text-lg--line-height);
+  --text-lg--font-weight: var(--text-lg--font-weight);
+  --text-lg--letter-spacing: var(--text-lg--letter-spacing);
+  --text-xl: var(--text-xl);
+  --text-xl--line-height: var(--text-xl--line-height);
+  --text-xl--font-weight: var(--text-xl--font-weight);
+  --text-xl--letter-spacing: var(--text-xl--letter-spacing);
+  --text-2xl: var(--text-2xl);
+  --text-2xl--line-height: var(--text-2xl--line-height);
+  --text-2xl--font-weight: var(--text-2xl--font-weight);
+  --text-2xl--letter-spacing: var(--text-2xl--letter-spacing);
+
+  --radius-2xs: var(--radius-2xs);
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-full: var(--radius-full);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-pane: var(--shadow-pane);
+
+  --ease-standard: var(--ease-standard);
+  --ease-exit: var(--ease-exit);
+  --ease-spring: var(--ease-spring);
+}
+
+/* Tokens under different names: alias them; utilities inline the `var()`. */
+@theme inline {
+  --color-tag-gray-bg: var(--tag-gray-bg);
+  --color-tag-gray-fg: var(--tag-gray-fg);
+  --color-tag-red-bg: var(--tag-red-bg);
+  --color-tag-red-fg: var(--tag-red-fg);
+  --color-tag-orange-bg: var(--tag-orange-bg);
+  --color-tag-orange-fg: var(--tag-orange-fg);
+  --color-tag-amber-bg: var(--tag-amber-bg);
+  --color-tag-amber-fg: var(--tag-amber-fg);
+  --color-tag-green-bg: var(--tag-green-bg);
+  --color-tag-green-fg: var(--tag-green-fg);
+  --color-tag-teal-bg: var(--tag-teal-bg);
+  --color-tag-teal-fg: var(--tag-teal-fg);
+  --color-tag-blue-bg: var(--tag-blue-bg);
+  --color-tag-blue-fg: var(--tag-blue-fg);
+  --color-tag-indigo-bg: var(--tag-indigo-bg);
+  --color-tag-indigo-fg: var(--tag-indigo-fg);
+  --color-tag-purple-bg: var(--tag-purple-bg);
+  --color-tag-purple-fg: var(--tag-purple-fg);
+  --color-tag-pink-bg: var(--tag-pink-bg);
+  --color-tag-pink-fg: var(--tag-pink-fg);
+
+  --spacing-0: var(--space-0);
+  --spacing-0_5: var(--space-0_5);
+  --spacing-1: var(--space-1);
+  --spacing-1_5: var(--space-1_5);
+  --spacing-2: var(--space-2);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-5: var(--space-5);
+  --spacing-6: var(--space-6);
+  --spacing-8: var(--space-8);
+  --spacing-10: var(--space-10);
+  --spacing-12: var(--space-12);
+  --spacing-16: var(--space-16);
+
+  --spacing-control-sm: var(--h-control-sm);
+  --spacing-control: var(--h-control);
+  --spacing-control-lg: var(--h-control-lg);
+  --spacing-row: var(--h-row);
+  --spacing-row-mobile: var(--h-row-mobile);
+  --spacing-row-subtask: var(--h-row-subtask);
+  --spacing-group: var(--h-group);
+  --spacing-group-mobile: var(--h-group-mobile);
+  --spacing-chip: var(--h-chip);
+  --spacing-pill: var(--h-pill);
+  --spacing-toolbar: var(--h-toolbar);
+  --spacing-sheet-header: var(--h-sheet-header);
+  --spacing-property-row: var(--h-property-row);
+  --spacing-checkbox: var(--size-checkbox);
+  --spacing-hit: var(--size-hit);
+  --spacing-hit-touch: var(--size-hit-touch);
+  --spacing-calendar-cell: var(--size-calendar-cell);
+
+  --container-list-max: var(--w-list-max);
+  --container-list-min: var(--w-list-min);
+  --container-sidebar: var(--w-sidebar);
+  --container-rail: var(--w-rail);
+  --container-pane: var(--w-pane);
+  --container-pane-min: var(--w-pane-min);
+  --container-pane-max: var(--w-pane-max);
+  --container-pane-overlay: var(--w-pane-overlay);
+  --container-date-popover: var(--w-date-popover);
+  --container-palette: var(--w-palette);
+  --container-toast: var(--w-toast);
+  --container-date-cell: var(--w-date-cell);
+  --container-label-col: var(--w-label-col);
+  --container-illustration: var(--w-illustration);
+}
+
+@custom-variant hover {
+  @media (hover: hover) {
+    &:hover {
+      @slot;
+    }
+  }
+  &[data-force~="hover"] {
+    @slot;
+  }
+}
+@custom-variant pressed (&:where(:active, [data-pressed], [data-force~="pressed"]));
+@custom-variant focus-ring (&:where(:focus-visible, [data-focus-visible], [data-force~="focus"]));
+
+@utility tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility skeleton-shimmer {
+  background-color: var(--color-bg-muted);
+  background-image: linear-gradient(
+    90deg,
+    var(--color-bg-muted) 0%,
+    var(--color-bg-subtle) 50%,
+    var(--color-bg-muted) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer var(--dur-shimmer) linear infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    background-image: none;
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-bg-app);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-mono);
+  }
+
+  ::selection {
+    background-color: var(--color-bg-accent-subtle);
+    color: var(--color-text);
+  }
+
+  /* 03 §3.12. Components that need an inset ring (task rows) override the offset. */
+  :focus-visible,
+  [data-force~="focus"] {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: 2px;
+  }
+}

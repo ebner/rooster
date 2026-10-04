@@ -1,0 +1,268 @@
+/*
+ * Coop design tokens (docs/spec/03-design-system.md §2). Light theme only (D-22).
+ *
+ * The TS mirror in ./index.ts must declare the same names and values; the test in
+ * ../test/contrast.test.ts enforces the agreement and the WCAG contrast pairs.
+ */
+:root {
+  /* Palette: neutral (cool grey). Raw values; only semantic tokens reference them. */
+  --n-0: #ffffff;
+  --n-25: #fbfcfd;
+  --n-50: #f6f7f9;
+  --n-100: #eef0f3;
+  --n-200: #e2e5ea;
+  --n-300: #cdd2da;
+  --n-400: #9aa3b0;
+  --n-500: #636b78;
+  --n-600: #4e5663;
+  --n-700: #3a404a;
+  --n-800: #262a31;
+  --n-900: #16191e;
+
+  /* Palette: coral (brand accent) */
+  --coral-50: #fff3f1;
+  --coral-100: #ffe3df;
+  --coral-200: #ffc9c2;
+  --coral-300: #ffa197;
+  --coral-400: #fa766a;
+  --coral-500: #ef4f45;
+  --coral-600: #d93a31;
+  --coral-700: #b42d26;
+  --coral-800: #8f251f;
+  --coral-900: #6e1f1a;
+
+  /* Palette: functional hues */
+  --green-50: #eefbf2;
+  --green-600: #16a34a;
+  --green-700: #15803d;
+  --amber-50: #fff8eb;
+  --amber-500: #f59e0b;
+  --amber-700: #b45309;
+  --violet-700: #6d28d9;
+  --rose-50: #fff1f3;
+  --rose-600: #e11d48;
+  --rose-700: #be123c;
+  --blue-50: #eff6ff;
+  --blue-700: #1d4ed8;
+
+  /* Semantic colours (components use these). A future dark theme redefines only this layer. */
+  --color-bg-app: var(--n-0);
+  --color-bg-sidebar: var(--n-50);
+  --color-bg-subtle: var(--n-50);
+  --color-bg-muted: var(--n-100);
+  --color-bg-elevated: var(--n-0);
+  --color-bg-selected: var(--coral-50);
+  --color-bg-accent: var(--coral-600);
+  --color-bg-accent-hover: var(--coral-700);
+  --color-bg-accent-subtle: var(--coral-100);
+  --color-bg-success-subtle: var(--green-50);
+  --color-bg-warning-subtle: var(--amber-50);
+  --color-bg-danger-subtle: var(--rose-50);
+  --color-bg-info-subtle: var(--blue-50);
+  --color-bg-danger: var(--rose-600);
+  --color-bg-danger-hover: var(--rose-700);
+  --color-bg-inverse: var(--n-900);
+  --color-bg-inverse-muted: var(--n-800);
+
+  /* Semantic: text */
+  --color-text: var(--n-900);
+  --color-text-secondary: var(--n-600);
+  --color-text-muted: var(--n-500);
+  --color-text-disabled: var(--n-400);
+  --color-text-on-accent: var(--n-0);
+  --color-text-on-danger: var(--n-0);
+  --color-text-accent: var(--coral-600);
+  --color-text-accent-hover: var(--coral-700);
+  --color-text-danger: var(--rose-700);
+  --color-text-success: var(--green-700);
+  --color-text-warning: var(--amber-700);
+  --color-text-info: var(--blue-700);
+  --color-text-inverse: var(--n-0);
+  --color-text-inverse-muted: var(--n-300);
+  --color-text-inverse-accent: var(--coral-300);
+
+  /* Semantic: icons, borders and indicators */
+  --color-icon-subtle: var(--n-400);
+  --color-icon-danger: var(--rose-600);
+  --color-border: var(--n-200);
+  --color-border-strong: var(--n-300);
+  --color-border-hover: var(--n-500);
+  --color-border-focus: var(--coral-500);
+  --color-border-danger: var(--rose-600);
+  --color-border-inverse: var(--n-600);
+  --color-selection-bar: var(--coral-500);
+  --color-drop-indicator: var(--coral-500);
+  --color-drop-target-outline: var(--coral-400);
+  --color-check-done: var(--green-600);
+  --color-brand: var(--coral-500);
+
+  /* Semantic: scrim */
+  --color-overlay: rgb(22 25 30 / 0.32);
+
+  /* Due-date label colours (03 §2.3) */
+  --color-date-overdue: var(--rose-700);
+  --color-date-today: var(--green-700);
+  --color-date-tomorrow: var(--amber-700);
+  --color-date-this-week: var(--violet-700);
+  --color-date-later: var(--n-600);
+  --color-date-done: var(--n-500);
+
+  /* Tag palette (03 §2.4): chip background + foreground pairs */
+  --tag-gray-bg: #eef0f3;
+  --tag-gray-fg: #3a404a;
+  --tag-red-bg: #ffe4e6;
+  --tag-red-fg: #9f1239;
+  --tag-orange-bg: #ffead5;
+  --tag-orange-fg: #9a3412;
+  --tag-amber-bg: #fef3c7;
+  --tag-amber-fg: #92400e;
+  --tag-green-bg: #dcfce7;
+  --tag-green-fg: #166534;
+  --tag-teal-bg: #ddf6f3;
+  --tag-teal-fg: #0f5f58;
+  --tag-blue-bg: #e0edff;
+  --tag-blue-fg: #1e40af;
+  --tag-indigo-bg: #e6e8ff;
+  --tag-indigo-fg: #3730a3;
+  --tag-purple-bg: #f1e8ff;
+  --tag-purple-fg: #6b21a8;
+  --tag-pink-bg: #fce7f3;
+  --tag-pink-fg: #9d174d;
+
+  /* Typography (03 §2.5). --text-<name>--* sub-properties follow the Tailwind v4 convention. */
+  --font-sans:
+    "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 13px;
+  --text-sm--line-height: 20px;
+  --text-base: 14px;
+  --text-base--line-height: 20px;
+  --text-md: 16px;
+  --text-md--line-height: 24px;
+  --text-group: 16px;
+  --text-group--line-height: 24px;
+  --text-group--font-weight: 600;
+  --text-lg: 20px;
+  --text-lg--line-height: 28px;
+  --text-lg--font-weight: 600;
+  --text-lg--letter-spacing: -0.011em;
+  --text-xl: 24px;
+  --text-xl--line-height: 32px;
+  --text-xl--font-weight: 600;
+  --text-xl--letter-spacing: -0.011em;
+  --text-2xl: 30px;
+  --text-2xl--line-height: 38px;
+  --text-2xl--font-weight: 600;
+  --text-2xl--letter-spacing: -0.011em;
+
+  /* Spacing scale (4 px base). Use only these steps. */
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-0_5: 2px;
+  --space-1_5: 6px;
+
+  /* Component heights */
+  --h-control-sm: 28px;
+  --h-control: 32px;
+  --h-control-lg: 40px;
+  --h-row: 40px;
+  --h-row-mobile: 52px;
+  --h-row-subtask: 36px;
+  --h-group: 44px;
+  --h-group-mobile: 48px;
+  --h-chip: 20px;
+  --h-pill: 24px;
+  --h-toolbar: 48px;
+  --h-sheet-header: 56px;
+  --h-property-row: 36px;
+
+  /* Square sizes: checkbox, hit areas (desktop / touch), calendar cells */
+  --size-checkbox: 18px;
+  --size-hit: 32px;
+  --size-hit-touch: 44px;
+  --size-calendar-cell: 36px;
+
+  /* Layout widths (03 §2.8, §3; D-27, D-29, D-29a) */
+  --w-list-max: 1040px;
+  --w-list-min: 480px;
+  --w-sidebar: 248px;
+  --w-rail: 56px;
+  --w-pane: 520px;
+  --w-pane-min: 400px;
+  --w-pane-max: 720px;
+  --w-pane-overlay: 480px;
+  --w-date-popover: 320px;
+  --w-palette: 640px;
+  --w-toast: 360px;
+  --w-date-cell: 112px;
+  --w-label-col: 112px;
+  --w-illustration: 160px;
+
+  /* Border widths that are not whole Tailwind steps */
+  --border-check: 1.5px;
+
+  /* Radius */
+  --radius-2xs: 2px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* Elevation (cool tinted) */
+  --shadow-sm: 0 1px 2px rgb(22 25 30 / 0.06);
+  --shadow-md: 0 4px 12px rgb(22 25 30 / 0.08), 0 1px 3px rgb(22 25 30 / 0.06);
+  --shadow-lg: 0 12px 32px rgb(22 25 30 / 0.12), 0 2px 6px rgb(22 25 30 / 0.08);
+  --shadow-pane: -1px 0 0 var(--color-border);
+
+  /* Z-index */
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-sidebar: 20;
+  --z-pane: 30;
+  --z-popover: 40;
+  --z-bulk-bar: 45;
+  --z-toast: 50;
+  --z-palette: 60;
+  --z-drag: 70;
+
+  /* Motion. --dur-fade is for opacity-only fades, which survive reduced motion (capped at 80 ms). */
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 250ms;
+  --dur-pop: 300ms;
+  --dur-fade: 120ms;
+  --dur-shimmer: 1200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Breakpoints, for reference only: media queries cannot read custom properties, so
+     apps/web/src/styles/theme.css repeats them as Tailwind --breakpoint-* values. */
+  --bp-tablet: 768px;
+  --bp-desktop: 1200px;
+  --bp-wide: 1600px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+    --dur-pop: 0ms;
+    --dur-fade: 80ms;
+    --dur-shimmer: 0ms;
+  }
+}

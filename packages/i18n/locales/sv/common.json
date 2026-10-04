@@ -1,0 +1,61 @@
+{
+  "app": {
+    "name": "rooster",
+    "tagline": "Dina uppgifter, lugnt och i ordning."
+  },
+  "home": {
+    "title": "Hej rooster",
+    "body": "Grunden är på plats. Snart finns dina uppgifter här.",
+    "kitchenSink": "Öppna komponentkatalogen"
+  },
+  "language": {
+    "label": "Språk",
+    "en": "English",
+    "sv": "Svenska"
+  },
+  "notFound": {
+    "title": "Sidan hittades inte",
+    "body": "Sidan du letar efter finns inte.",
+    "home": "Gå till startsidan"
+  },
+  "action": {
+    "dismiss": "Stäng",
+    "retry": "Försök igen",
+    "undo": "Ångra"
+  },
+  "toast": {
+    "region": "Aviseringar"
+  },
+  "sync": {
+    "status": "Synkstatus",
+    "offline": "Offline",
+    "pending": "{count, plural, one {Offline · # väntande} other {Offline · # väntande}}",
+    "syncing": "Synkar…",
+    "problem": "Synkproblem"
+  },
+  "kbd": {
+    "command": "Kommando",
+    "control": "Kontroll",
+    "option": "Alternativ",
+    "alt": "Alt",
+    "shift": "Skift",
+    "enter": "Retur",
+    "escape": "Escape",
+    "backspace": "Backsteg",
+    "tab": "Tabb",
+    "up": "Uppåtpil",
+    "down": "Nedåtpil",
+    "left": "Vänsterpil",
+    "right": "Högerpil"
+  },
+  "task": {
+    "complete": "Markera ”{title}” som klar",
+    "reopen": "Markera ”{title}” som inte klar"
+  },
+  "tag": {
+    "remove": "Ta bort taggen {name}"
+  },
+  "list": {
+    "loading": "Laddar uppgifter…"
+  }
+}

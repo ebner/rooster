@@ -1,0 +1,264 @@
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Cron } from 'croner';
+import { z } from 'zod';
+
+/** EX_CONFIG from sysexits.h: the process was started with an invalid configuration. */
+export const EXIT_CONFIG = 78;
+
+// Resolved relative to the running module: `src/` under tsx, `dist/` in the bundle.
+// Both sit next to the server package root, where the Docker image puts the web build.
+export const DEFAULT_WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../public');
+
+const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
+
+const emailSchema = z.email();
+
+const csvList = z
+  .string()
+  .optional()
+  .transform((v) =>
+    (v ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
+  );
+
+const emailList = csvList.pipe(z.array(emailSchema.transform((e) => e.toLowerCase())));
+
+const booleanFlag = (fallback: boolean) =>
+  z
+    .enum(['true', 'false', '1', '0', 'yes', 'no'], {
+      error: 'must be one of true, false, 1, 0, yes, no',
+    })
+    .optional()
+    .transform((v) => (v === undefined ? fallback : v === 'true' || v === '1' || v === 'yes'));
+
+const intInRange = (fallback: number, min: number, max: number) =>
+  z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined ? fallback : Number(v)))
+    .pipe(z.number({ error: 'must be a number' }).int().min(min).max(max));
+
+const oidcProviderSchema = z.object({
+  id: z.string().regex(/^[a-z0-9][a-z0-9_-]*$/, 'must be lowercase letters, digits, - or _'),
+  name: z.string().min(1),
+  discoveryUrl: z.url(),
+  clientId: z.string().min(1),
+  clientSecret: z.string().min(1),
+  scopes: z.array(z.string().min(1)).optional(),
+});
+
+export type OidcProviderConfig = z.infer<typeof oidcProviderSchema>;
+
+const oidcProviders = z
+  .string()
+  .optional()
+  .transform((raw, ctx) => {
+    if (raw === undefined) return [];
+    try {
+      return JSON.parse(raw) as unknown;
+    } catch {
+      ctx.addIssue({ code: 'custom', message: 'must be a JSON array' });
+      return z.NEVER;
+    }
+  })
+  .pipe(z.array(oidcProviderSchema));
+
+const backupCron = z
+  .string()
+  .optional()
+  .transform((v, ctx) => {
+    const pattern = v ?? '0 3 * * *';
+    if (pattern === 'off') return null;
+    try {
+      new Cron(pattern, { paused: true }).stop();
+    } catch {
+      ctx.addIssue({ code: 'custom', message: `"${pattern}" is not a valid cron pattern` });
+      return z.NEVER;
+    }
+    return pattern;
+  });
+
+const envSchema = z.object({
+  ROOSTER_BASE_URL: z
+    .url({ protocol: /^https?$/, error: 'must be an absolute http(s) URL' })
+    .transform((u) => u.replace(/\/+$/, '')),
+  ROOSTER_AUTH_SECRET: z.string().min(32, 'must be at least 32 characters'),
+  ROOSTER_ADMIN_EMAILS: emailList.refine((l) => l.length > 0, 'must list at least one email'),
+  ROOSTER_ALLOWED_EMAILS: emailList,
+  ROOSTER_ALLOWED_DOMAINS: csvList.transform((l) => l.map((d) => d.toLowerCase())),
+  ROOSTER_GOOGLE_CLIENT_ID: z.string().optional(),
+  ROOSTER_GOOGLE_CLIENT_SECRET: z.string().optional(),
+  ROOSTER_OIDC_PROVIDERS: oidcProviders,
+  ROOSTER_DATA_DIR: z.string().default('/data'),
+  ROOSTER_WEB_DIR: z.string().optional(),
+  PORT: intInRange(3000, 1, 65535),
+  ROOSTER_TRUST_PROXY: booleanFlag(false),
+  ROOSTER_LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
+  ROOSTER_SMTP_URL: z
+    .url({ protocol: /^smtps?$/, error: 'must be an smtp:// or smtps:// URL' })
+    .optional(),
+  ROOSTER_MAIL_FROM: z.string().optional(),
+  ROOSTER_VAPID_PUBLIC: z.string().optional(),
+  ROOSTER_VAPID_PRIVATE: z.string().optional(),
+  ROOSTER_VAPID_SUBJECT: z.string().optional(),
+  ROOSTER_UPLOAD_MAX_MB: intInRange(25, 1, 10_240),
+  ROOSTER_S3_ENDPOINT: z.url().optional(),
+  ROOSTER_S3_REGION: z.string().optional(),
+  ROOSTER_S3_BUCKET: z.string().optional(),
+  ROOSTER_S3_ACCESS_KEY_ID: z.string().optional(),
+  ROOSTER_S3_SECRET_ACCESS_KEY: z.string().optional(),
+  ROOSTER_S3_FORCE_PATH_STYLE: booleanFlag(false),
+  ROOSTER_BACKUP_CRON: backupCron,
+  ROOSTER_BACKUP_KEEP_DAILY: intInRange(7, 0, 1000),
+  ROOSTER_BACKUP_KEEP_WEEKLY: intInRange(4, 0, 1000),
+  ROOSTER_METRICS_TOKEN: z.string().min(16, 'must be at least 16 characters').optional(),
+  ROOSTER_GIT_SHA: z.string().default('dev'),
+});
+
+type Env = z.output<typeof envSchema>;
+
+/**
+ * Presence rules between variables. Checked on the raw values, separately from the schema,
+ * so they are reported together with every per-variable problem.
+ */
+function crossFieldErrors(values: Record<string, string>): string[] {
+  const errors: string[] = [];
+  const has = (key: string) => values[key] !== undefined;
+  const requireWith = (key: string, trigger: string) => {
+    if (has(trigger) && !has(key)) errors.push(`${key}: required when ${trigger} is set`);
+  };
+  requireWith('ROOSTER_GOOGLE_CLIENT_SECRET', 'ROOSTER_GOOGLE_CLIENT_ID');
+  requireWith('ROOSTER_GOOGLE_CLIENT_ID', 'ROOSTER_GOOGLE_CLIENT_SECRET');
+  requireWith('ROOSTER_VAPID_PRIVATE', 'ROOSTER_VAPID_PUBLIC');
+  requireWith('ROOSTER_VAPID_PUBLIC', 'ROOSTER_VAPID_PRIVATE');
+  requireWith('ROOSTER_MAIL_FROM', 'ROOSTER_SMTP_URL');
+  requireWith('ROOSTER_S3_ACCESS_KEY_ID', 'ROOSTER_S3_BUCKET');
+  requireWith('ROOSTER_S3_SECRET_ACCESS_KEY', 'ROOSTER_S3_BUCKET');
+  // The "at least one sign-in provider" rule (Google or ROOSTER_OIDC_PROVIDERS) belongs to
+  // Phase 1, which introduces sign-in; Phase 0 boots without any provider.
+  return errors;
+}
+
+function toConfig(env: Env) {
+  return {
+    baseUrl: env.ROOSTER_BASE_URL,
+    authSecret: env.ROOSTER_AUTH_SECRET,
+    adminEmails: env.ROOSTER_ADMIN_EMAILS,
+    allowedEmails: env.ROOSTER_ALLOWED_EMAILS,
+    allowedDomains: env.ROOSTER_ALLOWED_DOMAINS,
+    google:
+      env.ROOSTER_GOOGLE_CLIENT_ID !== undefined && env.ROOSTER_GOOGLE_CLIENT_SECRET !== undefined
+        ? { clientId: env.ROOSTER_GOOGLE_CLIENT_ID, clientSecret: env.ROOSTER_GOOGLE_CLIENT_SECRET }
+        : null,
+    oidcProviders: env.ROOSTER_OIDC_PROVIDERS,
+    dataDir: resolve(env.ROOSTER_DATA_DIR),
+    webDir: resolve(env.ROOSTER_WEB_DIR ?? DEFAULT_WEB_DIR),
+    port: env.PORT,
+    trustProxy: env.ROOSTER_TRUST_PROXY,
+    logLevel: env.ROOSTER_LOG_LEVEL,
+    smtp:
+      env.ROOSTER_SMTP_URL !== undefined && env.ROOSTER_MAIL_FROM !== undefined
+        ? { url: env.ROOSTER_SMTP_URL, from: env.ROOSTER_MAIL_FROM }
+        : null,
+    vapid:
+      env.ROOSTER_VAPID_PUBLIC !== undefined && env.ROOSTER_VAPID_PRIVATE !== undefined
+        ? { publicKey: env.ROOSTER_VAPID_PUBLIC, privateKey: env.ROOSTER_VAPID_PRIVATE }
+        : null,
+    vapidSubject: env.ROOSTER_VAPID_SUBJECT ?? `mailto:${env.ROOSTER_ADMIN_EMAILS[0] ?? ''}`,
+    uploadMaxMb: env.ROOSTER_UPLOAD_MAX_MB,
+    s3:
+      env.ROOSTER_S3_BUCKET !== undefined &&
+      env.ROOSTER_S3_ACCESS_KEY_ID !== undefined &&
+      env.ROOSTER_S3_SECRET_ACCESS_KEY !== undefined
+        ? {
+            bucket: env.ROOSTER_S3_BUCKET,
+            endpoint: env.ROOSTER_S3_ENDPOINT ?? null,
+            region: env.ROOSTER_S3_REGION ?? 'us-east-1',
+            accessKeyId: env.ROOSTER_S3_ACCESS_KEY_ID,
+            secretAccessKey: env.ROOSTER_S3_SECRET_ACCESS_KEY,
+            forcePathStyle: env.ROOSTER_S3_FORCE_PATH_STYLE,
+          }
+        : null,
+    backup: {
+      cron: env.ROOSTER_BACKUP_CRON,
+      keepDaily: env.ROOSTER_BACKUP_KEEP_DAILY,
+      keepWeekly: env.ROOSTER_BACKUP_KEEP_WEEKLY,
+    },
+    metricsToken: env.ROOSTER_METRICS_TOKEN ?? null,
+    gitSha: env.ROOSTER_GIT_SHA,
+  };
+}
+
+export type Config = ReturnType<typeof toConfig>;
+
+export type ConfigResult = { ok: true; config: Config } | { ok: false; errors: string[] };
+
+const KNOWN_KEYS = new Set(Object.keys(envSchema.shape));
+
+/**
+ * Applies the `<NAME>_FILE` convention (Docker secrets): the file's content, without a
+ * trailing newline, replaces `<NAME>`. Empty values count as unset so that blank lines
+ * in an env file do not trip validation.
+ */
+function resolveEnv(
+  env: Record<string, string | undefined>,
+  readFile: (path: string) => string,
+): { values: Record<string, string>; errors: string[]; unreadable: Set<string> } {
+  const values: Record<string, string> = {};
+  const errors: string[] = [];
+  const unreadable = new Set<string>();
+  for (const key of KNOWN_KEYS) {
+    const direct = env[key];
+    const filePath = env[`${key}_FILE`];
+    if (filePath !== undefined && filePath !== '') {
+      try {
+        const content = readFile(filePath).replace(/\r?\n$/, '');
+        if (content !== '') values[key] = content;
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        errors.push(`${key}_FILE: cannot read ${filePath} (${reason})`);
+        unreadable.add(key);
+      }
+    } else if (direct !== undefined && direct !== '') {
+      values[key] = direct;
+    }
+  }
+  return { values, errors, unreadable };
+}
+
+/** Pure config parser: never exits and never touches `process`. */
+export function parseConfig(
+  env: Record<string, string | undefined>,
+  readFile: (path: string) => string = (p) => readFileSync(p, 'utf8'),
+): ConfigResult {
+  const { values, errors, unreadable } = resolveEnv(env, readFile);
+  const parsed = envSchema.safeParse(values);
+  if (!parsed.success) {
+    for (const issue of parsed.error.issues) {
+      const key = issue.path[0] === undefined ? '(env)' : String(issue.path[0]);
+      // Already reported as an unreadable <NAME>_FILE.
+      if (unreadable.has(key)) continue;
+      const message =
+        issue.code === 'invalid_type' && values[key] === undefined ? 'is required' : issue.message;
+      errors.push(`${key}: ${message}`);
+    }
+  }
+  errors.push(...crossFieldErrors(values));
+  if (errors.length > 0 || !parsed.success) return { ok: false, errors };
+  return { ok: true, config: toConfig(parsed.data) };
+}
+
+/** Parses `process.env`; on failure prints every problem and exits with EX_CONFIG (78). */
+export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
+  const result = parseConfig(env);
+  if (result.ok) return result.config;
+  const lines = result.errors.map((e) => `  - ${e}`).join('\n');
+  process.stderr.write(
+    `rooster: invalid configuration\n${lines}\nSee apps/server/.env.example for the full reference.\n`,
+  );
+  process.exit(EXIT_CONFIG);
+}

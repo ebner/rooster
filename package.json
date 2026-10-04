@@ -18,7 +18,8 @@
     "gen:api": "pnpm --filter @rooster/server openapi:emit && pnpm --filter @rooster/api-client gen",
     "i18n:check": "node scripts/i18n-check.mjs",
     "db:generate": "pnpm --filter @rooster/server db:generate",
-    "ci": "bash scripts/ci.sh"
+    "ci": "bash scripts/ci.sh",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",

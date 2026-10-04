@@ -1,0 +1,4 @@
+# Caddy streams text/event-stream without buffering by default.
+rooster.example.com {
+	reverse_proxy 127.0.0.1:3000
+}

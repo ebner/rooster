@@ -1,0 +1,7 @@
+# Add to the rooster service in compose.yaml when Traefik is your reverse proxy.
+labels:
+  - traefik.enable=true
+  - traefik.http.routers.rooster.rule=Host(`rooster.example.com`)
+  - traefik.http.routers.rooster.entrypoints=websecure
+  - traefik.http.routers.rooster.tls.certresolver=letsencrypt
+  - traefik.http.services.rooster.loadbalancer.server.port=3000

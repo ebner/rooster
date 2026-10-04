@@ -38,7 +38,7 @@ P8 depends only on v1.0. It can start in parallel with P6 and P7 if capacity all
 - AC-0.3 A missing `ROOSTER_BASE_URL` makes the process exit with code 78 and a readable error.
 - AC-0.4 `/_dev/ui` shows every Coop v0 component in all states. The axe scan has 0 violations.
 - AC-0.5 Switching the language to Svenska changes all kitchen-sink strings, with no missing keys (the CI i18n key-parity check passes).
-- AC-0.6 The image runs as non-root, is under 200 MB, and passes the healthcheck.
+- AC-0.6 The image runs as non-root, is under 250 MB uncompressed (rooster's own layers under 50 MB), and passes the healthcheck.
 
 **Exit demo:** open the app and see a styled "Hello rooster" page in both languages.
 

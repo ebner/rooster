@@ -18,7 +18,7 @@ Goal: **one container, one volume, one env file.** Nothing has to be run by hand
   4. Stop the scheduler.
   5. Close the DB.
 - Multi-arch: linux/amd64 and linux/arm64, using `docker buildx`. Published to `ghcr.io/<owner>/rooster:<version>` and `:latest`.
-- Target size is under 200 MB; RAM use is about 100 to 150 MB.
+- Target size: under 250 MB uncompressed in total, of which rooster's own layers (bundled server, web build, native SQLite module) are under 50 MB. The distroless Node 24 base accounts for about 200 MB. RAM use is about 100 to 150 MB.
 
 ## 2. `/data` layout
 

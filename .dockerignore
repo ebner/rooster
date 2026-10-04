@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+.git
+.github
+.playwright-mcp
+**/test-results
+**/playwright-report
+**/coverage
+data

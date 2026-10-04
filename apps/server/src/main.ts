@@ -1,0 +1,59 @@
+import type { Server } from 'node:http';
+import { serve } from '@hono/node-server';
+import { createApp } from './app.ts';
+import { loadConfig } from './config.ts';
+import { prepareDatabase } from './db/boot.ts';
+import { registerJobs } from './jobs/register.ts';
+import { createScheduler } from './jobs/scheduler.ts';
+import { trackConnections } from './lib/graceful-close.ts';
+import { createLogger } from './lib/logger.ts';
+import { VERSION } from './version.ts';
+
+const SHUTDOWN_GRACE_MS = 10_000;
+
+const config = loadConfig();
+const logger = createLogger(config.logLevel);
+
+let prepared: ReturnType<typeof prepareDatabase>;
+try {
+  prepared = prepareDatabase(config.dataDir, logger);
+} catch (err) {
+  logger.fatal({ err, dataDir: config.dataDir }, 'database startup failed');
+  process.exit(1);
+}
+const { db, instanceId } = prepared;
+
+const app = createApp({ config, db, logger, version: VERSION });
+
+const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
+  logger.info(
+    { port: info.port, version: VERSION, gitSha: config.gitSha, instanceId },
+    'rooster listening',
+  );
+});
+
+const connections = trackConnections(server as Server);
+
+const scheduler = createScheduler(logger);
+registerJobs(scheduler, { db });
+
+let shuttingDown = false;
+
+async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info({ signal }, 'shutting down');
+
+  // SSE streams are closed here once the hub exists (Phase 2).
+  if (!(await connections.close(SHUTDOWN_GRACE_MS))) {
+    logger.warn({ graceMs: SHUTDOWN_GRACE_MS }, 'in-flight requests did not finish in time');
+  }
+
+  scheduler.stop();
+  db.close();
+  logger.info('shutdown complete');
+  process.exit(0);
+}
+
+process.once('SIGTERM', (signal) => void shutdown(signal));
+process.once('SIGINT', (signal) => void shutdown(signal));

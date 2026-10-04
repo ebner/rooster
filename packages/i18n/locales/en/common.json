@@ -1,0 +1,61 @@
+{
+  "app": {
+    "name": "rooster",
+    "tagline": "Your tasks, calm and in order."
+  },
+  "home": {
+    "title": "Hello rooster",
+    "body": "The foundations are in place. Your tasks will live here soon.",
+    "kitchenSink": "Open the component kitchen sink"
+  },
+  "language": {
+    "label": "Language",
+    "en": "English",
+    "sv": "Svenska"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "body": "The page you’re looking for doesn’t exist.",
+    "home": "Go to the start page"
+  },
+  "action": {
+    "dismiss": "Dismiss",
+    "retry": "Retry",
+    "undo": "Undo"
+  },
+  "toast": {
+    "region": "Notifications"
+  },
+  "sync": {
+    "status": "Sync status",
+    "offline": "Offline",
+    "pending": "{count, plural, one {Offline · # pending} other {Offline · # pending}}",
+    "syncing": "Syncing…",
+    "problem": "Sync problem"
+  },
+  "kbd": {
+    "command": "Command",
+    "control": "Control",
+    "option": "Option",
+    "alt": "Alt",
+    "shift": "Shift",
+    "enter": "Enter",
+    "escape": "Escape",
+    "backspace": "Backspace",
+    "tab": "Tab",
+    "up": "Up arrow",
+    "down": "Down arrow",
+    "left": "Left arrow",
+    "right": "Right arrow"
+  },
+  "task": {
+    "complete": "Mark “{title}” complete",
+    "reopen": "Mark “{title}” incomplete"
+  },
+  "tag": {
+    "remove": "Remove tag {name}"
+  },
+  "list": {
+    "loading": "Loading tasks…"
+  }
+}
