@@ -1,0 +1,37 @@
+{
+  "name": "@rooster/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/main.ts",
+    "build": "tsdown",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "openapi:emit": "tsx src/scripts/emit-openapi.ts",
+    "db:generate": "drizzle-kit generate && node scripts/strictify-migrations.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "catalog:",
+    "@hono/zod-openapi": "catalog:",
+    "@rooster/core": "workspace:*",
+    "@rooster/i18n": "workspace:*",
+    "@scalar/hono-api-reference": "catalog:",
+    "better-sqlite3": "catalog:",
+    "croner": "catalog:",
+    "drizzle-orm": "catalog:",
+    "hono": "catalog:",
+    "pino": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "catalog:",
+    "@types/node": "catalog:",
+    "drizzle-kit": "catalog:",
+    "tsdown": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

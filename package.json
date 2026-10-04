@@ -1,0 +1,30 @@
+{
+  "name": "rooster",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.9.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @rooster/server --filter @rooster/web dev",
+    "build": "pnpm -r --workspace-concurrency=1 build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "pnpm --filter @rooster/web e2e",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "typecheck": "pnpm -r typecheck",
+    "gen:api": "pnpm --filter @rooster/server openapi:emit && pnpm --filter @rooster/api-client gen",
+    "i18n:check": "node scripts/i18n-check.mjs",
+    "db:generate": "pnpm --filter @rooster/server db:generate",
+    "ci": "bash scripts/ci.sh"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "@vitest/coverage-v8": "catalog:"
+  }
+}

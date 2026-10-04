@@ -1,0 +1,48 @@
+{
+  "name": "@rooster/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "catalog:",
+    "@fontsource-variable/geist-mono": "catalog:",
+    "@rooster/core": "workspace:*",
+    "@rooster/i18n": "workspace:*",
+    "@rooster/tokens": "workspace:*",
+    "@tanstack/react-query": "catalog:",
+    "@tanstack/react-router": "catalog:",
+    "class-variance-authority": "catalog:",
+    "clsx": "catalog:",
+    "i18next": "catalog:",
+    "lucide-react": "catalog:",
+    "react": "catalog:",
+    "react-aria-components": "catalog:",
+    "react-dom": "catalog:",
+    "react-i18next": "catalog:",
+    "tailwind-merge": "catalog:",
+    "zustand": "catalog:"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "catalog:",
+    "@playwright/test": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@tanstack/router-plugin": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "jsdom": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}
