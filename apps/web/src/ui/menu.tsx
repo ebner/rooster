@@ -1,4 +1,4 @@
-import type { LucideIcon } from 'lucide-react';
+import { Check, ChevronRight, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import {
   Menu as AriaMenu,
@@ -11,13 +11,14 @@ import {
   MenuSection,
   MenuTrigger,
   Separator,
+  SubmenuTrigger,
 } from 'react-aria-components';
 import { cn } from '../lib/cn';
 import { iconStrokeWidth } from './button';
 import { Kbd } from './kbd';
 import { overlayOffsetPx, popoverMotion, popoverSurface } from './popover';
 
-export { MenuTrigger };
+export { MenuTrigger, SubmenuTrigger };
 
 export interface MenuProps<T extends object> extends Omit<AriaMenuProps<T>, 'className'> {
   className?: string | undefined;
@@ -52,7 +53,10 @@ export interface MenuItemProps extends Omit<AriaMenuItemProps, 'className' | 'ch
   className?: string | undefined;
 }
 
-/** 03 §3.8: 32 px tall, radius sm, 16 px icon + label + right-aligned Kbd. */
+/**
+ * 03 §3.8: 32 px tall, radius sm, 16 px icon + label + right-aligned Kbd.
+ * Items in a selectable menu show a check when selected; submenu triggers a chevron.
+ */
 export function MenuItem({
   icon: Icon,
   shortcut,
@@ -69,23 +73,41 @@ export function MenuItem({
       className={cn(
         'flex h-control cursor-default items-center gap-2 rounded-sm px-2 text-sm outline-none',
         tone === 'danger' ? 'text-text-danger' : 'text-text',
-        'data-focused:bg-bg-muted data-pressed:bg-bg-muted',
+        'data-focused:bg-bg-muted data-pressed:bg-bg-muted data-open:bg-bg-muted',
         'data-disabled:cursor-not-allowed data-disabled:text-text-disabled',
         className,
       )}
     >
-      {Icon && (
-        <Icon
-          className={cn(
-            'size-4 shrink-0',
-            tone === 'danger' ? 'text-text-danger' : 'text-text-secondary',
+      {({ isSelected, selectionMode, hasSubmenu }) => (
+        <>
+          {Icon && (
+            <Icon
+              className={cn(
+                'size-4 shrink-0',
+                tone === 'danger' ? 'text-text-danger' : 'text-text-secondary',
+              )}
+              strokeWidth={iconStrokeWidth}
+              aria-hidden
+            />
           )}
-          strokeWidth={iconStrokeWidth}
-          aria-hidden
-        />
+          <span className="flex-1 truncate">{children}</span>
+          {shortcut && <Kbd shortcut={shortcut} className="ms-4" />}
+          {selectionMode !== 'none' && (
+            <Check
+              className={cn('size-4 shrink-0 text-text-secondary', !isSelected && 'invisible')}
+              strokeWidth={iconStrokeWidth}
+              aria-hidden
+            />
+          )}
+          {hasSubmenu && (
+            <ChevronRight
+              className="size-4 shrink-0 text-text-secondary"
+              strokeWidth={iconStrokeWidth}
+              aria-hidden
+            />
+          )}
+        </>
       )}
-      <span className="flex-1 truncate">{children}</span>
-      {shortcut && <Kbd shortcut={shortcut} className="ms-4" />}
     </AriaMenuItem>
   );
 }

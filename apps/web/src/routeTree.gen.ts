@@ -10,43 +10,179 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as NotInvitedRouteImport } from './routes/not-invited'
+import { Route as AppAdminRouteImport } from './routes/_app/admin'
+import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as Char91_devChar93UiRouteImport } from './routes/[_dev]/ui'
+import { Route as InviteTokenRouteImport } from './routes/invite.$token'
+import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings.index'
+import { Route as AppSettingsProfileRouteImport } from './routes/_app/settings.profile'
+import { Route as AppSettingsSecurityRouteImport } from './routes/_app/settings.security'
+import { Route as AppOOrgSlugMyRouteImport } from './routes/_app/o.$orgSlug.my'
+import { Route as AppOOrgSlugSettingsRouteImport } from './routes/_app/o.$orgSlug.settings'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotInvitedRoute = NotInvitedRouteImport.update({
+  id: '/not-invited',
+  path: '/not-invited',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppAdminRoute = AppAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
 const Char91_devChar93UiRoute = Char91_devChar93UiRouteImport.update({
   id: '/_dev/ui',
   path: '/_dev/ui',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InviteTokenRoute = InviteTokenRouteImport.update({
+  id: '/invite/$token',
+  path: '/invite/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
+const AppSettingsProfileRoute = AppSettingsProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
+const AppSettingsSecurityRoute = AppSettingsSecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
+const AppOOrgSlugMyRoute = AppOOrgSlugMyRouteImport.update({
+  id: '/o/$orgSlug/my',
+  path: '/o/$orgSlug/my',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOOrgSlugSettingsRoute = AppOOrgSlugSettingsRouteImport.update({
+  id: '/o/$orgSlug/settings',
+  path: '/o/$orgSlug/settings',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/not-invited': typeof NotInvitedRoute
+  '/admin': typeof AppAdminRoute
+  '/settings': typeof AppSettingsRouteWithChildren
   '/_dev/ui': typeof Char91_devChar93UiRoute
+  '/invite/$token': typeof InviteTokenRoute
+  '/settings/profile': typeof AppSettingsProfileRoute
+  '/settings/security': typeof AppSettingsSecurityRoute
+  '/settings/': typeof AppSettingsIndexRoute
+  '/o/$orgSlug/my': typeof AppOOrgSlugMyRoute
+  '/o/$orgSlug/settings': typeof AppOOrgSlugSettingsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/not-invited': typeof NotInvitedRoute
+  '/admin': typeof AppAdminRoute
   '/_dev/ui': typeof Char91_devChar93UiRoute
+  '/invite/$token': typeof InviteTokenRoute
+  '/settings/profile': typeof AppSettingsProfileRoute
+  '/settings/security': typeof AppSettingsSecurityRoute
+  '/settings': typeof AppSettingsIndexRoute
+  '/o/$orgSlug/my': typeof AppOOrgSlugMyRoute
+  '/o/$orgSlug/settings': typeof AppOOrgSlugSettingsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_app': typeof AppRouteWithChildren
+  '/login': typeof LoginRoute
+  '/not-invited': typeof NotInvitedRoute
+  '/_app/admin': typeof AppAdminRoute
+  '/_app/settings': typeof AppSettingsRouteWithChildren
   '/_dev/ui': typeof Char91_devChar93UiRoute
+  '/invite/$token': typeof InviteTokenRoute
+  '/_app/settings/profile': typeof AppSettingsProfileRoute
+  '/_app/settings/security': typeof AppSettingsSecurityRoute
+  '/_app/settings/': typeof AppSettingsIndexRoute
+  '/_app/o/$orgSlug/my': typeof AppOOrgSlugMyRoute
+  '/_app/o/$orgSlug/settings': typeof AppOOrgSlugSettingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/_dev/ui'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/not-invited'
+    | '/admin'
+    | '/settings'
+    | '/_dev/ui'
+    | '/invite/$token'
+    | '/settings/profile'
+    | '/settings/security'
+    | '/settings/'
+    | '/o/$orgSlug/my'
+    | '/o/$orgSlug/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/_dev/ui'
-  id: '__root__' | '/' | '/_dev/ui'
+  to:
+    | '/'
+    | '/login'
+    | '/not-invited'
+    | '/admin'
+    | '/_dev/ui'
+    | '/invite/$token'
+    | '/settings/profile'
+    | '/settings/security'
+    | '/settings'
+    | '/o/$orgSlug/my'
+    | '/o/$orgSlug/settings'
+  id:
+    | '__root__'
+    | '/'
+    | '/_app'
+    | '/login'
+    | '/not-invited'
+    | '/_app/admin'
+    | '/_app/settings'
+    | '/_dev/ui'
+    | '/invite/$token'
+    | '/_app/settings/profile'
+    | '/_app/settings/security'
+    | '/_app/settings/'
+    | '/_app/o/$orgSlug/my'
+    | '/_app/o/$orgSlug/settings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  LoginRoute: typeof LoginRoute
+  NotInvitedRoute: typeof NotInvitedRoute
   Char91_devChar93UiRoute: typeof Char91_devChar93UiRoute
+  InviteTokenRoute: typeof InviteTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -58,6 +194,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/not-invited': {
+      id: '/not-invited'
+      path: '/not-invited'
+      fullPath: '/not-invited'
+      preLoaderRoute: typeof NotInvitedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/admin': {
+      id: '/_app/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AppAdminRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings': {
+      id: '/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_dev/ui': {
       id: '/_dev/ui'
       path: '/_dev/ui'
@@ -65,12 +236,90 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char91_devChar93UiRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/invite/$token': {
+      id: '/invite/$token'
+      path: '/invite/$token'
+      fullPath: '/invite/$token'
+      preLoaderRoute: typeof InviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/settings/': {
+      id: '/_app/settings/'
+      path: '/'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof AppSettingsIndexRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
+    '/_app/settings/profile': {
+      id: '/_app/settings/profile'
+      path: '/profile'
+      fullPath: '/settings/profile'
+      preLoaderRoute: typeof AppSettingsProfileRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
+    '/_app/settings/security': {
+      id: '/_app/settings/security'
+      path: '/security'
+      fullPath: '/settings/security'
+      preLoaderRoute: typeof AppSettingsSecurityRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
+    '/_app/o/$orgSlug/my': {
+      id: '/_app/o/$orgSlug/my'
+      path: '/o/$orgSlug/my'
+      fullPath: '/o/$orgSlug/my'
+      preLoaderRoute: typeof AppOOrgSlugMyRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/o/$orgSlug/settings': {
+      id: '/_app/o/$orgSlug/settings'
+      path: '/o/$orgSlug/settings'
+      fullPath: '/o/$orgSlug/settings'
+      preLoaderRoute: typeof AppOOrgSlugSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
+interface AppSettingsRouteChildren {
+  AppSettingsProfileRoute: typeof AppSettingsProfileRoute
+  AppSettingsSecurityRoute: typeof AppSettingsSecurityRoute
+  AppSettingsIndexRoute: typeof AppSettingsIndexRoute
+}
+
+const AppSettingsRouteChildren: AppSettingsRouteChildren = {
+  AppSettingsProfileRoute: AppSettingsProfileRoute,
+  AppSettingsSecurityRoute: AppSettingsSecurityRoute,
+  AppSettingsIndexRoute: AppSettingsIndexRoute,
+}
+
+const AppSettingsRouteWithChildren = AppSettingsRoute._addFileChildren(
+  AppSettingsRouteChildren,
+)
+
+interface AppRouteChildren {
+  AppAdminRoute: typeof AppAdminRoute
+  AppSettingsRoute: typeof AppSettingsRouteWithChildren
+  AppOOrgSlugMyRoute: typeof AppOOrgSlugMyRoute
+  AppOOrgSlugSettingsRoute: typeof AppOOrgSlugSettingsRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppAdminRoute: AppAdminRoute,
+  AppSettingsRoute: AppSettingsRouteWithChildren,
+  AppOOrgSlugMyRoute: AppOOrgSlugMyRoute,
+  AppOOrgSlugSettingsRoute: AppOOrgSlugSettingsRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
+  LoginRoute: LoginRoute,
+  NotInvitedRoute: NotInvitedRoute,
   Char91_devChar93UiRoute: Char91_devChar93UiRoute,
+  InviteTokenRoute: InviteTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -16,7 +16,15 @@
     "toast": "Notis",
     "avatar": "Avatar",
     "skeleton": "Platshållare",
-    "syncPill": "Synkindikator"
+    "syncPill": "Synkindikator",
+    "sidebar": "Sidofält",
+    "pickers": "Väljare",
+    "formControls": "Formulärkontroller",
+    "auth": "Inloggningssidor",
+    "orgSettings": "Organisationsinställningar",
+    "userSettings": "Användarinställningar",
+    "admin": "Administration",
+    "placeholder": "Platshållare för Mina uppgifter"
   },
   "group": {
     "colors": "Semantiska färger",
@@ -30,7 +38,29 @@
     "live": "Prova",
     "preview": "Statisk förhandsvisning",
     "people": "Personer",
-    "orgs": "Organisationer"
+    "orgs": "Organisationer",
+    "sidebarFrames": "Ramar",
+    "sidebarItems": "Rader",
+    "orgHeader": "Organisationsrubrik",
+    "viewHeader": "Vyrubrik",
+    "emoji": "Emoji",
+    "color": "Färg",
+    "createOrg": "Formulär för ny organisation",
+    "segmented": "Segmentkontroll",
+    "select": "Rullgardinsmeny",
+    "timezone": "Tidszon",
+    "inlineEdit": "Redigering på plats",
+    "banner": "Meddelanderuta",
+    "login": "Inloggning",
+    "loginErrors": "Inloggningsfel",
+    "invite": "Inbjudan",
+    "notInvited": "Inte inbjuden",
+    "ownerView": "Ägare av en delad organisation",
+    "personalView": "Personlig organisation",
+    "memberView": "Medlem (inte ägare)",
+    "deleteConfirm": "Bekräfta borttagning",
+    "profile": "Profil",
+    "security": "Säkerhet"
   },
   "state": {
     "rest": "Vila",
@@ -53,7 +83,15 @@
     "syncing": "Synkar",
     "auto": "Den här enheten",
     "mac": "macOS",
-    "other": "Windows och Linux"
+    "other": "Windows och Linux",
+    "expanded": "Utfällt",
+    "rail": "Ikonlist",
+    "active": "Aktiv",
+    "collapsed": "Ihopfällt",
+    "empty": "Inga inloggningstjänster",
+    "signedOut": "Utloggad",
+    "signedIn": "Inloggad",
+    "expired": "Utgången"
   },
   "variant": {
     "primary": "Primär",
@@ -137,6 +175,31 @@
       "sara": "Sara",
       "olof": "Olof Bergström"
     },
-    "restoreTags": "Återställ taggarna"
+    "restoreTags": "Återställ taggarna",
+    "monday": "måndag",
+    "sunday": "söndag",
+    "owner": "Ägare",
+    "member": "Medlem",
+    "weekStart": "Veckan börjar på",
+    "role": "Roll",
+    "orgName": "Organisationens namn",
+    "banner": {
+      "info": {
+        "title": "Bra att veta",
+        "body": "E-postutskick kommer i en senare fas."
+      },
+      "success": {
+        "title": "Klart",
+        "body": "Din inbjudningslänk är redo att delas."
+      },
+      "warning": {
+        "title": "Kontrollera",
+        "body": "Ingen inloggningstjänst är konfigurerad än."
+      },
+      "danger": {
+        "title": "Något gick fel",
+        "body": "Inbjudan gäller inte längre."
+      }
+    }
   }
 }

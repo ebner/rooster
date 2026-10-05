@@ -1,0 +1,60 @@
+{
+  "sidebar": {
+    "label": "Main",
+    "search": "Search",
+    "newOrg": "New organisation",
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar",
+    "open": "Open navigation"
+  },
+  "view": {
+    "my": "My tasks"
+  },
+  "org": {
+    "menu": "{name} options",
+    "reorder": "Reorder {name}",
+    "settings": "Organisation settings",
+    "invite": "Invite people",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "collapse": "Collapse",
+    "expand": "Expand"
+  },
+  "user": {
+    "menu": "Account menu for {name}",
+    "settings": "Settings",
+    "admin": "Admin",
+    "signOut": "Sign out"
+  },
+  "dnd": {
+    "instructions": "To reorder, press Space or Enter to pick up. Use the arrow keys to move, Space or Enter to drop, and Escape to cancel.",
+    "pickedUp": "Picked up {name}. Position {position} of {total}.",
+    "over": "{name} is at position {position} of {total}.",
+    "dropped": "Moved {name} to position {position} of {total}.",
+    "cancelled": "Move cancelled. {name} stays where it was."
+  },
+  "createOrg": {
+    "title": "New organisation",
+    "name": "Name",
+    "namePlaceholder": "e.g. Northwind",
+    "icon": "Icon",
+    "color": "Colour",
+    "cancel": "Cancel",
+    "submit": "Create organisation",
+    "failed": "Couldn’t create the organisation. Try again.",
+    "created": "Created {name}"
+  },
+  "placeholder": {
+    "hint": "Task lists arrive in the next phase. Your groups are ready."
+  },
+  "notFound": {
+    "home": "Go to My tasks",
+    "orgTitle": "Organisation not found",
+    "orgBody": "This organisation doesn’t exist, or you’re not a member of it.",
+    "adminTitle": "Admins only",
+    "adminBody": "Only instance administrators can open this page."
+  },
+  "error": {
+    "saveFailed": "Couldn’t save. Check your connection and try again."
+  }
+}

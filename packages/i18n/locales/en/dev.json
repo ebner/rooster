@@ -16,7 +16,15 @@
     "toast": "Toast",
     "avatar": "Avatar",
     "skeleton": "Skeleton",
-    "syncPill": "Sync pill"
+    "syncPill": "Sync pill",
+    "sidebar": "Sidebar",
+    "pickers": "Pickers",
+    "formControls": "Form controls",
+    "auth": "Sign-in screens",
+    "orgSettings": "Organisation settings",
+    "userSettings": "User settings",
+    "admin": "Admin",
+    "placeholder": "My tasks placeholder"
   },
   "group": {
     "colors": "Semantic colours",
@@ -30,7 +38,29 @@
     "live": "Try it",
     "preview": "Static preview",
     "people": "People",
-    "orgs": "Organisations"
+    "orgs": "Organisations",
+    "sidebarFrames": "Frames",
+    "sidebarItems": "Items",
+    "orgHeader": "Organisation header",
+    "viewHeader": "View header",
+    "emoji": "Emoji",
+    "color": "Colour",
+    "createOrg": "New organisation form",
+    "segmented": "Segmented control",
+    "select": "Select",
+    "timezone": "Time zone",
+    "inlineEdit": "Inline editing",
+    "banner": "Banner",
+    "login": "Login",
+    "loginErrors": "Login errors",
+    "invite": "Invite",
+    "notInvited": "Not invited",
+    "ownerView": "Owner of a shared organisation",
+    "personalView": "Personal organisation",
+    "memberView": "Member (not owner)",
+    "deleteConfirm": "Delete confirmation",
+    "profile": "Profile",
+    "security": "Security"
   },
   "state": {
     "rest": "Rest",
@@ -53,7 +83,15 @@
     "syncing": "Syncing",
     "auto": "This device",
     "mac": "macOS",
-    "other": "Windows and Linux"
+    "other": "Windows and Linux",
+    "expanded": "Expanded",
+    "rail": "Rail",
+    "active": "Active",
+    "collapsed": "Collapsed",
+    "empty": "No providers",
+    "signedOut": "Signed out",
+    "signedIn": "Signed in",
+    "expired": "Expired"
   },
   "variant": {
     "primary": "Primary",
@@ -137,6 +175,31 @@
       "sara": "Sara",
       "olof": "Olof Bergström"
     },
-    "restoreTags": "Restore tags"
+    "restoreTags": "Restore tags",
+    "monday": "Monday",
+    "sunday": "Sunday",
+    "owner": "Owner",
+    "member": "Member",
+    "weekStart": "Week starts on",
+    "role": "Role",
+    "orgName": "Organisation name",
+    "banner": {
+      "info": {
+        "title": "Good to know",
+        "body": "Email delivery arrives in a later phase."
+      },
+      "success": {
+        "title": "All set",
+        "body": "Your invite link is ready to share."
+      },
+      "warning": {
+        "title": "Check this",
+        "body": "No sign-in provider is configured yet."
+      },
+      "danger": {
+        "title": "Something went wrong",
+        "body": "That invite no longer works."
+      }
+    }
   }
 }

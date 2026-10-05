@@ -51,7 +51,9 @@ export interface AvatarProps {
   name: string;
   src?: string | undefined;
   /** Org avatars may use an emoji instead of initials. */
-  emoji?: string | undefined;
+  emoji?: string | null | undefined;
+  /** An explicit tag-palette colour (org avatars); otherwise hashed from `id`. */
+  color?: TagColor | null | undefined;
   size?: AvatarSize;
   /** `square` is the org variant (radius xs). */
   shape?: 'circle' | 'square';
@@ -65,6 +67,7 @@ export function Avatar({
   name,
   src,
   emoji,
+  color,
   size = 24,
   shape = 'circle',
   decorative = false,
@@ -72,6 +75,7 @@ export function Avatar({
 }: AvatarProps) {
   const [failedSrc, setFailedSrc] = useState<string | undefined>();
   const showImage = src !== undefined && src !== failedSrc;
+  const fallbackColor = color ?? avatarColor(id);
   const a11y = decorative ? { 'aria-hidden': true as const } : { role: 'img', 'aria-label': name };
   const classes = cn(
     'inline-flex shrink-0 select-none items-center justify-center overflow-hidden font-semibold leading-none',
@@ -94,10 +98,10 @@ export function Avatar({
   return (
     <span
       {...a11y}
-      data-color={avatarColor(id)}
-      className={cn(classes, tagColorClasses[avatarColor(id)])}
+      data-color={fallbackColor}
+      className={cn(classes, tagColorClasses[fallbackColor])}
     >
-      <span aria-hidden>{emoji ?? initials(name, size <= 20 ? 1 : 2)}</span>
+      <span aria-hidden>{emoji || initials(name, size <= 20 ? 1 : 2)}</span>
     </span>
   );
 }

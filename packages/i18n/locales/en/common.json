@@ -3,11 +3,6 @@
     "name": "rooster",
     "tagline": "Your tasks, calm and in order."
   },
-  "home": {
-    "title": "Hello rooster",
-    "body": "The foundations are in place. Your tasks will live here soon.",
-    "kitchenSink": "Open the component kitchen sink"
-  },
   "language": {
     "label": "Language",
     "en": "English",
@@ -57,5 +52,23 @@
   },
   "list": {
     "loading": "Loading tasks…"
+  },
+  "emoji": {
+    "initials": "Initials, no icon"
+  },
+  "inlineEdit": {
+    "edit": "{label}: {value}, edit"
+  },
+  "color": {
+    "gray": "Grey",
+    "red": "Red",
+    "orange": "Orange",
+    "amber": "Amber",
+    "green": "Green",
+    "teal": "Teal",
+    "blue": "Blue",
+    "indigo": "Indigo",
+    "purple": "Purple",
+    "pink": "Pink"
   }
 }

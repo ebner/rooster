@@ -16,11 +16,20 @@ const sections = [
   ['avatar', 'Avatar', 'Avatar'],
   ['skeleton', 'Skeleton', 'Platshållare'],
   ['syncPill', 'Sync pill', 'Synkindikator'],
+  ['sidebar', 'Sidebar', 'Sidofält'],
+  ['pickers', 'Pickers', 'Väljare'],
+  ['formControls', 'Form controls', 'Formulärkontroller'],
+  ['auth', 'Sign-in screens', 'Inloggningssidor'],
+  ['orgSettings', 'Organisation settings', 'Organisationsinställningar'],
+  ['userSettings', 'User settings', 'Användarinställningar'],
+  ['admin', 'Admin', 'Administration'],
+  ['placeholder', 'My tasks placeholder', 'Platshållare för Mina uppgifter'],
 ] as const;
 
 async function openKitchenSink(page: Page) {
   await page.goto('/_dev/ui');
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  // The embedded sign-in screens bring their own h1s, so match the page title by name.
+  await expect(page.getByRole('heading', { level: 1, name: 'Kitchen sink' })).toBeVisible();
 }
 
 test.beforeEach(async ({ page }) => {
@@ -37,7 +46,7 @@ test('AC-0.4 /_dev/ui renders every Coop v0 component section', async ({ page })
   await expect(page.getByRole('heading', { level: 1, name: 'Kitchen sink' })).toBeVisible();
   for (const [id, title] of sections) {
     const section = page.getByTestId(`section-${id}`);
-    await expect(section.getByRole('heading', { level: 2, name: title })).toBeVisible();
+    await expect(section.getByRole('heading', { level: 2, name: title }).first()).toBeVisible();
   }
   await expect(
     page.getByTestId('section-button').getByRole('button', { name: 'Add task' }),
@@ -62,7 +71,9 @@ test('AC-0.4 interactive overlays and toasts stay axe-clean', async ({ page }) =
   await page.getByRole('button', { name: 'Show toast with undo' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Task deleted' })).toBeVisible();
   await page.getByRole('button', { name: 'Show error toast' }).click();
-  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Notifications' }).getByRole('alert'),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Show details' }).click();
   await expect(page.getByRole('dialog', { name: 'Due date' })).toBeVisible();
   const results = await new AxeBuilder({ page })
@@ -96,9 +107,9 @@ test('AC-0.5 switching to Svenska translates the kitchen sink and persists acros
   await expect(page.locator('html')).toHaveAttribute('lang', 'sv');
   await expect(page.getByRole('heading', { level: 1, name: 'Komponentkatalog' })).toBeVisible();
   for (const [id, , sv] of sections) {
-    await expect(page.getByTestId(`section-${id}`).getByRole('heading', { level: 2 })).toHaveText(
-      sv,
-    );
+    await expect(
+      page.getByTestId(`section-${id}`).getByRole('heading', { level: 2 }).first(),
+    ).toHaveText(sv);
   }
   await expect(
     page.getByTestId('section-button').getByRole('button', { name: 'Lägg till uppgift' }).first(),
@@ -112,10 +123,9 @@ test('AC-0.5 switching to Svenska translates the kitchen sink and persists acros
   await expect(page.getByRole('radio', { name: 'Svenska' }).first()).toBeChecked();
 });
 
-test('WP 0.4 home page greets in the chosen language', async ({ page }) => {
+test('WP 1.4 / opens My tasks of the personal org', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1, name: 'Hello rooster' })).toBeVisible();
+  await expect(page).toHaveURL(/\/o\/personal\/my$/);
+  await expect(page.getByRole('heading', { level: 1, name: /My tasks/ })).toBeVisible();
   await expect(page.getByRole('img', { name: 'rooster' })).toBeVisible();
-  await page.getByRole('radio', { name: 'Svenska' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Hej rooster' })).toBeVisible();
 });

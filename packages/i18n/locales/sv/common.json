@@ -3,11 +3,6 @@
     "name": "rooster",
     "tagline": "Dina uppgifter, lugnt och i ordning."
   },
-  "home": {
-    "title": "Hej rooster",
-    "body": "Grunden är på plats. Snart finns dina uppgifter här.",
-    "kitchenSink": "Öppna komponentkatalogen"
-  },
   "language": {
     "label": "Språk",
     "en": "English",
@@ -57,5 +52,23 @@
   },
   "list": {
     "loading": "Laddar uppgifter…"
+  },
+  "emoji": {
+    "initials": "Initialer, ingen ikon"
+  },
+  "inlineEdit": {
+    "edit": "{label}: {value}, redigera"
+  },
+  "color": {
+    "gray": "Grå",
+    "red": "Röd",
+    "orange": "Orange",
+    "amber": "Bärnsten",
+    "green": "Grön",
+    "teal": "Blågrön",
+    "blue": "Blå",
+    "indigo": "Indigo",
+    "purple": "Lila",
+    "pink": "Rosa"
   }
 }

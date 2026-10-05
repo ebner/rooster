@@ -1,0 +1,60 @@
+{
+  "sidebar": {
+    "label": "Huvudmeny",
+    "search": "Sök",
+    "newOrg": "Ny organisation",
+    "collapse": "Fäll ihop sidofältet",
+    "expand": "Fäll ut sidofältet",
+    "open": "Öppna navigeringen"
+  },
+  "view": {
+    "my": "Mina uppgifter"
+  },
+  "org": {
+    "menu": "Alternativ för {name}",
+    "reorder": "Flytta {name}",
+    "settings": "Organisationsinställningar",
+    "invite": "Bjud in personer",
+    "moveUp": "Flytta upp",
+    "moveDown": "Flytta ned",
+    "collapse": "Fäll ihop",
+    "expand": "Fäll ut"
+  },
+  "user": {
+    "menu": "Kontomeny för {name}",
+    "settings": "Inställningar",
+    "admin": "Administration",
+    "signOut": "Logga ut"
+  },
+  "dnd": {
+    "instructions": "Tryck på blanksteg eller Enter för att lyfta. Flytta med piltangenterna, släpp med blanksteg eller Enter och avbryt med Escape.",
+    "pickedUp": "Lyfte {name}. Plats {position} av {total}.",
+    "over": "{name} är på plats {position} av {total}.",
+    "dropped": "Flyttade {name} till plats {position} av {total}.",
+    "cancelled": "Flytten avbröts. {name} ligger kvar."
+  },
+  "createOrg": {
+    "title": "Ny organisation",
+    "name": "Namn",
+    "namePlaceholder": "t.ex. Northwind",
+    "icon": "Ikon",
+    "color": "Färg",
+    "cancel": "Avbryt",
+    "submit": "Skapa organisation",
+    "failed": "Det gick inte att skapa organisationen. Försök igen.",
+    "created": "{name} har skapats"
+  },
+  "placeholder": {
+    "hint": "Uppgiftslistorna kommer i nästa fas. Dina grupper är redan på plats."
+  },
+  "notFound": {
+    "home": "Gå till Mina uppgifter",
+    "orgTitle": "Organisationen hittades inte",
+    "orgBody": "Organisationen finns inte, eller så är du inte medlem i den.",
+    "adminTitle": "Endast för administratörer",
+    "adminBody": "Bara administratörer kan öppna den här sidan."
+  },
+  "error": {
+    "saveFailed": "Det gick inte att spara. Kontrollera anslutningen och försök igen."
+  }
+}

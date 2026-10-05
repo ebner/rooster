@@ -1,0 +1,41 @@
+{
+  "title": "Admin",
+  "allowlist": {
+    "title": "Allowlist",
+    "description": "Who may sign in, in addition to the addresses in the server configuration and anyone with an invite.",
+    "inputLabel": "Email address or domain",
+    "placeholder": "anna@example.com or example.com",
+    "add": "Add",
+    "invalid": "Enter an email address or a domain such as example.com.",
+    "duplicate": "That address or domain is already on the list.",
+    "addFailed": "Couldn’t add the entry. Try again.",
+    "empty": "The list is empty. Only admins and invited people can sign in.",
+    "kind": {
+      "email": "Email",
+      "domain": "Domain"
+    },
+    "added": "Added {date}",
+    "remove": "Remove {value}",
+    "removed": "Removed from the allowlist"
+  },
+  "users": {
+    "title": "Users",
+    "count": "{count, plural, one {# user} other {# users}}",
+    "user": "User",
+    "created": "Joined",
+    "status": "Status",
+    "actions": "Actions",
+    "admin": "Admin",
+    "active": "Active",
+    "disabled": "Disabled",
+    "disable": "Disable",
+    "enable": "Enable",
+    "disableNamed": "Disable {name}",
+    "enableNamed": "Enable {name}",
+    "disabledToast": "User disabled and signed out everywhere",
+    "enabledToast": "User enabled"
+  },
+  "error": {
+    "saveFailed": "Couldn’t save. Check your connection and try again."
+  }
+}

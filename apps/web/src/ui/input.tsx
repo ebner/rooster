@@ -54,7 +54,7 @@ export interface TextFieldProps extends Omit<AriaTextFieldProps, 'className' | '
   hideLabel?: boolean;
   description?: string;
   /** Shown below the field in danger text; also marks the field invalid. */
-  errorMessage?: string;
+  errorMessage?: string | undefined;
   placeholder?: string;
   variant?: InputProps['variant'] | undefined;
   className?: string | undefined;

@@ -1,0 +1,41 @@
+{
+  "title": "Administration",
+  "allowlist": {
+    "title": "Tillåtna adresser",
+    "description": "Vem som får logga in, utöver adresserna i serverkonfigurationen och alla som har en inbjudan.",
+    "inputLabel": "E-postadress eller domän",
+    "placeholder": "anna@example.com eller example.com",
+    "add": "Lägg till",
+    "invalid": "Ange en e-postadress eller en domän, till exempel example.com.",
+    "duplicate": "Adressen eller domänen finns redan i listan.",
+    "addFailed": "Det gick inte att lägga till. Försök igen.",
+    "empty": "Listan är tom. Bara administratörer och inbjudna kan logga in.",
+    "kind": {
+      "email": "E-post",
+      "domain": "Domän"
+    },
+    "added": "Tillagd {date}",
+    "remove": "Ta bort {value}",
+    "removed": "Borttagen från listan"
+  },
+  "users": {
+    "title": "Användare",
+    "count": "{count, plural, one {# användare} other {# användare}}",
+    "user": "Användare",
+    "created": "Gick med",
+    "status": "Status",
+    "actions": "Åtgärder",
+    "admin": "Admin",
+    "active": "Aktiv",
+    "disabled": "Avstängd",
+    "disable": "Stäng av",
+    "enable": "Aktivera",
+    "disableNamed": "Stäng av {name}",
+    "enableNamed": "Aktivera {name}",
+    "disabledToast": "Användaren är avstängd och utloggad överallt",
+    "enabledToast": "Användaren är aktiverad"
+  },
+  "error": {
+    "saveFailed": "Det gick inte att spara. Kontrollera anslutningen och försök igen."
+  }
+}

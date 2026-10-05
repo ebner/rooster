@@ -11,7 +11,7 @@ import {
   SlidersHorizontal,
   Trash2,
 } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
 import type { Platform } from '../../lib/platform';
@@ -30,6 +30,8 @@ import { TaskCheckbox } from '../../ui/task-checkbox';
 import { ToastView, toast } from '../../ui/toast';
 import { Tooltip, tooltipSurface } from '../../ui/tooltip';
 import { LanguageSwitch } from '../locale/language-switch';
+import { Group, Section, Specimen } from './layout';
+import { Phase1Sections, phase1SectionIds } from './phase1-sections';
 
 const sectionIds = [
   'foundations',
@@ -47,7 +49,6 @@ const sectionIds = [
   'skeleton',
   'syncPill',
 ] as const;
-type SectionId = (typeof sectionIds)[number];
 
 type ForcedState = 'rest' | 'hover' | 'focus' | 'pressed';
 const forcedStates: readonly ForcedState[] = ['rest', 'hover', 'focus', 'pressed'];
@@ -146,56 +147,6 @@ const shortcuts = [
   '?',
 ] as const;
 const platforms: readonly (Platform | undefined)[] = [undefined, 'mac', 'other'];
-
-function Section({ id, title, children }: { id: SectionId; title: string; children: ReactNode }) {
-  return (
-    <section
-      id={id}
-      aria-labelledby={`${id}-title`}
-      data-testid={`section-${id}`}
-      className="flex scroll-mt-16 flex-col gap-6"
-    >
-      <h2 id={`${id}-title`} className="text-lg">
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-function Group({
-  title,
-  children,
-  className,
-}: {
-  title: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className="flex flex-col gap-3">
-      <h3 className="text-sm font-medium text-text-muted">{title}</h3>
-      <div className={cn('flex flex-wrap items-start gap-x-6 gap-y-4', className)}>{children}</div>
-    </div>
-  );
-}
-
-function Specimen({
-  label,
-  children,
-  className,
-}: {
-  label: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <figure className={cn('flex flex-col items-start gap-2', className)}>
-      <div className="flex min-h-control-lg items-center">{children}</div>
-      <figcaption className="text-xs text-text-muted">{label}</figcaption>
-    </figure>
-  );
-}
 
 function FoundationsSection() {
   const { t } = useTranslation('dev');
@@ -749,7 +700,7 @@ function SyncPillSection() {
   );
 }
 
-/** `/_dev/ui`: every Coop v0 component in every state (WP 0.5, AC-0.4). */
+/** `/_dev/ui`: every Coop component in every state (WP 0.5, AC-0.4; Phase 1 screens). */
 export function KitchenSink() {
   const { t } = useTranslation('dev');
   return (
@@ -767,7 +718,7 @@ export function KitchenSink() {
           <p className="text-md text-text-secondary">{t('intro')}</p>
           <nav aria-label={t('contents')}>
             <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-              {sectionIds.map((id) => (
+              {[...sectionIds, ...phase1SectionIds].map((id) => (
                 <li key={id}>
                   <a
                     href={`#${id}`}
@@ -794,6 +745,7 @@ export function KitchenSink() {
         <AvatarSection />
         <SkeletonSection />
         <SyncPillSection />
+        <Phase1Sections />
       </main>
     </div>
   );

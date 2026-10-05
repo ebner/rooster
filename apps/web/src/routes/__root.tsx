@@ -1,5 +1,11 @@
-import { createRootRouteWithContext, Link, Outlet } from '@tanstack/react-router';
-import { I18nProvider } from 'react-aria-components';
+import {
+  createRootRouteWithContext,
+  Link,
+  type NavigateOptions,
+  Outlet,
+  useRouter,
+} from '@tanstack/react-router';
+import { I18nProvider, RouterProvider } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import type { RouterContext } from '../router';
 import { ToastRegion } from '../ui/toast';
@@ -9,12 +15,25 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   notFoundComponent: NotFound,
 });
 
+declare module 'react-aria-components' {
+  interface RouterConfig {
+    routerOptions: Omit<NavigateOptions, 'to' | 'href'>;
+  }
+}
+
 function RootLayout() {
   const { i18n } = useTranslation();
+  const router = useRouter();
   return (
     <I18nProvider locale={i18n.language}>
-      <Outlet />
-      <ToastRegion />
+      {/* React Aria links and menu items with `href` navigate client-side through TanStack. */}
+      <RouterProvider
+        navigate={(href, options) => router.navigate({ ...options, href })}
+        useHref={(href) => href}
+      >
+        <Outlet />
+        <ToastRegion />
+      </RouterProvider>
     </I18nProvider>
   );
 }

@@ -1,9 +1,17 @@
 import i18next, { type InitOptions, type i18n, type Module, type Newable } from 'i18next';
 import ICU from 'i18next-icu';
+import enAdmin from '../locales/en/admin.json' with { type: 'json' };
+import enAuth from '../locales/en/auth.json' with { type: 'json' };
 import enCommon from '../locales/en/common.json' with { type: 'json' };
 import enDev from '../locales/en/dev.json' with { type: 'json' };
+import enSettings from '../locales/en/settings.json' with { type: 'json' };
+import enShell from '../locales/en/shell.json' with { type: 'json' };
+import svAdmin from '../locales/sv/admin.json' with { type: 'json' };
+import svAuth from '../locales/sv/auth.json' with { type: 'json' };
 import svCommon from '../locales/sv/common.json' with { type: 'json' };
 import svDev from '../locales/sv/dev.json' with { type: 'json' };
+import svSettings from '../locales/sv/settings.json' with { type: 'json' };
+import svShell from '../locales/sv/shell.json' with { type: 'json' };
 
 /** UI languages (D-23). English is the fallback. */
 export const supportedLocales = ['en', 'sv'] as const;
@@ -11,17 +19,32 @@ export type Locale = (typeof supportedLocales)[number];
 export const defaultLocale: Locale = 'en';
 
 /**
- * Catalog namespaces. `common` is the default; `dev` holds kitchen-sink copy.
+ * Catalog namespaces. `common` is the default; `dev` holds kitchen-sink copy; `shell`,
+ * `auth`, `settings` and `admin` are the web app's screens.
  * Add a namespace by adding `locales/<locale>/<ns>.json` for every locale and
  * registering it here.
  */
-export const namespaces = ['common', 'dev'] as const;
+export const namespaces = ['common', 'dev', 'shell', 'auth', 'settings', 'admin'] as const;
 export type Namespace = (typeof namespaces)[number];
 export const defaultNamespace: Namespace = 'common';
 
 export const resources = {
-  en: { common: enCommon, dev: enDev },
-  sv: { common: svCommon, dev: svDev },
+  en: {
+    common: enCommon,
+    dev: enDev,
+    shell: enShell,
+    auth: enAuth,
+    settings: enSettings,
+    admin: enAdmin,
+  },
+  sv: {
+    common: svCommon,
+    dev: svDev,
+    shell: svShell,
+    auth: svAuth,
+    settings: svSettings,
+    admin: svAdmin,
+  },
 } as const;
 
 /** The English catalog shape; used for typed keys (`CustomTypeOptions['resources']`). */
