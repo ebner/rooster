@@ -136,6 +136,7 @@ function toInvitePreview(invite: ResolvedInvite, now: number): InvitePreview {
   const reason = invalidReason(invite, now);
   return {
     kind: invite.kind,
+    orgSlug: invite.org.slug,
     orgName: invite.org.name,
     orgAvatarEmoji: invite.org.avatarEmoji,
     orgColor: invite.org.color as TagColor | null,

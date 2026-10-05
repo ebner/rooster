@@ -17,20 +17,28 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - `src/app.ts`: the pure `createApp(deps)`, used by tests.
   - `src/config.ts`: zod env schema. **Every env var lives here and in `.env.example`.**
   - `src/lib/`: errors (problem+json), logger, request id/log, security headers, SPA serving, graceful close.
-  - `src/routes/`: one file per resource. Route zod schemas come from `@rooster/core/schemas`, plus `.openapi('Name')`.
+  - `src/routes/`: one file per resource. Route zod schemas come from `@rooster/core/schemas`, registered in `routes/schemas.ts` with `.openapi('Name')`.
+  - `src/auth/`: the better-auth instance (`auth.ts`), mounting under `/api/auth/*`, actor resolution (`actor.ts`), and signed cookies. better-auth handles **authentication only**; orgs are ours (ADR 0002).
+  - `src/services/`: `OrgService`, `UserService`, `AdminService` and `sign-in-policy.ts` (the allowlist rules). **All authorisation lives here.**
   - `src/db/`: client and pragmas, `migrate.ts`, `schema/`, `migrations/` (generated, append-only).
   - `src/jobs/`: croner scheduler.
-  - *(planned)* `src/services/`, `src/auth/`, `src/events/`.
-  - Tests in `test/` (`createTestDb`, `createTestApp`).
+  - *(planned)* `src/events/` (SSE).
+  - Tests live in `test/`. Helpers: `createTestDb`, `createTestApp`, `mock-idp.ts`, `signInAs(email)`.
+  - `test/authz.matrix.test.ts` enumerates **every** OpenAPI route; a new route without a matrix row fails it.
   - The build bundles **all** JS deps into `dist/main.js`, except native modules (`NATIVE_DEPS` in `tsdown.config.ts`). Add a native dependency there **and** in `docker/Dockerfile`.
 - `apps/web`: React SPA (+ PWA from P4).
   - `src/routes/`: TanStack file routes. `routeTree.gen.ts` is generated and committed. `src/routes/[_dev]/ui.tsx` is the dev-only kitchen sink at `/_dev/ui`; the brackets escape the underscore.
   - `src/ui/`: Coop components.
-  - `src/features/*`
-  - `src/lib/`: `cn`, i18n, platform.
+  - `src/features/*`: shell (sidebar, app frame), auth, org-settings, settings, admin, list (P1 placeholder).
+  - `src/data/`: **the only place that talks to the API.** TanStack Query hooks over `createRoosterClient()`, query keys in `query-keys.ts`, problem+json mapped to `ApiError` in `errors.ts`, and better-auth client calls in `auth.ts` / `auth-client.ts`. Components take props; route components call `src/data` hooks.
+  - `src/routes/_app.tsx`: the signed-in layout. Its `beforeLoad` guard redirects to `/login?redirect=…`.
+  - `src/lib/`: `cn`, i18n, platform, and `safe-redirect.ts`. **Every redirect target must go through `safeRedirectPath()`.**
+  - `src/keymap.ts`: the single keymap registry (only shell shortcuts so far).
   - `src/styles/theme.css`: token → Tailwind mapping.
   - `e2e/`: Playwright tests.
-  - *(planned)* `src/data/` (queries, mutations, outbox, SSE), `src/state/`, `src/keymap.ts` (the single keymap registry).
+    - The config starts the mock IdP, the server (with a fresh temp data dir) and Vite.
+    - `e2e/support/` has `signInAs`, `newClient` and `apiCall`. The sign-in identity is chosen with `login_hint`, and each browser sends its own `X-Forwarded-For` so the per-IP auth rate limit isn't shared.
+  - *(planned)* outbox and SSE in `src/data/`, and `src/state/` (P2/P4).
 - *(planned, P8)* `apps/cli`: CLI, TUI (Ink) and MCP server.
 - `packages/core`: **pure** TS (no IO, no `Date.now()` inside functions):
   - `ids` (uuidv7)
@@ -43,13 +51,14 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
 - `packages/i18n`: `locales/{en,sv}/<namespace>.json` (ICU messages), plus `createI18n`/`initI18n`/`detectLocale`.
 - `packages/tokens`: Coop tokens. `src/tokens.css` and `src/index.ts` must agree. A contrast test guards every allowed pair.
 - `docker/`: `Dockerfile` (distroless, nonroot) and `proxy/` snippets. `compose.yaml` sits at the root.
-- `scripts/`: `ci.sh` (the whole pipeline), `docker-smoke.sh`, `i18n-check.mjs`.
+- `scripts/`: `ci.sh` (the whole pipeline), `docker-smoke.sh`, `i18n-check.mjs`, and `dev-idp.mjs` (a mock OIDC provider for local dev and tests).
 - `docs/spec/` (the spec), `docs/adr/` (decisions made during implementation).
 
 ## Commands
 ```
 pnpm i                         # install (pnpm 12 via corepack; Node 24)
 pnpm --filter @rooster/web exec playwright install chromium   # once, for e2e
+pnpm dev:idp                   # mock OIDC provider on :9400 (start BEFORE pnpm dev; signs in as dev@example.com)
 pnpm dev                       # server (:3000, tsx watch) + web (vite :5173, proxies /api)
 pnpm build                     # all packages (web → apps/web/dist, server → apps/server/dist)
 pnpm test                      # vitest, all projects
@@ -62,7 +71,12 @@ pnpm db:generate               # drizzle-kit generate + STRICT post-processing
 pnpm ci                        # full pipeline (scripts/ci.sh); add --with-docker for image build + smoke
 node apps/web/scripts/render-icons.mjs   # regenerate PNG icons from the SVG mark
 ```
-Local env for the server: copy `apps/server/.env.example` to `apps/server/.env`.
+**Local dev:**
+1. Copy `apps/server/.env.example` to `apps/server/.env` and uncomment the "Local development with the mock IdP" block.
+2. Run `pnpm dev:idp`, then `pnpm dev`, then open http://localhost:5173 and use "Dev login".
+3. To switch the identity for the next sign-in, call `curl -XPOST localhost:9400/__next-user -d '{"email":"bob@example.com"}'`.
+
+At least one sign-in provider must be configured, or the server exits with code 78.
 
 ## Hard rules
 1. **Authorisation only in services.** Routes never query the DB directly. Every service method takes an `actor` and checks access (04 §4.3). Every new route needs a row in the authorisation matrix test.
@@ -109,8 +123,9 @@ This file is the entry point for every agent and must describe the repository **
 Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to them. A PR that changes any of the above without updating `AGENTS.md` is not done.
 
 ## Status
-- **Current phase:** Phase 1 (Auth, users, orgs) is next.
-- **Last completed phase:** Phase 0, Foundations (2026-10-05). All AC-0.x pass. The Docker image is 230 MB (25 MB of it rooster's own).
+- **Current phase:** Phase 2 (list core) is next.
+- **Last completed phase:** Phase 1, Auth, users, orgs (2026-10-05). AC-1.1 to AC-1.7 pass end-to-end against the mock IdP. ADRs 0002 and 0003 record the auth and org decisions.
+- **Deferred (owned by later WPs):** the API rate limit (WP 2.1), avatar upload (P10), linked identities (P8).
 
 ## When you finish a WP
 - Run every gate in 10 §1.

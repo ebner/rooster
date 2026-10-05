@@ -3,8 +3,8 @@ import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
-/** The API server started by `pnpm dev` (apps/server). */
-const apiTarget = 'http://localhost:3000';
+/** The API server started by `pnpm dev` (apps/server); e2e points it at its own server. */
+const apiTarget = process.env.ROOSTER_API_TARGET ?? 'http://localhost:3000';
 const proxied = ['/api', '/healthz', '/readyz', '/ical'];
 
 export default defineConfig({

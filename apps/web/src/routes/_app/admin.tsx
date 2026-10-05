@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, notFound } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import {
+  meQueryOptions,
   useAddAllowlistEntry,
   useAdminUsers,
   useAllowlist,
@@ -13,10 +14,14 @@ import { AdminPage } from '../../features/admin/admin-page';
 import { AllowlistSection } from '../../features/admin/allowlist-section';
 import { UsersSection } from '../../features/admin/users-section';
 import { ViewBody, ViewHeader } from '../../features/shell/app-shell';
-import { NotAllowed } from '../../features/shell/org-not-found';
 import { toast } from '../../ui/toast';
 
+/** Instance admins only; everyone else gets the plain 404 (no hint that it exists). */
 export const Route = createFileRoute('/_app/admin')({
+  beforeLoad: async ({ context }) => {
+    const me = await context.queryClient.ensureQueryData(meQueryOptions);
+    if (!me.user.isAdmin) throw notFound();
+  },
   component: AdminRoute,
 });
 
@@ -31,7 +36,6 @@ function AdminRoute() {
   const setDisabled = useSetUserDisabled();
 
   if (!me.data) return null;
-  if (!me.data.user.isAdmin) return <NotAllowed />;
   const now = Date.now();
   const failed = () => toast({ message: t('error.saveFailed'), tone: 'danger' });
 

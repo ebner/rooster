@@ -50,11 +50,15 @@
   "notFound": {
     "home": "Go to My tasks",
     "orgTitle": "Organisation not found",
-    "orgBody": "This organisation doesn’t exist, or you’re not a member of it.",
-    "adminTitle": "Admins only",
-    "adminBody": "Only instance administrators can open this page."
+    "orgBody": "This organisation doesn’t exist, or you’re not a member of it."
   },
   "error": {
     "saveFailed": "Couldn’t save. Check your connection and try again."
+  },
+  "groups": {
+    "inbox": "Inbox",
+    "today": "Today",
+    "prio": "Prio",
+    "upcoming": "Upcoming"
   }
 }

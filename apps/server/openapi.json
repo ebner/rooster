@@ -764,6 +764,9 @@
               "link"
             ]
           },
+          "orgSlug": {
+            "type": "string"
+          },
           "orgName": {
             "type": "string"
           },
@@ -834,6 +837,7 @@
         },
         "required": [
           "kind",
+          "orgSlug",
           "orgName",
           "orgAvatarEmoji",
           "orgColor",

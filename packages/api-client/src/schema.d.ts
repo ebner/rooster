@@ -520,6 +520,7 @@ export interface components {
         InvitePreview: {
             /** @enum {string} */
             kind: "email" | "link";
+            orgSlug: string;
             orgName: string;
             orgAvatarEmoji: string | null;
             /** @enum {string|null} */

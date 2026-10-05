@@ -1,8 +1,8 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { createFileRoute, redirect } from '@tanstack/react-router';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAuthProviders, useMe, useSignIn } from '../data';
-import { isLoginError, type LoginError, LoginPage } from '../features/auth/login-page';
+import { meQueryOptions, useAuthProviders, useSignIn } from '../data';
+import { type LoginError, LoginPage } from '../features/auth/login-page';
 import { safeRedirectPath } from '../lib/safe-redirect';
 import { toast } from '../ui/toast';
 
@@ -11,31 +11,38 @@ interface LoginSearch {
   redirect?: string;
 }
 
+/** better-auth error codes (`/login?error=…`) → the banners the page knows. */
+function toLoginError(code: unknown): LoginError | undefined {
+  if (typeof code !== 'string' || code === '') return undefined;
+  if (code === 'not_invited') return 'not_invited';
+  if (code === 'account_disabled' || code === 'disabled') return 'disabled';
+  if (code === 'invite_invalid') return 'invite_invalid';
+  return 'failed';
+}
+
 export const Route = createFileRoute('/login')({
   validateSearch: (search: Record<string, unknown>): LoginSearch => {
-    const redirect = safeRedirectPath(search.redirect);
-    return {
-      ...(isLoginError(search.error) ? { error: search.error } : {}),
-      ...(redirect ? { redirect } : {}),
-    };
+    const error = toLoginError(search.error);
+    const target = safeRedirectPath(search.redirect);
+    return { ...(error ? { error } : {}), ...(target ? { redirect: target } : {}) };
+  },
+  // Already signed in: continue to the app.
+  beforeLoad: async ({ context, search }) => {
+    const signedIn = await context.queryClient
+      .fetchQuery(meQueryOptions)
+      .then(() => true)
+      .catch(() => false);
+    if (signedIn) throw redirect({ href: safeRedirectPath(search.redirect) ?? '/', replace: true });
   },
   component: LoginRoute,
 });
 
 function LoginRoute() {
   const { t } = useTranslation('auth');
-  const { error, redirect } = Route.useSearch();
-  const navigate = useNavigate();
-  const me = useMe();
+  const { error, redirect: target } = Route.useSearch();
   const providers = useAuthProviders();
   const signIn = useSignIn();
   const [pendingProviderId, setPendingProviderId] = useState<string | null>(null);
-
-  const signedIn = Boolean(me.data);
-  // Already signed in (or the fixture sign-in finished): continue to the app.
-  useEffect(() => {
-    if (signedIn) void navigate({ href: safeRedirectPath(redirect) ?? '/', replace: true });
-  }, [signedIn]);
 
   return (
     <LoginPage
@@ -45,11 +52,10 @@ function LoginRoute() {
       onSignIn={async (providerId) => {
         setPendingProviderId(providerId);
         try {
-          const callbackUrl = safeRedirectPath(redirect);
-          await signIn.mutateAsync({ providerId, ...(callbackUrl ? { callbackUrl } : {}) });
+          // Leaves the page for the provider; the promise only settles on failure.
+          await signIn.mutateAsync({ providerId, ...(target ? { callbackUrl: target } : {}) });
         } catch {
           toast({ message: t('login.error.failed.title'), tone: 'danger' });
-        } finally {
           setPendingProviderId(null);
         }
       }}

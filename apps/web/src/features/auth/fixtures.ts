@@ -10,6 +10,7 @@ const day = 24 * 60 * 60 * 1000;
 const now = Date.now();
 const org = {
   id: fixtureIds.companyOrg,
+  slug: 'northwind',
   name: 'Northwind',
   avatarEmoji: null,
   color: 'blue',

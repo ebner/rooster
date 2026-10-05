@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { Org, OrgPatch } from '../../data/types';
-import { Avatar } from '../../ui/avatar';
+import { Avatar, avatarColor } from '../../ui/avatar';
 import { Banner } from '../../ui/banner';
 import { ColorPicker } from '../../ui/color-picker';
 import { EmojiPicker } from '../../ui/emoji-picker';
@@ -58,7 +58,8 @@ export function GeneralSection({ org, onUpdate }: GeneralSectionProps) {
       />
       <ColorPicker
         label={t('org.general.color')}
-        value={org.color ?? 'gray'}
+        // No stored colour: the avatar shows the hashed one, so preselect that.
+        value={org.color ?? avatarColor(org.id)}
         isDisabled={!canEdit}
         onChange={(color) => onUpdate({ color })}
       />

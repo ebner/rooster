@@ -189,6 +189,8 @@ export const INVITE_INVALID_REASONS = ['expired', 'revoked', 'used', 'org_delete
 /** GET /invites/:token (public). */
 export const invitePreviewSchema = z.object({
   kind: inviteKindSchema,
+  /** Lets the invitee's client open the org right after joining. */
+  orgSlug: z.string(),
   orgName: z.string(),
   orgAvatarEmoji: z.string().nullable(),
   orgColor: tagColorSchema.nullable(),

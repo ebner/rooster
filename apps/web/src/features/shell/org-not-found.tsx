@@ -29,8 +29,3 @@ export function OrgNotFound() {
   const { t } = useTranslation('shell');
   return <Message title={t('notFound.orgTitle')} body={t('notFound.orgBody')} />;
 }
-
-export function NotAllowed() {
-  const { t } = useTranslation('shell');
-  return <Message title={t('notFound.adminTitle')} body={t('notFound.adminBody')} />;
-}

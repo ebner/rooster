@@ -1,6 +1,8 @@
+import { isLocale } from '@rooster/i18n';
 import {
   createFileRoute,
   Outlet,
+  redirect,
   useLocation,
   useNavigate,
   useParams,
@@ -8,8 +10,10 @@ import {
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  ApiError,
   errorCode,
   findOrg,
+  meQueryOptions,
   useChangeLocale,
   useCreateOrg,
   useMe,
@@ -20,15 +24,28 @@ import {
 import { AppShell } from '../features/shell/app-shell';
 import { orgUrlSlug, paths } from '../features/shell/paths';
 import { Sidebar } from '../features/shell/sidebar';
+import { setLocale } from '../lib/i18n';
+import { safeRedirectPath } from '../lib/safe-redirect';
 import { toast } from '../ui/toast';
 
-/** The signed-in frame: sidebar + main, for every route under it. */
+/** The signed-in frame: sidebar + main. Signed-out visitors go to `/login` (WP 1.4). */
 export const Route = createFileRoute('/_app')({
+  beforeLoad: async ({ context, location }) => {
+    try {
+      await context.queryClient.ensureQueryData({ ...meQueryOptions, revalidateIfStale: true });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        const target = safeRedirectPath(location.href);
+        throw redirect({ to: '/login', search: target ? { redirect: target } : {} });
+      }
+      throw error;
+    }
+  },
   component: AppLayout,
 });
 
 function AppLayout() {
-  const { t } = useTranslation('shell');
+  const { t, i18n } = useTranslation('shell');
   const me = useMe();
   const location = useLocation();
   const navigate = useNavigate();
@@ -39,12 +56,19 @@ function AppLayout() {
   const changeLocale = useChangeLocale();
   const signOut = useSignOut();
 
+  // The session ended while the app was open (revoked elsewhere, signed out).
   const unauthenticated = errorCode(me.error) === 'unauthenticated';
   useEffect(() => {
-    if (unauthenticated) {
-      void navigate({ to: '/login', search: { redirect: location.pathname }, replace: true });
-    }
-  }, [unauthenticated]);
+    if (!unauthenticated) return;
+    const target = safeRedirectPath(location.href);
+    void navigate({ to: '/login', search: target ? { redirect: target } : {}, replace: true });
+  }, [unauthenticated, navigate, location.href]);
+
+  // The profile's language wins once signed in (04 §8); it starts as the browser's.
+  const storedLocale = me.data?.user.locale;
+  useEffect(() => {
+    if (isLocale(storedLocale) && storedLocale !== i18n.language) void setLocale(storedLocale);
+  }, [storedLocale, i18n.language]);
 
   if (!me.data) return null;
 
@@ -75,7 +99,14 @@ function AppLayout() {
             await navigate({ href: paths.orgView(orgUrlSlug(org), 'my') });
           }}
           onLocaleChange={(locale) => changeLocale.mutateAsync(locale).catch(failed)}
-          onSignOut={() => signOut.mutateAsync().catch(failed)}
+          onSignOut={async () => {
+            try {
+              await signOut.mutateAsync();
+              window.location.replace(paths.login);
+            } catch {
+              failed();
+            }
+          }}
         />
       )}
     >

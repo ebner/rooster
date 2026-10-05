@@ -17,6 +17,7 @@
     "@dnd-kit/utilities": "catalog:",
     "@fontsource-variable/geist": "catalog:",
     "@fontsource-variable/geist-mono": "catalog:",
+    "@rooster/api-client": "workspace:*",
     "@rooster/core": "workspace:*",
     "@rooster/i18n": "workspace:*",
     "@rooster/tokens": "workspace:*",

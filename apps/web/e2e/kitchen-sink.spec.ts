@@ -123,9 +123,9 @@ test('AC-0.5 switching to Svenska translates the kitchen sink and persists acros
   await expect(page.getByRole('radio', { name: 'Svenska' }).first()).toBeChecked();
 });
 
-test('WP 1.4 / opens My tasks of the personal org', async ({ page }) => {
+test('WP 1.4 / sends signed-out visitors to the login page', async ({ page }) => {
   await page.goto('/');
-  await expect(page).toHaveURL(/\/o\/personal\/my$/);
-  await expect(page.getByRole('heading', { level: 1, name: /My tasks/ })).toBeVisible();
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fo%2Fpersonal%2Fmy$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Sign in to rooster' })).toBeVisible();
   await expect(page.getByRole('img', { name: 'rooster' })).toBeVisible();
 });

@@ -50,11 +50,15 @@
   "notFound": {
     "home": "Gå till Mina uppgifter",
     "orgTitle": "Organisationen hittades inte",
-    "orgBody": "Organisationen finns inte, eller så är du inte medlem i den.",
-    "adminTitle": "Endast för administratörer",
-    "adminBody": "Bara administratörer kan öppna den här sidan."
+    "orgBody": "Organisationen finns inte, eller så är du inte medlem i den."
   },
   "error": {
     "saveFailed": "Det gick inte att spara. Kontrollera anslutningen och försök igen."
+  },
+  "groups": {
+    "inbox": "Inkorg",
+    "today": "Idag",
+    "prio": "Prio",
+    "upcoming": "Kommande"
   }
 }

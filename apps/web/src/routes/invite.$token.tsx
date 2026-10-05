@@ -1,6 +1,8 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  errorCode,
   useAcceptInvite,
   useAuthProviders,
   useInvitePreview,
@@ -25,7 +27,19 @@ function InviteRoute() {
   const accept = useAcceptInvite();
   const signInWithInvite = useSignInWithInvite();
 
-  if (!preview.data) return null;
+  // Back from signing in through this invite (or a member re-opening it): the server
+  // already added the membership, so continue to the org.
+  const orgSlug = preview.data?.org?.slug;
+  const joined = orgSlug ? me.data?.orgs.find((o) => o.slug === orgSlug) : undefined;
+  const forwarded = useRef(false);
+  useEffect(() => {
+    if (!joined || forwarded.current) return;
+    forwarded.current = true;
+    toast({ message: t('invite.joined', { org: joined.name }) });
+    void navigate({ href: paths.orgView(orgUrlSlug(joined), 'my'), replace: true });
+  }, [joined, navigate, t]);
+
+  if (!preview.data || (me.isPending && !me.error) || joined) return null;
   return (
     <InvitePage
       preview={preview.data}
@@ -36,7 +50,6 @@ function InviteRoute() {
       onAcceptAndSignIn={async (providerId) => {
         try {
           await signInWithInvite.mutateAsync({ token, providerId });
-          await navigate({ to: '/' });
         } catch {
           toast({ message: t('invite.failed'), tone: 'danger' });
         }
@@ -46,8 +59,14 @@ function InviteRoute() {
           const org = await accept.mutateAsync({ token });
           toast({ message: t('invite.joined', { org: org.name }) });
           await navigate({ href: paths.orgView(orgUrlSlug(org), 'my') });
-        } catch {
-          toast({ message: t('invite.failed'), tone: 'danger' });
+        } catch (error) {
+          toast({
+            message:
+              errorCode(error) === 'invite_email_mismatch'
+                ? t('invite.emailMismatch')
+                : t('invite.failed'),
+            tone: 'danger',
+          });
         }
       }}
     />
