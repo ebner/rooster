@@ -44,9 +44,6 @@
     "failed": "Couldn’t create the organisation. Try again.",
     "created": "Created {name}"
   },
-  "placeholder": {
-    "hint": "Task lists arrive in the next phase. Your groups are ready."
-  },
   "notFound": {
     "home": "Go to My tasks",
     "orgTitle": "Organisation not found",
@@ -54,11 +51,5 @@
   },
   "error": {
     "saveFailed": "Couldn’t save. Check your connection and try again."
-  },
-  "groups": {
-    "inbox": "Inbox",
-    "today": "Today",
-    "prio": "Prio",
-    "upcoming": "Upcoming"
   }
 }

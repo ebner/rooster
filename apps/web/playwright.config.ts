@@ -51,7 +51,17 @@ export default defineConfig({
     baseURL,
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /perf\.spec\.ts$/ },
+    // Timing budgets (AC-2.12) run last and alone, so other workers do not skew them.
+    {
+      name: 'perf',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: /perf\.spec\.ts$/,
+      dependencies: ['chromium'],
+      fullyParallel: false,
+    },
+  ],
   webServer: [
     {
       command: 'node scripts/dev-idp.mjs',

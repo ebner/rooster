@@ -37,5 +37,25 @@
   },
   "error": {
     "saveFailed": "Det gick inte att spara. Kontrollera anslutningen och försök igen."
+  },
+  "backups": {
+    "title": "Säkerhetskopior",
+    "description": "Ögonblicksbilder varje natt: de senaste 7 dagliga och 4 veckovisa sparas, plus manuella och kopior före uppdateringar.",
+    "backUpNow": "Säkerhetskopiera nu",
+    "created": "Säkerhetskopian skapades",
+    "failed": "Det gick inte att skapa en säkerhetskopia. Försök igen.",
+    "empty": "Inga säkerhetskopior än.",
+    "name": "Fil",
+    "kind": "Typ",
+    "size": "Storlek",
+    "createdAt": "Skapad",
+    "download": "Ladda ned {name}",
+    "kinds": {
+      "daily": "Daglig",
+      "weekly": "Veckovis",
+      "manual": "Manuell",
+      "pre-migrate": "Före uppdatering"
+    },
+    "bytes": "{value} {unit}"
   }
 }

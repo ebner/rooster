@@ -16,25 +16,29 @@ const event = (
 
 describe('matchesShortcut', () => {
   test('Mod is Ctrl elsewhere and ⌘ on macOS', () => {
-    expect(matchesShortcut(event('\\', { ctrl: true }), keymap.toggleSidebar.keys, 'other')).toBe(
+    expect(
+      matchesShortcut(event('\\', { ctrl: true }), keymap.toggleSidebar.keys[0], 'other'),
+    ).toBe(true);
+    expect(matchesShortcut(event('\\', { meta: true }), keymap.toggleSidebar.keys[0], 'mac')).toBe(
       true,
     );
-    expect(matchesShortcut(event('\\', { meta: true }), keymap.toggleSidebar.keys, 'mac')).toBe(
-      true,
-    );
-    expect(matchesShortcut(event('\\', { meta: true }), keymap.toggleSidebar.keys, 'other')).toBe(
-      false,
-    );
+    expect(
+      matchesShortcut(event('\\', { meta: true }), keymap.toggleSidebar.keys[0], 'other'),
+    ).toBe(false);
   });
   test('matches the physical backslash key on layouts that need AltGr', () => {
     expect(
-      matchesShortcut(event("'", { ctrl: true }, 'Backslash'), keymap.toggleSidebar.keys, 'other'),
+      matchesShortcut(
+        event("'", { ctrl: true }, 'Backslash'),
+        keymap.toggleSidebar.keys[0],
+        'other',
+      ),
     ).toBe(true);
   });
   test('extra modifiers do not match', () => {
     expect(
-      matchesShortcut(event('k', { ctrl: true, shift: true }), keymap.search.keys, 'other'),
+      matchesShortcut(event('k', { ctrl: true, shift: true }), keymap.search.keys[0], 'other'),
     ).toBe(false);
-    expect(matchesShortcut(event('K', { ctrl: true }), keymap.search.keys, 'other')).toBe(true);
+    expect(matchesShortcut(event('K', { ctrl: true }), keymap.search.keys[0], 'other')).toBe(true);
   });
 });

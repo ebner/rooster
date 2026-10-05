@@ -5,6 +5,7 @@
  * `z.infer` aliases.
  */
 import type { DateFormat, Locale, TimeFormat } from '@rooster/core/dates';
+import type { Prefs } from '@rooster/core/schemas';
 import type { TagColor } from '@rooster/tokens';
 
 export type OrgRole = 'owner' | 'member';
@@ -52,6 +53,8 @@ export interface Me {
   user: CurrentUser;
   /** In the user's sidebar order. */
   orgs: Org[];
+  /** `user.prefs` with defaults applied (05 §2); absent in older fixtures. */
+  prefs?: Prefs;
 }
 
 export type ProfilePatch = Partial<UserSettings & { name: string }>;
@@ -161,13 +164,6 @@ export interface AdminUser {
   createdAt: number;
   disabledAt: number | null;
   isAdmin: boolean;
-}
-
-/** A My tasks group header (GroupDTO subset) for the Phase 1 placeholder. */
-export interface ListGroup {
-  id: string;
-  kind: 'inbox' | 'normal';
-  name: string;
 }
 
 /**

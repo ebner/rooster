@@ -23,7 +23,8 @@ const sections = [
   ['orgSettings', 'Organisation settings', 'Organisationsinställningar'],
   ['userSettings', 'User settings', 'Användarinställningar'],
   ['admin', 'Admin', 'Administration'],
-  ['placeholder', 'My tasks placeholder', 'Platshållare för Mina uppgifter'],
+  ['list', 'My tasks list', 'Listan Mina uppgifter'],
+  ['dates', 'Due dates', 'Förfallodatum'],
 ] as const;
 
 async function openKitchenSink(page: Page) {

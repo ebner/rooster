@@ -23,8 +23,7 @@
     "auth": "Inloggningssidor",
     "orgSettings": "Organisationsinställningar",
     "userSettings": "Användarinställningar",
-    "admin": "Administration",
-    "placeholder": "Platshållare för Mina uppgifter"
+    "admin": "Administration"
   },
   "group": {
     "colors": "Semantiska färger",

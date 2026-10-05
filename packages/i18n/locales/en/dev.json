@@ -23,8 +23,7 @@
     "auth": "Sign-in screens",
     "orgSettings": "Organisation settings",
     "userSettings": "User settings",
-    "admin": "Admin",
-    "placeholder": "My tasks placeholder"
+    "admin": "Admin"
   },
   "group": {
     "colors": "Semantic colours",

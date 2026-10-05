@@ -44,9 +44,6 @@
     "failed": "Det gick inte att skapa organisationen. Försök igen.",
     "created": "{name} har skapats"
   },
-  "placeholder": {
-    "hint": "Uppgiftslistorna kommer i nästa fas. Dina grupper är redan på plats."
-  },
   "notFound": {
     "home": "Gå till Mina uppgifter",
     "orgTitle": "Organisationen hittades inte",
@@ -54,11 +51,5 @@
   },
   "error": {
     "saveFailed": "Det gick inte att spara. Kontrollera anslutningen och försök igen."
-  },
-  "groups": {
-    "inbox": "Inkorg",
-    "today": "Idag",
-    "prio": "Prio",
-    "upcoming": "Kommande"
   }
 }

@@ -8,4 +8,5 @@ export const queryKeys = {
   invitePreview: (token: string) => ['invite-preview', token] as const,
   allowlist: ['admin', 'allowlist'] as const,
   adminUsers: ['admin', 'users'] as const,
+  adminBackups: ['admin', 'backups'] as const,
 };

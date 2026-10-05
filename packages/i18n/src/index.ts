@@ -5,6 +5,7 @@ import enAuth from '../locales/en/auth.json' with { type: 'json' };
 import enCommon from '../locales/en/common.json' with { type: 'json' };
 import enDates from '../locales/en/dates.json' with { type: 'json' };
 import enDev from '../locales/en/dev.json' with { type: 'json' };
+import enList from '../locales/en/list.json' with { type: 'json' };
 import enSettings from '../locales/en/settings.json' with { type: 'json' };
 import enShell from '../locales/en/shell.json' with { type: 'json' };
 import svAdmin from '../locales/sv/admin.json' with { type: 'json' };
@@ -12,6 +13,7 @@ import svAuth from '../locales/sv/auth.json' with { type: 'json' };
 import svCommon from '../locales/sv/common.json' with { type: 'json' };
 import svDates from '../locales/sv/dates.json' with { type: 'json' };
 import svDev from '../locales/sv/dev.json' with { type: 'json' };
+import svList from '../locales/sv/list.json' with { type: 'json' };
 import svSettings from '../locales/sv/settings.json' with { type: 'json' };
 import svShell from '../locales/sv/shell.json' with { type: 'json' };
 
@@ -26,7 +28,16 @@ export const defaultLocale: Locale = 'en';
  * Add a namespace by adding `locales/<locale>/<ns>.json` for every locale and
  * registering it here.
  */
-export const namespaces = ['common', 'dev', 'shell', 'auth', 'settings', 'admin', 'dates'] as const;
+export const namespaces = [
+  'common',
+  'dev',
+  'shell',
+  'auth',
+  'settings',
+  'admin',
+  'dates',
+  'list',
+] as const;
 export type Namespace = (typeof namespaces)[number];
 export const defaultNamespace: Namespace = 'common';
 
@@ -39,6 +50,7 @@ export const resources = {
     settings: enSettings,
     admin: enAdmin,
     dates: enDates,
+    list: enList,
   },
   sv: {
     common: svCommon,
@@ -48,6 +60,7 @@ export const resources = {
     settings: svSettings,
     admin: svAdmin,
     dates: svDates,
+    list: svList,
   },
 } as const;
 

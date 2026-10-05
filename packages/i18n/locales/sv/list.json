@@ -1,0 +1,203 @@
+{
+  "row": {
+    "placeholder": "Skriv ett uppgiftsnamn",
+    "titleLabel": "Uppgiftens namn",
+    "untitled": "Namnlös uppgift",
+    "complete": "Markera {title} som klar",
+    "uncomplete": "Markera {title} som inte klar",
+    "dragHandle": "Flytta {title}",
+    "addTask": "Lägg till uppgift",
+    "firstRunHint": "Skriv en uppgift och tryck på Enter",
+    "colonChip": "↵ igen för att göra om till gruppen ”{name}”",
+    "pasteChip": "Skapa {count, plural, one {# uppgift} other {# uppgifter}}? ↵"
+  },
+  "group": {
+    "untitled": "Ny grupp",
+    "nameLabel": "Gruppens namn",
+    "expand": "Visa {name}",
+    "collapse": "Fäll ihop {name}",
+    "count": "{count, plural, one {# öppen uppgift} other {# öppna uppgifter}}",
+    "inboxHint": "Sortera: dra uppgifterna till dina grupper",
+    "addTaskTop": "Lägg till uppgift i {name}",
+    "menu": "Alternativ för {name}",
+    "rename": "Byt namn",
+    "addBelow": "Lägg till grupp nedanför",
+    "collapseOthers": "Fäll ihop de andra",
+    "delete": "Ta bort grupp",
+    "deleteLast": "Den sista gruppen kan inte tas bort",
+    "add": "Lägg till grupp"
+  },
+  "groupDelete": {
+    "title": "Ta bort ”{name}”?",
+    "choice": "Vad som händer med uppgifterna",
+    "move": "Flytta {count, plural, one {# uppgift} other {# uppgifter}} till:",
+    "target": "Målgrupp",
+    "deleteTasks": "Ta bort uppgifterna också",
+    "cancel": "Avbryt",
+    "confirm": "Ta bort grupp"
+  },
+  "moveTo": {
+    "title": "Flytta {count, plural, one {uppgiften} other {# uppgifter}} till",
+    "filter": "Filtrera grupper",
+    "placeholder": "Flytta till grupp…",
+    "groups": "Grupper",
+    "empty": "Ingen grupp matchar",
+    "current": "Nuvarande grupp"
+  },
+  "bulk": {
+    "label": "Åtgärder för {count, plural, one {# uppgift} other {# uppgifter}}",
+    "selected": "{count} markerade",
+    "complete": "Klar",
+    "date": "Datum",
+    "moveTo": "Flytta till",
+    "delete": "Ta bort",
+    "clear": "Avmarkera"
+  },
+  "header": {
+    "showCompleted": "Visa klara",
+    "completedShown": "Klara uppgifter visas",
+    "completedHidden": "Klara uppgifter döljs"
+  },
+  "hint": {
+    "emptyTitle": "Namnet kan inte vara tomt",
+    "useTabDelete": "Använd Tab+Delete för att ta bort uppgifter med innehåll"
+  },
+  "undo": {
+    "action": "Ångra",
+    "undone": "Ångrat: {label}",
+    "redone": "Gjort om: {label}",
+    "created": "Uppgiften skapades",
+    "createdMany": "{count, plural, one {# uppgift} other {# uppgifter}} skapades",
+    "edited": "Uppgiften ändrades",
+    "completed": "”{title}” är klar",
+    "completedMany": "{count, plural, one {# uppgift} other {# uppgifter}} markerades som klara",
+    "reopened": "{count, plural, one {# uppgift} other {# uppgifter}} markerades som inte klara",
+    "openSubtasks": "{count, plural, one {# öppen deluppgift} other {# öppna deluppgifter}}",
+    "deleted": "Uppgiften togs bort",
+    "deletedMany": "{count, plural, one {# uppgift} other {# uppgifter}} togs bort",
+    "dated": "Datumet ändrades",
+    "dateCleared": "Datumet togs bort",
+    "moved": "{count, plural, one {# uppgift} other {# uppgifter}} flyttades",
+    "groupCreated": "Gruppen skapades",
+    "groupSplit": "Gruppen skapades med {count, plural, one {# uppgift} other {# uppgifter}} ovanifrån",
+    "groupDeleted": "Gruppen ”{name}” togs bort",
+    "groupMoved": "Gruppen flyttades",
+    "renamed": "Gruppen bytte namn"
+  },
+  "dnd": {
+    "handleRole": "Draghandtag",
+    "instructions": "Tryck på blanksteg för att plocka upp. Flytta med piltangenterna, hoppa mellan grupper med Ctrl och en piltangent, släpp med blanksteg och avbryt med Escape.",
+    "pickedUp": "Plockade upp {title}. Plats {position} av {total} i {group}.",
+    "pickedUpGroup": "Plockade upp gruppen {group}.",
+    "over": "{title} är på plats {position} av {total} i {group}.",
+    "moved": "Flyttad till {group}, plats {position} av {total}.",
+    "groupMoved": "Gruppen {group} flyttad till plats {position} av {total}.",
+    "cancelled": "Flytten avbröts."
+  },
+  "error": {
+    "couldNotSave": "Kunde inte spara – {reason}",
+    "couldNotSaveTitle": "Kunde inte spara ”{title}” – {reason}",
+    "code": {
+      "not_found": "den finns inte längre",
+      "conflict_deleted": "den har tagits bort",
+      "last_group": "du behöver minst en grupp",
+      "group_not_empty": "gruppen har fortfarande öppna uppgifter",
+      "inbox_immutable": "inkorgen kan inte ändras så",
+      "validation_failed": "ändringen var inte giltig",
+      "forbidden": "du saknar behörighet",
+      "idempotency_key_reuse": "ändringen skickades två gånger"
+    }
+  },
+  "state": {
+    "loadFailed": "Det gick inte att läsa in dina uppgifter. Kontrollera anslutningen och ladda om."
+  },
+  "cheatSheet": {
+    "title": "Kortkommandon",
+    "close": "Stäng kortkommandon",
+    "hint": "Kortkommandon",
+    "dismissHint": "Dölj tipset om kortkommandon"
+  },
+  "keys": {
+    "section": {
+      "general": "Allmänt",
+      "navigation": "Navigera",
+      "editing": "Redigera",
+      "moving": "Flytta",
+      "groups": "Grupper",
+      "dates": "Datumväljare"
+    },
+    "search": "Sök",
+    "toggleSidebar": "Visa eller dölj sidofältet",
+    "goToOrg": "Gå till organisation 1–9",
+    "undo": "Ångra",
+    "redo": "Gör om",
+    "cheatSheet": "Kortkommandon",
+    "goMyTasks": "Gå till Mina uppgifter",
+    "goSettings": "Gå till Inställningar",
+    "selectPrevious": "Föregående rad",
+    "selectNext": "Nästa rad",
+    "extendUp": "Utöka markeringen uppåt",
+    "extendDown": "Utöka markeringen nedåt",
+    "selectFirst": "Första raden",
+    "selectLast": "Sista raden",
+    "selectAll": "Markera gruppen, sedan allt",
+    "toggleInSelection": "Lägg till i eller ta bort från markeringen",
+    "collapse": "Fäll ihop grupp",
+    "expand": "Visa grupp",
+    "toggleCompleted": "Visa eller dölj klara",
+    "editTitle": "Redigera namnet",
+    "newBelowNavigate": "Ny uppgift nedanför",
+    "newAboveNavigate": "Ny uppgift ovanför",
+    "quickAddNavigate": "Snabbtillägg högst upp",
+    "dateNavigate": "Sätt datum",
+    "moveToNavigate": "Flytta till grupp",
+    "deleteNavigate": "Ta bort",
+    "newBelow": "Ny uppgift nedanför (vid redigering)",
+    "newAbove": "Ny uppgift ovanför (vid redigering)",
+    "caretUp": "Redigera raden ovanför",
+    "caretDown": "Redigera raden nedanför",
+    "deleteEmpty": "Ta bort en tom rad",
+    "escape": "Sluta redigera, sedan avmarkera",
+    "complete": "Markera som klar eller inte klar",
+    "deleteTask": "Ta bort (även vid redigering)",
+    "quickAdd": "Snabbtillägg högst upp",
+    "datePicker": "Sätt datum",
+    "moveTo": "Flytta till grupp",
+    "moveUp": "Flytta upp",
+    "moveDown": "Flytta ned",
+    "moveToPreviousGroup": "Flytta till slutet av föregående grupp",
+    "moveToNextGroup": "Flytta till början av nästa grupp",
+    "moveToGroupTop": "Flytta högst upp i gruppen",
+    "moveToGroupBottom": "Flytta längst ned i gruppen",
+    "newGroup": "Ny grupp vid markören",
+    "renameGroup": "Byt namn på grupp",
+    "dragLift": "Plocka upp eller släpp (draghandtag)",
+    "dragMove": "Flytta medan du drar",
+    "dragJumpGroup": "Hoppa till föregående eller nästa grupp",
+    "dragCancel": "Avbryt dragningen",
+    "dateToday": "Idag",
+    "dateTomorrow": "Imorgon",
+    "dateNextWeek": "Nästa vecka",
+    "dateWeekend": "Helgen",
+    "dateNone": "Inget datum"
+  },
+  "dev": {
+    "section": "Listan Mina uppgifter",
+    "live": "Levande lista (server i minnet)",
+    "bulkBar": "Åtgärdsfält",
+    "groups": {
+      "inbox": "Inkorg",
+      "today": "Idag",
+      "prio": "Prio",
+      "upcoming": "Kommande"
+    },
+    "tasks": {
+      "reply": "Svara Anna om fakturan",
+      "dentist": "Boka tandläkare",
+      "plan": "Skriv planen för Q4",
+      "passport": "Förnya passet",
+      "offsite": "Planera teamdagen",
+      "done": "Skicka bilderna"
+    }
+  }
+}

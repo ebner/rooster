@@ -27,6 +27,7 @@ import { Sidebar } from '../features/shell/sidebar';
 import { setLocale } from '../lib/i18n';
 import { safeRedirectPath } from '../lib/safe-redirect';
 import { toast } from '../ui/toast';
+import { useKeymapHandlers } from '../use-keymap';
 
 /** The signed-in frame: sidebar + main. Signed-out visitors go to `/login` (WP 1.4). */
 export const Route = createFileRoute('/_app')({
@@ -69,6 +70,24 @@ function AppLayout() {
   useEffect(() => {
     if (isLocale(storedLocale) && storedLocale !== i18n.language) void setLocale(storedLocale);
   }, [storedLocale, i18n.language]);
+
+  // G-sequences and Mod+1…9 (02 §6).
+  useKeymapHandlers({
+    goMyTasks: () => {
+      const org = (orgSlug && me.data ? findOrg(me.data.orgs, orgSlug) : null) ?? me.data?.orgs[0];
+      if (!org) return false;
+      void navigate({ href: paths.orgView(orgUrlSlug(org), 'my') });
+    },
+    goSettings: () => {
+      void navigate({ to: '/settings' });
+    },
+    goToOrg: (event) => {
+      const index = Number(event.code.replace('Digit', '') || event.key) - 1;
+      const org = me.data?.orgs[index];
+      if (!org) return false;
+      void navigate({ href: paths.orgView(orgUrlSlug(org), 'my') });
+    },
+  });
 
   if (!me.data) return null;
 

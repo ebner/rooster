@@ -18,8 +18,8 @@ export function toOrg(org: Schemas['Org']): Org {
 }
 
 export function toMe(me: Schemas['Me']): Me {
-  const { orgs, prefs: _prefs, ...user } = me;
-  return { user, orgs: orgs.map(toOrg) };
+  const { orgs, prefs, ...user } = me;
+  return { user, orgs: orgs.map(toOrg), prefs };
 }
 
 export function toMember(member: Schemas['Member']): OrgMember {

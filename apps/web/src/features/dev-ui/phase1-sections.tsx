@@ -23,14 +23,13 @@ import { SegmentedControl } from '../../ui/segmented-control';
 import { Select } from '../../ui/select';
 import { toast } from '../../ui/toast';
 import { AllowlistSection } from '../admin/allowlist-section';
+import { BackupsSection } from '../admin/backups-section';
 import { fixtureAdminUsers, fixtureAllowlist } from '../admin/fixtures';
 import { UsersSection } from '../admin/users-section';
 import { fixtureInvitePreviews, fixtureProviders } from '../auth/fixtures';
 import { InvitePage } from '../auth/invite-page';
 import { LoginPage, loginErrors } from '../auth/login-page';
 import { NotInvitedPage } from '../auth/not-invited-page';
-import { fixtureGroups } from '../list/fixtures';
-import { MyTasksPlaceholder } from '../list/placeholder';
 import { DangerZone } from '../org-settings/danger-zone';
 import { fixtureInvites, fixtureMembers } from '../org-settings/fixtures';
 import { GeneralSection } from '../org-settings/general-section';
@@ -56,7 +55,6 @@ export const phase1SectionIds = [
   'orgSettings',
   'userSettings',
   'admin',
-  'placeholder',
 ] as const;
 
 const noop = () => {};
@@ -570,15 +568,32 @@ function AdminSection() {
           )
         }
       />
-    </Section>
-  );
-}
-
-function PlaceholderSection() {
-  const { t } = useTranslation('dev');
-  return (
-    <Section id="placeholder" title={t('section.placeholder')}>
-      <MyTasksPlaceholder groups={fixtureGroups} />
+      <BackupsSection
+        backups={[
+          {
+            name: 'manual-2026-10-05T08-00-00-000Z.db',
+            size: 1_482_752,
+            createdAt: now - 3_600_000,
+            kind: 'manual',
+          },
+          {
+            name: 'rooster-2026-10-04T02-00-00-000Z.db',
+            size: 1_437_184,
+            createdAt: now - 86_400_000,
+            kind: 'weekly',
+          },
+          {
+            name: 'rooster-2026-10-03T02-00-00-000Z.db',
+            size: 1_398_000,
+            createdAt: now - 2 * 86_400_000,
+            kind: 'daily',
+          },
+        ]}
+        prefs={prefs}
+        now={now}
+        downloadUrl={() => '#'}
+        onBackUpNow={noop}
+      />
     </Section>
   );
 }
@@ -594,7 +609,6 @@ export function Phase1Sections() {
       <OrgSettingsSection />
       <UserSettingsSection />
       <AdminSection />
-      <PlaceholderSection />
     </>
   );
 }

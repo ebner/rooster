@@ -1,0 +1,203 @@
+{
+  "row": {
+    "placeholder": "Write a task name",
+    "titleLabel": "Task name",
+    "untitled": "Untitled task",
+    "complete": "Complete {title}",
+    "uncomplete": "Mark {title} incomplete",
+    "dragHandle": "Move {title}",
+    "addTask": "Add task",
+    "firstRunHint": "Type a task and press Enter",
+    "colonChip": "↵ again to turn into group “{name}”",
+    "pasteChip": "Create {count, plural, one {# task} other {# tasks}}? ↵"
+  },
+  "group": {
+    "untitled": "New group",
+    "nameLabel": "Group name",
+    "expand": "Expand {name}",
+    "collapse": "Collapse {name}",
+    "count": "{count, plural, one {# open task} other {# open tasks}}",
+    "inboxHint": "Triage: drag tasks into your groups",
+    "addTaskTop": "Add task to {name}",
+    "menu": "{name} options",
+    "rename": "Rename",
+    "addBelow": "Add group below",
+    "collapseOthers": "Collapse others",
+    "delete": "Delete group",
+    "deleteLast": "Can’t delete the last group",
+    "add": "Add group"
+  },
+  "groupDelete": {
+    "title": "Delete “{name}”?",
+    "choice": "What happens to the tasks",
+    "move": "Move {count, plural, one {# task} other {# tasks}} to:",
+    "target": "Target group",
+    "deleteTasks": "Delete the tasks too",
+    "cancel": "Cancel",
+    "confirm": "Delete group"
+  },
+  "moveTo": {
+    "title": "Move {count, plural, one {task} other {# tasks}} to",
+    "filter": "Filter groups",
+    "placeholder": "Move to group…",
+    "groups": "Groups",
+    "empty": "No matching group",
+    "current": "Current group"
+  },
+  "bulk": {
+    "label": "Bulk actions for {count, plural, one {# task} other {# tasks}}",
+    "selected": "{count} selected",
+    "complete": "Complete",
+    "date": "Date",
+    "moveTo": "Move to",
+    "delete": "Delete",
+    "clear": "Clear selection"
+  },
+  "header": {
+    "showCompleted": "Show completed",
+    "completedShown": "Completed tasks shown",
+    "completedHidden": "Completed tasks hidden"
+  },
+  "hint": {
+    "emptyTitle": "Title can’t be empty",
+    "useTabDelete": "Use Tab+Delete to delete tasks with content"
+  },
+  "undo": {
+    "action": "Undo",
+    "undone": "Undone: {label}",
+    "redone": "Redone: {label}",
+    "created": "Task created",
+    "createdMany": "Created {count, plural, one {# task} other {# tasks}}",
+    "edited": "Task edited",
+    "completed": "Completed “{title}”",
+    "completedMany": "Completed {count, plural, one {# task} other {# tasks}}",
+    "reopened": "Marked {count, plural, one {# task} other {# tasks}} incomplete",
+    "openSubtasks": "{count, plural, one {# open subtask} other {# open subtasks}}",
+    "deleted": "Task deleted",
+    "deletedMany": "{count, plural, one {# task} other {# tasks}} deleted",
+    "dated": "Date changed",
+    "dateCleared": "Date cleared",
+    "moved": "Moved {count, plural, one {# task} other {# tasks}}",
+    "groupCreated": "Group created",
+    "groupSplit": "Group created with {count, plural, one {# task} other {# tasks}} from above",
+    "groupDeleted": "Deleted group “{name}”",
+    "groupMoved": "Group moved",
+    "renamed": "Group renamed"
+  },
+  "dnd": {
+    "handleRole": "Drag handle",
+    "instructions": "Press Space to pick up. Use the arrow keys to move, Ctrl and an arrow key to jump between groups, Space to drop and Escape to cancel.",
+    "pickedUp": "Picked up {title}. Position {position} of {total} in {group}.",
+    "pickedUpGroup": "Picked up group {group}.",
+    "over": "{title} is at position {position} of {total} in {group}.",
+    "moved": "Moved to {group}, position {position} of {total}.",
+    "groupMoved": "Moved group {group} to position {position} of {total}.",
+    "cancelled": "Drop cancelled."
+  },
+  "error": {
+    "couldNotSave": "Couldn’t save – {reason}",
+    "couldNotSaveTitle": "Couldn’t save “{title}” – {reason}",
+    "code": {
+      "not_found": "it no longer exists",
+      "conflict_deleted": "it was deleted",
+      "last_group": "you need at least one group",
+      "group_not_empty": "the group still has open tasks",
+      "inbox_immutable": "the Inbox can’t be changed that way",
+      "validation_failed": "the change wasn’t valid",
+      "forbidden": "you don’t have access",
+      "idempotency_key_reuse": "the change was sent twice"
+    }
+  },
+  "state": {
+    "loadFailed": "Couldn’t load your tasks. Check your connection and reload."
+  },
+  "cheatSheet": {
+    "title": "Keyboard shortcuts",
+    "close": "Close shortcuts",
+    "hint": "Keyboard shortcuts",
+    "dismissHint": "Hide the shortcuts hint"
+  },
+  "keys": {
+    "section": {
+      "general": "General",
+      "navigation": "Navigate",
+      "editing": "Edit",
+      "moving": "Move",
+      "groups": "Groups",
+      "dates": "Date picker"
+    },
+    "search": "Search",
+    "toggleSidebar": "Toggle sidebar",
+    "goToOrg": "Go to organisation 1–9",
+    "undo": "Undo",
+    "redo": "Redo",
+    "cheatSheet": "Keyboard shortcuts",
+    "goMyTasks": "Go to My tasks",
+    "goSettings": "Go to Settings",
+    "selectPrevious": "Previous row",
+    "selectNext": "Next row",
+    "extendUp": "Extend selection up",
+    "extendDown": "Extend selection down",
+    "selectFirst": "First row",
+    "selectLast": "Last row",
+    "selectAll": "Select group, then all",
+    "toggleInSelection": "Add to or remove from selection",
+    "collapse": "Collapse group",
+    "expand": "Expand group",
+    "toggleCompleted": "Show or hide completed",
+    "editTitle": "Edit title",
+    "newBelowNavigate": "New task below",
+    "newAboveNavigate": "New task above",
+    "quickAddNavigate": "Quick add at the top",
+    "dateNavigate": "Set date",
+    "moveToNavigate": "Move to group",
+    "deleteNavigate": "Delete",
+    "newBelow": "New task below (while editing)",
+    "newAbove": "New task above (while editing)",
+    "caretUp": "Edit the row above",
+    "caretDown": "Edit the row below",
+    "deleteEmpty": "Delete an empty row",
+    "escape": "Stop editing, then clear the selection",
+    "complete": "Complete or reopen",
+    "deleteTask": "Delete (while editing too)",
+    "quickAdd": "Quick add at the top",
+    "datePicker": "Set date",
+    "moveTo": "Move to group",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "moveToPreviousGroup": "Move to the end of the previous group",
+    "moveToNextGroup": "Move to the start of the next group",
+    "moveToGroupTop": "Move to the top of the group",
+    "moveToGroupBottom": "Move to the bottom of the group",
+    "newGroup": "New group at the cursor",
+    "renameGroup": "Rename group",
+    "dragLift": "Pick up or drop (drag handle)",
+    "dragMove": "Move while dragging",
+    "dragJumpGroup": "Jump to the previous or next group",
+    "dragCancel": "Cancel dragging",
+    "dateToday": "Today",
+    "dateTomorrow": "Tomorrow",
+    "dateNextWeek": "Next week",
+    "dateWeekend": "Weekend",
+    "dateNone": "No date"
+  },
+  "dev": {
+    "section": "My tasks list",
+    "live": "Live list (in-memory server)",
+    "bulkBar": "Bulk bar",
+    "groups": {
+      "inbox": "Inbox",
+      "today": "Today",
+      "prio": "Prio",
+      "upcoming": "Upcoming"
+    },
+    "tasks": {
+      "reply": "Reply to Anna about the invoice",
+      "dentist": "Book dentist",
+      "plan": "Write Q4 plan",
+      "passport": "Renew passport",
+      "offsite": "Plan the team offsite",
+      "done": "Send the slides"
+    }
+  }
+}

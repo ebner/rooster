@@ -1,4 +1,4 @@
-import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
+import { MutationCache, notifyManager, QueryCache, QueryClient } from '@tanstack/react-query';
 import { createRouter } from '@tanstack/react-router';
 import { ApiError } from './data/errors';
 import { queryKeys } from './data/query-keys';
@@ -25,6 +25,12 @@ function onUnauthenticated(error: unknown, isMeQuery = false): void {
   const redirect = safeRedirectPath(href);
   void router.navigate({ to: '/login', search: redirect ? { redirect } : {}, replace: true });
 }
+
+/**
+ * Query notifications flush synchronously, so an optimistic cache write and the UI-store
+ * changes of the same keypress render in ONE pass (02 §1.3, AC-2.12). React still batches.
+ */
+notifyManager.setScheduler((callback) => callback());
 
 export const queryClient = new QueryClient({
   queryCache: new QueryCache({

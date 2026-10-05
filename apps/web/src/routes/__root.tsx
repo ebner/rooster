@@ -9,6 +9,7 @@ import { I18nProvider, RouterProvider } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import type { RouterContext } from '../router';
 import { ToastRegion } from '../ui/toast';
+import { useKeymap } from '../use-keymap';
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   component: RootLayout,
@@ -24,6 +25,7 @@ declare module 'react-aria-components' {
 function RootLayout() {
   const { i18n } = useTranslation();
   const router = useRouter();
+  useKeymap();
   return (
     <I18nProvider locale={i18n.language}>
       {/* React Aria links and menu items with `href` navigate client-side through TanStack. */}

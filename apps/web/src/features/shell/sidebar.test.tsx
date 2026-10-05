@@ -1,10 +1,17 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Org, OrgReorderIntent } from '../../data/types';
+import { useKeymap } from '../../use-keymap';
 import { AppShell } from './app-shell';
 import { fixtureMe } from './fixtures';
 import { Sidebar, type SidebarProps } from './sidebar';
 import { sidebarStorageKey } from './use-sidebar-collapsed';
+
+/** The root mounts the keymap dispatcher; tests mount it next to the shell. */
+function KeymapRoot() {
+  useKeymap();
+  return null;
+}
 
 const orgs = fixtureMe.orgs;
 const [personal, company, club] = orgs as [Org, Org, Org];
@@ -108,26 +115,29 @@ describe('Sidebar rail', () => {
 
   function renderShell() {
     return render(
-      <AppShell
-        renderSidebar={({ collapsed, onToggleCollapsed, inDrawer }) =>
-          inDrawer ? null : (
-            <Sidebar
-              user={fixtureMe.user}
-              orgs={orgs}
-              locale="en"
-              collapsed={collapsed}
-              onToggleCollapsed={onToggleCollapsed}
-              onReorder={() => {}}
-              onToggleOrgCollapsed={() => {}}
-              onCreateOrg={() => {}}
-              onLocaleChange={() => {}}
-              onSignOut={() => {}}
-            />
-          )
-        }
-      >
-        <p>content</p>
-      </AppShell>,
+      <>
+        <KeymapRoot />
+        <AppShell
+          renderSidebar={({ collapsed, onToggleCollapsed, inDrawer }) =>
+            inDrawer ? null : (
+              <Sidebar
+                user={fixtureMe.user}
+                orgs={orgs}
+                locale="en"
+                collapsed={collapsed}
+                onToggleCollapsed={onToggleCollapsed}
+                onReorder={() => {}}
+                onToggleOrgCollapsed={() => {}}
+                onCreateOrg={() => {}}
+                onLocaleChange={() => {}}
+                onSignOut={() => {}}
+              />
+            )
+          }
+        >
+          <p>content</p>
+        </AppShell>
+      </>,
     );
   }
 
@@ -145,9 +155,9 @@ describe('Sidebar rail', () => {
 
   test('Ctrl+\\ toggles the rail', () => {
     renderShell();
-    fireEvent.keyDown(window, { key: '\\', code: 'Backslash', ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: '\\', code: 'Backslash', ctrlKey: true });
     expect(localStorage.getItem(sidebarStorageKey)).toBe('1');
-    fireEvent.keyDown(window, { key: '\\', code: 'Backslash', ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: '\\', code: 'Backslash', ctrlKey: true });
     expect(localStorage.getItem(sidebarStorageKey)).toBe('0');
   });
 });

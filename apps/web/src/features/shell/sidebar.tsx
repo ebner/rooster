@@ -22,7 +22,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Popover as AriaPopover, Dialog, DialogTrigger } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import type { CreateOrgInput, CurrentUser, Org, OrgReorderIntent } from '../../data/types';
-import { keymap } from '../../keymap';
+import { primaryKeys } from '../../keymap';
 import { cn } from '../../lib/cn';
 import { IconButton } from '../../ui/icon-button';
 import { LogoMark, Wordmark } from '../../ui/logo';
@@ -144,7 +144,7 @@ export function Sidebar({
           <IconButton
             icon={PanelLeftClose}
             aria-label={t('sidebar.collapse')}
-            shortcut={keymap.toggleSidebar.keys}
+            shortcut={primaryKeys('toggleSidebar')}
             onPress={onToggleCollapsed}
           />
         )}
@@ -158,7 +158,7 @@ export function Sidebar({
             <IconButton
               icon={PanelLeftOpen}
               aria-label={t('sidebar.expand')}
-              shortcut={keymap.toggleSidebar.keys}
+              shortcut={primaryKeys('toggleSidebar')}
               onPress={onToggleCollapsed}
             />
           </div>
@@ -166,7 +166,7 @@ export function Sidebar({
         <SidebarItem
           icon={Search}
           label={t('sidebar.search')}
-          shortcut={keymap.search.keys}
+          shortcut={primaryKeys('search')}
           rail={rail}
           isDisabled
         />

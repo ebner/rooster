@@ -2,10 +2,10 @@ import { Menu as MenuIcon } from 'lucide-react';
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { Dialog, Modal, ModalOverlay } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
-import { keymap, matchesShortcut } from '../../keymap';
 import { cn } from '../../lib/cn';
-import { detectPlatform } from '../../lib/platform';
 import { IconButton } from '../../ui/icon-button';
+import { useKeymapHandlers } from '../../use-keymap';
+import { CheatSheet, toggleCheatSheet } from './cheat-sheet';
 import { useSidebarCollapsed } from './use-sidebar-collapsed';
 
 export interface ShellSidebarState {
@@ -39,17 +39,10 @@ export function AppShell({ renderSidebar, children, navKey }: AppShellProps) {
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
   const [navOpen, setNavOpen] = useState(false);
 
-  useEffect(() => {
-    const platform = detectPlatform();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (matchesShortcut(event, keymap.toggleSidebar.keys, platform)) {
-        event.preventDefault();
-        toggleCollapsed();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [toggleCollapsed]);
+  useKeymapHandlers({
+    toggleSidebar: () => toggleCollapsed(),
+    cheatSheet: () => toggleCheatSheet(),
+  });
 
   useEffect(() => setNavOpen(false), [navKey]);
 
@@ -78,6 +71,7 @@ export function AppShell({ renderSidebar, children, navKey }: AppShellProps) {
           </Modal>
         </ModalOverlay>
         <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">{children}</main>
+        <CheatSheet />
       </div>
     </ShellContext.Provider>
   );

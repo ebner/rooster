@@ -1,6 +1,6 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import { LoaderCircle, type LucideIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { Button as AriaButton, type ButtonProps as AriaButtonProps } from 'react-aria-components';
 import { cn } from '../lib/cn';
 
@@ -57,6 +57,8 @@ export interface ButtonProps extends Omit<AriaButtonProps, 'className' | 'childr
   children?: ReactNode;
   /** Kitchen-sink only: render a state statically ("hover", "focus", "pressed"). */
   'data-force'?: string;
+  /** Anchor for popovers (e.g. the bulk bar's date picker). */
+  ref?: Ref<HTMLButtonElement> | undefined;
 }
 
 export function Button({

@@ -272,7 +272,7 @@ Query keys (all scoped by org):
 - `syncStore`: online, outbox count, last error, SSE state.
 
 ### 5.3 Keymap
-`keymap.ts` registers `{id, keys, when: 'global'|'navigate'|'edit'|'pane', action, labelKey}`. A single `useKeymap()` listener on `document` dispatches the actions, handles **Tab chords** (track Tab down and up; `preventDefault` on Tab only when a chord fires) and **G-sequences** (1 s timeout). The cheat sheet and the palette actions are generated from the registry.
+`keymap.ts` registers `{id, keys, when: 'global'|'navigate'|'edit'|'pane', action, labelKey}`. A single `useKeymap()` listener on `document` dispatches the actions, handles **Tab chords** (inside the list, Tab `keydown` is always prevented, and native focus movement is emulated when Tab is released without a chord; ADR 0006) and **G-sequences** (1 s timeout). The cheat sheet and the palette actions are generated from the registry.
 
 ### 5.4 Rendering & performance
 - The list renders flat rows (group header, task, subtask, add row) from a memoised selector.

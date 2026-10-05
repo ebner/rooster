@@ -37,5 +37,25 @@
   },
   "error": {
     "saveFailed": "Couldn’t save. Check your connection and try again."
+  },
+  "backups": {
+    "title": "Backups",
+    "description": "Nightly snapshots: the last 7 daily and 4 weekly are kept, plus manual and pre-update copies.",
+    "backUpNow": "Back up now",
+    "created": "Backup created",
+    "failed": "Couldn’t create a backup. Try again.",
+    "empty": "No backups yet.",
+    "name": "File",
+    "kind": "Type",
+    "size": "Size",
+    "createdAt": "Created",
+    "download": "Download {name}",
+    "kinds": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "manual": "Manual",
+      "pre-migrate": "Before update"
+    },
+    "bytes": "{value} {unit}"
   }
 }
