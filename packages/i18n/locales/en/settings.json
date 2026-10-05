@@ -4,7 +4,8 @@
     "label": "Settings sections",
     "profile": "Profile",
     "behaviour": "Behaviour",
-    "security": "Security"
+    "security": "Security",
+    "data": "Data"
   },
   "profile": {
     "title": "Profile",

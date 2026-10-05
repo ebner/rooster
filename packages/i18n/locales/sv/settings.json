@@ -4,7 +4,8 @@
     "label": "Inställningsavsnitt",
     "profile": "Profil",
     "behaviour": "Beteende",
-    "security": "Säkerhet"
+    "security": "Säkerhet",
+    "data": "Data"
   },
   "profile": {
     "title": "Profil",

@@ -7,7 +7,11 @@
     "expand": "Expand sidebar"
   },
   "view": {
-    "my": "My tasks"
+    "my": "My tasks",
+    "today": "Today",
+    "week": "Next 7 days",
+    "overdue": "Overdue",
+    "nodate": "No date"
   },
   "org": {
     "menu": "{name} options",
