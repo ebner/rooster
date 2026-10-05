@@ -60,6 +60,8 @@ interface Row {
   expect: Record<ActorKind, Expected>;
   /** A non-JSON success body (file download): only the content type is checked. */
   binary?: string;
+  /** A never-ending success body (SSE): the content type is checked, then it is cancelled. */
+  stream?: string;
 }
 
 /** Public routes answer everyone alike. */
@@ -122,6 +124,12 @@ const ROWS: Record<string, Row> = {
     expect: signedIn(200),
   },
   'GET /api/v1/me': { request: () => ({ path: '/api/v1/me' }), expect: signedIn(200) },
+  // Anyone signed in may listen; what reaches them is targeted per user (events.test.ts).
+  'GET /api/v1/events': {
+    request: () => ({ path: '/api/v1/events' }),
+    expect: signedIn(200),
+    stream: 'text/event-stream',
+  },
   'PATCH /api/v1/me': {
     request: () => ({ path: '/api/v1/me', body: { name: 'Renamed' } }),
     expect: signedIn(200),
@@ -491,6 +499,12 @@ describe('AC-1.6 authorisation matrix', () => {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const res = await f.app.request(path, init);
+    if (row.stream !== undefined && res.status === 200) {
+      expect(res.headers.get('content-type')).toBe(row.stream);
+      await res.body?.cancel();
+      expect(res.status).toBe(expected);
+      return;
+    }
     expect(res.status, await res.clone().text()).toBe(expected);
     if (expected >= 400) {
       expect(res.headers.get('content-type')).toBe('application/problem+json');

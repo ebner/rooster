@@ -44,8 +44,25 @@ import {
   taskTag,
   user,
 } from '../db/schema/index.ts';
+import type { DomainEventType } from '../events/bus.ts';
 import { AppError } from '../lib/errors.ts';
-import { type Actor, immediate, type OpMeta, type ServiceDeps, type Tx } from './context.ts';
+import {
+  type Actor,
+  emitAfterCommit,
+  immediate,
+  type OpMeta,
+  type ServiceDeps,
+  type Tx,
+} from './context.ts';
+import {
+  memberIds,
+  mergeReach,
+  qk,
+  selfAudience,
+  type TaskReach,
+  taskAudiences,
+  taskReach,
+} from './event-audience.ts';
 import { listGroups } from './group-service.ts';
 import {
   ancestorsOf,
@@ -78,7 +95,7 @@ import type { OrderingService, OrderTarget } from './ordering-service.ts';
 import { requireMembership } from './org-access.ts';
 import type { MemberRemovalStep } from './org-service.ts';
 import type { PlacementService, PlacementTarget } from './placement-service.ts';
-import { attachTags, resolveTagsForCreate, setTaskTag } from './tag-service.ts';
+import { attachTags, emitTaskTagged, resolveTagsForCreate, setTaskTag } from './tag-service.ts';
 
 const DAY_MS = 86_400_000;
 /** my-list includes tasks completed within the last 14 days by default (06 §2.3). */
@@ -186,6 +203,57 @@ export class TaskService {
     return this.deps.clock();
   }
 
+  /**
+   * Publishes a task change after commit (04 §4.5) to everyone who can see the tasks. Pass
+   * `before` (the reach captured before a structural change) so users who lost the task from
+   * their list hear about it too.
+   */
+  private emit(
+    tx: Tx,
+    actor: Actor,
+    type: DomainEventType,
+    orgId: string,
+    taskIds: readonly string[],
+    options: { before?: TaskReach; trash?: boolean; tags?: boolean } = {},
+  ): void {
+    const after = taskReach(tx, taskIds);
+    const reach = options.before === undefined ? after : mergeReach(options.before, after);
+    const audiences = taskAudiences(tx, {
+      orgId,
+      actorId: actor.userId,
+      reach,
+      trash: options.trash === true,
+    });
+    if (options.tags === true) {
+      audiences.push({ org: orgId, userIds: memberIds(tx, orgId), keys: [qk.tags(orgId)] });
+    }
+    emitAfterCommit(this.deps, tx, {
+      type,
+      orgId,
+      actorId: actor.userId,
+      subjects: [...taskIds],
+      audiences,
+    });
+  }
+
+  /** A change only the actor sees: their own placements or expansions. */
+  private emitOwn(
+    tx: Tx,
+    actor: Actor,
+    type: DomainEventType,
+    orgId: string,
+    taskIds: readonly string[],
+    keys = [qk.myList(orgId), ...taskIds.map(qk.task)],
+  ): void {
+    emitAfterCommit(this.deps, tx, {
+      type,
+      orgId,
+      actorId: actor.userId,
+      subjects: [...taskIds],
+      audiences: [selfAudience(actor.userId, orgId, keys)],
+    });
+  }
+
   // --- create -------------------------------------------------------------------------------
 
   /**
@@ -196,7 +264,7 @@ export class TaskService {
    * end). A repeated create with the same client `id` and content returns the existing task;
    * the same `id` with other content is `409 id_conflict`.
    */
-  create(actor: Actor, orgRef: string, input: TaskCreate, _meta?: OpMeta): Task {
+  create(actor: Actor, orgRef: string, input: TaskCreate, meta?: OpMeta): Task {
     return immediate(this.deps.db, (tx) => {
       const { org } = requireMembership(tx, actor.userId, orgRef);
       const fields = input.parse === true ? this.parseTitle(tx, actor, org.id, input) : input;
@@ -262,12 +330,15 @@ export class TaskService {
         ...due,
         now,
       });
-      attachTags(tx, row.id, tagIds, now);
+      attachTags(tx, row.id, tagIds, meta?.editTime ?? now);
       this.placements.reconcilePlacements(
         tx,
         [row.id],
         group === null ? undefined : { userId: actor.userId, group, intent },
       );
+      this.emit(tx, actor, 'task.created', org.id, [row.id], {
+        tags: (input.tagNames?.length ?? 0) > 0,
+      });
       return taskDtoFor(tx, actor.userId, row);
     });
   }
@@ -469,6 +540,10 @@ export class TaskService {
     const changes: Partial<TaskRow> = {};
     const ignoredFields: string[] = [];
     let applied = false;
+    const before =
+      input.parentId !== undefined && input.parentId !== row.parentId
+        ? taskReach(tx, [row.id])
+        : undefined;
     const apply = (key: string, fields: string[], set: () => void) => {
       if (clockAllows(clock, key, meta.editTime)) {
         set();
@@ -519,6 +594,9 @@ export class TaskService {
       Object.assign(row, next);
     }
     if (reparented) this.placements.reconcilePlacements(tx, [row.id]);
+    if (applied) {
+      this.emit(tx, actor, 'task.updated', row.orgId, [row.id], before ? { before } : {});
+    }
     return { task: taskDtoFor(tx, actor.userId, row), ignoredFields };
   }
 
@@ -555,6 +633,7 @@ export class TaskService {
     }
     tx.update(task).set(changes).where(eq(task.id, row.id)).run();
     Object.assign(row, changes);
+    this.emit(tx, actor, 'task.completed', row.orgId, [row.id]);
   }
 
   /**
@@ -578,6 +657,7 @@ export class TaskService {
       .where(eq(task.id, row.id))
       .run();
     softDeleteTasks(tx, [row.id], { userId: actor.userId, now: this.now() });
+    this.emit(tx, actor, 'task.deleted', row.orgId, [row.id], { trash: true });
   }
 
   /**
@@ -587,7 +667,7 @@ export class TaskService {
   restore(actor: Actor, taskId: string, meta: OpMeta): Task {
     return immediate(this.deps.db, (tx) => {
       const row = requireTask(tx, actor.userId, taskId);
-      this.applyRestore(tx, row, meta);
+      this.applyRestore(tx, actor, row, meta);
       return taskDtoFor(tx, actor.userId, { ...row, ...this.reload(tx, row.id) });
     });
   }
@@ -598,7 +678,7 @@ export class TaskService {
     return row;
   }
 
-  private applyRestore(tx: Tx, row: TaskRow, meta: OpMeta): void {
+  private applyRestore(tx: Tx, actor: Actor, row: TaskRow, meta: OpMeta): void {
     if (row.deletedAt === null) return;
     const clock = parseClock(row.fieldClock);
     if (!clockAllows(clock, 'deleted', meta.editTime)) return;
@@ -631,6 +711,7 @@ export class TaskService {
       .where(and(inArray(placement.taskId, ids), isNotNull(taskGroup.deletedAt)))
       .all();
     for (const p of orphaned) this.placements.rehomeToInbox(tx, p.userId, p.orgId, [p.taskId]);
+    this.emit(tx, actor, 'task.restored', row.orgId, [row.id], { trash: true });
   }
 
   /** Hard delete, only from Trash. Placements and subtasks go with it (FK cascade). */
@@ -640,7 +721,9 @@ export class TaskService {
       if (row.deletedAt === null) {
         throw new AppError('not_in_trash', 409, 'Only deleted tasks can be deleted permanently.');
       }
+      const before = taskReach(tx, [row.id]);
       tx.delete(task).where(eq(task.id, row.id)).run();
+      this.emit(tx, actor, 'task.purged', row.orgId, [row.id], { before, trash: true });
     });
   }
 
@@ -699,6 +782,13 @@ export class TaskService {
         .run();
       byId.set(r.id, keys[i] as string);
     });
+    this.emitOwn(
+      tx,
+      actor,
+      'task.moved',
+      group.orgId,
+      movable.map((r) => r.id),
+    );
     return rows.map((r) => {
       const position = byId.get(r.id);
       return position === undefined ? null : { groupId: group.id, position };
@@ -732,18 +822,21 @@ export class TaskService {
               this.applyDelete(tx, actor, requireTask(tx, actor.userId, id), meta);
               break;
             case 'restore':
-              this.applyRestore(tx, requireTask(tx, actor.userId, id), meta);
+              this.applyRestore(tx, actor, requireTask(tx, actor.userId, id), meta);
               break;
             case 'addTag':
-            case 'removeTag':
-              setTaskTag(tx, {
+            case 'removeTag': {
+              const { row, changed } = setTaskTag(tx, {
                 userId: actor.userId,
                 taskId: id,
                 tagId: op.args.tagId,
                 on: op.op === 'addTag',
                 now: this.now(),
+                addedAt: meta.editTime,
               });
+              if (changed) emitTaskTagged(this.deps, tx, actor, row);
               break;
+            }
             case 'setDue': {
               const due = dueUnit(op.args);
               const patch: TaskPatch = { ...due };
@@ -816,6 +909,7 @@ export class TaskService {
         .set({ subtaskPosition, fieldClock: JSON.stringify(clock), updatedAt: this.now() })
         .where(eq(task.id, row.id))
         .run();
+      this.emit(tx, actor, 'task.updated', row.orgId, [row.id]);
       return { subtaskPosition };
     });
   }
@@ -914,27 +1008,36 @@ export class TaskService {
         }
       }
       this.placements.reconcilePlacements(tx, [top.id], target);
+      this.emit(tx, actor, 'task.created', top.orgId, [top.id]);
       return taskDtoFor(tx, actor.userId, top);
     });
   }
 
   /**
    * Persists the actor's expansion of a parent row (FR-TASK-11). Idempotent; any task the
-   * actor can see. Expanding a deleted task is `410`; collapsing always succeeds.
+   * actor can see. Expanding a deleted task is `410`; collapsing always succeeds. Expansion
+   * is per-user view state with set semantics and no field clock (05 §4.4 lists none), so
+   * the edit time is not consulted: the last arrival wins.
    */
   setExpanded(actor: Actor, taskId: string, expanded: boolean): void {
     immediate(this.deps.db, (tx) => {
       const row = requireTask(tx, actor.userId, taskId);
+      let changes: number;
       if (expanded) {
         if (row.deletedAt !== null) throw taskDeleted();
-        tx.insert(taskExpansion)
+        changes = tx
+          .insert(taskExpansion)
           .values({ userId: actor.userId, taskId: row.id })
           .onConflictDoNothing()
-          .run();
+          .run().changes;
       } else {
-        tx.delete(taskExpansion)
+        changes = tx
+          .delete(taskExpansion)
           .where(and(eq(taskExpansion.userId, actor.userId), eq(taskExpansion.taskId, row.id)))
-          .run();
+          .run().changes;
+      }
+      if (changes > 0) {
+        this.emitOwn(tx, actor, 'task.expanded', row.orgId, [row.id], [qk.myList(row.orgId)]);
       }
     });
   }

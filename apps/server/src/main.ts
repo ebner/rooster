@@ -44,7 +44,10 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   shuttingDown = true;
   logger.info({ signal }, 'shutting down');
 
-  // SSE streams are closed here once the hub exists (Phase 2).
+  // SSE streams never finish on their own: end them first, so draining waits only for real
+  // requests. Clients reconnect (with backoff) to the next instance.
+  const streams = app.hub.shutdown();
+  if (streams > 0) logger.info({ streams }, 'closed event streams');
   if (!(await connections.close(SHUTDOWN_GRACE_MS))) {
     logger.warn({ graceMs: SHUTDOWN_GRACE_MS }, 'in-flight requests did not finish in time');
   }

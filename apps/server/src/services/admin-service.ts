@@ -8,7 +8,14 @@ import type {
 import { asc, desc, eq } from 'drizzle-orm';
 import { allowlistEntry, session, user } from '../db/schema/index.ts';
 import { AppError } from '../lib/errors.ts';
-import { type Actor, immediate, isAdminEmail, type ServiceDeps, type Tx } from './context.ts';
+import {
+  type Actor,
+  emitAfterCommit,
+  immediate,
+  isAdminEmail,
+  type ServiceDeps,
+  type Tx,
+} from './context.ts';
 import { notFound } from './org-access.ts';
 
 function requireAdmin(actor: Actor): void {
@@ -94,7 +101,17 @@ export class AdminService {
         .set({ disabledAt, updatedAt: new Date(this.deps.clock()) })
         .where(eq(user.id, userId))
         .run();
-      if (disabled) tx.delete(session).where(eq(session.userId, userId)).run();
+      if (disabled) {
+        tx.delete(session).where(eq(session.userId, userId)).run();
+        // Force-closes every open SSE stream of the user (04 §4.5).
+        emitAfterCommit(this.deps, tx, {
+          type: 'user.disabled',
+          orgId: null,
+          actorId: actor.userId,
+          subjects: [userId],
+          audiences: [],
+        });
+      }
       return this.toAdminUser({ ...row, disabledAt });
     });
   }

@@ -13,8 +13,17 @@ import {
 import { isLocale } from '@rooster/i18n';
 import { and, desc, eq, gt } from 'drizzle-orm';
 import { orgMemberPref, session, user } from '../db/schema/index.ts';
+import type { Audience, DomainEventType, QueryKey } from '../events/bus.ts';
 import { AppError } from '../lib/errors.ts';
-import { type Actor, immediate, isAdminEmail, type ServiceDeps, type Tx } from './context.ts';
+import {
+  type Actor,
+  emitAfterCommit,
+  immediate,
+  isAdminEmail,
+  type ServiceDeps,
+  type Tx,
+} from './context.ts';
+import { memberIds, qk, selfAudience } from './event-audience.ts';
 import {
   listMemberships,
   type Membership,
@@ -49,6 +58,39 @@ function matchesRef(m: Membership, ref: string): boolean {
 /** The signed-in user: profile, settings, sessions and sidebar order (FR-SET-1/3, FR-ORG-6). */
 export class UserService {
   constructor(private readonly deps: ServiceDeps) {}
+
+  /** Settings, sessions and the sidebar are the user's own: only their streams hear it. */
+  private emitSelf(
+    tx: Tx,
+    actor: Actor,
+    type: DomainEventType,
+    keys: QueryKey[],
+    options: { subjects?: string[]; extra?: Audience[] } = {},
+  ): void {
+    emitAfterCommit(this.deps, tx, {
+      type,
+      orgId: null,
+      actorId: actor.userId,
+      subjects: options.subjects ?? [actor.userId],
+      audiences: [selfAudience(actor.userId, null, keys), ...(options.extra ?? [])],
+    });
+  }
+
+  /**
+   * Whether an open SSE stream may continue: the session still exists, has not expired, and
+   * its user is enabled. Checked on every heartbeat (04 §4.5).
+   */
+  sessionActive(userId: string, sessionId: string): boolean {
+    const row = this.deps.db.orm
+      .select({ expiresAt: session.expiresAt, disabledAt: user.disabledAt })
+      .from(session)
+      .innerJoin(user, eq(user.id, session.userId))
+      .where(and(eq(session.id, sessionId), eq(session.userId, userId)))
+      .get();
+    return (
+      row !== undefined && row.disabledAt === null && row.expiresAt.getTime() > this.deps.clock()
+    );
+  }
 
   /** Resolves the actor of a session; `null` for a missing or disabled user. */
   resolveActor(userId: string, sessionId: string): Actor | null {
@@ -118,6 +160,16 @@ export class UserService {
       if (Object.keys(changes).length === 0) return this.toMe(tx, actor, current);
       changes.updatedAt = new Date(this.deps.clock());
       tx.update(user).set(changes).where(eq(user.id, actor.userId)).run();
+      // A new name shows in every member list the user appears in.
+      const extra: Audience[] =
+        changes.name === undefined || changes.name === current.name
+          ? []
+          : listMemberships(tx, actor.userId).map((m) => ({
+              org: m.org.id,
+              userIds: memberIds(tx, m.org.id),
+              keys: [qk.orgMembers(m.org.id)],
+            }));
+      this.emitSelf(tx, actor, 'user.updated', [qk.me], { extra });
       return this.toMe(tx, actor, { ...current, ...changes });
     });
   }
@@ -156,6 +208,8 @@ export class UserService {
         .where(and(eq(session.id, sessionId), eq(session.userId, actor.userId)))
         .run();
       if (result.changes === 0) throw notFound('Session');
+      // Closes the streams of that session; the user's other tabs refresh their session list.
+      this.emitSelf(tx, actor, 'session.ended', [qk.me], { subjects: [sessionId] });
     });
   }
 
@@ -187,6 +241,7 @@ export class UserService {
       } else {
         this.setPosition(tx, actor.userId, target.org.id, position);
       }
+      this.emitSelf(tx, actor, 'org.prefs', [qk.orgs, qk.me], { subjects: [target.org.id] });
       return { orgId: target.org.id, position };
     });
   }
@@ -226,6 +281,7 @@ export class UserService {
         )
         .run();
       if (result.changes === 0) throw new AppError('not_found', 404, 'Organisation not found.');
+      this.emitSelf(tx, actor, 'org.prefs', [qk.orgs, qk.me], { subjects: [membership.org.id] });
       return toOrgDto({ ...membership, collapsed });
     });
   }

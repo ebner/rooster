@@ -11,15 +11,30 @@ import {
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { tag, task, taskTag } from '../db/schema/index.ts';
 import { AppError } from '../lib/errors.ts';
-import { type Actor, immediate, type OpMeta, type ServiceDeps, type Tx } from './context.ts';
+import {
+  type Actor,
+  emitAfterCommit,
+  immediate,
+  type OpMeta,
+  type ServiceDeps,
+  type Tx,
+} from './context.ts';
+import { memberIds, qk, taskAudiences, taskReach } from './event-audience.ts';
 import { isMember, requireTask, type TaskRow, taskDeleted, taskDtoFor } from './list-access.ts';
 import { requireMembership } from './org-access.ts';
 
 export type TagRow = typeof tag.$inferSelect;
 
 export const tagNotFound = () => new AppError('not_found', 404, 'Tag not found.');
-const nameTaken = () =>
-  new AppError('tag_name_taken', 409, 'A tag with that name already exists in this organisation.');
+/** `existingId` lets an offline outbox remap its own tag ID to the one that won (04 §6.2). */
+const nameTaken = (existingId: string) =>
+  new AppError(
+    'tag_name_taken',
+    409,
+    'A tag with that name already exists in this organisation.',
+    undefined,
+    { existingId },
+  );
 
 export function toTagDto(row: TagRow): Tag {
   return {
@@ -73,7 +88,8 @@ export function insertTag(
   input: { orgId: string; name: string; color?: TagColor; id?: string; now: number },
 ): TagRow {
   const name = normaliseName(input.name);
-  if (findTagByName(tx, input.orgId, name) !== undefined) throw nameTaken();
+  const existing = findTagByName(tx, input.orgId, name);
+  if (existing !== undefined) throw nameTaken(existing.id);
   const row: TagRow = {
     id: input.id ?? uuidv7(),
     orgId: input.orgId,
@@ -148,23 +164,32 @@ export function detachTag(tx: Tx, taskId: string, tagId: string): boolean {
  */
 export function setTaskTag(
   tx: Tx,
-  input: { userId: string; taskId: string; tagId: string; on: boolean; now: number },
-): TaskRow {
+  input: {
+    userId: string;
+    taskId: string;
+    tagId: string;
+    on: boolean;
+    now: number;
+    /** The chip-order time of an added tag: the request's edit time. Default `now`. */
+    addedAt?: number;
+  },
+): { row: TaskRow; changed: boolean } {
   const row = requireTask(tx, input.userId, input.taskId);
   if (row.deletedAt !== null) throw taskDeleted();
   const t = tx.select({ orgId: tag.orgId }).from(tag).where(eq(tag.id, input.tagId)).get();
   if (t === undefined || t.orgId !== row.orgId) throw tagNotFound();
   const changed = input.on
-    ? attachTags(tx, row.id, [input.tagId], input.now)
+    ? attachTags(tx, row.id, [input.tagId], input.addedAt ?? input.now)
     : detachTag(tx, row.id, input.tagId);
   if (changed) {
     tx.update(task).set({ updatedAt: input.now }).where(eq(task.id, row.id)).run();
     row.updatedAt = input.now;
   }
-  return row;
+  return { row, changed };
 }
 
-function touchTasksWithTag(tx: Tx, tagId: string, now: number): void {
+/** Bumps `updated_at` of every task carrying the tag; returns their IDs. */
+function touchTasksWithTag(tx: Tx, tagId: string, now: number): string[] {
   const ids = tx
     .select({ id: taskTag.taskId })
     .from(taskTag)
@@ -172,6 +197,7 @@ function touchTasksWithTag(tx: Tx, tagId: string, now: number): void {
     .all()
     .map((r) => r.id);
   if (ids.length > 0) tx.update(task).set({ updatedAt: now }).where(inArray(task.id, ids)).run();
+  return ids;
 }
 
 /**
@@ -183,6 +209,33 @@ export class TagService {
 
   private now(): number {
     return this.deps.clock();
+  }
+
+  /**
+   * Tag changes go to every member (04 §4.5): `['tags', org]`, `['my-list', org]` (chips), and
+   * `['task', id]` for each task whose tag set changed.
+   */
+  private emit(
+    tx: Tx,
+    actor: Actor,
+    type: 'tag.created' | 'tag.updated' | 'tag.deleted' | 'tag.merged',
+    orgId: string,
+    tagIds: string[],
+    taskIds: readonly string[] = [],
+  ): void {
+    emitAfterCommit(this.deps, tx, {
+      type,
+      orgId,
+      actorId: actor.userId,
+      subjects: tagIds,
+      audiences: [
+        {
+          org: orgId,
+          userIds: memberIds(tx, orgId),
+          keys: [qk.tags(orgId), qk.myList(orgId), ...taskIds.map(qk.task)],
+        },
+      ],
+    });
   }
 
   /** The org's tags by name (case-insensitive, then ID). */
@@ -215,15 +268,15 @@ export class TagService {
           throw new AppError('id_conflict', 409, 'That ID is already in use.');
         }
       }
-      return toTagDto(
-        insertTag(tx, {
-          orgId: org.id,
-          name: input.name,
-          ...(input.color === undefined ? {} : { color: input.color }),
-          ...(input.id === undefined ? {} : { id: input.id }),
-          now: this.now(),
-        }),
-      );
+      const row = insertTag(tx, {
+        orgId: org.id,
+        name: input.name,
+        ...(input.color === undefined ? {} : { color: input.color }),
+        ...(input.id === undefined ? {} : { id: input.id }),
+        now: this.now(),
+      });
+      this.emit(tx, actor, 'tag.created', org.id, [row.id]);
+      return toTagDto(row);
     });
   }
 
@@ -235,12 +288,13 @@ export class TagService {
       if (input.name !== undefined) {
         const name = normaliseName(input.name);
         const clash = findTagByName(tx, row.orgId, name);
-        if (clash !== undefined && clash.id !== row.id) throw nameTaken();
+        if (clash !== undefined && clash.id !== row.id) throw nameTaken(clash.id);
         changes.name = name;
       }
       if (input.color !== undefined) changes.color = input.color;
       tx.update(tag).set(changes).where(eq(tag.id, row.id)).run();
       touchTasksWithTag(tx, row.id, this.now());
+      this.emit(tx, actor, 'tag.updated', row.orgId, [row.id]);
       return toTagDto({ ...row, ...changes });
     });
   }
@@ -249,8 +303,9 @@ export class TagService {
   remove(actor: Actor, tagId: string, _meta?: OpMeta): void {
     immediate(this.deps.db, (tx) => {
       const row = requireTag(tx, actor.userId, tagId);
-      touchTasksWithTag(tx, row.id, this.now());
+      const tasks = touchTasksWithTag(tx, row.id, this.now());
       tx.delete(tag).where(eq(tag.id, row.id)).run();
+      this.emit(tx, actor, 'tag.deleted', row.orgId, [row.id], tasks);
     });
   }
 
@@ -269,7 +324,7 @@ export class TagService {
           { path: 'intoId', message: 'Pick another tag' },
         ]);
       }
-      touchTasksWithTag(tx, from.id, this.now());
+      const tasks = touchTasksWithTag(tx, from.id, this.now());
       const tagged = tx
         .select()
         .from(taskTag)
@@ -283,15 +338,42 @@ export class TagService {
           .run();
       }
       tx.delete(tag).where(eq(tag.id, from.id)).run();
+      this.emit(tx, actor, 'tag.merged', into.orgId, [from.id, into.id], tasks);
       return toTagDto(into);
     });
   }
 
-  /** `PUT`/`DELETE /tasks/:id/tags/:tagId`: idempotent set semantics; returns the task. */
-  setOnTask(actor: Actor, taskId: string, tagId: string, on: boolean, _meta?: OpMeta): Task {
+  /**
+   * `PUT`/`DELETE /tasks/:id/tags/:tagId`: idempotent set semantics; returns the task. An
+   * added tag's `added_at` is the (clamped) edit time, so offline adds keep their chip order.
+   */
+  setOnTask(actor: Actor, taskId: string, tagId: string, on: boolean, meta?: OpMeta): Task {
     return immediate(this.deps.db, (tx) => {
-      const row = setTaskTag(tx, { userId: actor.userId, taskId, tagId, on, now: this.now() });
+      const { row, changed } = setTaskTag(tx, {
+        userId: actor.userId,
+        taskId,
+        tagId,
+        on,
+        now: this.now(),
+        ...(meta === undefined ? {} : { addedAt: meta.editTime }),
+      });
+      if (changed) emitTaskTagged(this.deps, tx, actor, row);
       return taskDtoFor(tx, actor.userId, row);
     });
   }
+}
+
+/** A task's tag set changed: a plain task update for its audiences. */
+export function emitTaskTagged(deps: ServiceDeps, tx: Tx, actor: Actor, row: TaskRow): void {
+  emitAfterCommit(deps, tx, {
+    type: 'task.updated',
+    orgId: row.orgId,
+    actorId: actor.userId,
+    subjects: [row.id],
+    audiences: taskAudiences(tx, {
+      orgId: row.orgId,
+      actorId: actor.userId,
+      reach: taskReach(tx, [row.id]),
+    }),
+  });
 }

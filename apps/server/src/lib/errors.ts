@@ -17,7 +17,12 @@ export interface Problem {
   detail: string;
   code: string;
   errors?: FieldError[];
+  /** See `problemSchema.existingId` in @rooster/core. */
+  existingId?: string;
 }
+
+/** RFC 9457 extension members a service may attach to a problem. */
+export type ProblemExtensions = Pick<Problem, 'existingId'>;
 
 /** Domain error thrown from services; rendered as problem+json with a stable `code`. */
 export class AppError extends Error {
@@ -25,14 +30,22 @@ export class AppError extends Error {
   readonly status: ContentfulStatusCode;
   readonly detail: string;
   readonly errors: FieldError[] | undefined;
+  readonly extensions: ProblemExtensions | undefined;
 
-  constructor(code: string, status: ContentfulStatusCode, detail: string, errors?: FieldError[]) {
+  constructor(
+    code: string,
+    status: ContentfulStatusCode,
+    detail: string,
+    errors?: FieldError[],
+    extensions?: ProblemExtensions,
+  ) {
     super(detail);
     this.name = 'AppError';
     this.code = code;
     this.status = status;
     this.detail = detail;
     this.errors = errors;
+    this.extensions = extensions;
   }
 }
 
@@ -73,6 +86,7 @@ export function problemResponse(
   code: string,
   detail: string,
   errors?: FieldError[],
+  extensions?: ProblemExtensions,
 ): Response {
   const body: Problem = {
     type: 'about:blank',
@@ -81,6 +95,7 @@ export function problemResponse(
     detail,
     code,
     ...(errors === undefined ? {} : { errors }),
+    ...extensions,
   };
   return c.body(JSON.stringify(body), status, { 'Content-Type': 'application/problem+json' });
 }
@@ -114,7 +129,7 @@ export const createErrorHandler =
   (baseLogger: Logger): ErrorHandler<AppEnv> =>
   (err, c) => {
     if (err instanceof AppError) {
-      return problemResponse(c, err.status, err.code, err.detail, err.errors);
+      return problemResponse(c, err.status, err.code, err.detail, err.errors, err.extensions);
     }
     if (err instanceof ZodError) {
       return validationProblem(c, err);

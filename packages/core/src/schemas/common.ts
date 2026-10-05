@@ -36,6 +36,11 @@ export const problemSchema = z.object({
   instance: z.string().optional(),
   code: z.string().min(1),
   errors: z.array(problemFieldErrorSchema).optional(),
+  /**
+   * Extension member on a `409` caused by a unique name (e.g. `tag_name_taken`): the ID of the
+   * entity that already holds it, so an offline outbox can remap its own ID to it (04 §6.2).
+   */
+  existingId: z.string().optional(),
 });
 
 /** GET /api/v1/meta (06). */
@@ -44,6 +49,8 @@ export const metaSchema = z.object({
   gitSha: z.string(),
   providers: z.array(z.object({ id: z.string(), name: z.string() })),
   features: z.object({ email: z.boolean(), push: z.boolean(), s3: z.boolean() }),
+  /** The server's clock (ms epoch) when it answered, for client clock-skew estimation. */
+  serverTime: timestampSchema,
 });
 
 export type ProblemFieldError = z.infer<typeof problemFieldErrorSchema>;

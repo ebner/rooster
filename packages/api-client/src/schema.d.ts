@@ -12,8 +12,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Server version, sign-in providers and enabled features
-         * @description No authentication. Used by the login page and the CLI.
+         * Server version, sign-in providers, enabled features and the server clock
+         * @description No authentication. Used by the login page and the CLI. `serverTime` lets clients estimate their clock skew before stamping `X-Rooster-Edit-Time`.
          */
         get: operations["getMeta"];
         put?: never;
@@ -761,10 +761,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Server-Sent Events: hello, invalidations and heartbeats
+         * @description A `text/event-stream` (04 §4.5). Every message has `event:`, `data:` (JSON) and a
+         *     monotonic `id:` (per server process; there is no replay, so `Last-Event-ID` is ignored and
+         *     clients refetch their active queries after a reconnect).
+         *
+         *     - `hello` (first message): [`SseHello`](#/components/schemas/SseHello), the server version
+         *       for update detection and its clock.
+         *     - `invalidate`: [`SseInvalidate`](#/components/schemas/SseInvalidate), query-key prefixes
+         *       to invalidate verbatim. Only the affected users receive it. `origin` is the
+         *       `X-Rooster-Client-Id` of the request that caused it. Bursts within ~50 ms are coalesced.
+         *     - `: ping` comment every 25 s.
+         *
+         *     The stream ends on sign-out, session revoke, user deactivation and server shutdown.
+         */
+        get: operations["streamEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        SseHello: {
+            version: string;
+            gitSha: string;
+            serverTime: number;
+        };
+        SseInvalidate: {
+            org: string | null;
+            keys: string[][];
+            origin: string | null;
+        };
         Problem: {
             type: string;
             title: string;
@@ -776,6 +817,7 @@ export interface components {
                 path: string;
                 message: string;
             }[];
+            existingId?: string;
         };
         Meta: {
             version: string;
@@ -789,6 +831,7 @@ export interface components {
                 push: boolean;
                 s3: boolean;
             };
+            serverTime: number;
         };
         Me: {
             id: string;
@@ -811,9 +854,9 @@ export interface components {
             parseTitleDates: boolean;
             completeHideMs: number;
             /** @enum {string} */
-            swipeLeft: "complete" | "date" | "delete" | "none";
+            swipeLeft: "complete" | "date" | "move" | "delete" | "none";
             /** @enum {string} */
-            swipeRight: "complete" | "date" | "delete" | "none";
+            swipeRight: "complete" | "date" | "move" | "delete" | "none";
             reminderTime: string;
             digestTime: string;
         };
@@ -844,9 +887,9 @@ export interface components {
                 parseTitleDates?: boolean;
                 completeHideMs?: number;
                 /** @enum {string} */
-                swipeLeft?: "complete" | "date" | "delete" | "none";
+                swipeLeft?: "complete" | "date" | "move" | "delete" | "none";
                 /** @enum {string} */
-                swipeRight?: "complete" | "date" | "delete" | "none";
+                swipeRight?: "complete" | "date" | "move" | "delete" | "none";
                 reminderTime?: string;
                 digestTime?: string;
             };
@@ -5269,6 +5312,53 @@ export interface operations {
             };
             /** @description Rate limited; retry after the Retry-After header */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    streamEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The event stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The server is shutting down; retry shortly */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

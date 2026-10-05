@@ -11,6 +11,61 @@
   ],
   "components": {
     "schemas": {
+      "SseHello": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "gitSha": {
+            "type": "string"
+          },
+          "serverTime": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "version",
+          "gitSha",
+          "serverTime"
+        ]
+      },
+      "SseInvalidate": {
+        "type": "object",
+        "properties": {
+          "org": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "maxItems": 4
+            },
+            "minItems": 1
+          },
+          "origin": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "org",
+          "keys",
+          "origin"
+        ]
+      },
       "Problem": {
         "type": "object",
         "properties": {
@@ -52,6 +107,9 @@
                 "message"
               ]
             }
+          },
+          "existingId": {
+            "type": "string"
           }
         },
         "required": [
@@ -106,13 +164,18 @@
               "push",
               "s3"
             ]
+          },
+          "serverTime": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": [
           "version",
           "gitSha",
           "providers",
-          "features"
+          "features",
+          "serverTime"
         ]
       },
       "Me": {
@@ -217,6 +280,7 @@
             "enum": [
               "complete",
               "date",
+              "move",
               "delete",
               "none"
             ]
@@ -226,6 +290,7 @@
             "enum": [
               "complete",
               "date",
+              "move",
               "delete",
               "none"
             ]
@@ -376,6 +441,7 @@
                 "enum": [
                   "complete",
                   "date",
+                  "move",
                   "delete",
                   "none"
                 ]
@@ -385,6 +451,7 @@
                 "enum": [
                   "complete",
                   "date",
+                  "move",
                   "delete",
                   "none"
                 ]
@@ -2310,8 +2377,8 @@
           "meta"
         ],
         "operationId": "getMeta",
-        "summary": "Server version, sign-in providers and enabled features",
-        "description": "No authentication. Used by the login page and the CLI.",
+        "summary": "Server version, sign-in providers, enabled features and the server clock",
+        "description": "No authentication. Used by the login page and the CLI. `serverTime` lets clients estimate their clock skew before stamping `X-Rooster-Edit-Time`.",
         "responses": {
           "200": {
             "description": "Server metadata",
@@ -7380,6 +7447,59 @@
           },
           "429": {
             "description": "Rate limited; retry after the Retry-After header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/events": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "operationId": "streamEvents",
+        "summary": "Server-Sent Events: hello, invalidations and heartbeats",
+        "description": "A `text/event-stream` (04 §4.5). Every message has `event:`, `data:` (JSON) and a\nmonotonic `id:` (per server process; there is no replay, so `Last-Event-ID` is ignored and\nclients refetch their active queries after a reconnect).\n\n- `hello` (first message): [`SseHello`](#/components/schemas/SseHello), the server version\n  for update detection and its clock.\n- `invalidate`: [`SseInvalidate`](#/components/schemas/SseInvalidate), query-key prefixes\n  to invalidate verbatim. Only the affected users receive it. `origin` is the\n  `X-Rooster-Client-Id` of the request that caused it. Bursts within ~50 ms are coalesced.\n- `: ping` comment every 25 s.\n\nThe stream ends on sign-out, session revoke, user deactivation and server shutdown.",
+        "responses": {
+          "200": {
+            "description": "The event stream",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "example": "event: hello\nid: 1\ndata: {\"version\":\"1.0.0\",\"gitSha\":\"abc1234\",\"serverTime\":1767225600000}\n\nevent: invalidate\nid: 2\ndata: {\"org\":\"0199…\",\"keys\":[[\"my-list\",\"0199…\"]],\"origin\":\"tab-1\"}\n\n"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is shutting down; retry shortly",
             "content": {
               "application/problem+json": {
                 "schema": {

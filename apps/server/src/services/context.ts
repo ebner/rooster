@@ -1,5 +1,7 @@
 import type { Config } from '../config.ts';
 import type { AppDb, Orm } from '../db/client.ts';
+import type { DomainEvent, EventBus } from '../events/bus.ts';
+import { currentOrigin } from '../events/origin.ts';
 import type { Logger } from '../lib/logger.ts';
 
 export type Scope = 'read' | 'write';
@@ -32,6 +34,8 @@ export interface ServiceDeps {
   logger: Logger;
   /** ms epoch; injectable for tests. */
   clock: () => number;
+  /** Domain events, published after commit (04 §4.5). */
+  events: EventBus;
 }
 
 /** A Drizzle transaction on the single better-sqlite3 connection. */
@@ -42,7 +46,38 @@ export type Tx = Parameters<Parameters<Orm['transaction']>[0]>[0];
  * `fn` must not be async: a promise would escape the transaction.
  */
 export function immediate<T>(db: AppDb, fn: (tx: Tx) => T): T {
-  return db.orm.transaction(fn, { behavior: 'immediate' });
+  const queue: (() => void)[] = [];
+  const result = db.orm.transaction(
+    (tx) => {
+      commitQueues.set(tx, queue);
+      return fn(tx);
+    },
+    { behavior: 'immediate' },
+  );
+  // Only reached after COMMIT: a throw inside `fn` rolls back and drops the queue.
+  for (const callback of queue) callback();
+  return result;
+}
+
+const commitQueues = new WeakMap<Tx, (() => void)[]>();
+
+/** Runs `callback` once the transaction `tx` (opened by `immediate`) has committed. */
+export function afterCommit(tx: Tx, callback: () => void): void {
+  const queue = commitQueues.get(tx);
+  if (queue === undefined) throw new Error('afterCommit needs a transaction from immediate()');
+  queue.push(callback);
+}
+
+export type EventDraft = Omit<DomainEvent, 'origin'>;
+
+/**
+ * Publishes a domain event once `tx` commits, tagged with the request's client ID. Audiences
+ * are computed by the caller inside `tx`, so they match the committed state exactly; nothing
+ * is published for rolled-back work.
+ */
+export function emitAfterCommit(deps: ServiceDeps, tx: Tx, event: EventDraft): void {
+  const origin = currentOrigin();
+  afterCommit(tx, () => deps.events.publish({ ...event, origin }));
 }
 
 export function isAdminEmail(config: Config, email: string): boolean {

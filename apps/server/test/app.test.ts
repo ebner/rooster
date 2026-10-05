@@ -36,16 +36,24 @@ describe('probes', () => {
 });
 
 describe('GET /api/v1/meta', () => {
-  it('reports version, git SHA, providers and features', async () => {
-    const { app } = createTestApp({ env: { ROOSTER_GIT_SHA: 'abc1234' } });
+  it('reports version, git SHA, providers, features and the server clock', async () => {
+    let now = 1_767_225_600_000;
+    const { app } = createTestApp({ env: { ROOSTER_GIT_SHA: 'abc1234' }, clock: () => now });
     const res = await app.request('/api/v1/meta');
     expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('no-store');
     expect(await res.json()).toEqual({
       version: '0.0.0-test',
       gitSha: 'abc1234',
       providers: [{ id: 'google', name: 'Google' }],
       features: { email: false, push: false, s3: false },
+      serverTime: 1_767_225_600_000,
     });
+    // Read per request, not at boot (P4 clock-skew estimation).
+    now += 5_000;
+    expect(
+      ((await (await app.request('/api/v1/meta')).json()) as { serverTime: number }).serverTime,
+    ).toBe(1_767_225_605_000);
   });
 
   it('derives features from the config', async () => {

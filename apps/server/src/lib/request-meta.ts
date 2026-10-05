@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
+import { runWithOrigin } from '../events/origin.ts';
 import type { OpMeta } from '../services/context.ts';
 import type { AppEnv } from './context.ts';
 
@@ -38,20 +39,21 @@ export function parseOpMeta(
   };
 }
 
-/** Captures edit time and client identity into `c.var.opMeta` for the services (04 §6.2). */
+/**
+ * Captures edit time and client identity into `c.var.opMeta` for the services (04 §6.2), and
+ * makes the client ID the origin of every domain event the request emits (04 §4.5).
+ */
 export function requestMeta(clock: () => number): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
-    c.set(
-      'opMeta',
-      parseOpMeta(
-        {
-          editTime: c.req.header('x-rooster-edit-time'),
-          clientId: c.req.header('x-rooster-client-id'),
-          client: c.req.header('x-rooster-client'),
-        },
-        clock(),
-      ),
+    const meta = parseOpMeta(
+      {
+        editTime: c.req.header('x-rooster-edit-time'),
+        clientId: c.req.header('x-rooster-client-id'),
+        client: c.req.header('x-rooster-client'),
+      },
+      clock(),
     );
-    return next();
+    c.set('opMeta', meta);
+    return runWithOrigin(meta.clientId, () => next());
   };
 }

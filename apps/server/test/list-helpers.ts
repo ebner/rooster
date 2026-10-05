@@ -38,11 +38,13 @@ export function listCtx(
     clock?: () => number;
     env?: Record<string, string>;
     apiRateLimit?: AppDeps['apiRateLimit'];
+    sse?: AppDeps['sse'];
   } = {},
 ): ListCtx {
   const { app, db } = createTestApp({
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.env === undefined ? {} : { env: options.env }),
+    ...(options.sse === undefined ? {} : { sse: options.sse }),
     apiRateLimit: options.apiRateLimit ?? false,
   });
   const user = (email: string, name?: string): Caller => {

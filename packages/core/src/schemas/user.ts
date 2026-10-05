@@ -29,7 +29,7 @@ export const timeZoneSchema = z
   .string()
   .refine(isValidTimeZone, { error: 'Expected an IANA timezone such as Europe/Stockholm' });
 
-export const SWIPE_ACTIONS = ['complete', 'date', 'delete', 'none'] as const;
+export const SWIPE_ACTIONS = ['complete', 'date', 'move', 'delete', 'none'] as const;
 export const swipeActionSchema = z.enum(SWIPE_ACTIONS);
 
 /** `user.prefs` (05 §2). Every key is optional in storage; reads apply `DEFAULT_PREFS`. */

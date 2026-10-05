@@ -186,6 +186,20 @@ export function createAuth(deps: AuthDeps) {
             if (token !== null) services.orgs.acceptInviteOnSignIn(created.userId, token);
           },
         },
+        delete: {
+          // Sign-out (or an expired session cleaned up by better-auth) ends that session's
+          // event streams at once (04 §4.5).
+          after: async (deleted) => {
+            services.events.publish({
+              type: 'session.ended',
+              orgId: null,
+              actorId: deleted.userId,
+              origin: null,
+              subjects: [deleted.id],
+              audiences: [],
+            });
+          },
+        },
       },
     },
     onAPIError: { errorURL: `${config.baseUrl}/login` },

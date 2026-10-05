@@ -24,12 +24,22 @@ import {
   member,
   organization,
   orgMemberPref,
+  task,
   user,
 } from '../db/schema/index.ts';
+import type { Audience, DomainEventType } from '../events/bus.ts';
 import { AppError } from '../lib/errors.ts';
 import { serverText } from '../lib/i18n.ts';
 import { hashToken, randomToken } from '../lib/tokens.ts';
-import { type Actor, immediate, type ServiceDeps, type Tx } from './context.ts';
+import { type Actor, emitAfterCommit, immediate, type ServiceDeps, type Tx } from './context.ts';
+import {
+  memberIds,
+  ownerIds,
+  qk,
+  selfAudience,
+  taskAudiences,
+  taskReach,
+} from './event-audience.ts';
 import { createDefaultGroups, deleteMemberGroups } from './group-bootstrap.ts';
 import {
   consumeInvite,
@@ -168,6 +178,29 @@ export class OrgService {
     return `${this.deps.config.baseUrl}/invite/${token}`;
   }
 
+  private emit(
+    tx: Tx,
+    type: DomainEventType,
+    input: { orgId: string; actorId: string | null; subjects?: string[]; audiences: Audience[] },
+  ): void {
+    emitAfterCommit(this.deps, tx, {
+      type,
+      orgId: input.orgId,
+      actorId: input.actorId,
+      subjects: input.subjects ?? [input.orgId],
+      audiences: input.audiences,
+    });
+  }
+
+  /** The sidebar and `me.orgs` of every member changed. */
+  private everyMember(tx: Tx, orgId: string): Audience {
+    return { org: orgId, userIds: memberIds(tx, orgId), keys: [qk.orgs, qk.me] };
+  }
+
+  private invitesChanged(tx: Tx, orgId: string): Audience {
+    return { org: orgId, userIds: ownerIds(tx, orgId), keys: [qk.orgInvites(orgId)] };
+  }
+
   /**
    * Adds the user to the org with its own Inbox, default groups and sidebar entry. The
    * caller has checked that they are not a member yet.
@@ -211,7 +244,13 @@ export class OrgService {
         deletedAt: null,
       };
       tx.insert(organization).values(org).run();
-      return toOrgDto(this.join(tx, org, userId, 'owner'));
+      const joined = this.join(tx, org, userId, 'owner');
+      this.emit(tx, 'org.created', {
+        orgId: org.id,
+        actorId: userId,
+        audiences: [selfAudience(userId, org.id, [qk.orgs, qk.me])],
+      });
+      return toOrgDto(joined);
     });
   }
 
@@ -248,7 +287,13 @@ export class OrgService {
         deletedAt: null,
       };
       tx.insert(organization).values(org).run();
-      return toOrgDto(this.join(tx, org, actor.userId, 'owner'));
+      const joined = this.join(tx, org, actor.userId, 'owner');
+      this.emit(tx, 'org.created', {
+        orgId: org.id,
+        actorId: actor.userId,
+        audiences: [selfAudience(actor.userId, org.id, [qk.orgs, qk.me])],
+      });
+      return toOrgDto(joined);
     });
   }
 
@@ -273,6 +318,11 @@ export class OrgService {
       if (patch.color !== undefined) changes.color = patch.color;
       if (Object.keys(changes).length > 0) {
         tx.update(organization).set(changes).where(eq(organization.id, org.id)).run();
+        this.emit(tx, 'org.updated', {
+          orgId: org.id,
+          actorId: actor.userId,
+          audiences: [this.everyMember(tx, org.id)],
+        });
       }
       return toOrgDto({ ...membership, org: { ...org, ...changes } });
     });
@@ -294,6 +344,11 @@ export class OrgService {
         .set({ deletedAt: this.now() })
         .where(eq(organization.id, org.id))
         .run();
+      this.emit(tx, 'org.deleted', {
+        orgId: org.id,
+        actorId: actor.userId,
+        audiences: [this.everyMember(tx, org.id)],
+      });
     });
   }
 
@@ -333,6 +388,15 @@ export class OrgService {
         .set({ role })
         .where(and(eq(member.organizationId, org.id), eq(member.userId, userId)))
         .run();
+      this.emit(tx, 'member.updated', {
+        orgId: org.id,
+        actorId: actor.userId,
+        subjects: [userId],
+        audiences: [
+          { org: org.id, userIds: memberIds(tx, org.id), keys: [qk.orgMembers(org.id)] },
+          selfAudience(userId, org.id, [qk.orgs, qk.me, qk.orgInvites(org.id)]),
+        ],
+      });
       return { ...target, role };
     });
   }
@@ -355,6 +419,13 @@ export class OrgService {
         throw new AppError('last_owner', 409, 'An organisation needs at least one owner.');
       }
       const scope = { orgId: org.id, userId };
+      const membersBefore = memberIds(tx, org.id);
+      const unassigned = tx
+        .select({ id: task.id })
+        .from(task)
+        .where(and(eq(task.orgId, org.id), eq(task.assigneeId, userId)))
+        .all()
+        .map((r) => r.id);
       for (const step of this.removalSteps) step(tx, scope);
       deleteMemberGroups(tx, scope);
       tx.delete(orgMemberPref)
@@ -363,6 +434,25 @@ export class OrgService {
       tx.delete(member)
         .where(and(eq(member.organizationId, org.id), eq(member.userId, userId)))
         .run();
+      // The removed user's tasks are unassigned: whoever can see them refreshes them.
+      const tasks =
+        unassigned.length === 0
+          ? []
+          : taskAudiences(tx, {
+              orgId: org.id,
+              actorId: actor.userId,
+              reach: taskReach(tx, unassigned),
+            });
+      this.emit(tx, 'member.removed', {
+        orgId: org.id,
+        actorId: actor.userId,
+        subjects: [userId],
+        audiences: [
+          { org: org.id, userIds: membersBefore, keys: [qk.orgMembers(org.id)] },
+          selfAudience(userId, org.id, [qk.orgs, qk.me]),
+          ...tasks,
+        ],
+      });
     });
   }
 
@@ -471,6 +561,12 @@ export class OrgService {
           })
           .run();
         const token = emailInviteToken(this.deps.config.authSecret, id);
+        this.emit(tx, 'invite.created', {
+          orgId: org.id,
+          actorId: actor.userId,
+          subjects: [id],
+          audiences: [this.invitesChanged(tx, org.id)],
+        });
         return { id, kind: 'email', url: this.inviteUrl(token), expiresAt };
       }
       const token = randomToken();
@@ -488,6 +584,12 @@ export class OrgService {
           createdAt: now,
         })
         .run();
+      this.emit(tx, 'invite.created', {
+        orgId: org.id,
+        actorId: actor.userId,
+        subjects: [id],
+        audiences: [this.invitesChanged(tx, org.id)],
+      });
       return { id, kind: 'link', url: this.inviteUrl(token), expiresAt };
     });
   }
@@ -496,6 +598,12 @@ export class OrgService {
   revokeInvite(actor: Actor, ref: string, inviteId: string): void {
     immediate(this.deps.db, (tx) => {
       const { org } = requireOwner(tx, actor.userId, ref);
+      this.emit(tx, 'invite.revoked', {
+        orgId: org.id,
+        actorId: actor.userId,
+        subjects: [inviteId],
+        audiences: [this.invitesChanged(tx, org.id)],
+      });
       const email = tx
         .update(invitation)
         .set({ status: 'canceled' })
@@ -586,11 +694,30 @@ export class OrgService {
     }
     const existing = listMemberships(tx, userId).find((m) => m.org.id === invite.org.id);
     if (existing !== undefined) {
-      if (invite.kind === 'email') consumeInvite(tx, invite);
+      if (invite.kind === 'email') {
+        consumeInvite(tx, invite);
+        this.emit(tx, 'invite.revoked', {
+          orgId: invite.org.id,
+          actorId: userId,
+          subjects: [invite.row.id],
+          audiences: [this.invitesChanged(tx, invite.org.id)],
+        });
+      }
       return toOrgDto(existing);
     }
     const joined = this.join(tx, invite.org, userId, inviteRole(invite));
     consumeInvite(tx, invite);
+    const orgId = invite.org.id;
+    this.emit(tx, 'member.joined', {
+      orgId,
+      actorId: userId,
+      subjects: [userId],
+      audiences: [
+        selfAudience(userId, orgId, [qk.orgs, qk.me]),
+        { org: orgId, userIds: memberIds(tx, orgId), keys: [qk.orgMembers(orgId)] },
+        this.invitesChanged(tx, orgId),
+      ],
+    });
     return toOrgDto(joined);
   }
 

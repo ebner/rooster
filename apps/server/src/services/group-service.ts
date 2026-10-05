@@ -10,8 +10,17 @@ import type {
 } from '@rooster/core/schemas';
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { placement, task, taskGroup } from '../db/schema/index.ts';
+import type { Audience, DomainEventType } from '../events/bus.ts';
 import { AppError } from '../lib/errors.ts';
-import { type Actor, immediate, type OpMeta, type ServiceDeps, type Tx } from './context.ts';
+import {
+  type Actor,
+  emitAfterCommit,
+  immediate,
+  type OpMeta,
+  type ServiceDeps,
+  type Tx,
+} from './context.ts';
+import { qk, selfAudience, taskAudiences, taskReach } from './event-audience.ts';
 import {
   clockAllows,
   descendantsOf,
@@ -60,6 +69,39 @@ export class GroupService {
   ) {}
 
   /**
+   * Groups are personal: a change goes to their owner only (04 §4.5). Tasks deleted or
+   * restored together with a group reach everyone who can see them (`taskIds`).
+   */
+  private emit(
+    tx: Tx,
+    actor: Actor,
+    type: DomainEventType,
+    group: Pick<GroupRow, 'id' | 'orgId'>,
+    taskIds: readonly string[] = [],
+  ): void {
+    const audiences: Audience[] = [
+      selfAudience(actor.userId, group.orgId, [qk.myList(group.orgId)]),
+    ];
+    if (taskIds.length > 0) {
+      audiences.push(
+        ...taskAudiences(tx, {
+          orgId: group.orgId,
+          actorId: actor.userId,
+          reach: taskReach(tx, taskIds),
+          trash: true,
+        }),
+      );
+    }
+    emitAfterCommit(this.deps, tx, {
+      type,
+      orgId: group.orgId,
+      actorId: actor.userId,
+      subjects: [group.id],
+      audiences,
+    });
+  }
+
+  /**
    * Creates a group at the intent (default: the end). With `splitAfterTaskId` (Tab+N, 02 §4)
    * the group goes directly after that task's group (at the top when that is the Inbox), and
    * every placement below the task moves into it with its key unchanged, so the order is
@@ -106,6 +148,7 @@ export class GroupService {
         deletedAt: null,
       };
       tx.insert(taskGroup).values(row).run();
+      this.emit(tx, actor, 'group.created', row);
 
       if (movedIds.length === 0) return { group: toGroupDto(row), moved: [] };
       tx.update(placement)
@@ -162,6 +205,7 @@ export class GroupService {
         updatedAt: this.deps.clock(),
       };
       tx.update(taskGroup).set(next).where(eq(taskGroup.id, group.id)).run();
+      this.emit(tx, actor, 'group.updated', group);
       return toGroupDto({ ...group, ...next });
     });
   }
@@ -181,6 +225,7 @@ export class GroupService {
         .set({ position, fieldClock: JSON.stringify(clock), updatedAt: now })
         .where(eq(taskGroup.id, group.id))
         .run();
+      this.emit(tx, actor, 'group.moved', group);
       return { position };
     });
   }
@@ -190,16 +235,21 @@ export class GroupService {
    * its placements, deleted tasks' included, go to the end of the target in order) or
    * `deleteTasks` (its tasks are soft-deleted together with it). Without either, completed
    * tasks left in the group move to the end of the Inbox. The last normal group stays.
+   * LWW key `deleted`, shared with restore: a delete older than the last restore is a no-op.
    */
-  remove(actor: Actor, groupId: string, input: GroupDelete, _meta?: OpMeta): void {
+  remove(actor: Actor, groupId: string, input: GroupDelete, meta?: OpMeta): void {
     immediate(this.deps.db, (tx) => {
       const group = requireOwnGroup(tx, actor.userId, groupId);
       if (group.kind === 'inbox') throw inboxImmutable();
+      const clock = parseClock(group.fieldClock);
+      const editTime = meta?.editTime ?? this.deps.clock();
       if (input.moveTasksTo !== undefined && input.deleteTasks === true) {
         throw new AppError('validation_failed', 422, 'Choose moveTasksTo or deleteTasks.', [
           { path: 'moveTasksTo', message: 'Not allowed together with deleteTasks' },
         ]);
       }
+      if (!clockAllows(clock, 'deleted', editTime)) return;
+      clock.deleted = editTime;
       const now = this.deps.clock();
       const normals = groupDomain(tx, { userId: actor.userId, orgId: group.orgId, now }).items;
       if (normals.length <= 1) {
@@ -217,6 +267,7 @@ export class GroupService {
         .orderBy(asc(placement.position), asc(placement.taskId))
         .all();
       const live = placed.filter((p) => p.deletedAt === null);
+      let deletedTaskIds: string[] = [];
 
       if (input.moveTasksTo !== undefined) {
         if (input.moveTasksTo === group.id) {
@@ -234,11 +285,8 @@ export class GroupService {
           target: 'end',
         });
       } else if (input.deleteTasks === true) {
-        softDeleteTasks(
-          tx,
-          live.map((p) => p.id),
-          { userId: actor.userId, now },
-        );
+        deletedTaskIds = live.map((p) => p.id);
+        softDeleteTasks(tx, deletedTaskIds, { userId: actor.userId, now });
       } else {
         if (live.some((p) => p.completedAt === null)) {
           throw new AppError(
@@ -255,24 +303,31 @@ export class GroupService {
         });
       }
       tx.update(taskGroup)
-        .set({ deletedAt: now, updatedAt: now })
+        .set({ deletedAt: now, updatedAt: now, fieldClock: JSON.stringify(clock) })
         .where(eq(taskGroup.id, group.id))
         .run();
+      this.emit(tx, actor, 'group.deleted', group, deletedTaskIds);
     });
   }
 
   /**
    * Undoes a delete: the group returns at its old position, together with the tasks that
-   * were deleted with it (same `deleted_at`).
+   * were deleted with it (same `deleted_at`). LWW key `deleted`: a restore older than the
+   * delete is a no-op that returns the group as it is.
    */
-  restore(actor: Actor, groupId: string, _meta?: OpMeta): Group {
+  restore(actor: Actor, groupId: string, meta?: OpMeta): Group {
     return immediate(this.deps.db, (tx) => {
       const group = requireOwnGroup(tx, actor.userId, groupId, { includeDeleted: true });
       if (group.deletedAt === null) return toGroupDto(group);
+      const clock = parseClock(group.fieldClock);
+      const editTime = meta?.editTime ?? this.deps.clock();
+      if (!clockAllows(clock, 'deleted', editTime)) return toGroupDto(group);
+      clock.deleted = editTime;
       const deletedAt = group.deletedAt;
       const now = this.deps.clock();
+      const fieldClock = JSON.stringify(clock);
       tx.update(taskGroup)
-        .set({ deletedAt: null, updatedAt: now })
+        .set({ deletedAt: null, updatedAt: now, fieldClock })
         .where(eq(taskGroup.id, group.id))
         .run();
       const ids = tx
@@ -289,7 +344,8 @@ export class GroupService {
           .where(inArray(task.id, all))
           .run();
       }
-      return toGroupDto({ ...group, deletedAt: null, updatedAt: now });
+      this.emit(tx, actor, 'group.restored', group, ids);
+      return toGroupDto({ ...group, deletedAt: null, updatedAt: now, fieldClock });
     });
   }
 }

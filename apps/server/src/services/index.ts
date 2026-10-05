@@ -1,3 +1,4 @@
+import { EventBus } from '../events/bus.ts';
 import { AdminService } from './admin-service.ts';
 import { BackupService } from './backup-service.ts';
 import type { ServiceDeps } from './context.ts';
@@ -25,9 +26,15 @@ export interface Services {
   idempotency: IdempotencyStore;
   retention: RetentionService;
   backups: BackupService;
+  /** Domain events, published after commit (04 §4.5). */
+  events: EventBus;
 }
 
-export function createServices(deps: ServiceDeps, options: OrgServiceOptions = {}): Services {
+export function createServices(
+  input: Omit<ServiceDeps, 'events'> & { events?: EventBus },
+  options: OrgServiceOptions = {},
+): Services {
+  const deps: ServiceDeps = { ...input, events: input.events ?? new EventBus(input.logger) };
   const ordering = new OrderingService();
   const placements = new PlacementService(deps, ordering);
   const idempotency = new IdempotencyStore(deps);
@@ -51,6 +58,7 @@ export function createServices(deps: ServiceDeps, options: OrgServiceOptions = {
     idempotency,
     retention: new RetentionService(deps, placements, idempotency),
     backups: new BackupService(deps),
+    events: deps.events,
   };
 }
 

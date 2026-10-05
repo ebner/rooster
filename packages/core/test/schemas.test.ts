@@ -78,14 +78,29 @@ describe('common schemas', () => {
     expect(problemSchema.safeParse({ ...problem, status: 99 }).success).toBe(false);
   });
 
+  it('problemSchema carries existingId on unique-name conflicts (P4 outbox remap)', () => {
+    const problem = {
+      type: 'about:blank',
+      title: 'Conflict',
+      status: 409,
+      detail: 'A tag with that name already exists in this organisation.',
+      code: 'tag_name_taken',
+      existingId: '0199aaaa-0000-7000-8000-000000000001',
+    };
+    expect(problemSchema.parse(problem)).toEqual(problem);
+    expect(problemSchema.safeParse({ ...problem, existingId: 42 }).success).toBe(false);
+  });
+
   it('metaSchema', () => {
     const meta = {
       version: '0.1.0',
       gitSha: 'abc1234',
       providers: [{ id: 'google', name: 'Google' }],
       features: { email: true, push: false, s3: false },
+      serverTime: 1_767_225_600_000,
     };
     expect(metaSchema.parse(meta)).toEqual(meta);
     expect(metaSchema.safeParse({ ...meta, features: { email: true } }).success).toBe(false);
+    expect(metaSchema.safeParse({ ...meta, serverTime: undefined }).success).toBe(false);
   });
 });

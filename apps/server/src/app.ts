@@ -8,6 +8,8 @@ import { createAuth, providerOrigins } from './auth/auth.ts';
 import { registerAuthRoutes } from './auth/mount.ts';
 import type { Config } from './config.ts';
 import type { AppDb } from './db/client.ts';
+import { EventBus } from './events/bus.ts';
+import { SseHub } from './events/hub.ts';
 import type { AppEnv } from './lib/context.ts';
 import { csrfProtection } from './lib/csrf.ts';
 import { createErrorHandler, notFoundHandler, validationHook } from './lib/errors.ts';
@@ -19,6 +21,7 @@ import { requestMeta } from './lib/request-meta.ts';
 import { DOCS_PATH, securityHeaders } from './lib/security-headers.ts';
 import { webApp } from './lib/web-app.ts';
 import { registerAdminRoutes } from './routes/admin.ts';
+import { registerEventRoutes } from './routes/events.ts';
 import { registerGroupRoutes } from './routes/groups.ts';
 import { registerHealthRoutes } from './routes/health.ts';
 import { registerInviteRoutes } from './routes/invites.ts';
@@ -43,6 +46,8 @@ export interface AppDeps {
   authRateLimit?: boolean;
   /** The per-user API limit (06 §1); default 600/min, `false` switches it off (tests). */
   apiRateLimit?: RateLimitOptions | false;
+  /** SSE timings; tests shorten them. Defaults: 25 s heartbeat, 50 ms coalescing. */
+  sse?: { heartbeatMs?: number; coalesceMs?: number };
 }
 
 export const OPENAPI_PATH = '/api/v1/openapi.json';
@@ -72,13 +77,23 @@ export function openApiDocumentConfig(version: string) {
 export type App = OpenAPIHono<AppEnv> & {
   /** Domain services, exposed for tests and the auth hooks. */
   services: Services;
+  /** The SSE hub; `main.ts` shuts it down before draining connections. */
+  hub: SseHub;
 };
 
 /** Pure factory: no listening, no timers. Tests drive it through `app.request()`. */
 export function createApp(deps: AppDeps): App {
   const { config, db, logger, version } = deps;
   const clock = deps.clock ?? Date.now;
-  const services = createServices({ db, config, logger, clock });
+  const events = new EventBus(logger);
+  const services = createServices({ db, config, logger, clock, events });
+  const hub = new SseHub(events, {
+    version,
+    gitSha: config.gitSha,
+    clock,
+    logger,
+    ...deps.sse,
+  });
   const auth = createAuth({
     config,
     db,
@@ -104,7 +119,7 @@ export function createApp(deps: AppDeps): App {
 
   registerHealthRoutes(app, { db, migrationsDir: deps.migrationsDir });
   registerAuthRoutes(app, { auth, config });
-  registerMetaRoutes(app, { config, version });
+  registerMetaRoutes(app, { config, version, clock });
   registerMeRoutes(app, services);
   registerOrgRoutes(app, services);
   registerInviteRoutes(app, services, { config, clock });
@@ -112,6 +127,7 @@ export function createApp(deps: AppDeps): App {
   registerGroupRoutes(app, services);
   registerTaskRoutes(app, services);
   registerTagRoutes(app, services);
+  registerEventRoutes(app, { hub, services });
 
   app.openAPIRegistry.register('Problem', ProblemSchema);
   app.doc31(OPENAPI_PATH, openApiDocumentConfig(version));
@@ -141,5 +157,5 @@ export function createApp(deps: AppDeps): App {
   // Last: everything no route claimed is the web app (or a problem+json 404).
   app.use(webApp(config.webDir, logger));
 
-  return Object.assign(app, { services });
+  return Object.assign(app, { services, hub });
 }

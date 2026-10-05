@@ -6,7 +6,7 @@ import { parseOpMeta } from '../lib/request-meta.ts';
 import type { Actor, OpMeta } from '../services/index.ts';
 import { ProblemSchema } from './problem.ts';
 
-type ProblemStatus = 401 | 403 | 404 | 409 | 410 | 415 | 422 | 429;
+type ProblemStatus = 401 | 403 | 404 | 409 | 410 | 415 | 422 | 429 | 503;
 
 const STATUS_TEXT: Record<ProblemStatus, string> = {
   401: 'Not signed in',
@@ -17,6 +17,7 @@ const STATUS_TEXT: Record<ProblemStatus, string> = {
   415: 'Not JSON',
   422: 'Validation failed',
   429: 'Rate limited; retry after the Retry-After header',
+  503: 'The server is shutting down; retry shortly',
 };
 
 /** problem+json responses for the given statuses, for the OpenAPI document. */

@@ -12,8 +12,9 @@ const metaRoute = createRoute({
   path: '/api/v1/meta',
   tags: ['meta'],
   operationId: 'getMeta',
-  summary: 'Server version, sign-in providers and enabled features',
-  description: 'No authentication. Used by the login page and the CLI.',
+  summary: 'Server version, sign-in providers, enabled features and the server clock',
+  description:
+    'No authentication. Used by the login page and the CLI. `serverTime` lets clients estimate their clock skew before stamping `X-Rooster-Edit-Time`.',
   responses: {
     200: {
       description: 'Server metadata',
@@ -24,10 +25,10 @@ const metaRoute = createRoute({
 
 export function registerMetaRoutes(
   app: OpenAPIHono<AppEnv>,
-  deps: { config: Config; version: string },
+  deps: { config: Config; version: string; clock: () => number },
 ): void {
-  const { config, version } = deps;
-  const body: Meta = {
+  const { config, version, clock } = deps;
+  const body: Omit<Meta, 'serverTime'> = {
     version,
     gitSha: config.gitSha,
     providers: configuredProviders(config),
@@ -37,5 +38,8 @@ export function registerMetaRoutes(
       s3: config.s3 !== null,
     },
   };
-  app.openapi(metaRoute, (c) => c.json(body, 200));
+  app.openapi(metaRoute, (c) => {
+    c.header('Cache-Control', 'no-store');
+    return c.json({ ...body, serverTime: clock() }, 200);
+  });
 }

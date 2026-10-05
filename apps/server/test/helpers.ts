@@ -49,6 +49,7 @@ export function createTestApp(
     logger?: Logger;
     clock?: () => number;
     apiRateLimit?: AppDeps['apiRateLimit'];
+    sse?: AppDeps['sse'];
   } = {},
 ): { app: App; db: AppDb; config: Config } {
   const config = testConfig({ ROOSTER_WEB_DIR: '/nonexistent/web', ...options.env });
@@ -62,6 +63,7 @@ export function createTestApp(
     authRateLimit: false,
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.apiRateLimit === undefined ? {} : { apiRateLimit: options.apiRateLimit }),
+    ...(options.sse === undefined ? {} : { sse: options.sse }),
   });
   return { app, db, config };
 }
