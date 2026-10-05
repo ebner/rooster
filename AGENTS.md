@@ -140,7 +140,7 @@ This file is the entry point for every agent and must describe the repository **
 Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to them. A PR that changes any of the above without updating `AGENTS.md` is not done.
 
 ## Status
-- **Current phase:** Phase 5 (smart views, search, palette → v1.0) is next.
+- **Current phase:** Phase 5 (smart views, search, palette, export and Trash → v1.0) is next.
 - **Last completed phase:** Phase 4, PWA, offline, realtime, mobile (2026-10-05). AC-4.1 to AC-4.7 pass, including the iPhone 15 (WebKit) and Pixel 8 projects. ADRs 0009 to 0011 record the decisions.
 - **E2E:** never run two Playwright suites at once; they share ports 9400, 3181, 5181 and 3182.
 - **Git:** commit locally; **do not push to origin unless the maintainer explicitly asks.**

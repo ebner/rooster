@@ -9,7 +9,7 @@
 - AC are written to be automatable. Each AC maps to at least one test, named with the AC ID: `test('AC-2.7 …')`.
 
 ```
-P0 Foundations ─► P1 Auth & orgs ─► P2 List core ─► P3 Detail pane & subtasks ─► P4 PWA/offline/realtime/mobile ─► P5 Views, search, import  ══► v1.0 (switch-over)
+P0 Foundations ─► P1 Auth & orgs ─► P2 List core ─► P3 Detail pane & subtasks ─► P4 PWA/offline/realtime/mobile ─► P5 Views, search, palette ══► v1.0 (switch-over)
                                                                                                                                                   │
    P6 Collaboration ─► P7 Notification delivery ─► P8 CLI & PATs & public API ─► P9 TUI & MCP ─► P10 Recurrence, attachments, iCal ─► P11 Hardening ══► v2.0
 ```
@@ -148,22 +148,24 @@ P8 depends only on v1.0. It can start in parallel with P6 and P7 if capacity all
 
 ---
 
-## Phase 5: Smart views, search, palette, import → **v1.0**
+## Phase 5: Smart views, search, palette, export → **v1.0**
 
 | WP | Content |
 |---|---|
 | 5.1 Smart views | Selectors in `packages/core/views.ts` (shared with the server `?view=`), the sidebar counts, the Today / Next 7 days / Overdue / No date screens, and inline add with date inheritance and the `>Group` token. |
 | 5.2 Search | FTS5 table and service maintenance, the reindex command, and `/search`. |
 | 5.3 Command palette | The Ctrl+K panel, actions from the keymap registry, recent tasks, prefixes, and offline client-side filtering. |
-| 5.6 Export and Trash UI | JSON and Markdown export; the Trash list with restore and permanent delete. |
-| 5.7 Release | `CHANGELOG`, the 1.0.0 image, the README quick start, and the OIDC setup docs. |
+| 5.4 Export and Trash UI | JSON and Markdown export; the Trash list with restore and permanent delete. |
+| 5.5 Release | `CHANGELOG`, the 1.0.0 image, the README quick start, and the OIDC setup docs. |
 
 **Acceptance criteria**
 - AC-5.1 Today shows overdue and today tasks from all groups, each with a group chip. Creating a task there sets due = today and places it in the Inbox. Completing one there removes it from My tasks too.
 - AC-5.2 Searching "tand" finds "Boka tandläkare" (prefix match). "rapport" matches a description. Results never include tasks from orgs the user is not a member of (test).
 - AC-5.3 Ctrl+K → ">dark" shows no results gracefully. ">move" lists the move action for the selected task.
 
-**v1.0 exit demo, the switch-over:** move the open tasks over, then use rooster on desktop and the installed iPhone PWA for a week. The previous tool is no longer needed for daily use.
+**v1.0 exit demo, the switch-over:** move the open tasks over from the previous tool by hand (paste a multi-line list per group), then use rooster on desktop and the installed iPhone PWA for a week. The previous tool is no longer needed for daily use.
+
+An import from other task managers is on the [Backlog](#backlog); v1.0 ships without it (D-18).
 
 ---
 
@@ -249,3 +251,10 @@ P8 depends only on v1.0. It can start in parallel with P6 and P7 if capacity all
 - Performance pass: 2,000-task org; bundle budget (10 §4).
 - Backup and restore drill automated in CI. The Admin → System page. The Litestream overlay documented.
 - Documentation: a user guide (keyboard cheat sheet, NL dates, CLI), an operator guide, and a contributing guide.
+
+---
+
+## Backlog
+
+Work that is specified but not scheduled into a phase. Pick an item up by moving it into a phase (or a minor release after v1.0) and renumbering its WP and AC IDs.
+

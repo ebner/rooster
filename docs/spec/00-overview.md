@@ -88,7 +88,7 @@ These decisions come from the product requirements and from technical research. 
 | D-15 | **Natural-language dates** are parsed in the title and in the date picker, in English and Swedish. Recognised phrases are highlighted; clicking one reverts it to literal text. |
 | D-16 | **Keyboard:** Common task-manager shortcuts (Enter, Shift+Enter, Ctrl/Cmd+Enter, Ctrl/Cmd+↑↓, Tab+letter) **plus** single-key shortcuts when no text field is focused, and a Ctrl/Cmd+K command palette. |
 | D-17 | **Extras in scope:** full-text search with a command palette, a private iCal feed, and a public REST API with OpenAPI docs. An import from other task managers is on the backlog (09 §Backlog). |
-| D-18 | **First switch-over release (v1.0)** contains: login, personal and business orgs in the sidebar, groups, inline tasks, drag and drop, due dates, the detail pane with description, subtasks and tags, the offline-capable PWA, smart views and search. Collaboration, notifications, CLI, recurrence, attachments and iCal follow in later phases. |
+| D-18 | **First switch-over release (v1.0)** contains: login, personal and business orgs in the sidebar, groups, inline tasks, drag and drop, due dates, the detail pane with description, subtasks and tags, the offline-capable PWA, smart views, search with the command palette, export and Trash. Collaboration, notifications, CLI, recurrence, attachments and iCal follow in later phases. |
 
 ### Design
 

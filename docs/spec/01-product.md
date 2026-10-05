@@ -152,7 +152,7 @@ Requirements are numbered `FR-<AREA>-<n>`. **P** is the phase that delivers each
 | FR-SET-2 | **Behaviour:** NL date parsing in titles (on/off), completion hide delay (1.5 s / 3 s / until reload), mobile swipe actions (left and right action each chosen from Complete, Date, Move, Delete). | 2/4 |
 | FR-SET-3 | **Security:** active sessions (P1); linked identities, PATs and authorised CLI devices (P8). | 1/8 |
 | FR-SET-4 | **Org settings** (owners): name, avatar, members, invites, tags, danger zone. | 1 |
-| FR-SET-5 | **Data:** export all my data in an org as JSON (and Markdown), Trash, Import. | 5 |
+| FR-SET-5 | **Data:** export all my data in an org as JSON (and Markdown), and Trash. | 5 |
 
 ## FR-CLI, FR-MCP
 
