@@ -29,6 +29,7 @@ import { SyncPill } from '../../ui/sync-pill';
 import { TaskCheckbox } from '../../ui/task-checkbox';
 import { ToastView, toast } from '../../ui/toast';
 import { Tooltip, tooltipSurface } from '../../ui/tooltip';
+import { DatesSection } from '../dates/kitchen-sink-section';
 import { LanguageSwitch } from '../locale/language-switch';
 import { Group, Section, Specimen } from './layout';
 import { Phase1Sections, phase1SectionIds } from './phase1-sections';
@@ -746,6 +747,7 @@ export function KitchenSink() {
         <SkeletonSection />
         <SyncPillSection />
         <Phase1Sections />
+        <DatesSection />
       </main>
     </div>
   );

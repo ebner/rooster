@@ -3,12 +3,14 @@ import ICU from 'i18next-icu';
 import enAdmin from '../locales/en/admin.json' with { type: 'json' };
 import enAuth from '../locales/en/auth.json' with { type: 'json' };
 import enCommon from '../locales/en/common.json' with { type: 'json' };
+import enDates from '../locales/en/dates.json' with { type: 'json' };
 import enDev from '../locales/en/dev.json' with { type: 'json' };
 import enSettings from '../locales/en/settings.json' with { type: 'json' };
 import enShell from '../locales/en/shell.json' with { type: 'json' };
 import svAdmin from '../locales/sv/admin.json' with { type: 'json' };
 import svAuth from '../locales/sv/auth.json' with { type: 'json' };
 import svCommon from '../locales/sv/common.json' with { type: 'json' };
+import svDates from '../locales/sv/dates.json' with { type: 'json' };
 import svDev from '../locales/sv/dev.json' with { type: 'json' };
 import svSettings from '../locales/sv/settings.json' with { type: 'json' };
 import svShell from '../locales/sv/shell.json' with { type: 'json' };
@@ -24,7 +26,7 @@ export const defaultLocale: Locale = 'en';
  * Add a namespace by adding `locales/<locale>/<ns>.json` for every locale and
  * registering it here.
  */
-export const namespaces = ['common', 'dev', 'shell', 'auth', 'settings', 'admin'] as const;
+export const namespaces = ['common', 'dev', 'shell', 'auth', 'settings', 'admin', 'dates'] as const;
 export type Namespace = (typeof namespaces)[number];
 export const defaultNamespace: Namespace = 'common';
 
@@ -36,6 +38,7 @@ export const resources = {
     auth: enAuth,
     settings: enSettings,
     admin: enAdmin,
+    dates: enDates,
   },
   sv: {
     common: svCommon,
@@ -44,6 +47,7 @@ export const resources = {
     auth: svAuth,
     settings: svSettings,
     admin: svAdmin,
+    dates: svDates,
   },
 } as const;
 

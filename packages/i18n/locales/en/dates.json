@@ -1,0 +1,136 @@
+{
+  "cell": {
+    "set": "Set due date",
+    "label": "Due date: {label} ({full})",
+    "overdue": "Overdue"
+  },
+  "popover": {
+    "title": "Due date",
+    "inputLabel": "Type a date",
+    "placeholder": "Type a date… (e.g. fri, next week, 12 oct)",
+    "preview": "→ {date}",
+    "invalid": "Can't understand that",
+    "quick": "Quick dates"
+  },
+  "chip": {
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "nextWeek": "Next week",
+    "weekend": "Weekend",
+    "noDate": "No date"
+  },
+  "calendar": {
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "monthYear": "{month} {year}"
+  },
+  "time": {
+    "add": "Time",
+    "label": "Time",
+    "placeholder": "HH:MM",
+    "suggestions": "Suggested times",
+    "remove": "Remove time"
+  },
+  "startDate": {
+    "add": "Start date"
+  },
+  "format": {
+    "full": {
+      "monthFirst": "{weekday}, {month} {day}, {year}",
+      "dayFirst": "{weekday}, {day} {month} {year}"
+    },
+    "short": {
+      "monthFirst": "{weekday}, {month} {day}",
+      "dayFirst": "{weekday}, {day} {month}",
+      "monthFirstYear": "{weekday}, {month} {day}, {year}",
+      "dayFirstYear": "{weekday}, {day} {month} {year}"
+    },
+    "withTime": "{date}, {time}",
+    "range": "{start} – {end}"
+  },
+  "weekday": {
+    "long": {
+      "0": "Sunday",
+      "1": "Monday",
+      "2": "Tuesday",
+      "3": "Wednesday",
+      "4": "Thursday",
+      "5": "Friday",
+      "6": "Saturday"
+    },
+    "short": {
+      "0": "Sun",
+      "1": "Mon",
+      "2": "Tue",
+      "3": "Wed",
+      "4": "Thu",
+      "5": "Fri",
+      "6": "Sat"
+    },
+    "narrow": {
+      "0": "Su",
+      "1": "Mo",
+      "2": "Tu",
+      "3": "We",
+      "4": "Th",
+      "5": "Fr",
+      "6": "Sa"
+    }
+  },
+  "month": {
+    "long": {
+      "1": "January",
+      "2": "February",
+      "3": "March",
+      "4": "April",
+      "5": "May",
+      "6": "June",
+      "7": "July",
+      "8": "August",
+      "9": "September",
+      "10": "October",
+      "11": "November",
+      "12": "December"
+    },
+    "short": {
+      "1": "Jan",
+      "2": "Feb",
+      "3": "Mar",
+      "4": "Apr",
+      "5": "May",
+      "6": "Jun",
+      "7": "Jul",
+      "8": "Aug",
+      "9": "Sep",
+      "10": "Oct",
+      "11": "Nov",
+      "12": "Dec"
+    }
+  },
+  "dev": {
+    "section": "Due dates",
+    "labels": "Date labels",
+    "cells": "Date cell",
+    "popover": "Date popover",
+    "live": "Try it",
+    "english": "English",
+    "swedish": "Swedish",
+    "state": {
+      "overdue": "Overdue",
+      "overdueTime": "Overdue (time passed)",
+      "today": "Today",
+      "todayTime": "Today with time",
+      "tomorrow": "Tomorrow",
+      "thisWeek": "This week",
+      "later": "Later",
+      "nextYear": "Next year",
+      "done": "Done",
+      "range": "With start date (P3)",
+      "empty": "Empty",
+      "emptyRowHover": "Empty, row hover",
+      "filled": "Filled",
+      "focused": "Focused",
+      "readOnly": "Read-only"
+    }
+  }
+}

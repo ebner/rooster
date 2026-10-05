@@ -1,0 +1,136 @@
+{
+  "cell": {
+    "set": "Ange förfallodatum",
+    "label": "Förfallodatum: {label} ({full})",
+    "overdue": "Försenad"
+  },
+  "popover": {
+    "title": "Förfallodatum",
+    "inputLabel": "Skriv ett datum",
+    "placeholder": "Skriv ett datum… (t.ex. fre, nästa vecka, 12 okt)",
+    "preview": "→ {date}",
+    "invalid": "Det förstod jag inte",
+    "quick": "Snabbval"
+  },
+  "chip": {
+    "today": "Idag",
+    "tomorrow": "Imorgon",
+    "nextWeek": "Nästa vecka",
+    "weekend": "I helgen",
+    "noDate": "Inget datum"
+  },
+  "calendar": {
+    "previousMonth": "Föregående månad",
+    "nextMonth": "Nästa månad",
+    "monthYear": "{month} {year}"
+  },
+  "time": {
+    "add": "Tid",
+    "label": "Tid",
+    "placeholder": "TT:MM",
+    "suggestions": "Föreslagna tider",
+    "remove": "Ta bort tid"
+  },
+  "startDate": {
+    "add": "Startdatum"
+  },
+  "format": {
+    "full": {
+      "monthFirst": "{weekday} {day} {month} {year}",
+      "dayFirst": "{weekday} {day} {month} {year}"
+    },
+    "short": {
+      "monthFirst": "{weekday} {day} {month}",
+      "dayFirst": "{weekday} {day} {month}",
+      "monthFirstYear": "{weekday} {day} {month} {year}",
+      "dayFirstYear": "{weekday} {day} {month} {year}"
+    },
+    "withTime": "{date} kl. {time}",
+    "range": "{start} – {end}"
+  },
+  "weekday": {
+    "long": {
+      "0": "söndag",
+      "1": "måndag",
+      "2": "tisdag",
+      "3": "onsdag",
+      "4": "torsdag",
+      "5": "fredag",
+      "6": "lördag"
+    },
+    "short": {
+      "0": "sön",
+      "1": "mån",
+      "2": "tis",
+      "3": "ons",
+      "4": "tor",
+      "5": "fre",
+      "6": "lör"
+    },
+    "narrow": {
+      "0": "sö",
+      "1": "må",
+      "2": "ti",
+      "3": "on",
+      "4": "to",
+      "5": "fr",
+      "6": "lö"
+    }
+  },
+  "month": {
+    "long": {
+      "1": "januari",
+      "2": "februari",
+      "3": "mars",
+      "4": "april",
+      "5": "maj",
+      "6": "juni",
+      "7": "juli",
+      "8": "augusti",
+      "9": "september",
+      "10": "oktober",
+      "11": "november",
+      "12": "december"
+    },
+    "short": {
+      "1": "jan",
+      "2": "feb",
+      "3": "mar",
+      "4": "apr",
+      "5": "maj",
+      "6": "jun",
+      "7": "jul",
+      "8": "aug",
+      "9": "sep",
+      "10": "okt",
+      "11": "nov",
+      "12": "dec"
+    }
+  },
+  "dev": {
+    "section": "Förfallodatum",
+    "labels": "Datumetiketter",
+    "cells": "Datumcell",
+    "popover": "Datumväljare",
+    "live": "Prova",
+    "english": "Engelska",
+    "swedish": "Svenska",
+    "state": {
+      "overdue": "Försenad",
+      "overdueTime": "Försenad (tiden har passerat)",
+      "today": "Idag",
+      "todayTime": "Idag med tid",
+      "tomorrow": "Imorgon",
+      "thisWeek": "Den här veckan",
+      "later": "Senare",
+      "nextYear": "Nästa år",
+      "done": "Klar",
+      "range": "Med startdatum (P3)",
+      "empty": "Tom",
+      "emptyRowHover": "Tom, pekaren över raden",
+      "filled": "Ifylld",
+      "focused": "Fokuserad",
+      "readOnly": "Skrivskyddad"
+    }
+  }
+}
