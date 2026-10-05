@@ -10,7 +10,8 @@
     "placeholder": "Skriv ett datum… (t.ex. fre, nästa vecka, 12 okt)",
     "preview": "→ {date}",
     "invalid": "Det förstod jag inte",
-    "quick": "Snabbval"
+    "quick": "Snabbval",
+    "rangePlaceholder": "Skriv ett intervall… (t.ex. 10–12 okt)"
   },
   "chip": {
     "today": "Idag",
@@ -32,7 +33,11 @@
     "remove": "Ta bort tid"
   },
   "startDate": {
-    "add": "Startdatum"
+    "add": "Startdatum",
+    "label": "Startdatum",
+    "remove": "Ta bort startdatum",
+    "pickStart": "Välj startdatum",
+    "pickDue": "Välj förfallodatum"
   },
   "format": {
     "full": {
@@ -130,7 +135,11 @@
       "emptyRowHover": "Tom, pekaren över raden",
       "filled": "Ifylld",
       "focused": "Fokuserad",
-      "readOnly": "Skrivskyddad"
-    }
+      "readOnly": "Skrivskyddad",
+      "rangeSet": "Intervall valt",
+      "rangePickStart": "Välj start",
+      "rangeTyped": "Skrivet intervall"
+    },
+    "range": "Datumväljare: startdatum"
   }
 }

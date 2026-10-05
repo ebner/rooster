@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CreatedInvite, Org, OrgInvite, OrgMember, OrgPatch, OrgRole } from '../../data/types';
 import type { DisplayPrefs } from '../../lib/format';
@@ -21,9 +22,11 @@ export interface OrgSettingsPageProps {
   onRevokeInvite: (inviteId: string) => void;
   onDeleteOrg: (confirmName: string) => Promise<void>;
   onLeaveOrg: () => Promise<void>;
+  /** FR-SET-4 / FR-TAG-3: the Tags section, rendered before the danger zone. */
+  tagsSection?: ReactNode;
 }
 
-/** FR-SET-4: General, Members, Invites (owners of shared orgs) and the danger zone. */
+/** FR-SET-4: General, Members, Invites (owners of shared orgs), Tags and the danger zone. */
 export function OrgSettingsPage({
   org,
   currentUserId,
@@ -38,6 +41,7 @@ export function OrgSettingsPage({
   onRevokeInvite,
   onDeleteOrg,
   onLeaveOrg,
+  tagsSection,
 }: OrgSettingsPageProps) {
   const { t } = useTranslation('settings');
   const isOwner = org.role === 'owner';
@@ -71,6 +75,7 @@ export function OrgSettingsPage({
           />
         )
       )}
+      {tagsSection}
       <DangerZone org={org} isSoleOwner={isSoleOwner} onDelete={onDeleteOrg} onLeave={onLeaveOrg} />
     </div>
   );

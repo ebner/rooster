@@ -13,9 +13,12 @@ import { matches } from '../../keymap';
 import { cn } from '../../lib/cn';
 import { detectPlatform } from '../../lib/platform';
 import type { Caret } from '../../state/list-store';
+import { useTagsStore } from '../../state/tags-store';
+import { TagDot } from '../tags/tag-dot';
+import { type TagOption, tagOptions } from '../tags/tag-picker';
 import type { CommitResult } from './controller';
 import { useListContext } from './list-context';
-import { findTitleDate, type Span } from './title-tokens';
+import { findTagTokens, findTitleDate, type Span, tagTokenAt } from './title-tokens';
 
 /** 02 §8.1: parsing runs debounced on every keystroke. */
 const parseDebounceMs = 50;
@@ -40,7 +43,30 @@ export interface TitleInputProps {
 
 interface Highlight {
   text: string;
+  /** The date phrase (02 §8.1). */
   span: Span | null;
+  /** `#tag` tokens (02 §3.4). */
+  tags: Span[];
+}
+
+interface Suggest {
+  token: Span & { name: string };
+  options: TagOption[];
+  active: number;
+}
+
+/** Mirror segments: plain text and highlighted tokens, in order. */
+function segments(text: string, marks: readonly Span[]): { text: string; mark: boolean }[] {
+  const out: { text: string; mark: boolean }[] = [];
+  let at = 0;
+  for (const m of [...marks].sort((a, b) => a.start - b.start)) {
+    if (m.start < at) continue;
+    out.push({ text: text.slice(at, m.start), mark: false });
+    out.push({ text: text.slice(m.start, m.end), mark: true });
+    at = m.end;
+  }
+  out.push({ text: text.slice(at), mark: false });
+  return out;
 }
 
 /** Places the caret per the edit request. */
@@ -84,17 +110,66 @@ export function TitleInput({
   const mirror = useRef<HTMLDivElement>(null);
   const committed = useRef(false);
   const ignored = useRef<string[]>([]);
-  const [highlight, setHighlight] = useState<Highlight>({ text: initialValue, span: null });
+  const [highlight, setHighlight] = useState<Highlight>({
+    text: initialValue,
+    span: null,
+    tags: [],
+  });
+  const [suggest, setSuggest] = useState<Suggest | null>(null);
+  const tagsById = useTagsStore((s) => s.byId);
   const [colonChip, setColonChip] = useState<'off' | 'shown' | 'declined'>('off');
   const [pasteLines, setPasteLines] = useState<string[] | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const reparse = () => {
     const text = input.current?.value ?? '';
-    const match = parseTitles
-      ? findTitleDate(text, dateCtx, ignoredSpans(text, ignored.current))
-      : null;
-    setHighlight({ text, span: match ? { start: match.start, end: match.end } : null });
+    const skip = ignoredSpans(text, ignored.current);
+    const match = parseTitles ? findTitleDate(text, dateCtx, skip) : null;
+    setHighlight({
+      text,
+      span: match ? { start: match.start, end: match.end } : null,
+      tags: findTagTokens(text, skip),
+    });
+  };
+
+  /** The autocomplete for the `#partial` token at the caret (02 §3.4). */
+  const updateSuggest = () => {
+    const el = input.current;
+    if (!el || el.selectionStart !== el.selectionEnd) {
+      setSuggest(null);
+      return;
+    }
+    const token = tagTokenAt(el.value, el.selectionStart ?? 0);
+    if (!token) {
+      setSuggest(null);
+      return;
+    }
+    const options = tagOptions(Object.values(tagsById), token.name, token.name !== '').slice(0, 8);
+    setSuggest((current) =>
+      options.length === 0
+        ? null
+        : {
+            token,
+            options,
+            active:
+              current && current.token.start === token.start
+                ? Math.min(current.active, options.length - 1)
+                : 0,
+          },
+    );
+  };
+
+  const acceptSuggestion = (option: TagOption | undefined) => {
+    const el = input.current;
+    if (!el || !suggest || !option) return;
+    const { start, end } = suggest.token;
+    const insert = `#${option.name} `;
+    const after = el.value.slice(end).replace(/^ /, '');
+    el.value = `${el.value.slice(0, start)}${insert}${after}`.slice(0, TASK_TITLE_MAX);
+    const caretAt = Math.min(start + insert.length, el.value.length);
+    el.setSelectionRange(caretAt, caretAt);
+    setSuggest(null);
+    reparse();
   };
 
   useLayoutEffect(() => {
@@ -137,6 +212,25 @@ export function TitleInput({
         return;
       }
       backspaceLatch = false;
+    }
+    if (suggest) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const step = event.key === 'ArrowDown' ? 1 : -1;
+        const count = suggest.options.length;
+        setSuggest({ ...suggest, active: (suggest.active + step + count) % count });
+        return;
+      }
+      if ((event.key === 'Enter' || event.key === 'Tab') && !event.shiftKey) {
+        event.preventDefault();
+        acceptSuggestion(suggest.options[suggest.active]);
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setSuggest(null);
+        return;
+      }
     }
     if (pasteLines) {
       if (event.key === 'Enter') {
@@ -229,6 +323,7 @@ export function TitleInput({
     if (colonChip !== 'off' && !value().trim().endsWith(':')) setColonChip('off');
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(reparse, parseDebounceMs);
+    updateSuggest();
   };
 
   const onPaste = (event: ClipboardEvent<HTMLInputElement>) => {
@@ -254,6 +349,7 @@ export function TitleInput({
   };
 
   const onBlur = () => {
+    setSuggest(null);
     if (committed.current) return;
     apply(controller.blurEdit(rowId, value(), spans()));
   };
@@ -263,19 +359,59 @@ export function TitleInput({
   };
 
   const { text, span } = highlight;
+  const marks = span ? [span, ...highlight.tags] : highlight.tags;
+  const listId = `tag-suggest-${rowId}`;
   return (
     <div className={cn('relative flex min-w-0 flex-1 items-center', className)}>
-      {span && (
+      {marks.length > 0 && (
         <div
           ref={mirror}
           aria-hidden
           className="pointer-events-none absolute inset-0 flex items-center overflow-hidden whitespace-pre text-transparent"
         >
-          <span>{text.slice(0, span.start)}</span>
-          <mark className="rounded-2xs bg-bg-accent-subtle text-transparent">
-            {text.slice(span.start, span.end)}
-          </mark>
-          <span>{text.slice(span.end)}</span>
+          {segments(text, marks).map((part, i) =>
+            part.mark ? (
+              <mark key={i} className="rounded-2xs bg-bg-accent-subtle text-transparent">
+                {part.text}
+              </mark>
+            ) : (
+              <span key={i}>{part.text}</span>
+            ),
+          )}
+        </div>
+      )}
+      {suggest && (
+        <div
+          id={listId}
+          role="listbox"
+          aria-label={t('tags.suggestions')}
+          data-overlay
+          className="absolute top-full left-0 z-(--z-popover) mt-1 flex w-date-popover flex-col rounded-md border border-border bg-bg-elevated p-1 shadow-md"
+        >
+          {suggest.options.map((option, index) => (
+            <div
+              key={option.id}
+              id={`${listId}-${index}`}
+              role="option"
+              tabIndex={-1}
+              aria-selected={index === suggest.active}
+              onPointerDown={(e) => {
+                // Keep focus (and the edit) in the title.
+                e.preventDefault();
+                acceptSuggestion(option);
+              }}
+              onKeyDown={() => undefined}
+              className={cn(
+                'flex h-control cursor-default items-center gap-2 rounded-sm px-2 text-sm text-text',
+                index === suggest.active && 'bg-bg-muted',
+              )}
+            >
+              {option.tag ? <TagDot color={option.tag.color} /> : <span className="size-2" />}
+              <span className="min-w-0 flex-1 truncate">
+                {option.kind === 'create' ? t('tags.create', { name: option.name }) : option.name}
+              </span>
+            </div>
+          ))}
         </div>
       )}
       <input
@@ -290,7 +426,19 @@ export function TitleInput({
         onKeyDown={onKeyDown}
         onKeyUp={(event) => {
           if (event.key === 'Backspace') backspaceLatch = false;
+          if (
+            event.key === 'ArrowLeft' ||
+            event.key === 'ArrowRight' ||
+            event.key === 'Home' ||
+            event.key === 'End'
+          )
+            updateSuggest();
         }}
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={suggest !== null}
+        aria-controls={suggest ? listId : undefined}
+        aria-activedescendant={suggest ? `${listId}-${suggest.active}` : undefined}
         onInput={onInput}
         onPaste={onPaste}
         onClick={onClick}

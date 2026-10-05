@@ -1,4 +1,5 @@
-export { type ApplyContext, applyOp, applyOps, touchesDue } from './apply.ts';
+export { type ApplyContext, applyOp, applyOps, derivedTaskId, touchesDue } from './apply.ts';
+export { applyOpToDetail, detailState, mergeDetailResponse } from './detail.ts';
 export { inverseOf, inverseOfSequence, restorePlacements } from './inverse.ts';
 export { type MergeResult, mergeResponse } from './merge.ts';
 export {
@@ -8,11 +9,19 @@ export {
   type ListOpSpec,
   listOps,
   type ReducerContext,
+  type TagCreateBody,
   type TaskCreateBody,
+  type TaskDuplicateBody,
 } from './ops.ts';
 export {
+  ancestorsOf,
+  childrenIndex,
+  childrenOf,
   comparePlaced,
+  compareSubtasks,
   type DeletedTask,
+  depthOf,
+  descendantIds,
   emptyListState,
   groupIdOf,
   inboxOf,
@@ -22,5 +31,7 @@ export {
   normalGroups,
   normalizeMyList,
   orderedGroups,
+  SUBTASK_DEPTH_MAX,
+  subtreeHeight,
   tasksInGroup,
 } from './state.ts';

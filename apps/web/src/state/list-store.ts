@@ -1,4 +1,5 @@
-import { create } from 'zustand';
+import { createContext, useContext } from 'react';
+import { create, type StoreApi, type UseBoundStore, useStore } from 'zustand';
 
 /** 02 §3.2: Navigate (a row is selected) or Edit (caret in a title or group name). */
 export type ListMode = 'navigate' | 'edit';
@@ -12,9 +13,15 @@ export type Caret = 'end' | 'start' | 'all' | number;
  */
 export interface Draft {
   id: string;
+  /** The group the row renders in (for a subtask draft: its top-level ancestor's group). */
   groupId: string;
-  /** The row directly above within the group (task or draft); null = top of the group. */
+  /**
+   * The row directly above within the group, or among the siblings for a subtask draft (task
+   * or draft); null = the top.
+   */
   afterId: string | null;
+  /** Set for a subtask draft (P3): the parent it is created under. */
+  parentId?: string;
 }
 
 /** The DnD insertion point, drawn on one row (02 §5). */
@@ -30,7 +37,7 @@ export interface KeyboardDrag {
 }
 
 export interface ListPopover {
-  kind: 'moveTo' | 'date' | 'groupDelete' | 'groupMenu';
+  kind: 'moveTo' | 'date' | 'groupDelete' | 'groupMenu' | 'tag';
   /** The row the popover is anchored to. */
   rowId: string;
 }
@@ -39,6 +46,7 @@ export interface ListPopover {
 export const groupRowId = (groupId: string) => `group:${groupId}`;
 export const addRowId = (groupId: string) => `add:${groupId}`;
 export const addGroupRowId = 'add-group';
+export const addSubtaskRowId = (parentId: string) => `addsub:${parentId}`;
 export const isGroupRowId = (id: string) => id.startsWith('group:');
 export const groupIdOfRow = (id: string) => id.slice('group:'.length);
 
@@ -66,6 +74,8 @@ export interface ListUiState {
   hoverExpanded: Readonly<Record<string, true>>;
   drop: DropIndicator | null;
   keyboardDrag: KeyboardDrag | null;
+  /** FR-TAG-4: only rows with one of these tags (empty = no filter). */
+  tagFilter: readonly string[];
 }
 
 export interface ListUiActions {
@@ -120,71 +130,96 @@ const initial = (): ListUiState => ({
   hoverExpanded: {},
   drop: null,
   keyboardDrag: null,
+  tagFilter: [],
 });
 
 let editSeq = 0;
 
-/** List UI state (04 §5.2 `listStore`). One list is on screen at a time. */
-export const useListStore = create<ListStore>()((set) => ({
-  ...initial(),
-  set: (patch) => set(patch),
-  select: (rowId, mode = 'navigate') =>
-    set((s) => ({
-      mode,
-      cursor: rowId,
-      anchor: rowId,
-      selected: rowId ? { [rowId]: true } : {},
-      editing: mode === 'edit' ? s.editing : null,
-      focusSeq: s.focusSeq + 1,
-    })),
-  edit: (rowId, caret = 'end') => {
-    editSeq += 1;
-    set({
-      mode: 'edit',
-      cursor: rowId,
-      anchor: rowId,
-      selected: { [rowId]: true },
-      editing: { rowId, caret, seq: editSeq },
-    });
-  },
-  navigate: (rowId) =>
-    set((s) => {
-      const target = rowId === undefined ? s.cursor : rowId;
-      return {
+export type ListStoreHook = UseBoundStore<StoreApi<ListStore>>;
+
+/**
+ * A list UI store (04 §5.2 `listStore`). My tasks uses the app-wide `useListStore`; the pane's
+ * subtask list (02 §9.2) gets its own, so both share the row component and keyboard model
+ * without sharing a selection.
+ */
+export function createListStore(overrides: Partial<ListUiState> = {}): ListStoreHook {
+  return create<ListStore>()((set) => ({
+    ...initial(),
+    ...overrides,
+    set: (patch) => set(patch),
+    select: (rowId, mode = 'navigate') =>
+      set((s) => ({
+        mode,
+        cursor: rowId,
+        anchor: rowId,
+        selected: rowId ? { [rowId]: true } : {},
+        editing: mode === 'edit' ? s.editing : null,
+        focusSeq: s.focusSeq + 1,
+      })),
+    edit: (rowId, caret = 'end') => {
+      editSeq += 1;
+      set({
+        mode: 'edit',
+        cursor: rowId,
+        anchor: rowId,
+        selected: { [rowId]: true },
+        editing: { rowId, caret, seq: editSeq },
+      });
+    },
+    navigate: (rowId) =>
+      set((s) => {
+        const target = rowId === undefined ? s.cursor : rowId;
+        return {
+          mode: 'navigate',
+          editing: null,
+          cursor: target,
+          anchor: target,
+          selected: target ? { [target]: true } : {},
+          focusSeq: s.focusSeq + 1,
+        };
+      }),
+    toggleSelected: (rowId) =>
+      set((s) => {
+        const selected = { ...s.selected };
+        if (selected[rowId]) delete selected[rowId];
+        else selected[rowId] = true;
+        return { selected, cursor: rowId, anchor: rowId, mode: 'navigate', editing: null };
+      }),
+    selectRange: (ids, cursor) =>
+      set((s) => ({
+        selected: Object.fromEntries(ids.map((id) => [id, true] as const)),
+        cursor,
         mode: 'navigate',
         editing: null,
-        cursor: target,
-        anchor: target,
-        selected: target ? { [target]: true } : {},
         focusSeq: s.focusSeq + 1,
-      };
-    }),
-  toggleSelected: (rowId) =>
-    set((s) => {
-      const selected = { ...s.selected };
-      if (selected[rowId]) delete selected[rowId];
-      else selected[rowId] = true;
-      return { selected, cursor: rowId, anchor: rowId, mode: 'navigate', editing: null };
-    }),
-  selectRange: (ids, cursor) =>
-    set((s) => ({
-      selected: Object.fromEntries(ids.map((id) => [id, true] as const)),
-      cursor,
-      mode: 'navigate',
-      editing: null,
-      focusSeq: s.focusSeq + 1,
-    })),
-  addDraft: (draft) => set((s) => ({ drafts: [...s.drafts, draft] })),
-  removeDraft: (id) => set((s) => ({ drafts: s.drafts.filter((d) => d.id !== id) })),
-  setHiding: (id, phase) =>
-    set((s) => {
-      const hiding = { ...s.hiding };
-      if (phase) hiding[id] = phase;
-      else delete hiding[id];
-      return { hiding };
-    }),
-  reset: () => set(initial()),
-}));
+      })),
+    addDraft: (draft) => set((s) => ({ drafts: [...s.drafts, draft] })),
+    removeDraft: (id) => set((s) => ({ drafts: s.drafts.filter((d) => d.id !== id) })),
+    setHiding: (id, phase) =>
+      set((s) => {
+        const hiding = { ...s.hiding };
+        if (phase) hiding[id] = phase;
+        else delete hiding[id];
+        return { hiding };
+      }),
+    reset: () => set({ ...initial(), ...overrides }),
+  }));
+}
+
+/** The My tasks list store. */
+export const useListStore = createListStore();
+
+/** The store the list components below read (My tasks unless a provider says otherwise). */
+export const ListStoreContext = createContext<ListStoreHook>(useListStore);
+
+export function useListStoreApi(): ListStoreHook {
+  return useContext(ListStoreContext);
+}
+
+/** `useListStore(selector)` for the list in context. */
+export function useListUi<T>(selector: (state: ListStore) => T): T {
+  return useStore(useContext(ListStoreContext), selector);
+}
 
 /** The selected row ids in no particular order. */
 export function selectedIds(state: Pick<ListUiState, 'selected'>): string[] {

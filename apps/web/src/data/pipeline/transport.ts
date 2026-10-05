@@ -1,5 +1,5 @@
 import type { ListOp } from '@rooster/core/reducers';
-import type { MyList } from '@rooster/core/schemas';
+import type { MyList, Tag, TaskDetail } from '@rooster/core/schemas';
 import { ApiError } from '../errors';
 
 /**
@@ -9,6 +9,10 @@ import { ApiError } from '../errors';
  */
 export interface ListTransport {
   fetchMyList: (orgId: string) => Promise<MyList>;
+  /** GET /tasks/:id (P3): the task with its description, direct subtasks and parent chain. */
+  fetchTask: (taskId: string) => Promise<TaskDetail>;
+  /** GET /orgs/:orgId/tags (P3). */
+  fetchTags: (orgId: string) => Promise<Tag[]>;
   /** Sends one op; resolves with the response body (undefined for 204), throws `ApiError`. */
   send: (op: ListOp, orgId: string) => Promise<unknown>;
 }

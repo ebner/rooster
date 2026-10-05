@@ -75,6 +75,23 @@ export function mergeResponse(state: ListState, op: ListOpSpec, response: unknow
       if (typeof position !== 'string' || !group) return keep;
       return { state: putGroup(state, { ...group, position }), refetch: false };
     }
+    case 'task.reorder': {
+      const position = isObject(response) ? response.subtaskPosition : undefined;
+      const task = state.tasks[op.entityId];
+      if (typeof position !== 'string' || !task) return keep;
+      return { state: putTask(state, { ...task, subtaskPosition: position }), refetch: false };
+    }
+    case 'task.duplicate':
+      // The copied subtasks get server ids: only a refetch replaces the optimistic copies.
+      return {
+        state: isTask(response) ? putTask(state, response, true) : state,
+        refetch: true,
+      };
+    case 'task.addTag':
+    case 'task.removeTag':
+      return isTask(response) ? { state: putTask(state, response), refetch: false } : keep;
+    case 'task.expanded':
+    case 'tag.create':
     case 'task.delete':
     case 'group.delete':
       return keep;

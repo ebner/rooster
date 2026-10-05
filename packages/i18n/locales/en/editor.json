@@ -1,0 +1,35 @@
+{
+  "placeholder": "Add more detail…",
+  "showMore": "Show more",
+  "showLess": "Show less",
+  "taskCheckbox": "Checklist item: {text}",
+  "toolbar": {
+    "label": "Formatting",
+    "bold": "Bold",
+    "italic": "Italic",
+    "strike": "Strikethrough",
+    "code": "Code",
+    "link": "Link",
+    "heading": "Heading",
+    "headingLevel": "Heading {level}",
+    "bulletList": "Bulleted list",
+    "taskList": "Checklist"
+  },
+  "link": {
+    "label": "Link address",
+    "placeholder": "Paste or type a link",
+    "apply": "Apply link",
+    "remove": "Remove link",
+    "open": "Open link",
+    "invalid": "That isn't a link"
+  },
+  "dev": {
+    "section": "Description editor",
+    "empty": "Empty, with placeholder",
+    "collapsed": "Long, collapsed",
+    "toolbar": "Bubble toolbar",
+    "readOnly": "Read-only",
+    "sample": "## Agenda\n\nWalk through the **Q3 plan** with [the team](https://example.com/team).\n\n- [x] Book the room\n- [ ] Send the *draft* to Anna\n  - [ ] Attach `budget.xlsx`\n\n> Keep it under 30 minutes.\n\n1. Status\n2. Risks\n3. Next steps\n\n### Notes\n\nBring coffee.\n\nAsk about the offsite.\n\n---\n\nThat's all.",
+    "short": "Call **Anna** about the venue and check `room-4`."
+  }
+}

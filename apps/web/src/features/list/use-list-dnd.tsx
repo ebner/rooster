@@ -12,7 +12,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { normalGroups } from '@rooster/core/reducers';
-import type { OrderingIntent } from '@rooster/core/schemas';
+import type { OrderingIntent, TaskMove } from '@rooster/core/schemas';
 import {
   type KeyboardEvent,
   memo,
@@ -29,11 +29,12 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
 import {
   addRowId,
+  addSubtaskRowId,
   type DropIndicator,
   groupIdOfRow,
   groupRowId,
   isGroupRowId,
-  useListStore,
+  useListUi,
 } from '../../state/list-store';
 import { announce } from './announcer';
 import type { ListController } from './controller';
@@ -66,9 +67,39 @@ const silent: Announcements = {
   onDragCancel: () => undefined,
 };
 
+/** The parent of a subtask row (subtasks only move among their siblings, 02 §5). */
+function subtaskParent(rows: readonly Row[], id: string): string | null {
+  const row = rows.find((r) => r.id === id);
+  return row?.kind === 'task' ? row.parentId : null;
+}
+
+/**
+ * The slots a drag works in: the groups' top-level rows, or for a subtask its siblings as one
+ * pseudo-group keyed by the parent id.
+ */
+function dragOrder(rows: readonly Row[], ids: readonly string[]): GroupOrder[] {
+  const parentId = ids.length === 1 ? subtaskParent(rows, ids[0] as string) : null;
+  if (parentId === null) return visibleOrder(rows);
+  const taskIds = rows
+    .filter((r) => r.kind === 'task' && !r.draft && r.parentId === parentId)
+    .map((r) => r.id);
+  return [{ id: parentId, collapsed: false, taskIds }];
+}
+
+/** Applies a drop: a placement move, or a sibling reorder for a subtask. */
+function commitDrop(controller: ListController, ids: string[], intent: TaskMove, subtask: boolean) {
+  if (subtask) {
+    controller.reorderSubtask(ids[0] as string, {
+      afterId: intent.afterId ?? null,
+      beforeId: intent.beforeId ?? null,
+    });
+  } else controller.moveTasks(ids, intent);
+}
+
 /** The tasks a drag of `id` carries: the whole selection when `id` is part of it. */
 function draggedIds(controller: ListController, id: string): string[] {
-  const selected = useListStore.getState().selected;
+  const selected = controller.ui().selected;
+  if (subtaskParent(controller.rows(), id) !== null) return [id];
   if (selected[id]) {
     const ids = controller.selectedTaskIds();
     if (ids.length > 1) return ids;
@@ -84,7 +115,8 @@ function positionText(
 ) {
   const group = order[slot.groupIndex];
   const total = (group?.taskIds.filter((id) => !moving.has(id)).length ?? 0) + 1;
-  const name = group ? (controller.state()?.groups[group.id]?.name ?? '') : '';
+  const state = controller.state();
+  const name = group ? (state?.groups[group.id]?.name ?? state?.tasks[group.id]?.title ?? '') : '';
   return { position: slot.index + 1, total, group: name };
 }
 
@@ -97,10 +129,10 @@ export function useKeyboardDragHandle(id: string) {
   const { controller } = useListContext();
 
   const context = () => {
-    const drag = useListStore.getState().keyboardDrag;
+    const drag = controller.ui().keyboardDrag;
     const ids = drag?.ids ?? draggedIds(controller, id);
     const moving = new Set(ids);
-    const order = visibleOrder(controller.rows());
+    const order = dragOrder(controller.rows(), ids);
     return { drag, ids, moving, order, slots: dropSlots(order, moving) };
   };
 
@@ -108,14 +140,14 @@ export function useKeyboardDragHandle(id: string) {
     const { ids, moving, order, slots } = context();
     const target = slots[slot];
     if (!target) return;
-    useListStore.getState().set({
+    controller.ui().set({
       keyboardDrag: { ids, slot },
       drop: slotIndicator(order, moving, target),
     });
     return target;
   };
 
-  const end = () => useListStore.getState().set({ keyboardDrag: null, drop: null });
+  const end = () => controller.ui().set({ keyboardDrag: null, drop: null });
   const title = () => controller.task(id)?.title ?? '';
 
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
@@ -156,7 +188,8 @@ export function useKeyboardDragHandle(id: string) {
       const target = slots[drag.slot];
       const intent = target ? slotIntent(order, moving, target) : null;
       end();
-      if (intent) controller.moveTasks(ids, intent);
+      if (intent)
+        commitDrop(controller, ids, intent, subtaskParent(controller.rows(), id) !== null);
     } else if (event.key === 'Escape') {
       event.preventDefault();
       end();
@@ -168,7 +201,7 @@ export function useKeyboardDragHandle(id: string) {
   };
 
   const onBlur = () => {
-    if (useListStore.getState().keyboardDrag) {
+    if (controller.ui().keyboardDrag) {
       end();
       announce(t('dnd.cancelled'));
     }
@@ -187,7 +220,7 @@ function scrollParent(el: Element | null): HTMLElement | null {
 }
 
 interface DragSession {
-  kind: 'task' | 'group';
+  kind: 'task' | 'group' | 'subtask';
   /** Task ids, or the dragged group id. */
   ids: string[];
   pointer: { x: number; y: number };
@@ -221,6 +254,7 @@ function pressedRow(target: EventTarget | null): string | null {
 
 interface SurfaceProps {
   label: string;
+  compact: boolean;
   rootRef: RefObject<HTMLDivElement | null>;
   pressed: RefObject<string | null>;
   enabled: boolean;
@@ -232,8 +266,11 @@ interface SurfaceProps {
  * Per-row `useDraggable` would re-render all rows whenever any row mounts (dnd-kit rebuilds its
  * context), which breaks the 50 ms budget at 500 rows (AC-2.12).
  */
-function DragSurface({ label, rootRef, pressed, enabled, children }: SurfaceProps) {
+function DragSurface({ label, compact, rootRef, pressed, enabled, children }: SurfaceProps) {
   const { setNodeRef, listeners } = useDraggable({ id: 'list', disabled: !enabled });
+  const dragging = useListUi(
+    (s) => s.drop !== null || s.dragging !== null || s.keyboardDrag !== null,
+  );
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     pressed.current = pressedRow(event.target);
     if (pressed.current) listeners?.onPointerDown?.(event);
@@ -252,9 +289,10 @@ function DragSurface({ label, rootRef, pressed, enabled, children }: SurfaceProp
       aria-label={label}
       aria-multiselectable
       data-list-root
+      data-dragging={dragging || undefined}
       onPointerDown={onPointerDown}
       onTouchStart={onTouchStart}
-      className="flex flex-col pb-16"
+      className={cn('flex flex-col', !compact && 'pb-16')}
     >
       {children}
     </div>
@@ -271,12 +309,15 @@ export const ListDnd = memo(function ListDnd({
   label,
   rootRef,
   enabled = true,
+  compact = false,
   children,
 }: {
   rowsRef: RefObject<readonly Row[]>;
   label: string;
   rootRef: RefObject<HTMLDivElement | null>;
   enabled?: boolean;
+  /** The pane's subtask list: no trailing space for the bulk bar. */
+  compact?: boolean;
   children: ReactNode;
 }) {
   const pressed = useRef<string | null>(null);
@@ -297,9 +338,9 @@ export const ListDnd = memo(function ListDnd({
   const rowById = (id: string) => rowsRef.current.find((r) => r.id === id);
 
   const setDrop = (drop: DropIndicator | null) => {
-    const current = useListStore.getState().drop;
+    const current = controller.ui().drop;
     if (current?.rowId === drop?.rowId && current?.edge === drop?.edge) return;
-    useListStore.getState().set({ drop });
+    controller.ui().set({ drop });
   };
 
   const clearHover = (s: DragSession) => {
@@ -332,7 +373,7 @@ export const ListDnd = memo(function ListDnd({
         s.hover = {
           groupId,
           timer: setTimeout(() => {
-            const store = useListStore.getState();
+            const store = controller.ui();
             store.set({ hoverExpanded: { ...store.hoverExpanded, [groupId]: true } });
           }, hoverExpandMs),
         };
@@ -340,6 +381,15 @@ export const ListDnd = memo(function ListDnd({
       return;
     }
     clearHover(s);
+    if (s.kind === 'subtask') {
+      const parentId = subtaskParent(rowsRef.current, s.ids[0] as string);
+      if (row.kind === 'task' && !row.draft && row.parentId === parentId && row.id !== s.ids[0]) {
+        setDrop({ rowId: row.id, edge: upper ? 'before' : 'after' });
+      } else if (row.kind === 'addSubtask' && row.parentId === parentId) {
+        setDrop({ rowId: row.id, edge: 'before' });
+      } else setDrop(null);
+      return;
+    }
     if (row.kind === 'group') setDrop({ rowId: row.id, edge: 'after' });
     else if (row.kind === 'task') {
       if (s.ids.includes(row.id) || row.draft) setDrop(null);
@@ -399,7 +449,7 @@ export const ListDnd = memo(function ListDnd({
     }
     session.current = null;
     setOverlay(null);
-    useListStore.getState().set({
+    controller.ui().set({
       dragging: null,
       drop: null,
       dragCollapsed: false,
@@ -410,14 +460,18 @@ export const ListDnd = memo(function ListDnd({
   const onDragStart = ({ active, activatorEvent }: DragStartEvent) => {
     const id = pressed.current;
     if (!id) return;
-    const kind = isGroupRowId(id) ? 'group' : 'task';
+    const kind = isGroupRowId(id)
+      ? 'group'
+      : subtaskParent(rowsRef.current, id) !== null
+        ? 'subtask'
+        : 'task';
     const point = activatorEvent as PointerEvent | TouchEvent;
     const touch = 'touches' in point;
     const start = touch
       ? { x: point.touches[0]?.clientX ?? 0, y: point.touches[0]?.clientY ?? 0 }
       : { x: (point as PointerEvent).clientX, y: (point as PointerEvent).clientY };
     const ids = kind === 'group' ? [groupIdOfRow(id)] : draggedIds(controller, id);
-    const root = document.querySelector('[data-list-root]');
+    const root = rootRef.current;
     session.current = {
       kind,
       ids,
@@ -436,19 +490,19 @@ export const ListDnd = memo(function ListDnd({
         ? (state?.groups[ids[0] as string]?.name ?? '')
         : (state?.tasks[id]?.title ?? '');
     setOverlay({
-      kind,
+      kind: kind === 'group' ? 'group' : 'task',
       title: name,
       count: ids.length,
       width: session.current.width,
       touch,
     });
-    useListStore.getState().set({
+    controller.ui().set({
       dragging: kind === 'group' ? [id] : ids,
       dragCollapsed: kind === 'group',
       popover: null,
     });
-    if (kind === 'task') {
-      const order = visibleOrder(rowsRef.current);
+    if (kind !== 'group') {
+      const order = dragOrder(rowsRef.current, ids);
       const moving = new Set(ids);
       const slot = dropSlots(order, moving)[currentSlot(order, moving)];
       if (slot) {
@@ -471,7 +525,7 @@ export const ListDnd = memo(function ListDnd({
 
   const onDragEnd = (_event: DragEndEvent) => {
     const s = session.current;
-    const drop = useListStore.getState().drop;
+    const drop = controller.ui().drop;
     if (!s || !drop) {
       finish();
       announce(t('dnd.cancelled'));
@@ -483,15 +537,21 @@ export const ListDnd = memo(function ListDnd({
       if (intent) controller.moveGroup(s.ids[0] as string, intent);
       return;
     }
-    const order = visibleOrder(rowsRef.current);
+    const order = dragOrder(rowsRef.current, s.ids);
     const moving = new Set(s.ids);
-    const slot = indicatorSlot(order, moving, drop);
+    const parentId = s.kind === 'subtask' ? (order[0]?.id ?? '') : null;
+    // The pseudo-group's "+ Add subtask" row stands for the end of the siblings.
+    const target =
+      parentId !== null && drop.rowId === addSubtaskRowId(parentId)
+        ? { rowId: addRowId(parentId), edge: drop.edge }
+        : drop;
+    const slot = indicatorSlot(order, moving, target);
     const intent = slot ? slotIntent(order, moving, slot) : null;
     // A group opened by hovering stays open once something lands in it.
-    const opened = intent && useListStore.getState().hoverExpanded[intent.groupId];
+    const opened = intent && controller.ui().hoverExpanded[intent.groupId];
     finish();
     if (intent && opened) controller.setCollapsed(intent.groupId, false);
-    if (intent) controller.moveTasks(s.ids, intent);
+    if (intent) commitDrop(controller, s.ids, intent, s.kind === 'subtask');
     else announce(t('dnd.cancelled'));
   };
 
@@ -528,7 +588,13 @@ export const ListDnd = memo(function ListDnd({
         screenReaderInstructions: { draggable: t('dnd.instructions') },
       }}
     >
-      <DragSurface label={label} rootRef={rootRef} pressed={pressed} enabled={enabled}>
+      <DragSurface
+        label={label}
+        compact={compact}
+        rootRef={rootRef}
+        pressed={pressed}
+        enabled={enabled}
+      >
         {children}
       </DragSurface>
       <DragOverlay dropAnimation={null} zIndex={70} className="pointer-events-none">

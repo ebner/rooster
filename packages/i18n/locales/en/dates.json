@@ -10,7 +10,8 @@
     "placeholder": "Type a date… (e.g. fri, next week, 12 oct)",
     "preview": "→ {date}",
     "invalid": "Can't understand that",
-    "quick": "Quick dates"
+    "quick": "Quick dates",
+    "rangePlaceholder": "Type a range… (e.g. oct 10 - 12)"
   },
   "chip": {
     "today": "Today",
@@ -32,7 +33,11 @@
     "remove": "Remove time"
   },
   "startDate": {
-    "add": "Start date"
+    "add": "Start date",
+    "label": "Start date",
+    "remove": "Remove start date",
+    "pickStart": "Pick a start date",
+    "pickDue": "Pick a due date"
   },
   "format": {
     "full": {
@@ -130,7 +135,11 @@
       "emptyRowHover": "Empty, row hover",
       "filled": "Filled",
       "focused": "Focused",
-      "readOnly": "Read-only"
-    }
+      "readOnly": "Read-only",
+      "rangeSet": "Range set",
+      "rangePickStart": "Pick start",
+      "rangeTyped": "Typed range"
+    },
+    "range": "Date popover: start date"
   }
 }

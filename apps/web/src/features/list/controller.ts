@@ -1,14 +1,23 @@
 import { uuidv7 } from '@rooster/core/ids';
 import {
   type ApplyContext,
+  childrenOf,
+  depthOf,
   inverseOfSequence,
   type ListOpSpec,
   type ListState,
   listOps,
   normalGroups,
+  SUBTASK_DEPTH_MAX,
   tasksInGroup,
 } from '@rooster/core/reducers';
-import { BULK_MAX, type OrderingIntent, type Task, type TaskMove } from '@rooster/core/schemas';
+import {
+  BULK_MAX,
+  type OrderingIntent,
+  type Tag,
+  type Task,
+  type TaskMove,
+} from '@rooster/core/schemas';
 import type { DroppedOp, ListPipeline } from '../../data/list';
 import {
   type Caret,
@@ -16,6 +25,8 @@ import {
   groupIdOfRow,
   groupRowId,
   isGroupRowId,
+  type ListStore,
+  type ListStoreHook,
   selectedIds,
   useListStore,
 } from '../../state/list-store';
@@ -45,6 +56,14 @@ export interface ControllerDeps {
   prefs?: () => { parseTitles: boolean; holdMs: number };
   holdMs?: number;
   collapseMs?: number;
+  /** The UI store of this list (My tasks: the app-wide one; the pane's subtasks: their own). */
+  store?: ListStoreHook;
+  /** The org's tags, read live (`#tag` tokens and the tag picker resolve names with them). */
+  tags?: () => readonly Tag[];
+  /** The detail pane, when this list drives it (02 §6 Esc chain: close the pane). */
+  pane?: { isOpen: () => boolean; close: () => void };
+  /** The pane's subtask list: rows are the subtasks of this task. */
+  rootTaskId?: string;
 }
 
 export interface CommitResult {
@@ -93,8 +112,23 @@ export class ListController {
     return this.deps.prefs?.().parseTitles ?? true;
   }
 
+  /** Set for the pane's subtask list: the task whose subtasks are the rows. */
+  get rootTaskId(): string | undefined {
+    return this.deps.rootTaskId;
+  }
+
+  /** The list's UI store. */
+  get uiStore(): ListStoreHook {
+    return this.deps.store ?? useListStore;
+  }
+
+  /** The list's UI state and actions, now. */
+  ui(): ListStore {
+    return this.uiStore.getState();
+  }
+
   private store() {
-    return useListStore.getState();
+    return this.ui();
   }
 
   task(id: string): Task | undefined {
@@ -243,7 +277,7 @@ export class ListController {
       .filter((r) => r.kind === 'task')
       .map((r) => r.id);
     this.store().selectRange(ids.length > 0 ? ids : [to], to);
-    useListStore.setState({ anchor: from });
+    this.uiStore.setState({ anchor: from });
     this.announceSelection();
   }
 
@@ -290,6 +324,10 @@ export class ListController {
       store.select(store.cursor);
       return true;
     }
+    if (this.deps.pane?.isOpen()) {
+      this.deps.pane.close();
+      return true;
+    }
     if (count === 1) {
       store.set({ selected: {}, anchor: null });
       return true;
@@ -311,26 +349,51 @@ export class ListController {
     return this.store().drafts.some((d) => d.id === id);
   }
 
-  /** Creates a draft row and puts the caret in it. */
-  newDraft(groupId: string, afterId: string | null): string {
-    const draft: Draft = { id: uuidv7(), groupId, afterId };
+  /** Creates a draft row and puts the caret in it (a subtask draft with `parentId`). */
+  newDraft(groupId: string, afterId: string | null, parentId?: string | null): string {
+    const draft: Draft = {
+      id: uuidv7(),
+      groupId,
+      afterId,
+      ...(parentId ? { parentId } : {}),
+    };
     this.store().addDraft(draft);
     this.store().edit(draft.id, 'end');
     return draft.id;
   }
 
-  /** The row above `rowId` within its group (task or draft), or null at the top. */
-  private rowAboveInGroup(rowId: string): string | null {
+  /**
+   * The rows on the same level as `rowId` (its group's top-level rows, or its siblings under
+   * the same parent) directly before and after it, drafts included.
+   */
+  private siblingRows(rowId: string): { before: TaskRow | null; after: TaskRow | null } {
     const rows = this.rows();
     const index = rows.findIndex((r) => r.id === rowId);
-    const above = rows[index - 1];
-    return above?.kind === 'task' ? above.id : null;
+    const row = rows[index];
+    if (row?.kind !== 'task') return { before: null, after: null };
+    const scan = (step: 1 | -1): TaskRow | null => {
+      for (let i = index + step; i >= 0 && i < rows.length; i += step) {
+        const r = rows[i] as Row;
+        if (r.kind === 'group') return null;
+        if (r.kind === 'task' && r.level === row.level) {
+          return r.parentId === row.parentId ? r : null;
+        }
+        if ((r.kind === 'task' || r.kind === 'addSubtask') && r.level < row.level) return null;
+      }
+      return null;
+    };
+    return { before: scan(-1), after: scan(1) };
   }
 
-  /** N / Enter: new row below the cursor (or at the end of its group). */
+  /** The row above `rowId` among its siblings (task or draft), or null at the top. */
+  private rowAboveInGroup(rowId: string): string | null {
+    return this.siblingRows(rowId).before?.id ?? null;
+  }
+
+  /** N / Enter: new row below the cursor (a sibling subtask under a subtask). */
   newBelow(rowId?: string | null): void {
     const row = rowId ? this.rows().find((r) => r.id === rowId) : this.cursorRow();
-    if (row?.kind === 'task') this.newDraft(row.groupId, row.id);
+    if (row?.kind === 'task') this.newDraft(row.groupId, row.id, row.parentId);
     else if (row?.kind === 'group') this.newDraft(row.group.id, null);
     else this.quickAdd();
   }
@@ -338,8 +401,9 @@ export class ListController {
   /** Shift+N / Shift+Enter: new row above. */
   newAbove(rowId?: string | null): void {
     const row = rowId ? this.rows().find((r) => r.id === rowId) : this.cursorRow();
-    if (row?.kind === 'task') this.newDraft(row.groupId, this.rowAboveInGroup(row.id));
-    else if (row?.kind === 'group') this.newDraft(row.group.id, null);
+    if (row?.kind === 'task') {
+      this.newDraft(row.groupId, this.rowAboveInGroup(row.id), row.parentId);
+    } else if (row?.kind === 'group') this.newDraft(row.group.id, null);
     else this.quickAdd();
   }
 
@@ -355,6 +419,11 @@ export class ListController {
   quickAdd(): void {
     const state = this.state();
     if (!state) return;
+    const root = this.deps.rootTaskId;
+    if (root) {
+      this.addSubtask(root);
+      return;
+    }
     const first = normalGroups(state)[0];
     if (!first) return;
     if (first.collapsed) this.run('', [listOps.patchGroup(first.id, { collapsed: false })]);
@@ -382,41 +451,82 @@ export class ListController {
       (due.dueDate !== task.dueDate || due.dueTime !== task.dueTime || due.dueTz !== task.dueTz);
     const patch = {
       ...(parsed.title === task.title ? {} : { title: parsed.title }),
-      ...(dueChanged ? due : {}),
+      ...(dueChanged ? { ...due, startDate: null } : {}),
     };
-    if (Object.keys(patch).length > 0) {
-      this.run(this.t('undo.edited'), [listOps.patchTask(rowId, patch)]);
-    }
+    const specs: ListOpSpec[] = [];
+    if (Object.keys(patch).length > 0) specs.push(listOps.patchTask(rowId, patch));
+    specs.push(...this.tagSpecs([rowId], parsed.tags ?? []));
+    if (specs.length > 0) this.run(this.t('undo.edited'), specs);
     return {};
   }
 
-  private createFromDraft(draft: Draft, parsed: readonly { title: string; due?: object }[]): void {
-    const rows = this.rows();
-    const index = rows.findIndex((r) => r.id === draft.id);
-    // Neighbours among persisted tasks of the group, around the draft's slot.
-    const before = rows
-      .slice(0, index)
-      .reverse()
-      .find((r): r is TaskRow => isTaskRow(r) && r.groupId === draft.groupId);
-    const after = rows
-      .slice(index + 1)
-      .find((r): r is TaskRow => isTaskRow(r) && r.groupId === draft.groupId);
-    const sameGroupBefore = before && this.rowsBetweenSameGroup(rows, before.id, draft.id);
-    const sameGroupAfter = after && this.rowsBetweenSameGroup(rows, draft.id, after.id);
-    let afterId: string | null = sameGroupBefore ? before.id : null;
-    const beforeId: string | null = sameGroupAfter ? after.id : null;
+  /** Splits `#tag` names into existing org tags and new names (case-insensitive). */
+  resolveTags(names: readonly string[]): { ids: string[]; newNames: string[] } {
+    const tags = this.deps.tags?.() ?? [];
+    const ids: string[] = [];
+    const newNames: string[] = [];
+    for (const name of names) {
+      const tag = tags.find((t) => t.name.toLocaleLowerCase() === name.toLocaleLowerCase());
+      if (tag) {
+        if (!ids.includes(tag.id)) ids.push(tag.id);
+      } else newNames.push(name);
+    }
+    return { ids, newNames };
+  }
+
+  /** Ops that add the named tags to existing tasks, creating unknown tags first. */
+  private tagSpecs(taskIds: readonly string[], names: readonly string[]): ListOpSpec[] {
+    if (names.length === 0) return [];
+    const { ids, newNames } = this.resolveTags(names);
+    const specs: ListOpSpec[] = [];
+    for (const name of newNames) {
+      const id = uuidv7();
+      specs.push(listOps.createTag({ id, name }));
+      ids.push(id);
+    }
+    for (const tagId of ids) {
+      for (const taskId of taskIds) {
+        if (!this.task(taskId)?.tagIds.includes(tagId)) specs.push(listOps.addTag(taskId, tagId));
+      }
+    }
+    return specs;
+  }
+
+  /** The nearest persisted sibling of a draft on each side (drafts are skipped). */
+  private persistedNeighbours(draftId: string): {
+    afterId: string | null;
+    beforeId: string | null;
+  } {
+    const find = (from: string, side: 'before' | 'after'): string | null => {
+      let row = this.siblingRows(from)[side];
+      while (row?.draft) row = this.siblingRows(row.id)[side];
+      return row?.id ?? null;
+    };
+    return { afterId: find(draftId, 'before'), beforeId: find(draftId, 'after') };
+  }
+
+  private createFromDraft(
+    draft: Draft,
+    parsed: readonly { title: string; due?: object; tags?: string[] }[],
+  ): void {
+    const neighbours = this.persistedNeighbours(draft.id);
+    let afterId = neighbours.afterId;
+    const beforeId = neighbours.beforeId;
     const specs: ListOpSpec[] = [];
     parsed.forEach((p, i) => {
       const id = i === 0 ? draft.id : uuidv7();
       createdHere.add(id);
+      const { ids: tagIds, newNames } = this.resolveTags(p.tags ?? []);
       specs.push(
         listOps.createTask({
           id,
           title: p.title,
-          groupId: draft.groupId,
+          ...(draft.parentId ? { parentId: draft.parentId } : { groupId: draft.groupId }),
           afterId,
           beforeId,
           ...(p.due ?? {}),
+          ...(tagIds.length > 0 ? { tagIds } : {}),
+          ...(newNames.length > 0 ? { tagNames: newNames } : {}),
         }),
       );
       afterId = id;
@@ -430,15 +540,6 @@ export class ListController {
     );
   }
 
-  /** True when no group header lies between the two rows. */
-  private rowsBetweenSameGroup(rows: readonly Row[], a: string, b: string): boolean {
-    const i = rows.findIndex((r) => r.id === a);
-    const j = rows.findIndex((r) => r.id === b);
-    return rows
-      .slice(Math.min(i, j), Math.max(i, j))
-      .every((r) => r.kind !== 'group' || r.id === a);
-  }
-
   /** Enter / Shift+Enter in Edit. */
   enter(rowId: string, raw: string, ignored: readonly Span[], above: boolean): CommitResult {
     const isDraft = this.draftTask(rowId);
@@ -449,12 +550,15 @@ export class ListController {
       return task ? { restore: task.title } : {};
     }
     const draft = this.store().drafts.find((d) => d.id === rowId);
-    const result = this.commitTitle(rowId, raw, ignored);
     const row = this.rows().find((r) => r.id === rowId);
+    const aboveId = above ? this.rowAboveInGroup(rowId) : null;
+    const result = this.commitTitle(rowId, raw, ignored);
     const groupId = row?.kind === 'task' ? row.groupId : draft?.groupId;
     if (!groupId) return result;
-    if (above) this.newDraft(groupId, this.rowAboveInGroup(rowId));
-    else this.newDraft(groupId, rowId);
+    // 02 §3.4: Enter in a subtask creates a sibling subtask.
+    const parentId = row?.kind === 'task' ? row.parentId : (draft?.parentId ?? null);
+    if (above) this.newDraft(groupId, aboveId, parentId);
+    else this.newDraft(groupId, rowId, parentId);
     return result;
   }
 
@@ -558,7 +662,12 @@ export class ListController {
     if (!draft) {
       const row = this.rows().find((r) => r.id === rowId);
       if (row?.kind !== 'task') return;
-      draft = { id: uuidv7(), groupId: row.groupId, afterId: row.id };
+      draft = {
+        id: uuidv7(),
+        groupId: row.groupId,
+        afterId: row.id,
+        ...(row.parentId ? { parentId: row.parentId } : {}),
+      };
       this.store().addDraft(draft);
     }
     this.createFromDraft(draft, parsed);
@@ -672,9 +781,19 @@ export class ListController {
   /** Due change from the date cell, the picker or the bulk bar. */
   setDue(
     ids: readonly string[],
-    due: { dueDate: string | null; dueTime: string | null; dueTz: string | null } | null,
+    due: {
+      dueDate: string | null;
+      dueTime: string | null;
+      dueTz: string | null;
+      startDate?: string | null | undefined;
+    } | null,
   ): void {
-    const value = due ?? { dueDate: null, dueTime: null, dueTz: null };
+    const value = {
+      dueDate: due?.dueDate ?? null,
+      dueTime: due?.dueTime ?? null,
+      dueTz: due?.dueTz ?? null,
+      startDate: due?.startDate ?? null,
+    };
     const live = ids.filter((id) => this.task(id));
     if (live.length === 0) return;
     const specs =
@@ -735,6 +854,11 @@ export class ListController {
     if (cursor?.kind === 'group') {
       if (move !== 'up' && move !== 'down') return false;
       return this.stepGroup(cursor.group.id, move === 'up' ? -1 : 1);
+    }
+    if (cursor?.kind === 'task' && this.task(cursor.id)?.parentId && cursor.parentId) {
+      // Subtasks move among their siblings only (02 §5).
+      if (move !== 'up' && move !== 'down') return true;
+      return this.stepSubtask(cursor.id, move === 'up' ? -1 : 1);
     }
     const ids = this.selectedTaskIds();
     if (ids.length === 0) return false;
@@ -799,12 +923,178 @@ export class ListController {
     this.deps.pipeline.enqueue(this.orgId, specs, { userId: this.deps.userId });
   }
 
-  /** ←/→ in Navigate on a header (or on a task: its group). */
+  /**
+   * ←/→ in Navigate (02 §6): collapse or expand a group or a parent task. → on an expanded
+   * parent selects its first subtask; ← on a subtask (nothing to collapse) selects its parent.
+   */
   collapseCursor(collapsed: boolean): boolean {
     const row = this.cursorRow();
-    if (row?.kind !== 'group') return false;
-    this.setCollapsed(row.group.id, collapsed);
+    if (row?.kind === 'group') {
+      this.setCollapsed(row.group.id, collapsed);
+      return true;
+    }
+    if (row?.kind !== 'task' || row.draft) return false;
+    if (collapsed) {
+      if (row.expandable && row.expanded) this.setExpanded(row.id, false);
+      else if (row.parentId && this.rows().some((r) => r.id === row.parentId)) {
+        this.store().select(row.parentId);
+      }
+      return true;
+    }
+    if (!row.expandable) return true;
+    if (!row.expanded) {
+      this.setExpanded(row.id, true);
+      return true;
+    }
+    const rows = this.rows();
+    const next = rows[rows.findIndex((r) => r.id === row.id) + 1];
+    if (next?.kind === 'task' && next.parentId === row.id) this.store().select(next.id);
     return true;
+  }
+
+  // -------------------------------------------------------------------------------------
+  // Subtasks (02 §3.1, FR-TASK-11)
+  // -------------------------------------------------------------------------------------
+
+  /** Chevron and ←/→: persisted per user (PUT/DELETE /tasks/:id/expanded), not undoable. */
+  setExpanded(taskId: string, expanded: boolean): void {
+    const state = this.state();
+    if (!state || state.expandedTaskIds.includes(taskId) === expanded) return;
+    this.deps.pipeline.enqueue(this.orgId, [listOps.setExpanded(taskId, expanded)], {
+      userId: this.deps.userId,
+    });
+  }
+
+  toggleExpanded(taskId: string): void {
+    this.setExpanded(taskId, !this.state()?.expandedTaskIds.includes(taskId));
+  }
+
+  /** Whether one more level fits below `taskId` (05 §4.3); hints when it does not. */
+  canNestUnder(taskId: string): boolean {
+    const state = this.state();
+    if (!state?.tasks[taskId]) return false;
+    if (depthOf(state, taskId) + 1 <= SUBTASK_DEPTH_MAX) return true;
+    toast({ message: this.t('hint.subtaskDepth', { max: SUBTASK_DEPTH_MAX }) });
+    return false;
+  }
+
+  /**
+   * Tab+S / S and "+ Add subtask": expands the parent and opens a subtask draft at the end of
+   * its subtasks. In the pane's subtask list the parent is the pane's task.
+   */
+  addSubtask(parentId?: string): boolean {
+    const id = parentId ?? this.selectedTaskIds()[0];
+    const state = this.state();
+    const parent = id ? state?.tasks[id] : undefined;
+    if (!id || !parent || !this.canNestUnder(id)) return false;
+    if (!this.rootTaskId || this.rootTaskId !== id) this.setExpanded(id, true);
+    const groupId = this.groupOfTask(id) ?? '';
+    const siblings = this.rows().filter(
+      (r): r is TaskRow => r.kind === 'task' && r.parentId === id,
+    );
+    const last = siblings.at(-1)?.id ?? childrenOf(state as ListState, id).at(-1)?.id ?? null;
+    this.newDraft(groupId, last, id);
+    return true;
+  }
+
+  /** The group a task's row renders in: its own placement, or its top-level ancestor's. */
+  private groupOfTask(taskId: string): string | undefined {
+    const state = this.state();
+    let task = state?.tasks[taskId];
+    for (let guard = 0; task && guard < 10; guard++) {
+      if (task.placement) return task.placement.groupId;
+      task = task.parentId ? state?.tasks[task.parentId] : undefined;
+    }
+    const row = this.rows().find((r) => r.id === taskId);
+    return row?.kind === 'task' ? row.groupId : undefined;
+  }
+
+  /** Subtask reorder among siblings (DnD, Ctrl+↑/↓), with undo. */
+  reorderSubtask(taskId: string, intent: OrderingIntent): void {
+    if (!this.task(taskId)?.parentId) return;
+    this.run(this.t('undo.moved', { count: 1 }), [listOps.reorderSubtask(taskId, intent)]);
+  }
+
+  /** Ctrl+↑/↓ on a subtask: one step among its siblings. */
+  private stepSubtask(taskId: string, step: 1 | -1): boolean {
+    const state = this.state();
+    const task = state?.tasks[taskId];
+    if (!state || !task?.parentId) return false;
+    const siblings = childrenOf(state, task.parentId).filter(
+      (t) => t.completedAt === null || this.store().showCompleted || t.id === taskId,
+    );
+    const index = siblings.findIndex((t) => t.id === taskId);
+    const target = index + step;
+    if (target < 0 || target >= siblings.length) return true;
+    const rest = siblings.filter((t) => t.id !== taskId);
+    this.reorderSubtask(taskId, {
+      afterId: rest[target - 1]?.id ?? null,
+      beforeId: rest[target]?.id ?? null,
+    });
+    this.store().set({ focusSeq: this.store().focusSeq + 1 });
+    return true;
+  }
+
+  // -------------------------------------------------------------------------------------
+  // Duplicate (FR-TASK-13) and tags (FR-TAG-2)
+  // -------------------------------------------------------------------------------------
+
+  /** Ctrl+D: copies go directly after their originals; the selection moves to the copy. */
+  duplicate(ids: readonly string[] = this.selectedTaskIds()): string[] {
+    const live = ids.filter((id) => this.task(id));
+    if (live.length === 0) return [];
+    const copies = live.map(() => uuidv7());
+    const specs = live.map((id, i) => listOps.duplicateTask(id, copies[i] as string));
+    this.run(this.t('undo.duplicated', { count: live.length }), specs, { toast: true });
+    if (this.rows().some((r) => r.id === copies[0])) this.store().select(copies[0] as string);
+    return copies;
+  }
+
+  /** The tag picker's toggle: removes the tag when every task has it, else adds it. */
+  toggleTag(ids: readonly string[], tagId: string): void {
+    const tasks = ids.map((id) => this.task(id)).filter((t): t is Task => t !== undefined);
+    if (tasks.length === 0) return;
+    const remove = tasks.every((t) => t.tagIds.includes(tagId));
+    const targets = tasks.filter((t) => t.tagIds.includes(tagId) === remove).map((t) => t.id);
+    const specs =
+      targets.length === 1
+        ? [
+            remove
+              ? listOps.removeTag(targets[0] as string, tagId)
+              : listOps.addTag(targets[0] as string, tagId),
+          ]
+        : chunk(targets).map((part) =>
+            listOps.bulk(this.orgId, {
+              op: remove ? 'removeTag' : 'addTag',
+              ids: part,
+              args: { tagId },
+            }),
+          );
+    this.run(this.t(remove ? 'undo.untagged' : 'undo.tagged'), specs);
+  }
+
+  /** Removes one tag from one task (a chip's ×). */
+  removeTag(taskId: string, tagId: string): void {
+    if (!this.task(taskId)?.tagIds.includes(tagId)) return;
+    this.run(this.t('undo.untagged'), [listOps.removeTag(taskId, tagId)]);
+  }
+
+  /** The picker's "Create …": a new org tag, added to the tasks. Returns its id. */
+  createTagFor(ids: readonly string[], name: string): string | null {
+    const trimmed = name.replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (trimmed === '') return null;
+    const { ids: existing } = this.resolveTags([trimmed]);
+    if (existing[0]) {
+      this.toggleTag(ids, existing[0]);
+      return existing[0];
+    }
+    const id = uuidv7();
+    const live = ids.filter((t) => this.task(t));
+    this.run(this.t('undo.tagged'), [
+      listOps.createTag({ id, name: trimmed }),
+      ...live.map((taskId) => listOps.addTag(taskId, id)),
+    ]);
+    return id;
   }
 
   renameGroup(groupId: string, name: string): void {

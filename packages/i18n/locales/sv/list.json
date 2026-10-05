@@ -9,7 +9,8 @@
     "addTask": "Lägg till uppgift",
     "firstRunHint": "Skriv en uppgift och tryck på Enter",
     "colonChip": "↵ igen för att göra om till gruppen ”{name}”",
-    "pasteChip": "Skapa {count, plural, one {# uppgift} other {# uppgifter}}? ↵"
+    "pasteChip": "Skapa {count, plural, one {# uppgift} other {# uppgifter}}? ↵",
+    "breadcrumb": "{title} ›"
   },
   "group": {
     "untitled": "Ny grupp",
@@ -51,7 +52,8 @@
     "date": "Datum",
     "moveTo": "Flytta till",
     "delete": "Ta bort",
-    "clear": "Avmarkera"
+    "clear": "Avmarkera",
+    "tag": "Tagga"
   },
   "header": {
     "showCompleted": "Visa klara",
@@ -60,7 +62,8 @@
   },
   "hint": {
     "emptyTitle": "Namnet kan inte vara tomt",
-    "useTabDelete": "Använd Tab+Delete för att ta bort uppgifter med innehåll"
+    "useTabDelete": "Använd Tab+Delete för att ta bort uppgifter med innehåll",
+    "subtaskDepth": "Deluppgifter kan bara ligga {max} nivåer djupt"
   },
   "undo": {
     "action": "Ångra",
@@ -82,7 +85,10 @@
     "groupSplit": "Gruppen skapades med {count, plural, one {# uppgift} other {# uppgifter}} ovanifrån",
     "groupDeleted": "Gruppen ”{name}” togs bort",
     "groupMoved": "Gruppen flyttades",
-    "renamed": "Gruppen bytte namn"
+    "renamed": "Gruppen bytte namn",
+    "duplicated": "{count, plural, one {Uppgiften duplicerades} other {# uppgifter duplicerades}}",
+    "tagged": "Taggen lades till",
+    "untagged": "Taggen togs bort"
   },
   "dnd": {
     "handleRole": "Draghandtag",
@@ -105,7 +111,12 @@
       "inbox_immutable": "inkorgen kan inte ändras så",
       "validation_failed": "ändringen var inte giltig",
       "forbidden": "du saknar behörighet",
-      "idempotency_key_reuse": "ändringen skickades två gånger"
+      "idempotency_key_reuse": "ändringen skickades två gånger",
+      "subtask_cycle": "en uppgift kan inte vara deluppgift till sin egen deluppgift",
+      "subtask_depth": "deluppgifter kan bara ligga 5 nivåer djupt",
+      "invalid_parent": "den överordnade uppgiften är inte tillgänglig",
+      "tag_name_taken": "det finns redan en tagg med det namnet",
+      "not_subtask": "bara deluppgifter kan ordnas om på det sättet"
     }
   },
   "state": {
@@ -124,7 +135,9 @@
       "editing": "Redigera",
       "moving": "Flytta",
       "groups": "Grupper",
-      "dates": "Datumväljare"
+      "dates": "Datumväljare",
+      "pane": "Detaljpanel",
+      "editor": "Beskrivningsredigerare"
     },
     "search": "Sök",
     "toggleSidebar": "Visa eller dölj sidofältet",
@@ -142,8 +155,8 @@
     "selectLast": "Sista raden",
     "selectAll": "Markera gruppen, sedan allt",
     "toggleInSelection": "Lägg till i eller ta bort från markeringen",
-    "collapse": "Fäll ihop grupp",
-    "expand": "Visa grupp",
+    "collapse": "Fäll ihop grupp eller överordnad uppgift",
+    "expand": "Fäll ut grupp eller överordnad uppgift",
     "toggleCompleted": "Visa eller dölj klara",
     "editTitle": "Redigera namnet",
     "newBelowNavigate": "Ny uppgift nedanför",
@@ -179,7 +192,23 @@
     "dateTomorrow": "Imorgon",
     "dateNextWeek": "Nästa vecka",
     "dateWeekend": "Helgen",
-    "dateNone": "Inget datum"
+    "dateNone": "Inget datum",
+    "addSubtaskNavigate": "Lägg till deluppgift",
+    "tagPickerNavigate": "Lägg till tagg",
+    "openPane": "Öppna detaljpanelen",
+    "peekPane": "Titta: visa eller dölj panelen",
+    "addSubtask": "Lägg till deluppgift",
+    "tagPicker": "Lägg till tagg",
+    "duplicate": "Duplicera",
+    "openPaneFocus": "Öppna panelen och redigera rubriken",
+    "paneFullScreen": "Panelen i helskärm",
+    "focusDescription": "Redigera beskrivningen",
+    "editorBold": "Fetstil",
+    "editorItalic": "Kursiv",
+    "editorStrike": "Genomstruken",
+    "editorCode": "Kod i text",
+    "editorLink": "Länk (med markerad text)",
+    "editorToolbar": "Gå till formateringsverktygen"
   },
   "dev": {
     "section": "Listan Mina uppgifter",
@@ -199,5 +228,16 @@
       "offsite": "Planera teamdagen",
       "done": "Skicka bilderna"
     }
+  },
+  "subtasks": {
+    "add": "Lägg till deluppgift",
+    "expand": "Visa deluppgifter för {title}",
+    "collapse": "Dölj deluppgifter för {title}",
+    "progress": "{done} av {total} deluppgifter klara"
+  },
+  "tags": {
+    "rowLabel": "Taggar: {names}",
+    "suggestions": "Förslag på taggar",
+    "create": "Skapa ”{name}”"
   }
 }

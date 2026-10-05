@@ -53,7 +53,7 @@ Adding a route without a matrix row fails the test, because the test enumerates 
 Uses Playwright `context.setOffline`, two browser contexts plus API calls as a third actor. It covers AC-4.2 to AC-4.4, outbox persistence across a page reload while offline, and multi-tab leader election (two tabs, only one flusher, verified by the request count).
 
 ### 3.5 Markdown round-trip
-A corpus of 40 Markdown samples. For each, `md → Tiptap doc → md` must be identical, or equal after normalisation (documented normalisations only: list bullet `-`, emphasis `*`, and a fenced code style).
+A corpus of 40 Markdown samples (`apps/web/src/features/editor/markdown.corpus.ts`). For each, `md → Tiptap doc → md` must be identical, or equal after the documented normalisations, and the canonical form must survive a second round trip unchanged. Normalisations: N1 list bullets become `-`; N2 emphasis becomes `*` / `**`; N3 code blocks are fenced with ```` ``` ````; N4 ordered lists are renumbered; N5 a hard break is two trailing spaces, and other trailing whitespace is dropped; N6 `<url>` autolinks become bare URLs; N7 thematic breaks become `---`; N8 leading and trailing blank lines are dropped.
 
 ### 3.6 Ops tests
 - The Docker image smoke test (CI): it boots with a minimal env, checks `/readyz`, logs in with the mock OIDC issuer, creates a task, restarts the container, and the task persists.

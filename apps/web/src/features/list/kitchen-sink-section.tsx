@@ -47,6 +47,10 @@ export function ListSection() {
     const today = todayIn(Intl.DateTimeFormat().resolvedOptions().timeZone, Date.now());
     const transport = createFixtureTransport({
       userId: fixtureUser,
+      tags: [
+        { name: 'mail', color: 'amber' },
+        { name: 'work', color: 'red' },
+      ],
       groupNames: [
         t('dev.groups.inbox'),
         t('dev.groups.today'),
@@ -55,7 +59,12 @@ export function ListSection() {
       ],
       tasks: {
         1: [
-          t('dev.tasks.reply'),
+          {
+            title: t('dev.tasks.reply'),
+            tags: ['mail', 'work', 'finance', 'urgent'],
+            expanded: true,
+            subtasks: [t('dev.tasks.passport'), { title: t('dev.tasks.done'), completed: true }],
+          },
           { title: t('dev.tasks.dentist'), dueDate: today },
           { title: t('dev.tasks.done'), completed: true },
         ],

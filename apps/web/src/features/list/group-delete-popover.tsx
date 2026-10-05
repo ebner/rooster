@@ -3,7 +3,6 @@ import { type RefObject, useState } from 'react';
 import { Popover as AriaPopover, Dialog, Radio, RadioGroup } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
-import { useListStore } from '../../state/list-store';
 import { Button } from '../../ui/button';
 import { overlayOffsetPx, popoverMotion, popoverSurface } from '../../ui/popover';
 import { Select } from '../../ui/select';
@@ -45,7 +44,7 @@ export function GroupDeletePopover({
       a.kind === 'inbox' ? -1 : b.kind === 'inbox' ? 1 : a.position < b.position ? -1 : 1,
     )
     .map((g) => ({ id: g.id, label: g.name }));
-  const close = () => useListStore.getState().set({ popover: null });
+  const close = () => controller.ui().set({ popover: null });
   const confirm = () =>
     controller.deleteGroup(
       groupId,

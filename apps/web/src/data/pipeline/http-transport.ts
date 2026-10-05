@@ -1,5 +1,5 @@
 import type { ListOp } from '@rooster/core/reducers';
-import type { MyList } from '@rooster/core/schemas';
+import type { MyList, Tag, TaskDetail } from '@rooster/core/schemas';
 import { api, toApiError } from '../http';
 import { type ListTransport, opHeaders, parseRetryAfter, RateLimitedError } from './transport';
 
@@ -64,6 +64,35 @@ function request(op: ListOp, orgId: string): Promise<FetchResult> {
       });
     case 'task.bulk':
       return api.POST('/api/v1/tasks/bulk', { body: wire(op.payload), headers });
+    case 'task.reorder':
+      return api.POST('/api/v1/tasks/{id}/reorder', {
+        params: { path: { id } },
+        body: wire(op.payload),
+        headers,
+      });
+    case 'task.duplicate':
+      return api.POST('/api/v1/tasks/{id}/duplicate', {
+        params: { path: { id } },
+        body: wire(op.payload),
+        headers,
+      });
+    case 'task.expanded':
+      return op.payload.expanded
+        ? api.PUT('/api/v1/tasks/{id}/expanded', { params: { path: { id } }, headers })
+        : api.DELETE('/api/v1/tasks/{id}/expanded', { params: { path: { id } }, headers });
+    case 'task.addTag':
+    case 'task.removeTag': {
+      const params = { path: { id, tagId: op.payload.tagId } };
+      return op.kind === 'task.addTag'
+        ? api.PUT('/api/v1/tasks/{id}/tags/{tagId}', { params, headers })
+        : api.DELETE('/api/v1/tasks/{id}/tags/{tagId}', { params, headers });
+    }
+    case 'tag.create':
+      return api.POST('/api/v1/orgs/{orgId}/tags', {
+        params: { path: { orgId } },
+        body: wire(op.payload),
+        headers,
+      });
     case 'group.create':
       return api.POST('/api/v1/orgs/{orgId}/groups', {
         params: { path: { orgId } },
@@ -99,5 +128,9 @@ export const httpTransport: ListTransport = {
     (await settle(
       api.GET('/api/v1/orgs/{orgId}/my-list', { params: { path: { orgId } } }),
     )) as MyList,
+  fetchTask: async (id) =>
+    (await settle(api.GET('/api/v1/tasks/{id}', { params: { path: { id } } }))) as TaskDetail,
+  fetchTags: async (orgId) =>
+    (await settle(api.GET('/api/v1/orgs/{orgId}/tags', { params: { path: { orgId } } }))) as Tag[],
   send: (op, orgId) => settle(request(op, orgId)),
 };

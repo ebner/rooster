@@ -30,8 +30,11 @@ import { TaskCheckbox } from '../../ui/task-checkbox';
 import { ToastView, toast } from '../../ui/toast';
 import { Tooltip, tooltipSurface } from '../../ui/tooltip';
 import { DatesSection } from '../dates/kitchen-sink-section';
+import { EditorSection } from '../editor/kitchen-sink-section';
 import { ListSection } from '../list/kitchen-sink-section';
 import { LanguageSwitch } from '../locale/language-switch';
+import { PaneSection } from '../pane/kitchen-sink-section';
+import { TagsKitchenSection } from '../tags/kitchen-sink-section';
 import { Group, Section, Specimen } from './layout';
 import { Phase1Sections, phase1SectionIds } from './phase1-sections';
 
@@ -750,7 +753,10 @@ export function KitchenSink() {
         <SyncPillSection />
         <Phase1Sections />
         <DatesSection />
+        <EditorSection />
         <ListSection />
+        <PaneSection />
+        <TagsKitchenSection />
       </main>
     </div>
   );

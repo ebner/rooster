@@ -1,0 +1,239 @@
+/*
+ * Description prose (03 §2.5): --text-md body, about 72ch per line, H1 20 / H2 18 /
+ * H3 16 at weight 600. Token variables only; scoped to the editor's content element.
+ * In the components layer, so Tailwind utilities on the same elements still win.
+ */
+@layer components {
+  .rooster-prose {
+    max-width: 72ch;
+    font-size: var(--text-md);
+    line-height: var(--text-md--line-height);
+    color: var(--color-text);
+    overflow-wrap: anywhere;
+    outline-offset: var(--space-1);
+    border-radius: var(--radius-xs);
+  }
+
+  .rooster-prose > * + * {
+    margin-top: var(--space-2);
+  }
+
+  .rooster-prose :where(h1, h2, h3) {
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+
+  .rooster-prose :where(h1, h2, h3):not(:first-child) {
+    margin-top: var(--space-4);
+  }
+
+  .rooster-prose h1 {
+    font-size: var(--text-lg);
+    line-height: var(--text-lg--line-height);
+  }
+
+  /* 18 px has no token step; it sits between --text-md and --text-lg. */
+  .rooster-prose h2 {
+    font-size: calc((var(--text-md) + var(--text-lg)) / 2);
+    line-height: var(--text-md--line-height);
+  }
+
+  .rooster-prose h3 {
+    font-size: var(--text-md);
+    line-height: var(--text-md--line-height);
+  }
+
+  .rooster-prose a {
+    color: var(--color-text-info);
+    text-decoration: underline;
+    text-underline-offset: var(--space-0_5);
+  }
+
+  .rooster-prose a:hover {
+    text-decoration-thickness: 2px;
+  }
+
+  .rooster-prose :where(strong) {
+    font-weight: 600;
+  }
+
+  .rooster-prose :where(code) {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    padding: 0 var(--space-1);
+    border-radius: var(--radius-xs);
+    background-color: var(--color-bg-muted);
+  }
+
+  .rooster-prose pre {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background-color: var(--color-bg-subtle);
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  .rooster-prose pre code {
+    padding: 0;
+    font-size: inherit;
+    background: none;
+  }
+
+  .rooster-prose blockquote {
+    padding-left: var(--space-3);
+    border-left: 2px solid var(--color-border-strong);
+    color: var(--color-text-secondary);
+  }
+
+  .rooster-prose hr {
+    border: 0;
+    border-top: 1px solid var(--color-border);
+    margin: var(--space-4) 0;
+  }
+
+  .rooster-prose :where(ul, ol) {
+    padding-left: var(--space-6);
+  }
+
+  .rooster-prose ul {
+    list-style: disc;
+  }
+
+  .rooster-prose ul ul {
+    list-style: circle;
+  }
+
+  .rooster-prose ol {
+    list-style: decimal;
+  }
+
+  .rooster-prose li > * + * {
+    margin-top: var(--space-1);
+  }
+
+  .rooster-prose li + li {
+    margin-top: var(--space-0_5);
+  }
+
+  .rooster-prose li::marker {
+    color: var(--color-text-muted);
+  }
+
+  /* Task lists: a checkbox column, then the item's content. */
+  .rooster-prose ul[data-type="taskList"] {
+    list-style: none;
+    padding-left: 0;
+  }
+
+  /* A nested list sits in the item's text column, already indented by the checkbox. */
+  .rooster-prose ul[data-type="taskList"] ul[data-type="taskList"] {
+    padding-left: 0;
+  }
+
+  .rooster-prose ul[data-type="taskList"] > li {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  /*
+   * The checkbox: a transparent native input over a 24 px target (WCAG 2.5.8), with the
+   * 16 px box and check drawn by the label in Coop tokens.
+   */
+  .rooster-prose ul[data-type="taskList"] > li > label {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--space-6);
+    height: var(--text-md--line-height);
+    margin-left: calc(-1 * var(--space-1));
+    margin-right: calc(-1 * var(--space-1));
+    flex-shrink: 0;
+    user-select: none;
+  }
+
+  .rooster-prose ul[data-type="taskList"] > li > label::before {
+    content: "";
+    width: var(--space-4);
+    height: var(--space-4);
+    border: var(--border-check) solid var(--color-border-strong);
+    border-radius: var(--radius-xs);
+    background-color: var(--color-bg-app);
+    transition: background-color var(--dur-fast) var(--ease-standard);
+  }
+
+  .rooster-prose ul[data-type="taskList"] > li[data-checked="true"] > label::before {
+    border-color: var(--color-check-done);
+    background-color: var(--color-check-done);
+  }
+
+  /* The check: the bottom and right borders of a small box, rotated. */
+  .rooster-prose ul[data-type="taskList"] > li[data-checked="true"] > label::after {
+    content: "";
+    position: absolute;
+    width: var(--space-1_5);
+    height: var(--space-2);
+    margin-top: calc(-1 * var(--space-0_5));
+    border: solid var(--color-text-on-accent);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+    pointer-events: none;
+  }
+
+  .rooster-prose ul[data-type="taskList"] > li > label:has(input:focus-visible)::before {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: 2px;
+  }
+
+  .rooster-prose ul[data-type="taskList"] > li > label:hover::before {
+    border-color: var(--color-border-hover);
+  }
+
+  .rooster-prose ul[data-type="taskList"] > li[data-checked="true"] > label:hover::before {
+    border-color: var(--color-check-done);
+  }
+
+  .rooster-prose ul[data-type="taskList"] > li > div {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .rooster-prose ul[data-type="taskList"] > li input[type="checkbox"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .rooster-prose ul[data-type="taskList"] > li[data-checked="true"] > div > p {
+    color: var(--color-text-muted);
+    text-decoration: line-through;
+  }
+
+  /* Placeholder (02 §9.2) on the empty first paragraph. */
+  .rooster-prose p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    color: var(--color-text-muted);
+    pointer-events: none;
+  }
+
+  /* Collapsed (> N lines, 02 §9.2): fade out the last two lines without knowing the surface colour. */
+  .rooster-prose-clip {
+    overflow: hidden;
+    mask-image: linear-gradient(
+      to bottom,
+      black calc(100% - 2 * var(--text-md--line-height)),
+      transparent
+    );
+  }
+}

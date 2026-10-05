@@ -1,0 +1,62 @@
+{
+  "label": "Task details",
+  "resize": "Resize the task pane",
+  "loading": "Loading task…",
+  "notFound": "This task doesn’t exist or you don’t have access to it.",
+  "loadFailed": "Couldn’t load this task.",
+  "toolbar": {
+    "label": "Task actions",
+    "complete": "Mark complete",
+    "completed": "Completed",
+    "copyLink": "Copy link",
+    "linkCopied": "Link copied",
+    "duplicate": "Duplicate",
+    "fullScreen": "Full screen",
+    "exitFullScreen": "Exit full screen",
+    "more": "More actions",
+    "delete": "Delete task",
+    "copyId": "Copy task ID",
+    "idCopied": "Task ID copied",
+    "openInNewTab": "Open in new tab",
+    "moveTo": "Move to group",
+    "close": "Close"
+  },
+  "save": {
+    "saving": "Saving…",
+    "saved": "Saved",
+    "offline": "Offline · will sync",
+    "failed": "Couldn’t save",
+    "retry": "Retry"
+  },
+  "breadcrumb": "Parent tasks",
+  "title": {
+    "label": "Task name",
+    "placeholder": "Write a task name"
+  },
+  "props": {
+    "label": "Properties",
+    "due": "Due date",
+    "group": "Group",
+    "groupLabel": "Group in My tasks",
+    "tags": "Tags",
+    "addTag": "Add tag",
+    "created": "Created",
+    "createdBy": "Created by {name} · {ago}",
+    "you": "you",
+    "justNow": "just now"
+  },
+  "description": {
+    "label": "Description",
+    "placeholder": "Add more detail…"
+  },
+  "subtasks": {
+    "label": "Subtasks",
+    "heading": "Subtasks",
+    "progress": "{done}/{total}",
+    "add": "Add subtask"
+  },
+  "dev": {
+    "section": "Detail pane",
+    "live": "Pane on the in-memory list"
+  }
+}

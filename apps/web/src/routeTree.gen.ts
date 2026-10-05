@@ -20,8 +20,10 @@ import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings.index'
 import { Route as AppSettingsProfileRouteImport } from './routes/_app/settings.profile'
 import { Route as AppSettingsSecurityRouteImport } from './routes/_app/settings.security'
-import { Route as AppOOrgSlugMyRouteImport } from './routes/_app/o.$orgSlug.my'
+import { Route as AppOOrgSlugTasksRouteImport } from './routes/_app/o.$orgSlug._tasks'
 import { Route as AppOOrgSlugSettingsRouteImport } from './routes/_app/o.$orgSlug.settings'
+import { Route as AppOOrgSlugTasksMyRouteImport } from './routes/_app/o.$orgSlug._tasks.my'
+import { Route as AppOOrgSlugTasksTTaskIdRouteImport } from './routes/_app/o.$orgSlug._tasks.t.$taskId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -77,15 +79,25 @@ const AppSettingsSecurityRoute = AppSettingsSecurityRouteImport.update({
   path: '/security',
   getParentRoute: () => AppSettingsRoute,
 } as any)
-const AppOOrgSlugMyRoute = AppOOrgSlugMyRouteImport.update({
-  id: '/o/$orgSlug/my',
-  path: '/o/$orgSlug/my',
+const AppOOrgSlugTasksRoute = AppOOrgSlugTasksRouteImport.update({
+  id: '/o/$orgSlug/_tasks',
+  path: '/o/$orgSlug',
   getParentRoute: () => AppRoute,
 } as any)
 const AppOOrgSlugSettingsRoute = AppOOrgSlugSettingsRouteImport.update({
   id: '/o/$orgSlug/settings',
   path: '/o/$orgSlug/settings',
   getParentRoute: () => AppRoute,
+} as any)
+const AppOOrgSlugTasksMyRoute = AppOOrgSlugTasksMyRouteImport.update({
+  id: '/my',
+  path: '/my',
+  getParentRoute: () => AppOOrgSlugTasksRoute,
+} as any)
+const AppOOrgSlugTasksTTaskIdRoute = AppOOrgSlugTasksTTaskIdRouteImport.update({
+  id: '/t/$taskId',
+  path: '/t/$taskId',
+  getParentRoute: () => AppOOrgSlugTasksRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -99,8 +111,10 @@ export interface FileRoutesByFullPath {
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/security': typeof AppSettingsSecurityRoute
   '/settings/': typeof AppSettingsIndexRoute
-  '/o/$orgSlug/my': typeof AppOOrgSlugMyRoute
+  '/o/$orgSlug': typeof AppOOrgSlugTasksRouteWithChildren
   '/o/$orgSlug/settings': typeof AppOOrgSlugSettingsRoute
+  '/o/$orgSlug/my': typeof AppOOrgSlugTasksMyRoute
+  '/o/$orgSlug/t/$taskId': typeof AppOOrgSlugTasksTTaskIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -112,8 +126,10 @@ export interface FileRoutesByTo {
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/security': typeof AppSettingsSecurityRoute
   '/settings': typeof AppSettingsIndexRoute
-  '/o/$orgSlug/my': typeof AppOOrgSlugMyRoute
+  '/o/$orgSlug': typeof AppOOrgSlugTasksRouteWithChildren
   '/o/$orgSlug/settings': typeof AppOOrgSlugSettingsRoute
+  '/o/$orgSlug/my': typeof AppOOrgSlugTasksMyRoute
+  '/o/$orgSlug/t/$taskId': typeof AppOOrgSlugTasksTTaskIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -128,8 +144,10 @@ export interface FileRoutesById {
   '/_app/settings/profile': typeof AppSettingsProfileRoute
   '/_app/settings/security': typeof AppSettingsSecurityRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
-  '/_app/o/$orgSlug/my': typeof AppOOrgSlugMyRoute
+  '/_app/o/$orgSlug/_tasks': typeof AppOOrgSlugTasksRouteWithChildren
   '/_app/o/$orgSlug/settings': typeof AppOOrgSlugSettingsRoute
+  '/_app/o/$orgSlug/_tasks/my': typeof AppOOrgSlugTasksMyRoute
+  '/_app/o/$orgSlug/_tasks/t/$taskId': typeof AppOOrgSlugTasksTTaskIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -144,8 +162,10 @@ export interface FileRouteTypes {
     | '/settings/profile'
     | '/settings/security'
     | '/settings/'
-    | '/o/$orgSlug/my'
+    | '/o/$orgSlug'
     | '/o/$orgSlug/settings'
+    | '/o/$orgSlug/my'
+    | '/o/$orgSlug/t/$taskId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -157,8 +177,10 @@ export interface FileRouteTypes {
     | '/settings/profile'
     | '/settings/security'
     | '/settings'
-    | '/o/$orgSlug/my'
+    | '/o/$orgSlug'
     | '/o/$orgSlug/settings'
+    | '/o/$orgSlug/my'
+    | '/o/$orgSlug/t/$taskId'
   id:
     | '__root__'
     | '/'
@@ -172,8 +194,10 @@ export interface FileRouteTypes {
     | '/_app/settings/profile'
     | '/_app/settings/security'
     | '/_app/settings/'
-    | '/_app/o/$orgSlug/my'
+    | '/_app/o/$orgSlug/_tasks'
     | '/_app/o/$orgSlug/settings'
+    | '/_app/o/$orgSlug/_tasks/my'
+    | '/_app/o/$orgSlug/_tasks/t/$taskId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -264,11 +288,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsSecurityRouteImport
       parentRoute: typeof AppSettingsRoute
     }
-    '/_app/o/$orgSlug/my': {
-      id: '/_app/o/$orgSlug/my'
-      path: '/o/$orgSlug/my'
-      fullPath: '/o/$orgSlug/my'
-      preLoaderRoute: typeof AppOOrgSlugMyRouteImport
+    '/_app/o/$orgSlug/_tasks': {
+      id: '/_app/o/$orgSlug/_tasks'
+      path: '/o/$orgSlug'
+      fullPath: '/o/$orgSlug'
+      preLoaderRoute: typeof AppOOrgSlugTasksRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/o/$orgSlug/settings': {
@@ -277,6 +301,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/o/$orgSlug/settings'
       preLoaderRoute: typeof AppOOrgSlugSettingsRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_app/o/$orgSlug/_tasks/my': {
+      id: '/_app/o/$orgSlug/_tasks/my'
+      path: '/my'
+      fullPath: '/o/$orgSlug/my'
+      preLoaderRoute: typeof AppOOrgSlugTasksMyRouteImport
+      parentRoute: typeof AppOOrgSlugTasksRoute
+    }
+    '/_app/o/$orgSlug/_tasks/t/$taskId': {
+      id: '/_app/o/$orgSlug/_tasks/t/$taskId'
+      path: '/t/$taskId'
+      fullPath: '/o/$orgSlug/t/$taskId'
+      preLoaderRoute: typeof AppOOrgSlugTasksTTaskIdRouteImport
+      parentRoute: typeof AppOOrgSlugTasksRoute
     }
   }
 }
@@ -297,17 +335,30 @@ const AppSettingsRouteWithChildren = AppSettingsRoute._addFileChildren(
   AppSettingsRouteChildren,
 )
 
+interface AppOOrgSlugTasksRouteChildren {
+  AppOOrgSlugTasksMyRoute: typeof AppOOrgSlugTasksMyRoute
+  AppOOrgSlugTasksTTaskIdRoute: typeof AppOOrgSlugTasksTTaskIdRoute
+}
+
+const AppOOrgSlugTasksRouteChildren: AppOOrgSlugTasksRouteChildren = {
+  AppOOrgSlugTasksMyRoute: AppOOrgSlugTasksMyRoute,
+  AppOOrgSlugTasksTTaskIdRoute: AppOOrgSlugTasksTTaskIdRoute,
+}
+
+const AppOOrgSlugTasksRouteWithChildren =
+  AppOOrgSlugTasksRoute._addFileChildren(AppOOrgSlugTasksRouteChildren)
+
 interface AppRouteChildren {
   AppAdminRoute: typeof AppAdminRoute
   AppSettingsRoute: typeof AppSettingsRouteWithChildren
-  AppOOrgSlugMyRoute: typeof AppOOrgSlugMyRoute
+  AppOOrgSlugTasksRoute: typeof AppOOrgSlugTasksRouteWithChildren
   AppOOrgSlugSettingsRoute: typeof AppOOrgSlugSettingsRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppAdminRoute: AppAdminRoute,
   AppSettingsRoute: AppSettingsRouteWithChildren,
-  AppOOrgSlugMyRoute: AppOOrgSlugMyRoute,
+  AppOOrgSlugTasksRoute: AppOOrgSlugTasksRouteWithChildren,
   AppOOrgSlugSettingsRoute: AppOOrgSlugSettingsRoute,
 }
 

@@ -4,7 +4,7 @@ import { type KeyboardEvent, type MouseEvent, memo, useLayoutEffect, useRef } fr
 import { useTranslation } from 'react-i18next';
 import { primaryKeys } from '../../keymap';
 import { cn } from '../../lib/cn';
-import { groupRowId, useListStore } from '../../state/list-store';
+import { groupRowId, useListUi } from '../../state/list-store';
 import { iconStrokeWidth } from '../../ui/button';
 import { IconButton } from '../../ui/icon-button';
 import { Menu, MenuItem, MenuPopover, MenuTrigger } from '../../ui/menu';
@@ -18,7 +18,7 @@ import { placeCaret } from './title-input';
 function GroupNameInput({ groupId, name }: { groupId: string; name: string }) {
   const { t } = useTranslation('list');
   const { controller } = useListContext();
-  const editing = useListStore((s) => s.editing);
+  const editing = useListUi((s) => s.editing);
   const input = useRef<HTMLInputElement>(null);
   const done = useRef(false);
 
@@ -32,7 +32,7 @@ function GroupNameInput({ groupId, name }: { groupId: string; name: string }) {
   const close = (commit: boolean) => {
     done.current = true;
     if (commit) controller.renameGroup(groupId, input.current?.value ?? '');
-    useListStore.getState().navigate(groupRowId(groupId));
+    controller.ui().navigate(groupRowId(groupId));
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -59,7 +59,7 @@ function GroupNameInput({ groupId, name }: { groupId: string; name: string }) {
         if (!done.current) {
           done.current = true;
           controller.renameGroup(groupId, input.current?.value ?? '');
-          const store = useListStore.getState();
+          const store = controller.ui();
           if (store.editing?.rowId === groupRowId(groupId))
             store.set({ editing: null, mode: 'navigate' });
         }
@@ -83,13 +83,11 @@ export const GroupHeader = memo(function GroupHeader({ row }: GroupHeaderProps) 
   const { controller } = useListContext();
   const { group, collapsed, count, first, id } = row;
   const inbox = group.kind === 'inbox';
-  const selected = useListStore((s) => Boolean(s.selected[id]));
-  const renaming = useListStore((s) => s.editing?.rowId === id);
-  const dropInside = useListStore((s) => s.drop?.rowId === id && s.drop.edge === 'inside');
-  const isSource = useListStore((s) => Boolean(s.dragging?.includes(id)));
-  const deleteOpen = useListStore(
-    (s) => s.popover?.kind === 'groupDelete' && s.popover.rowId === id,
-  );
+  const selected = useListUi((s) => Boolean(s.selected[id]));
+  const renaming = useListUi((s) => s.editing?.rowId === id);
+  const dropInside = useListUi((s) => s.drop?.rowId === id && s.drop.edge === 'inside');
+  const isSource = useListUi((s) => Boolean(s.dragging?.includes(id)));
+  const deleteOpen = useListUi((s) => s.popover?.kind === 'groupDelete' && s.popover.rowId === id);
   const headerRef = useRef<HTMLDivElement | null>(null);
 
   const onRowClick = (event: MouseEvent<HTMLDivElement>) => {
@@ -97,7 +95,7 @@ export const GroupHeader = memo(function GroupHeader({ row }: GroupHeaderProps) 
     if (target.closest('button,input,[data-no-row-press]')) return;
     // A click on the name renames (02 §4); the Inbox name is not editable.
     if (target.closest('[data-focus-target]') && !inbox) controller.startRename(group.id);
-    else useListStore.getState().select(id);
+    else controller.ui().select(id);
   };
 
   const canDelete = controller.canDeleteGroup(group.id);
@@ -116,7 +114,7 @@ export const GroupHeader = memo(function GroupHeader({ row }: GroupHeaderProps) 
       onFocus={(event) => {
         // Tabbing onto the title (or name) selects the row in Navigate.
         if (!(event.target as Element).matches('[data-focus-target]')) return;
-        const store = useListStore.getState();
+        const store = controller.ui();
         if (store.cursor !== id && store.mode === 'navigate') store.select(id);
       }}
       className={cn(

@@ -1,4 +1,5 @@
 import {
+  diffDays,
   dueInstant,
   formatTime,
   type IsoDate,
@@ -48,9 +49,21 @@ export function toLocalDue(value: DueValue, timezone: string): LocalDue | null {
   return { date: todayIn(timezone, instant), time: hhmmIn(timezone, instant) };
 }
 
-/** The stored value for a picked local date and time; times carry the viewer's zone. */
-export function toDueValue(local: LocalDue, timezone: string): DueValue {
-  return { dueDate: local.date, dueTime: local.time, dueTz: local.time ? timezone : null };
+/**
+ * The stored value for a picked local date and time; times carry the viewer's zone.
+ * A start date is kept only when it is before the due date (FR-DATE-2).
+ */
+export function toDueValue(
+  local: LocalDue,
+  timezone: string,
+  startDate: IsoDate | null = null,
+): DueValue {
+  return {
+    dueDate: local.date,
+    dueTime: local.time,
+    dueTz: local.time ? timezone : null,
+    startDate: startDate && diffDays(startDate, local.date) < 0 ? startDate : null,
+  };
 }
 
 export interface DateText {

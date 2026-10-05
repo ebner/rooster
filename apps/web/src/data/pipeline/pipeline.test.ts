@@ -1,11 +1,11 @@
 import { type ListOp, listOps, normalizeMyList, tasksInGroup } from '@rooster/core/reducers';
-import type { MyList, Task } from '@rooster/core/schemas';
+import type { MyList, Task, TaskDetail } from '@rooster/core/schemas';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { useSyncStore } from '../../state/sync-store';
 import { ApiError } from '../errors';
 import { createFixtureTransport } from './fixture-transport';
-import { ListPipeline, myListKey } from './pipeline';
+import { deepEqual, ListPipeline, myListKey, taskDetailKey } from './pipeline';
 import {
   classifyFailure,
   type ListTransport,
@@ -75,6 +75,8 @@ describe('ListPipeline', () => {
     const transport = fixture();
     const sent: string[] = [];
     const spy: ListTransport = {
+      fetchTask: () => Promise.reject(new Error('unused')),
+      fetchTags: async () => [],
       fetchMyList: transport.fetchMyList,
       send: (op, org) => {
         sent.push(op.kind);
@@ -112,6 +114,8 @@ describe('ListPipeline', () => {
       release = resolve;
     });
     const slow: ListTransport = {
+      fetchTask: () => Promise.reject(new Error('unused')),
+      fetchTags: async () => [],
       fetchMyList: transport.fetchMyList,
       send: async (op, org) => {
         await gate;
@@ -169,6 +173,8 @@ describe('ListPipeline', () => {
     const transport = fixture();
     const failures: unknown[] = [new RateLimitedError(2000), new ApiError('unauthenticated', 401)];
     const flaky: ListTransport = {
+      fetchTask: () => Promise.reject(new Error('unused')),
+      fetchTags: async () => [],
       fetchMyList: transport.fetchMyList,
       send: async (op, org) => {
         const failure = failures.shift();
@@ -202,4 +208,49 @@ describe('ListPipeline', () => {
     pipeline.seed(orgId, normalizeMyList(orgId, emptyList()));
     expect(pipeline.view(orgId)).toBeDefined();
   });
+});
+
+describe('ListPipeline, P3 caches', () => {
+  test('pending ops are exposed, and confirmed ops move into cached task details', async () => {
+    const transport = fixture();
+    const { queryClient, pipeline } = setup(transport);
+    const state = await pipeline.fetch(orgId);
+    const a = Object.values(state.tasks).find((t) => t.title === 'A') as Task;
+    queryClient.setQueryData(taskDetailKey(a.id), await transport.fetchTask(a.id));
+    const seen: number[] = [];
+    const unsubscribe = pipeline.subscribe(() => seen.push(pipeline.getVersion()));
+    pipeline.enqueue(orgId, [listOps.patchTask(a.id, { description: '# Notes' })], { userId });
+    expect(pipeline.pendingOps(orgId).map((op) => op.kind)).toEqual(['task.patch']);
+    await pipeline.idle();
+    expect(pipeline.pendingOps(orgId)).toEqual([]);
+    expect(queryClient.getQueryData<TaskDetail>(taskDetailKey(a.id))?.description).toBe('# Notes');
+    expect(seen.length).toBeGreaterThanOrEqual(2);
+    unsubscribe();
+  });
+
+  test('a rejected re-parent is dropped, reverted and reported', async () => {
+    const transport = createFixtureTransport({
+      userId,
+      tasks: { 1: [{ title: 'P', subtasks: ['C'] }] },
+    });
+    const { pipeline } = setup(transport);
+    const tasks = Object.values((await pipeline.fetch(orgId)).tasks);
+    const p = tasks.find((t) => t.title === 'P') as Task;
+    const c = tasks.find((t) => t.title === 'C') as Task;
+    const dropped: string[] = [];
+    pipeline.onDropped(({ error }) => dropped.push(error.code));
+    pipeline.enqueue(orgId, [listOps.patchTask(p.id, { parentId: c.id })], { userId });
+    await pipeline.idle();
+    expect(dropped).toEqual(['subtask_cycle']);
+    expect(pipeline.view(orgId)?.tasks[p.id]?.parentId).toBeNull();
+  });
+});
+
+test('deepEqual ignores key order and undefined members', () => {
+  expect(deepEqual({ a: 1, b: { c: [1, 2] } }, { b: { c: [1, 2] }, a: 1, d: undefined })).toBe(
+    true,
+  );
+  expect(deepEqual({ a: 1 }, { a: 2 })).toBe(false);
+  expect(deepEqual([1], { 0: 1 })).toBe(false);
+  expect(deepEqual(null, {})).toBe(false);
 });

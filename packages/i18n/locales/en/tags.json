@@ -1,0 +1,40 @@
+{
+  "picker": {
+    "label": "Tags for {title}",
+    "labelMany": "Tags for {count, plural, one {# task} other {# tasks}}",
+    "filter": "Filter tags",
+    "placeholder": "Add a tag…",
+    "list": "Tags",
+    "empty": "No tags yet. Type a name to create one.",
+    "create": "Create “{name}”"
+  },
+  "filter": {
+    "button": "Filter",
+    "label": "Filter by tag",
+    "active": "{count, plural, one {# tag} other {# tags}}",
+    "clear": "Clear filter",
+    "empty": "No tags in this organisation yet",
+    "announce": "Showing tasks tagged {names}",
+    "cleared": "Tag filter cleared"
+  },
+  "settings": {
+    "title": "Tags",
+    "description": "Tags are shared by everyone in this organisation.",
+    "empty": "No tags yet. Type #name in a task title to create one.",
+    "color": "Colour of {name}",
+    "rename": "Rename {name}",
+    "merge": "Merge into…",
+    "mergeLabel": "Merge {name} into",
+    "mergeConfirm": "Merge “{name}” into “{into}”? Every task tagged “{name}” gets “{into}”, and “{name}” is deleted.",
+    "mergeAction": "Merge tags",
+    "delete": "Delete {name}",
+    "deleteConfirm": "Delete “{name}”? It is removed from every task. This can’t be undone.",
+    "deleteAction": "Delete tag",
+    "cancel": "Cancel",
+    "renamed": "Tag renamed",
+    "merged": "Merged into “{name}”",
+    "deleted": "Deleted “{name}”",
+    "nameTaken": "A tag with that name already exists",
+    "options": "Options for {name}"
+  }
+}

@@ -24,7 +24,7 @@ export interface DateCellProps {
   ctx: ViewerDateContext;
   /** Completed tasks show the muted `done` label. */
   completed?: boolean | undefined;
-  /** P3 start date (range label). */
+  /** Overrides `value.startDate` for the range label; normally left out. */
   startDate?: IsoDate | null | undefined;
   /** Shows the label only: no picker, no clearing, no tab stop. */
   isReadOnly?: boolean | undefined;

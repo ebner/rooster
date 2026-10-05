@@ -356,3 +356,15 @@
     outline-offset: 2px;
   }
 }
+
+/*
+ * List rendering budget (AC-2.12, 04 §5.4): rows outside the viewport skip style, layout and
+ * paint. Rows have a fixed height, so nothing shifts. Paint containment would clip the drop
+ * line (it straddles row edges) and the title's tag suggestions, so it is off while dragging
+ * and on the row being edited.
+ */
+@layer components {
+  [data-list-root]:not([data-dragging]) > [data-cv] {
+    content-visibility: auto;
+  }
+}

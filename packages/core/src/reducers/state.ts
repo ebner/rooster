@@ -1,11 +1,25 @@
 import { compareKeys, generateKeyBetween, generateNKeysBetween } from '../ordering.ts';
-import type { Group, MyList, OrderingIntent, Task } from '../schemas/list.ts';
+import {
+  type Group,
+  type MyList,
+  type OrderingIntent,
+  SUBTASK_DEPTH_MAX,
+  type Task,
+} from '../schemas/list.ts';
 
-/** A task soft-deleted on this client; `withGroupId` marks tasks deleted together with a group. */
+/**
+ * A task soft-deleted on this client. `withGroupId` marks tasks deleted together with a group;
+ * `withTaskId` marks descendants deleted by the cascade of that task (05 §4.3), which are
+ * restored with it.
+ */
 export interface DeletedTask {
   task: Task;
   withGroupId?: string;
+  withTaskId?: string;
 }
+
+/** 05 §4.3 / ADR 0007: depth = number of ancestors, at most this many. */
+export { SUBTASK_DEPTH_MAX } from '../schemas/list.ts';
 
 /**
  * The normalized My tasks cache (04 §5.1 `['my-list', orgId]`). Optimistic reducers produce a
@@ -157,6 +171,88 @@ export function groupIdOf(state: ListState, taskId: string): string | undefined 
   return (
     state.tasks[taskId]?.placement?.groupId ?? state.deletedTasks[taskId]?.task.placement?.groupId
   );
+}
+
+interface SubtaskKeyed {
+  readonly id: string;
+  readonly subtaskPosition: string | null;
+}
+
+/** Sibling order: `ORDER BY subtask_position, id`. */
+export function compareSubtasks(a: SubtaskKeyed, b: SubtaskKeyed): number {
+  return compareKeys(a.subtaskPosition ?? '', b.subtaskPosition ?? '') || compareKeys(a.id, b.id);
+}
+
+/** The live direct subtasks of `parentId`, in sibling order. */
+export function childrenOf(state: ListState, parentId: string): Task[] {
+  return Object.values(state.tasks)
+    .filter((t) => t.parentId === parentId)
+    .sort(compareSubtasks);
+}
+
+/** Children per parent in one pass, each list in sibling order (for row building). */
+export function childrenIndex(tasks: Iterable<Task>): Map<string, Task[]> {
+  const index = new Map<string, Task[]>();
+  for (const task of tasks) {
+    if (task.parentId === null) continue;
+    const list = index.get(task.parentId);
+    if (list) list.push(task);
+    else index.set(task.parentId, [task]);
+  }
+  for (const list of index.values()) list.sort(compareSubtasks);
+  return index;
+}
+
+/** Every live descendant of `id`, parents before their children. */
+export function descendantIds(state: ListState, id: string): string[] {
+  const index = childrenIndex(Object.values(state.tasks));
+  const out: string[] = [];
+  const queue = [id];
+  for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+    for (const child of index.get(next) ?? []) {
+      out.push(child.id);
+      queue.push(child.id);
+    }
+  }
+  return out;
+}
+
+/** Ancestors known to the state, from the direct parent up (stops at a missing one). */
+export function ancestorsOf(state: ListState, id: string): Task[] {
+  const out: Task[] = [];
+  const seen = new Set([id]);
+  let parentId = state.tasks[id]?.parentId ?? null;
+  while (parentId !== null && !seen.has(parentId)) {
+    const parent = state.tasks[parentId];
+    if (!parent) break;
+    out.push(parent);
+    seen.add(parentId);
+    parentId = parent.parentId;
+  }
+  return out;
+}
+
+/** Nesting level of a task: 0 for a top-level task, 1 for its subtasks, and so on. */
+export function depthOf(state: ListState, id: string): number {
+  return ancestorsOf(state, id).length;
+}
+
+/** How many levels of subtasks hang below `id` (0 without subtasks). */
+export function subtreeHeight(state: ListState, id: string): number {
+  const index = childrenIndex(Object.values(state.tasks));
+  const height = (taskId: string, guard: number): number => {
+    if (guard > SUBTASK_DEPTH_MAX + 1) return guard;
+    let max = 0;
+    for (const child of index.get(taskId) ?? [])
+      max = Math.max(max, 1 + height(child.id, guard + 1));
+    return max;
+  };
+  return height(id, 0);
+}
+
+/** Siblings as `Keyed` items (by subtask position), for `keysForIntent`. */
+export function subtaskKeyed(tasks: readonly Task[]): Keyed[] {
+  return tasks.map((t) => ({ id: t.id, position: t.subtaskPosition ?? '' }));
 }
 
 export function withTask(state: ListState, task: Task): ListState {

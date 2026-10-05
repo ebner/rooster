@@ -13,14 +13,24 @@ import type { Platform } from './lib/platform';
  * Scopes:
  * - `global`: modifier chords that work even while typing.
  * - `navigate`: single keys in Navigate, never while a text input has focus.
- * - `list`: list keys in both modes (modifier chords and Tab chords).
+ * - `list`: list keys in both modes (modifier chords and Tab chords). They also work with focus
+ *   in the detail pane, where they act on the pane's task.
  * - `edit`: handled by the focused title input itself.
  * - `drag`: handled by a focused drag handle.
  * - `picker`: handled inside the date popover (matched by `event.code`, 02 §7).
+ * - `editor`: handled by the description editor itself (features/editor, 02 §9.2).
  */
-export type ShortcutScope = 'global' | 'navigate' | 'list' | 'edit' | 'drag' | 'picker';
+export type ShortcutScope = 'global' | 'navigate' | 'list' | 'edit' | 'drag' | 'picker' | 'editor';
 
-export type ShortcutSection = 'general' | 'navigation' | 'editing' | 'moving' | 'groups' | 'dates';
+export type ShortcutSection =
+  | 'general'
+  | 'navigation'
+  | 'editing'
+  | 'moving'
+  | 'groups'
+  | 'pane'
+  | 'editor'
+  | 'dates';
 
 export interface ShortcutDefinition {
   /** Alternatives; the first is the one shown in tooltips and menus. */
@@ -66,6 +76,10 @@ export const keymap = {
   dateNavigate: { keys: ['D'], scope: 'navigate', section: 'editing' },
   moveToNavigate: { keys: ['M'], scope: 'navigate', section: 'moving' },
   deleteNavigate: { keys: ['Delete', 'Backspace'], scope: 'navigate', section: 'editing' },
+  addSubtaskNavigate: { keys: ['S'], scope: 'navigate', section: 'editing' },
+  tagPickerNavigate: { keys: ['T', '#'], scope: 'navigate', section: 'editing' },
+  openPane: { keys: ['O'], scope: 'navigate', section: 'pane' },
+  peekPane: { keys: ['Space'], scope: 'navigate', section: 'pane' },
 
   // Edit (the title input).
   newBelow: { keys: ['Enter'], scope: 'edit', section: 'editing' },
@@ -88,6 +102,12 @@ export const keymap = {
   moveToGroupTop: { keys: ['Alt+Shift+ArrowUp'], scope: 'list', section: 'moving' },
   moveToGroupBottom: { keys: ['Alt+Shift+ArrowDown'], scope: 'list', section: 'moving' },
   newGroup: { keys: ['Tab+N'], scope: 'list', section: 'groups' },
+  addSubtask: { keys: ['Tab+S'], scope: 'list', section: 'editing' },
+  tagPicker: { keys: ['Tab+T'], scope: 'list', section: 'editing' },
+  duplicate: { keys: ['Mod+D'], scope: 'list', section: 'editing' },
+  openPaneFocus: { keys: ['Tab+Enter'], scope: 'list', section: 'pane' },
+  paneFullScreen: { keys: ['Tab+X'], scope: 'list', section: 'pane' },
+  focusDescription: { keys: ['Tab+R'], scope: 'list', section: 'pane' },
   renameGroup: { keys: ['F2'], scope: 'navigate', section: 'groups' },
 
   // Keyboard drag on a focused handle (02 §5).
@@ -95,6 +115,14 @@ export const keymap = {
   dragMove: { keys: ['ArrowUp', 'ArrowDown'], scope: 'drag', section: 'moving' },
   dragJumpGroup: { keys: ['Ctrl+ArrowUp', 'Ctrl+ArrowDown'], scope: 'drag', section: 'moving' },
   dragCancel: { keys: ['Escape'], scope: 'drag', section: 'moving' },
+
+  // The description editor (features/editor binds the same keys).
+  editorBold: { keys: ['Mod+B'], scope: 'editor', section: 'editor' },
+  editorItalic: { keys: ['Mod+I'], scope: 'editor', section: 'editor' },
+  editorStrike: { keys: ['Mod+Shift+S'], scope: 'editor', section: 'editor' },
+  editorCode: { keys: ['Mod+E'], scope: 'editor', section: 'editor' },
+  editorLink: { keys: ['Mod+K'], scope: 'editor', section: 'editor' },
+  editorToolbar: { keys: ['Alt+F10'], scope: 'editor', section: 'editor' },
 
   // Date popover quick chips (features/dates/quick-dates.ts matches them by code).
   dateToday: { keys: ['Alt+T'], scope: 'picker', section: 'dates' },

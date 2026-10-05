@@ -9,6 +9,10 @@ export interface ListContextValue {
   parseTitles: boolean;
   /** Sorted views disable dragging (none in P2). */
   dragEnabled: boolean;
+  /** Opens the detail pane on a task (row body click, O, Tab+Enter); `focus` moves focus there. */
+  onOpenTask?: ((taskId: string, focus: boolean) => void) | undefined;
+  /** The `aria-level` rows start at (2 in My tasks; the pane's subtask list starts deeper). */
+  baseLevel?: number | undefined;
 }
 
 export const ListContext = createContext<ListContextValue | null>(null);

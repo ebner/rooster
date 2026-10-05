@@ -9,7 +9,8 @@
     "addTask": "Add task",
     "firstRunHint": "Type a task and press Enter",
     "colonChip": "↵ again to turn into group “{name}”",
-    "pasteChip": "Create {count, plural, one {# task} other {# tasks}}? ↵"
+    "pasteChip": "Create {count, plural, one {# task} other {# tasks}}? ↵",
+    "breadcrumb": "{title} ›"
   },
   "group": {
     "untitled": "New group",
@@ -51,7 +52,8 @@
     "date": "Date",
     "moveTo": "Move to",
     "delete": "Delete",
-    "clear": "Clear selection"
+    "clear": "Clear selection",
+    "tag": "Tag"
   },
   "header": {
     "showCompleted": "Show completed",
@@ -60,7 +62,8 @@
   },
   "hint": {
     "emptyTitle": "Title can’t be empty",
-    "useTabDelete": "Use Tab+Delete to delete tasks with content"
+    "useTabDelete": "Use Tab+Delete to delete tasks with content",
+    "subtaskDepth": "Subtasks can only be nested {max} levels deep"
   },
   "undo": {
     "action": "Undo",
@@ -82,7 +85,10 @@
     "groupSplit": "Group created with {count, plural, one {# task} other {# tasks}} from above",
     "groupDeleted": "Deleted group “{name}”",
     "groupMoved": "Group moved",
-    "renamed": "Group renamed"
+    "renamed": "Group renamed",
+    "duplicated": "{count, plural, one {Task duplicated} other {# tasks duplicated}}",
+    "tagged": "Tag added",
+    "untagged": "Tag removed"
   },
   "dnd": {
     "handleRole": "Drag handle",
@@ -105,7 +111,12 @@
       "inbox_immutable": "the Inbox can’t be changed that way",
       "validation_failed": "the change wasn’t valid",
       "forbidden": "you don’t have access",
-      "idempotency_key_reuse": "the change was sent twice"
+      "idempotency_key_reuse": "the change was sent twice",
+      "subtask_cycle": "a task can’t be a subtask of its own subtask",
+      "subtask_depth": "subtasks can only be nested 5 levels deep",
+      "invalid_parent": "the parent task isn’t available",
+      "tag_name_taken": "a tag with that name already exists",
+      "not_subtask": "only subtasks can be reordered that way"
     }
   },
   "state": {
@@ -124,7 +135,9 @@
       "editing": "Edit",
       "moving": "Move",
       "groups": "Groups",
-      "dates": "Date picker"
+      "dates": "Date picker",
+      "pane": "Detail pane",
+      "editor": "Description editor"
     },
     "search": "Search",
     "toggleSidebar": "Toggle sidebar",
@@ -142,8 +155,8 @@
     "selectLast": "Last row",
     "selectAll": "Select group, then all",
     "toggleInSelection": "Add to or remove from selection",
-    "collapse": "Collapse group",
-    "expand": "Expand group",
+    "collapse": "Collapse group or parent task",
+    "expand": "Expand group or parent task",
     "toggleCompleted": "Show or hide completed",
     "editTitle": "Edit title",
     "newBelowNavigate": "New task below",
@@ -179,7 +192,23 @@
     "dateTomorrow": "Tomorrow",
     "dateNextWeek": "Next week",
     "dateWeekend": "Weekend",
-    "dateNone": "No date"
+    "dateNone": "No date",
+    "addSubtaskNavigate": "Add subtask",
+    "tagPickerNavigate": "Add tag",
+    "openPane": "Open the detail pane",
+    "peekPane": "Peek: show or hide the pane",
+    "addSubtask": "Add subtask",
+    "tagPicker": "Add tag",
+    "duplicate": "Duplicate",
+    "openPaneFocus": "Open the pane and edit its title",
+    "paneFullScreen": "Pane full screen",
+    "focusDescription": "Edit the description",
+    "editorBold": "Bold",
+    "editorItalic": "Italic",
+    "editorStrike": "Strikethrough",
+    "editorCode": "Inline code",
+    "editorLink": "Link (with text selected)",
+    "editorToolbar": "Focus the formatting toolbar"
   },
   "dev": {
     "section": "My tasks list",
@@ -199,5 +228,16 @@
       "offsite": "Plan the team offsite",
       "done": "Send the slides"
     }
+  },
+  "subtasks": {
+    "add": "Add subtask",
+    "expand": "Show subtasks of {title}",
+    "collapse": "Hide subtasks of {title}",
+    "progress": "{done} of {total} subtasks done"
+  },
+  "tags": {
+    "rowLabel": "Tags: {names}",
+    "suggestions": "Tag suggestions",
+    "create": "Create “{name}”"
   }
 }

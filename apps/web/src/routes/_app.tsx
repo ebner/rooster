@@ -93,7 +93,9 @@ function AppLayout() {
 
   const { user, orgs } = me.data;
   const activeOrg = orgSlug ? findOrg(orgs, orgSlug) : null;
-  const activeView = location.pathname.endsWith('/my') ? 'my' : null;
+  // The pane (`/t/:taskId`) sits over My tasks (02 §2).
+  const activeView =
+    location.pathname.endsWith('/my') || location.pathname.includes('/t/') ? 'my' : null;
   const failed = () => toast({ message: t('error.saveFailed'), tone: 'danger' });
 
   return (

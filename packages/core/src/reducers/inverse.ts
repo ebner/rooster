@@ -1,7 +1,14 @@
 import { BULK_MAX, type BulkOp, type TaskPatch } from '../schemas/list.ts';
 import { type ApplyContext, applyOp, touchesDue } from './apply.ts';
 import { type ListOpSpec, listOps } from './ops.ts';
-import { type ListState, normalGroups, orderedGroups, tasksInGroup } from './state.ts';
+import {
+  childrenOf,
+  intentAt,
+  type ListState,
+  normalGroups,
+  orderedGroups,
+  tasksInGroup,
+} from './state.ts';
 
 /**
  * The ops that undo `op` when applied right after it (02 §3.7: undo is inverse mutations sent
@@ -13,8 +20,11 @@ export function inverseOf(op: ListOpSpec, before: ListState, ctx: ApplyContext):
   switch (op.kind) {
     case 'task.create':
       return before.tasks[id] || before.deletedTasks[id] ? [] : [listOps.deleteTask(id)];
-    case 'task.patch':
-      return inversePatch(before, id, op.payload);
+    case 'task.patch': {
+      const fields = inversePatch(before, id, op.payload);
+      if (op.payload.parentId === undefined) return fields;
+      return [...fields, ...inverseReparent(before, applyOp(before, op, ctx), id)];
+    }
     case 'task.complete': {
       const task = before.tasks[id];
       if (!task || (task.completedAt !== null) === op.payload.completed) return [];
@@ -28,6 +38,28 @@ export function inverseOf(op: ListOpSpec, before: ListState, ctx: ApplyContext):
       return restorePlacements(before, applyOp(before, op, ctx), [id], ctx);
     case 'task.bulk':
       return inverseBulk(before, op.entityId, op.payload, ctx);
+    case 'task.reorder': {
+      const after = applyOp(before, op, ctx);
+      const task = before.tasks[id];
+      if (!task?.parentId || after.tasks[id]?.subtaskPosition === task.subtaskPosition) return [];
+      return [listOps.reorderSubtask(id, siblingSlot(before, id, task.parentId))];
+    }
+    case 'task.duplicate':
+      return applyOp(before, op, ctx) === before ? [] : [listOps.deleteTask(op.payload.id)];
+    case 'task.expanded':
+      return before.expandedTaskIds.includes(id) === op.payload.expanded
+        ? []
+        : [listOps.setExpanded(id, !op.payload.expanded)];
+    case 'task.addTag':
+    case 'task.removeTag': {
+      const add = op.kind === 'task.addTag';
+      const task = before.tasks[id];
+      if (!task || task.tagIds.includes(op.payload.tagId) === add) return [];
+      return [add ? listOps.removeTag(id, op.payload.tagId) : listOps.addTag(id, op.payload.tagId)];
+    }
+    case 'tag.create':
+      // A tag created on the way stays; undo removes it from the task instead.
+      return [];
     case 'group.create': {
       if (before.groups[id] || before.deletedGroups[id]) return [];
       const after = applyOp(before, op, ctx);
@@ -116,6 +148,44 @@ function inversePatch(before: ListState, id: string, p: TaskPatch): ListOpSpec[]
       : {}),
   };
   return Object.keys(undo).length === 0 ? [] : [listOps.patchTask(id, undo)];
+}
+
+/** The intent that puts `id` back between its current siblings in `before`. */
+function siblingSlot(before: ListState, id: string, parentId: string) {
+  const order = childrenOf(before, parentId);
+  const index = order.findIndex((t) => t.id === id);
+  return intentAt(
+    order.filter((t) => t.id !== id),
+    index,
+  );
+}
+
+/**
+ * Undoing a re-parent: back under the old parent at its old sibling slot, or back to top level
+ * at its old placement (the patch lands it at the top of the Inbox; a move restores the spot).
+ */
+function inverseReparent(before: ListState, after: ListState, id: string): ListOpSpec[] {
+  const task = before.tasks[id];
+  const moved = after.tasks[id];
+  if (!task || !moved || moved.parentId === task.parentId) return [];
+  const ops: ListOpSpec[] = [listOps.patchTask(id, { parentId: task.parentId })];
+  if (task.parentId !== null) {
+    ops.push(listOps.reorderSubtask(id, siblingSlot(before, id, task.parentId)));
+  } else if (task.placement) {
+    const groupId = task.placement.groupId;
+    const order = tasksInGroup(before, groupId);
+    const index = order.findIndex((t) => t.id === id);
+    ops.push(
+      listOps.moveTask(id, {
+        groupId,
+        ...intentAt(
+          order.filter((t) => t.id !== id),
+          index,
+        ),
+      }),
+    );
+  }
+  return ops;
 }
 
 type Due = {

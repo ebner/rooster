@@ -1,0 +1,62 @@
+{
+  "label": "Uppgiftsdetaljer",
+  "resize": "Ändra panelens bredd",
+  "loading": "Läser in uppgiften…",
+  "notFound": "Uppgiften finns inte eller så har du inte åtkomst till den.",
+  "loadFailed": "Det gick inte att läsa in uppgiften.",
+  "toolbar": {
+    "label": "Uppgiftsåtgärder",
+    "complete": "Markera som klar",
+    "completed": "Klar",
+    "copyLink": "Kopiera länk",
+    "linkCopied": "Länken har kopierats",
+    "duplicate": "Duplicera",
+    "fullScreen": "Helskärm",
+    "exitFullScreen": "Lämna helskärm",
+    "more": "Fler åtgärder",
+    "delete": "Ta bort uppgift",
+    "copyId": "Kopiera uppgifts-ID",
+    "idCopied": "Uppgifts-ID har kopierats",
+    "openInNewTab": "Öppna i ny flik",
+    "moveTo": "Flytta till grupp",
+    "close": "Stäng"
+  },
+  "save": {
+    "saving": "Sparar…",
+    "saved": "Sparat",
+    "offline": "Offline · synkas senare",
+    "failed": "Kunde inte spara",
+    "retry": "Försök igen"
+  },
+  "breadcrumb": "Överordnade uppgifter",
+  "title": {
+    "label": "Uppgiftens namn",
+    "placeholder": "Skriv ett namn på uppgiften"
+  },
+  "props": {
+    "label": "Egenskaper",
+    "due": "Förfallodatum",
+    "group": "Grupp",
+    "groupLabel": "Grupp i Mina uppgifter",
+    "tags": "Taggar",
+    "addTag": "Lägg till tagg",
+    "created": "Skapad",
+    "createdBy": "Skapad av {name} · {ago}",
+    "you": "dig",
+    "justNow": "just nu"
+  },
+  "description": {
+    "label": "Beskrivning",
+    "placeholder": "Lägg till mer information…"
+  },
+  "subtasks": {
+    "label": "Deluppgifter",
+    "heading": "Deluppgifter",
+    "progress": "{done}/{total}",
+    "add": "Lägg till deluppgift"
+  },
+  "dev": {
+    "section": "Detaljpanel",
+    "live": "Panel på listan i minnet"
+  }
+}

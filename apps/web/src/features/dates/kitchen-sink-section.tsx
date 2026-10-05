@@ -22,7 +22,7 @@ const labelSamples = [
   ['later', due('2026-10-24')],
   ['nextYear', due('2027-01-15')],
   ['done', due('2026-10-03')],
-  ['range', due('2026-10-12')],
+  ['range', due('2026-10-12', null, '2026-10-10')],
 ] as const;
 
 function CellSample({
@@ -58,12 +58,7 @@ export function DatesSection() {
       <Group title={t('dev.labels')}>
         {labelSamples.map(([state, value]) => (
           <Specimen key={state} label={t(`dev.state.${state}`)}>
-            <DateLabel
-              value={value}
-              ctx={ctx}
-              completed={state === 'done'}
-              startDate={state === 'range' ? '2026-10-10' : null}
-            />
+            <DateLabel value={value} ctx={ctx} completed={state === 'done'} />
           </Specimen>
         ))}
       </Group>
@@ -84,6 +79,11 @@ export function DatesSection() {
           isReadOnly
         />
         <CellSample label={t('dev.live')} initial={due(sampleToday)} ctx={ctx} />
+        <CellSample
+          label={t('dev.state.range')}
+          initial={due('2026-10-12', null, '2026-10-10')}
+          ctx={ctx}
+        />
       </Group>
       <Group title={t('dev.popover')}>
         <Specimen label={t('dev.english')}>
@@ -110,6 +110,41 @@ export function DatesSection() {
           </div>
         </Specimen>
       </Group>
+      <Group title={t('dev.range')}>
+        {rangeSamples.map(({ id, locale: lang, value, text, rangeMode }) => (
+          <Specimen
+            key={`${id}-${lang}`}
+            label={`${t(`dev.state.${id}`)} · ${t(`dev.${lang === 'en' ? 'english' : 'swedish'}`)}`}
+          >
+            <div lang={lang} className={cn(popoverSurface, datePopoverClass)}>
+              <DatePanel
+                value={value}
+                ctx={sampleDateContext(lang)}
+                onCommit={noop}
+                onCancel={noop}
+                autoFocus={false}
+                defaultText={text}
+                defaultRangeMode={rangeMode}
+              />
+            </div>
+          </Specimen>
+        ))}
+      </Group>
     </Section>
   );
 }
+
+interface RangeSample {
+  id: 'rangeSet' | 'rangePickStart' | 'rangeTyped';
+  locale: Locale;
+  value: DueValue;
+  text: string;
+  rangeMode?: boolean;
+}
+
+const rangeSamples: readonly RangeSample[] = [
+  { id: 'rangeSet', locale: 'en', value: due('2026-10-16', null, '2026-10-12'), text: '' },
+  { id: 'rangePickStart', locale: 'en', value: due('2026-10-16'), text: '', rangeMode: true },
+  { id: 'rangeTyped', locale: 'en', value: noDue, text: 'oct 10 - 12', rangeMode: true },
+  { id: 'rangeSet', locale: 'sv', value: due('2026-11-02', '14:00', '2026-10-28'), text: '' },
+];

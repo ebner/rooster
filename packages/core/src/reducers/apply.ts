@@ -8,15 +8,28 @@ import type {
   TaskMove,
   TaskPatch,
 } from '../schemas/list.ts';
-import type { GroupCreateBody, ListOpSpec, ReducerContext, TaskCreateBody } from './ops.ts';
+import type {
+  GroupCreateBody,
+  ListOpSpec,
+  ReducerContext,
+  TaskCreateBody,
+  TaskDuplicateBody,
+} from './ops.ts';
 import {
+  childrenIndex,
+  childrenOf,
   type DeletedTask,
+  depthOf,
+  descendantIds,
   inboxOf,
   keysForIntent,
   type ListState,
   normalGroups,
   omit,
   placedKeyed,
+  SUBTASK_DEPTH_MAX,
+  subtaskKeyed,
+  subtreeHeight,
   tasksInGroup,
   withGroup,
   withTask,
@@ -36,18 +49,34 @@ export function applyOp(state: ListState, op: ListOpSpec, ctx: ApplyContext): Li
   switch (op.kind) {
     case 'task.create':
       return createTask(state, op.payload, ctx);
-    case 'task.patch':
-      return patchTasks(state, [op.entityId], op.payload, ctx.now);
+    case 'task.patch': {
+      const patched = patchTasks(state, [op.entityId], op.payload, ctx.now);
+      return op.payload.parentId === undefined
+        ? patched
+        : reparent(patched, op.entityId, op.payload.parentId, ctx);
+    }
     case 'task.complete':
       return completeTasks(state, [op.entityId], op.payload.completed, ctx.now);
     case 'task.delete':
       return deleteTasks(state, [op.entityId]);
     case 'task.restore':
-      return restoreTasks(state, [op.entityId]);
+      return restoreTasks(state, [op.entityId], ctx.userId);
     case 'task.move':
       return moveTasks(state, [op.entityId], op.payload);
     case 'task.bulk':
-      return applyBulk(state, op.payload, ctx.now);
+      return applyBulk(state, op.payload, ctx.now, ctx.userId);
+    case 'task.reorder':
+      return reorderSubtask(state, op.entityId, op.payload);
+    case 'task.duplicate':
+      return duplicateTask(state, op.entityId, op.payload, ctx);
+    case 'task.expanded':
+      return setExpanded(state, op.entityId, op.payload.expanded);
+    case 'task.addTag':
+    case 'task.removeTag':
+      return tagTasks(state, [op.entityId], op.payload.tagId, op.kind === 'task.addTag');
+    case 'tag.create':
+      // Tags live in their own cache (['tags', orgId]); the list state holds only tag ids.
+      return state;
     case 'group.create':
       return createGroup(state, op.payload);
     case 'group.patch': {
@@ -67,7 +96,7 @@ export function applyOp(state: ListState, op: ListOpSpec, ctx: ApplyContext): Li
     case 'group.delete':
       return deleteGroup(state, op.entityId, op.payload);
     case 'group.restore':
-      return restoreGroup(state, op.entityId);
+      return restoreGroup(state, op.entityId, ctx.userId);
   }
 }
 
@@ -80,9 +109,12 @@ export function applyOps(
   return ops.reduce((s, op) => applyOp(s, op, ctx), state);
 }
 
+const noCounts = () => ({ subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 });
+
 function createTask(state: ListState, p: TaskCreateBody, ctx: ApplyContext): ListState {
   if (state.tasks[p.id] || state.deletedTasks[p.id]) return state;
-  const groupId = state.groups[p.groupId] ? p.groupId : inboxOf(state)?.id;
+  if (p.parentId !== undefined) return createSubtask(state, p, p.parentId, ctx);
+  const groupId = p.groupId && state.groups[p.groupId] ? p.groupId : inboxOf(state)?.id;
   if (!groupId) return state;
   const siblings = placedKeyed(tasksInGroup(state, groupId));
   // ADR 0005 §1: no intent fields at all means the top of the Inbox (end of a named group).
@@ -102,13 +134,221 @@ function createTask(state: ListState, p: TaskCreateBody, ctx: ApplyContext): Lis
     createdBy: ctx.userId,
     ...dueUnit(p),
     completedAt: null,
-    tagIds: [],
-    counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
+    tagIds: uniqueIds(p.tagIds ?? []),
+    counts: noCounts(),
     placement: { groupId, position },
     createdAt: ctx.now,
     updatedAt: ctx.now,
   };
   return withTask(state, task);
+}
+
+const uniqueIds = (ids: readonly string[]) => [...new Set(ids)];
+
+/**
+ * A subtask (P3): ordered among its siblings by the intent (end without one), assigned like its
+ * parent, so it never needs a placement of its own (05 §4.1). Over-deep nesting is rejected by
+ * the server (422); the optimistic state then never shows it.
+ */
+function createSubtask(
+  state: ListState,
+  p: TaskCreateBody,
+  parentId: string,
+  ctx: ApplyContext,
+): ListState {
+  const parent = state.tasks[parentId];
+  if (!parent || depthOf(state, parentId) + 1 > SUBTASK_DEPTH_MAX) return state;
+  const siblings = subtaskKeyed(childrenOf(state, parentId));
+  const [subtaskPosition = generateKeyBetween(null, null)] = keysForIntent(siblings, {
+    afterId: p.afterId ?? null,
+    beforeId: p.beforeId ?? null,
+  });
+  const task: Task = {
+    id: p.id,
+    orgId: state.orgId,
+    seq: null,
+    parentId,
+    subtaskPosition,
+    title: p.title,
+    ...(p.description === undefined ? {} : { description: p.description }),
+    assigneeId: parent.assigneeId,
+    createdBy: ctx.userId,
+    ...dueUnit(p),
+    completedAt: null,
+    tagIds: uniqueIds(p.tagIds ?? []),
+    counts: noCounts(),
+    placement: null,
+    createdAt: ctx.now,
+    updatedAt: ctx.now,
+  };
+  return adjustCounts(withTask(state, task), parentId, 1, 0);
+}
+
+/** Keeps a parent's `subtasks`/`subtasksDone` counters in step with its children. */
+function adjustCounts(
+  state: ListState,
+  parentId: string | null,
+  subtasks: number,
+  done: number,
+): ListState {
+  const parent = parentId === null ? undefined : state.tasks[parentId];
+  if (!parent || (subtasks === 0 && done === 0)) return state;
+  return withTask(state, {
+    ...parent,
+    counts: {
+      ...parent.counts,
+      subtasks: Math.max(0, parent.counts.subtasks + subtasks),
+      subtasksDone: Math.max(0, parent.counts.subtasksDone + done),
+    },
+  });
+}
+
+/** Whether a task needs its own row in the actor's list (05 §4.1), given its parent. */
+function needsPlacement(task: Task, parent: Task | undefined, userId: string): boolean {
+  if (task.assigneeId !== userId) return false;
+  return task.parentId === null || parent?.assigneeId !== task.assigneeId;
+}
+
+/** The top of the Inbox (05 §4.1 reconcile: a new placement goes there). */
+function inboxTop(state: ListState): Task['placement'] {
+  const inbox = inboxOf(state);
+  if (!inbox) return null;
+  const first = tasksInGroup(state, inbox.id)[0]?.placement?.position ?? null;
+  return { groupId: inbox.id, position: generateKeyBetween(null, first) };
+}
+
+/**
+ * Re-parent (taskPatchSchema `parentId`): appended to the new parent's subtasks, or made
+ * top-level. Cycles and over-deep nesting are left to the server's 422. The placement follows
+ * the reconcile rules: kept when still needed, removed when not, the Inbox top when new.
+ */
+function reparent(
+  state: ListState,
+  id: string,
+  parentId: string | null,
+  ctx: ApplyContext,
+): ListState {
+  const task = state.tasks[id];
+  if (!task || task.parentId === parentId) return state;
+  let subtaskPosition: string | null = null;
+  let parent: Task | undefined;
+  if (parentId !== null) {
+    parent = state.tasks[parentId];
+    if (!parent || parentId === id || descendantIds(state, id).includes(parentId)) return state;
+    if (depthOf(state, parentId) + 1 + subtreeHeight(state, id) > SUBTASK_DEPTH_MAX) return state;
+    subtaskPosition = generateKeyBetween(
+      childrenOf(state, parentId).at(-1)?.subtaskPosition ?? null,
+      null,
+    );
+  }
+  const moved: Task = { ...task, parentId, subtaskPosition };
+  const placed = needsPlacement(moved, parent, ctx.userId);
+  const next: Task = {
+    ...moved,
+    placement: placed ? (task.placement ?? inboxTop(state)) : null,
+    updatedAt: ctx.now,
+  };
+  const done = task.completedAt === null ? 0 : 1;
+  let result = withTask(state, next);
+  result = adjustCounts(result, task.parentId, -1, -done);
+  return adjustCounts(result, parentId, 1, done);
+}
+
+/** POST /tasks/:id/reorder: among the task's siblings. */
+function reorderSubtask(state: ListState, id: string, intent: OrderingIntent): ListState {
+  const task = state.tasks[id];
+  if (!task || task.parentId === null) return state;
+  const siblings = subtaskKeyed(childrenOf(state, task.parentId).filter((t) => t.id !== id));
+  const [subtaskPosition = task.subtaskPosition] = keysForIntent(siblings, intent);
+  if (subtaskPosition === task.subtaskPosition) return state;
+  return withTask(state, { ...task, subtaskPosition });
+}
+
+function setExpanded(state: ListState, id: string, expanded: boolean): ListState {
+  const has = state.expandedTaskIds.includes(id);
+  if (has === expanded) return state;
+  return {
+    ...state,
+    expandedTaskIds: expanded
+      ? [...state.expandedTaskIds, id]
+      : state.expandedTaskIds.filter((t) => t !== id),
+  };
+}
+
+/**
+ * Ids for the optimistic copies of subtasks: derived from the copy's id, so replaying the op
+ * gives the same rows. They are local only; the server's ids replace them on the refetch that
+ * follows the response.
+ */
+export function derivedTaskId(copyId: string, index: number): string {
+  const suffix = (index + 1).toString(16).padStart(12, '0').slice(-12);
+  return `${copyId.slice(0, -12)}${suffix}`;
+}
+
+/**
+ * Duplicate (FR-TASK-13): title, description, dates, tags and (optionally) subtasks are copied;
+ * the copy is open and sits directly after the original (in its group, or among its siblings).
+ */
+function duplicateTask(
+  state: ListState,
+  id: string,
+  p: TaskDuplicateBody,
+  ctx: ApplyContext,
+): ListState {
+  const original = state.tasks[id];
+  if (!original || state.tasks[p.id] || state.deletedTasks[p.id]) return state;
+  const index = childrenIndex(Object.values(state.tasks));
+  const copies: Task[] = [];
+  const idMap = new Map<string, string>([[id, p.id]]);
+  if (p.includeSubtasks) {
+    const queue = [id];
+    for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+      for (const child of index.get(next) ?? []) {
+        idMap.set(child.id, derivedTaskId(p.id, idMap.size - 1));
+        queue.push(child.id);
+      }
+    }
+  }
+  const fresh = (task: Task, copyId: string): Task => ({
+    ...task,
+    id: copyId,
+    seq: null,
+    tagIds: [...task.tagIds],
+    createdBy: ctx.userId,
+    createdAt: ctx.now,
+    updatedAt: ctx.now,
+  });
+  let placement = original.placement;
+  if (placement) {
+    const siblings = placedKeyed(tasksInGroup(state, placement.groupId));
+    const [position = placement.position] = keysForIntent(siblings, { afterId: id });
+    placement = { groupId: placement.groupId, position };
+  }
+  let subtaskPosition = original.subtaskPosition;
+  if (original.parentId !== null) {
+    const siblings = subtaskKeyed(childrenOf(state, original.parentId));
+    [subtaskPosition = original.subtaskPosition] = keysForIntent(siblings, { afterId: id });
+  }
+  copies.push({
+    ...fresh(original, p.id),
+    completedAt: null,
+    placement,
+    subtaskPosition,
+    counts: p.includeSubtasks ? { ...original.counts, comments: 0, attachments: 0 } : noCounts(),
+  });
+  for (const [sourceId, copyId] of idMap) {
+    if (sourceId === id) continue;
+    const source = state.tasks[sourceId] as Task;
+    copies.push({
+      ...fresh(source, copyId),
+      parentId: idMap.get(source.parentId as string) ?? source.parentId,
+      placement: null,
+      counts: { ...source.counts, comments: 0, attachments: 0 },
+    });
+  }
+  const tasks = { ...state.tasks };
+  for (const copy of copies) tasks[copy.id] = copy;
+  return adjustCounts({ ...state, tasks }, original.parentId, 1, 0);
 }
 
 type DueFields = Pick<TaskPatch, 'dueDate' | 'dueTime' | 'dueTz' | 'startDate'>;
@@ -152,9 +392,10 @@ function mapTasks(
 function patchTasks(
   state: ListState,
   ids: readonly string[],
-  p: TaskPatch,
+  p: Omit<TaskPatch, 'parentId'>,
   now: number,
 ): ListState {
+  if (p.title === undefined && p.description === undefined && !touchesDue(p)) return state;
   return mapTasks(state, ids, (task) => ({
     ...task,
     ...(p.title === undefined ? {} : { title: p.title }),
@@ -170,29 +411,80 @@ function completeTasks(
   completed: boolean,
   now: number,
 ): ListState {
-  return mapTasks(state, ids, (task) => {
+  const changed: Task[] = [];
+  let next = mapTasks(state, ids, (task) => {
     if ((task.completedAt !== null) === completed) return task;
+    changed.push(task);
     return { ...task, completedAt: completed ? now : null, updatedAt: now };
   });
+  for (const task of changed) next = adjustCounts(next, task.parentId, 0, completed ? 1 : -1);
+  return next;
 }
 
+/**
+ * Soft delete (05 §4.3): descendants go with the task and are restored with it. A parent
+ * loses the deleted child from its counters.
+ */
 function deleteTasks(state: ListState, ids: readonly string[], withGroupId?: string): ListState {
-  const present = ids.filter((id) => state.tasks[id]);
-  if (present.length === 0) return state;
+  const present = new Set(ids.filter((id) => state.tasks[id]));
+  if (present.size === 0) return state;
+  const index = childrenIndex(Object.values(state.tasks));
   const deletedTasks = { ...state.deletedTasks };
-  for (const id of present) {
-    const task = state.tasks[id] as Task;
-    deletedTasks[id] = withGroupId === undefined ? { task } : { task, withGroupId };
+  const gone: string[] = [];
+  const cascade = (rootId: string, taskId: string) => {
+    for (const child of index.get(taskId) ?? []) {
+      if (deletedTasks[child.id]) continue;
+      deletedTasks[child.id] = { task: child, withTaskId: rootId };
+      gone.push(child.id);
+      cascade(rootId, child.id);
+    }
+  };
+  // Roots first: a listed task below another listed task goes with its ancestor's cascade.
+  const isRoot = (task: Task) => {
+    for (let p = task.parentId; p !== null; p = state.tasks[p]?.parentId ?? null) {
+      if (present.has(p)) return false;
+    }
+    return true;
+  };
+  const roots = [...present].map((id) => state.tasks[id] as Task).filter(isRoot);
+  for (const task of roots) {
+    deletedTasks[task.id] = withGroupId === undefined ? { task } : { task, withGroupId };
+    gone.push(task.id);
+    cascade(task.id, task.id);
   }
-  return { ...state, tasks: omit(state.tasks, present), deletedTasks };
+  let next: ListState = { ...state, tasks: omit(state.tasks, gone), deletedTasks };
+  for (const task of roots) {
+    next = adjustCounts(next, task.parentId, -1, task.completedAt === null ? 0 : -1);
+  }
+  return next;
 }
 
-function restoreTasks(state: ListState, ids: readonly string[]): ListState {
+function restoreTasks(state: ListState, ids: readonly string[], userId: string): ListState {
   const present = ids.filter((id) => state.deletedTasks[id]);
   if (present.length === 0) return state;
-  let next: ListState = { ...state, deletedTasks: omit(state.deletedTasks, present) };
-  for (const id of present) {
+  const roots = new Set(present);
+  const restored = Object.entries(state.deletedTasks)
+    .filter(([id, entry]) => roots.has(id) || (entry.withTaskId && roots.has(entry.withTaskId)))
+    .map(([id]) => id);
+  let next: ListState = { ...state, deletedTasks: omit(state.deletedTasks, restored) };
+  for (const id of restored) {
     next = withTask(next, rehome(next, (state.deletedTasks[id] as DeletedTask).task));
+  }
+  for (const id of present) {
+    const task = (state.deletedTasks[id] as DeletedTask).task;
+    if (task.parentId !== null && next.deletedTasks[task.parentId]) {
+      // ADR 0007 §5: a subtask restored while its parent is still deleted becomes top-level.
+      const current = next.tasks[id] as Task;
+      const promoted: Task = { ...current, parentId: null, subtaskPosition: null };
+      next = withTask(next, {
+        ...promoted,
+        placement: needsPlacement(promoted, undefined, userId)
+          ? (current.placement ?? inboxTop(next))
+          : null,
+      });
+      continue;
+    }
+    next = adjustCounts(next, task.parentId, 1, task.completedAt === null ? 0 : 1);
   }
   return next;
 }
@@ -227,7 +519,7 @@ function moveTasks(state: ListState, ids: readonly string[], args: TaskMove): Li
   return { ...state, tasks };
 }
 
-function applyBulk(state: ListState, op: BulkOp, now: number): ListState {
+function applyBulk(state: ListState, op: BulkOp, now: number, userId: string): ListState {
   switch (op.op) {
     case 'complete':
       return completeTasks(state, op.ids, true, now);
@@ -236,7 +528,7 @@ function applyBulk(state: ListState, op: BulkOp, now: number): ListState {
     case 'delete':
       return deleteTasks(state, op.ids);
     case 'restore':
-      return restoreTasks(state, op.ids);
+      return restoreTasks(state, op.ids, userId);
     case 'move':
       return moveTasks(state, op.ids, op.args);
     case 'setDue':
@@ -345,7 +637,7 @@ function appendTo(state: ListState, tasks: readonly Task[], target: string): Lis
   );
 }
 
-function restoreGroup(state: ListState, id: string): ListState {
+function restoreGroup(state: ListState, id: string, userId: string): ListState {
   const group = state.deletedGroups[id];
   if (!group) return state;
   const next: ListState = {
@@ -356,5 +648,5 @@ function restoreGroup(state: ListState, id: string): ListState {
   const alongside = Object.entries(state.deletedTasks)
     .filter(([, e]) => e.withGroupId === id)
     .map(([taskId]) => taskId);
-  return restoreTasks(next, alongside);
+  return restoreTasks(next, alongside, userId);
 }

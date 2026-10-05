@@ -12,4 +12,6 @@ export * from './me';
 export * from './orgs';
 export { queryKeys } from './query-keys';
 export * from './sessions';
+export * from './tags';
+export * from './task-detail';
 export type * from './types';

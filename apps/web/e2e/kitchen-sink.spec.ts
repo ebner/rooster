@@ -25,6 +25,9 @@ const sections = [
   ['admin', 'Admin', 'Administration'],
   ['list', 'My tasks list', 'Listan Mina uppgifter'],
   ['dates', 'Due dates', 'Förfallodatum'],
+  ['editor', 'Description editor', 'Beskrivningsredigerare'],
+  ['pane', 'Detail pane', 'Detaljpanel'],
+  ['tags', 'Tags', 'Taggar'],
 ] as const;
 
 async function openKitchenSink(page: Page) {

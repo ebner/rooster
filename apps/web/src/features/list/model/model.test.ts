@@ -284,3 +284,65 @@ describe('drop slots (keyboard drag)', () => {
     expect(indicatorSlot(order, moving, { rowId: 'unknown', edge: 'before' })).toBeNull();
   });
 });
+
+describe('subtask rows (P3)', () => {
+  const sub = (
+    id: string,
+    parentId: string,
+    position: string,
+    extra: Partial<Task> = {},
+  ): Task => ({
+    ...task(id, 'g1', position),
+    parentId,
+    subtaskPosition: position,
+    placement: null,
+    ...extra,
+  });
+
+  test('expanded parents show indented subtasks, drafts, and "+ Add subtask"', () => {
+    const parent = {
+      ...task('p', 'g1', 'a0'),
+      counts: { subtasks: 2, subtasksDone: 0, comments: 0, attachments: 0 },
+    };
+    const s = {
+      ...state([parent, task('q', 'g1', 'a1'), sub('s1', 'p', 'a0'), sub('s2', 'p', 'a1')]),
+      expandedTaskIds: ['p'],
+    };
+    const drafts: Draft[] = [{ id: 'd', groupId: 'g1', afterId: 's1', parentId: 'p' }];
+    const rows = buildRows(s, options({ drafts }));
+    const ids = rows.map((r) => r.id);
+    expect(ids.slice(ids.indexOf('p'), ids.indexOf('q') + 1)).toEqual([
+      'p',
+      's1',
+      'd',
+      's2',
+      'addsub:p',
+      'q',
+    ]);
+    const s1 = rows.find((r) => r.id === 's1');
+    expect(s1).toMatchObject({ kind: 'task', level: 3, parentId: 'p', groupId: 'g1' });
+    expect(rows.find((r) => r.id === 'p')).toMatchObject({ expandable: true, expanded: true });
+    // Subtasks never take part in group moves.
+    expect(visibleOrder(rows).find((g) => g.id === 'g1')?.taskIds).toEqual(['p', 'q']);
+    const collapsed = buildRows({ ...s, expandedTaskIds: [] }, options());
+    expect(collapsed.map((r) => r.id)).not.toContain('s1');
+  });
+
+  test('orphan subtasks get the parent breadcrumb; the tag filter keeps headers', () => {
+    const foreign = {
+      ...task('fp', 'g1', 'a0'),
+      placement: null,
+      assigneeId: 'other',
+      title: 'Their plan',
+    };
+    const orphan = { ...sub('o', 'fp', 'a0'), placement: { groupId: 'g1', position: 'a0' } };
+    const tagged = { ...task('t', 'g2', 'a0'), tagIds: ['urgent'] };
+    const s = state([foreign, orphan, tagged]);
+    const rows = buildRows(s, options());
+    expect(rows.find((r) => r.id === 'o')).toMatchObject({ breadcrumb: 'Their plan', level: 2 });
+    expect(rows.map((r) => r.id)).not.toContain('fp');
+    const filtered = buildRows(s, options({ tagFilter: ['urgent'] }));
+    expect(filtered.filter((r) => r.kind === 'task').map((r) => r.id)).toEqual(['t']);
+    expect(filtered.filter((r) => r.kind === 'group').length).toBe(2);
+  });
+});

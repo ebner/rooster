@@ -4,22 +4,31 @@ import type {
   GroupDelete,
   GroupMove,
   GroupPatch,
+  SubtaskReorder,
   TaskComplete,
   TaskCreate,
   TaskMove,
   TaskPatch,
 } from '../schemas/list.ts';
+import type { TagCreate } from '../schemas/tags.ts';
 
 type Empty = Record<string, never>;
 
-/** The create body as the web client sends it: always with a client id and a target group. */
-export type TaskCreateBody = TaskCreate & { id: string; groupId: string };
+/**
+ * The create body as the web client sends it: always with a client id, and a target group for
+ * a top-level task (subtasks set `parentId` instead; their intents name siblings).
+ */
+export type TaskCreateBody = TaskCreate & { id: string };
 export type GroupCreateBody = GroupCreate & { id: string };
+/** POST /tasks/:id/duplicate with the copy's client id. */
+export type TaskDuplicateBody = { id: string; includeSubtasks: boolean };
+export type TagCreateBody = TagCreate & { id: string };
 
 /**
  * One list mutation, before the pipeline stamps it (04 §6.2). Each kind is exactly one HTTP
- * request; `payload` is the request body. `entityId` is the task or group id (the org id for
- * bulk ops).
+ * request; `payload` is the request body, except for `task.expanded` (PUT or DELETE) and
+ * `task.addTag`/`task.removeTag` (the tag id is part of the path). `entityId` is the task,
+ * group or tag id (the org id for bulk ops).
  */
 export type ListOpSpec =
   | { kind: 'task.create'; entityId: string; payload: TaskCreateBody }
@@ -29,6 +38,12 @@ export type ListOpSpec =
   | { kind: 'task.restore'; entityId: string; payload: Empty }
   | { kind: 'task.move'; entityId: string; payload: TaskMove }
   | { kind: 'task.bulk'; entityId: string; payload: BulkOp }
+  | { kind: 'task.reorder'; entityId: string; payload: SubtaskReorder }
+  | { kind: 'task.duplicate'; entityId: string; payload: TaskDuplicateBody }
+  | { kind: 'task.expanded'; entityId: string; payload: { expanded: boolean } }
+  | { kind: 'task.addTag'; entityId: string; payload: { tagId: string } }
+  | { kind: 'task.removeTag'; entityId: string; payload: { tagId: string } }
+  | { kind: 'tag.create'; entityId: string; payload: TagCreateBody }
   | { kind: 'group.create'; entityId: string; payload: GroupCreateBody }
   | { kind: 'group.patch'; entityId: string; payload: GroupPatch }
   | { kind: 'group.move'; entityId: string; payload: GroupMove }
@@ -78,6 +93,36 @@ export const listOps = {
   bulk: (orgId: string, payload: BulkOp): ListOpSpec => ({
     kind: 'task.bulk',
     entityId: orgId,
+    payload,
+  }),
+  reorderSubtask: (id: string, payload: SubtaskReorder): ListOpSpec => ({
+    kind: 'task.reorder',
+    entityId: id,
+    payload,
+  }),
+  duplicateTask: (id: string, copyId: string, includeSubtasks = true): ListOpSpec => ({
+    kind: 'task.duplicate',
+    entityId: id,
+    payload: { id: copyId, includeSubtasks },
+  }),
+  setExpanded: (id: string, expanded: boolean): ListOpSpec => ({
+    kind: 'task.expanded',
+    entityId: id,
+    payload: { expanded },
+  }),
+  addTag: (id: string, tagId: string): ListOpSpec => ({
+    kind: 'task.addTag',
+    entityId: id,
+    payload: { tagId },
+  }),
+  removeTag: (id: string, tagId: string): ListOpSpec => ({
+    kind: 'task.removeTag',
+    entityId: id,
+    payload: { tagId },
+  }),
+  createTag: (payload: TagCreateBody): ListOpSpec => ({
+    kind: 'tag.create',
+    entityId: payload.id,
     payload,
   }),
   createGroup: (payload: GroupCreateBody): ListOpSpec => ({

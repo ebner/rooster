@@ -5,6 +5,7 @@ import { DateCell } from './date-cell';
 import { DateLabel, useDateLabel } from './date-label';
 import { DatePanel } from './date-popover';
 import { sampleDateContext, sampleDue, sampleToday, sampleZone } from './fixtures';
+import { parseRangeInput } from './parser';
 import { type DueValue, noDue, type ViewerDateContext } from './types';
 
 const en = sampleDateContext('en');
@@ -134,6 +135,7 @@ describe('DateCell', () => {
       dueDate: '2026-10-15',
       dueTime: '14:30',
       dueTz: sampleZone,
+      startDate: null,
     });
     expect(screen.queryByRole('dialog')).toBeNull();
   });
@@ -162,6 +164,7 @@ describe('DateCell', () => {
       dueDate: '2026-10-09',
       dueTime: '14:00',
       dueTz: sampleZone,
+      startDate: null,
     });
   });
 
@@ -317,5 +320,169 @@ describe('DateLabel', () => {
     expect(label.className).toContain('text-date-overdue');
     expect(label.className).toContain('font-medium');
     expect(container.querySelector('svg.lucide-circle-alert')).not.toBeNull();
+  });
+});
+
+describe('Start date range mode (FR-DATE-2)', () => {
+  const day = (dialog: HTMLElement, date: string) => {
+    const cell = dialog.querySelector<HTMLElement>(`[data-date="${date}"]`);
+    if (!cell) throw new Error(`no cell for ${date}`);
+    return cell;
+  };
+  const status = () => screen.getByTestId('date-picker-status').textContent;
+
+  test('two clicks pick start then due, then commit and close', () => {
+    const { cell, onChange } = renderCell(sampleDue('2026-10-20'));
+    const { dialog } = openPicker(cell);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Start date' }));
+    // Focus moves to the calendar, ready to pick the start.
+    expect(document.activeElement?.getAttribute('role')).toBe('gridcell');
+    expect(status()).toBe('Pick a start date');
+    fireEvent.click(day(dialog, '2026-10-10'));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(status()).toBe('Pick a due date');
+    expect(day(dialog, '2026-10-10').getAttribute('aria-selected')).toBe('true');
+    // Hovering previews the range; the days between are tinted.
+    fireEvent.pointerOver(day(dialog, '2026-10-12'));
+    expect(day(dialog, '2026-10-11').className).toContain('bg-bg-selected');
+    fireEvent.click(day(dialog, '2026-10-12'));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(sampleDue('2026-10-12', null, '2026-10-10'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(cell.textContent).toBe('Oct 10 – 12');
+  });
+
+  test('picking the due date before the start swaps them', () => {
+    const { cell, onChange } = renderCell();
+    const { dialog } = openPicker(cell);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Start date' }));
+    fireEvent.click(day(dialog, '2026-10-22'));
+    fireEvent.click(day(dialog, '2026-10-14'));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(sampleDue('2026-10-22', null, '2026-10-14'));
+  });
+
+  test('keyboard: Enter on two days picks the range', () => {
+    const { cell, onChange } = renderCell();
+    const { dialog } = openPicker(cell);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Start date' }));
+    const start = document.activeElement as HTMLElement;
+    expect(start.dataset.date).toBe(sampleToday);
+    fireEvent.keyDown(start, { key: 'Enter' });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowRight' });
+    fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowRight' });
+    fireEvent.keyDown(document.activeElement as Element, { key: 'Enter' });
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(sampleDue('2026-10-10', null, sampleToday));
+  });
+
+  test('typing "oct 10 - 12" previews and Enter commits the range', () => {
+    const { cell, onChange } = renderCell();
+    const { dialog, input } = openPicker(cell);
+    type(input, 'oct 10 - 12');
+    expect(within(dialog).getByText('→ Sat, Oct 10 – Mon, Oct 12')).toBeTruthy();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(sampleDue('2026-10-12', null, '2026-10-10'));
+    expect(cell.textContent).toBe('Oct 10 – 12');
+  });
+
+  test('an existing range opens in range mode; removing the start keeps the due date', () => {
+    const { cell, onChange } = renderCell(sampleDue('2026-10-12', null, '2026-10-10'));
+    expect(cell.textContent).toBe('Oct 10 – 12');
+    const { dialog, input } = openPicker(cell);
+    expect(day(dialog, '2026-10-11').getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove start date' }));
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(sampleDue('2026-10-12'));
+  });
+
+  test('clearing the due date clears the start date', () => {
+    const { cell, onChange } = renderCell(sampleDue('2026-10-12', null, '2026-10-10'));
+    const { input } = openPicker(cell);
+    fireEvent.keyDown(input, { key: 'º', code: 'Digit0', altKey: true });
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(null);
+    expect(cell.textContent).toBe('');
+  });
+
+  test('a click outside after picking only the start keeps it when it fits the due date', () => {
+    const onChange = vi.fn();
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      const [value, setValue] = useState(sampleDue('2026-10-20'));
+      return (
+        <DateCell
+          value={value}
+          ctx={en}
+          isOpen={open}
+          onOpenChange={setOpen}
+          onChange={(next) => {
+            onChange(next);
+            setValue(next ?? noDue);
+          }}
+        />
+      );
+    }
+    render(<Harness />);
+    const { dialog } = openPicker(screen.getByRole('button', { name: /due date/i }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Start date' }));
+    fireEvent.click(day(dialog, '2026-10-15'));
+    act(() => {
+      fireEvent.pointerDown(document.body);
+      fireEvent.pointerUp(document.body);
+      fireEvent.click(document.body);
+    });
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(sampleDue('2026-10-20', null, '2026-10-15'));
+  });
+
+  test('Swedish: a typed range commits from the panel', () => {
+    const { onCommit } = renderPanel(sampleDateContext('sv'));
+    const input = screen.getByRole('textbox', { name: 'Skriv ett datum' });
+    type(input, '10–12 okt');
+    expect(screen.getByText('→ lör 10 okt – mån 12 okt')).toBeTruthy();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onCommit).toHaveBeenCalledExactlyOnceWith(sampleDue('2026-10-12', null, '2026-10-10'));
+  });
+});
+
+describe('parseRangeInput', () => {
+  const ctx = {
+    today: sampleToday,
+    locale: 'en' as const,
+    weekStart: 1 as const,
+    dateFormat: 'MMM d' as const,
+  };
+  const sv = { ...ctx, locale: 'sv' as const, dateFormat: 'd MMM' as const };
+  test.each([
+    ['oct 10 - 12', ctx, { start: '2026-10-10', date: '2026-10-12', time: null }],
+    ['oct 10 – 12', ctx, { start: '2026-10-10', date: '2026-10-12', time: null }],
+    ['oct 10-12', ctx, { start: '2026-10-10', date: '2026-10-12', time: null }],
+    ['oct 30 - 2', ctx, { start: '2026-10-30', date: '2026-11-02', time: null }],
+    ['10 - 12 oct', ctx, { start: '2026-10-10', date: '2026-10-12', time: null }],
+    ['oct 12 to oct 10', ctx, { start: '2026-10-10', date: '2026-10-12', time: null }],
+    ['tomorrow to oct 16 at 14', ctx, { start: '2026-10-09', date: '2026-10-16', time: '14:00' }],
+    ['2026-10-10 - 2026-10-14', ctx, { start: '2026-10-10', date: '2026-10-14', time: null }],
+    ['10–12 okt', sv, { start: '2026-10-10', date: '2026-10-12', time: null }],
+    ['30 okt till 2 nov', sv, { start: '2026-10-30', date: '2026-11-02', time: null }],
+  ])('%s', (text, context, expected) => {
+    expect(parseRangeInput(text, context)).toEqual(expected);
+  });
+
+  test.each(['2026-10-12', 'fri', 'oct 10 - 10', '10 - 12', 'blorp - fri', ''])(
+    '"%s" is not a range',
+    (text) => {
+      expect(parseRangeInput(text, ctx)).toBeNull();
+    },
+  );
+});
+
+describe('DateLabel ranges', () => {
+  test.each([
+    [en, sampleDue('2026-10-12', null, '2026-10-10'), 'Oct 10 – 12'],
+    [en, sampleDue('2026-11-02', null, '2026-10-30'), 'Oct 30 – Nov 2'],
+    [sampleDateContext('sv'), sampleDue('2026-10-12', null, '2026-10-10'), '10–12 okt'],
+    // A start that is not before the due date is no range.
+    [en, sampleDue('2026-10-24', null, '2026-10-24'), 'Oct 24'],
+  ])('%#: %o → %s', (ctx, value, label) => {
+    render(<DateLabel value={value} ctx={ctx} tooltip={false} />);
+    expect(screen.getByText(label)).toBeTruthy();
   });
 });

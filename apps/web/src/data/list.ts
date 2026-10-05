@@ -82,3 +82,18 @@ export function useMyListStatus(orgId: string): { ready: boolean; error: Error |
   });
   return { ready: query.data === true, error: query.error };
 }
+
+/**
+ * A slice of `['my-list', orgId]`. Results are structurally shared, so a component re-renders
+ * only when its slice changed, not on every list op (AC-2.12 with the pane open).
+ */
+export function useMyListSelect<T>(orgId: string, select: (state: ListState) => T): QueryResult<T> {
+  const pipeline = useListPipeline();
+  return useQuery({
+    queryKey: myListKey(orgId),
+    queryFn: () => pipeline.fetch(orgId),
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    select,
+  });
+}

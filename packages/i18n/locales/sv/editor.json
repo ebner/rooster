@@ -1,0 +1,35 @@
+{
+  "placeholder": "Lägg till fler detaljer…",
+  "showMore": "Visa mer",
+  "showLess": "Visa mindre",
+  "taskCheckbox": "Checklistpunkt: {text}",
+  "toolbar": {
+    "label": "Formatering",
+    "bold": "Fetstil",
+    "italic": "Kursiv",
+    "strike": "Genomstruken",
+    "code": "Kod",
+    "link": "Länk",
+    "heading": "Rubrik",
+    "headingLevel": "Rubrik {level}",
+    "bulletList": "Punktlista",
+    "taskList": "Checklista"
+  },
+  "link": {
+    "label": "Länkadress",
+    "placeholder": "Klistra in eller skriv en länk",
+    "apply": "Lägg till länk",
+    "remove": "Ta bort länk",
+    "open": "Öppna länk",
+    "invalid": "Det där är ingen länk"
+  },
+  "dev": {
+    "section": "Beskrivningsredigerare",
+    "empty": "Tom, med platshållare",
+    "collapsed": "Lång, ihopfälld",
+    "toolbar": "Formateringsverktyg",
+    "readOnly": "Skrivskyddad",
+    "sample": "## Agenda\n\nGå igenom **planen för Q3** med [teamet](https://example.com/team).\n\n- [x] Boka rummet\n- [ ] Skicka *utkastet* till Anna\n  - [ ] Bifoga `budget.xlsx`\n\n> Håll det under 30 minuter.\n\n1. Läget\n2. Risker\n3. Nästa steg\n\n### Anteckningar\n\nTa med kaffe.\n\nFråga om konferensen.\n\n---\n\nDet var allt.",
+    "short": "Ring **Anna** om lokalen och kolla `rum-4`."
+  }
+}

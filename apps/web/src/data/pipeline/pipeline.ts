@@ -4,10 +4,12 @@ import {
   type ListOp,
   type ListOpSpec,
   type ListState,
+  mergeDetailResponse,
   mergeResponse,
   normalizeMyList,
   type ReducerContext,
 } from '@rooster/core/reducers';
+import type { Task, TaskDetail } from '@rooster/core/schemas';
 import type { QueryClient } from '@tanstack/react-query';
 import { useSyncStore } from '../../state/sync-store';
 import type { ApiError } from '../errors';
@@ -17,6 +19,10 @@ import { classifyFailure, type ListTransport, RateLimitedError } from './transpo
 export const backoffScheduleMs = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000] as const;
 
 export const myListKey = (orgId: string) => ['my-list', orgId] as const;
+/** `['task', id]` (04 §5.1): GET /tasks/:id. */
+export const taskDetailKey = (taskId: string) => ['task', taskId] as const;
+/** `['tags', orgId]` (04 §5.1): GET /orgs/:orgId/tags. */
+export const tagsKey = (orgId: string) => ['tags', orgId] as const;
 
 interface Queued {
   op: ListOp;
@@ -42,6 +48,68 @@ export interface DroppedOp {
 
 type DropListener = (dropped: DroppedOp) => void;
 
+/** Field equality for two copies of a task. */
+function sameTask(a: Task, b: Task): boolean {
+  return a === b || deepEqual(a, b);
+}
+
+/**
+ * Equality ignoring what only the server stamps (`seq`, `createdAt`, `updatedAt`): rows never
+ * show them, so a confirmation that differs only there needs no render now.
+ */
+function sameTaskButStamps(a: Task, b: Task): boolean {
+  if (a === b) return true;
+  const { updatedAt: _ua, createdAt: _ca, seq: _sa, ...restA } = a;
+  const { updatedAt: _ub, createdAt: _cb, seq: _sb, ...restB } = b;
+  return deepEqual(restA, restB);
+}
+
+/** Structural equality of JSON-like values, independent of key order. */
+export function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a).filter((k) => (a as Record<string, unknown>)[k] !== undefined);
+  const kb = Object.keys(b).filter((k) => (b as Record<string, unknown>)[k] !== undefined);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) =>
+    deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
+  );
+}
+
+function sameRecord<T>(
+  a: Readonly<Record<string, T>>,
+  b: Readonly<Record<string, T>>,
+  equal: (x: T, y: T) => boolean,
+): boolean {
+  if (a === b) return true;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  for (const key of keys) {
+    const x = a[key];
+    const y = b[key];
+    if (x === y) continue;
+    if (x === undefined || y === undefined || !equal(x, y)) return false;
+  }
+  return true;
+}
+
+const sameJson = <T>(x: T, y: T) => deepEqual(x, y);
+
+/**
+ * Whether two list states are equal (identity first, then fields of the few that differ).
+ * With `ignoreStamps`, server-only stamps on tasks do not count.
+ */
+export function equivalentStates(a: ListState, b: ListState, ignoreStamps = false): boolean {
+  return (
+    sameRecord(a.tasks, b.tasks, ignoreStamps ? sameTaskButStamps : sameTask) &&
+    sameRecord(a.groups, b.groups, sameJson) &&
+    sameRecord(a.deletedTasks, b.deletedTasks, sameJson) &&
+    sameRecord(a.deletedGroups, b.deletedGroups, sameJson) &&
+    a.expandedTaskIds.join() === b.expandedTaskIds.join()
+  );
+}
+
 /**
  * The mutation pipeline (04 §6.2), Phase 2 edition: an in-memory FIFO queue (the IndexedDB
  * outbox replaces it in P4 with the same op shape).
@@ -52,7 +120,7 @@ type DropListener = (dropped: DroppedOp) => void;
  * response or a refetch never clobbers a newer optimistic change.
  */
 export class ListPipeline {
-  private readonly transport: ListTransport;
+  readonly transport: ListTransport;
   private readonly queryClient: QueryClient;
   private readonly clientId: string;
   private readonly now: () => number;
@@ -67,6 +135,8 @@ export class ListPipeline {
   private failures = 0;
   private wake: (() => void) | null = null;
   private readonly dropListeners = new Set<DropListener>();
+  private readonly changeListeners = new Set<() => void>();
+  private version = 0;
   private idleWaiters: (() => void)[] = [];
 
   constructor(options: PipelineOptions) {
@@ -108,6 +178,22 @@ export class ListPipeline {
   }
 
   /**
+   * Ops not yet confirmed for an org, oldest first. Caches outside the list (`['task', id]`,
+   * `['tags', orgId]`) render their server state with these replayed on top.
+   */
+  pendingOps(orgId: string): ListOp[] {
+    return this.queue.filter((item) => item.orgId === orgId).map((item) => item.op);
+  }
+
+  /** Changes whenever the queue changes (for `useSyncExternalStore`). */
+  getVersion = (): number => this.version;
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.changeListeners.add(listener);
+    return () => this.changeListeners.delete(listener);
+  };
+
+  /**
    * Stamps, applies and queues ops. The cache update is synchronous, so the UI renders the
    * change in the same frame (02 §1.3). Returns the stamped ops.
    */
@@ -124,6 +210,7 @@ export class ListPipeline {
     }
     this.queryClient.setQueryData(myListKey(orgId), view);
     this.publish();
+    this.changed();
     void this.flush();
     return ops;
   }
@@ -142,8 +229,16 @@ export class ListPipeline {
 
   /** Resolves once the queue is empty (tests, and P4's SW update gate). */
   idle(): Promise<void> {
-    if (this.queue.length === 0 && !this.flushing) return Promise.resolve();
-    return new Promise((resolve) => this.idleWaiters.push(resolve));
+    if (this.queue.length === 0 && !this.flushing) {
+      this.flushLazySyncs();
+      return Promise.resolve();
+    }
+    return new Promise((resolve) =>
+      this.idleWaiters.push(() => {
+        this.flushLazySyncs();
+        resolve();
+      }),
+    );
   }
 
   private apply(state: ListState, { op, ctx }: Queued): ListState {
@@ -173,6 +268,7 @@ export class ListPipeline {
           await this.fail(head, error);
         }
         this.publish();
+        this.changed();
       }
     } finally {
       this.flushing = false;
@@ -191,8 +287,63 @@ export class ListPipeline {
     this.confirmSeq += 1;
     this.confirmed.push({ seq: this.confirmSeq, item });
     if (this.confirmed.length > 100) this.confirmed.shift();
-    this.queryClient.setQueryData(myListKey(item.orgId), this.replay(item.orgId));
+    // The server usually agrees with the optimistic guess. Then the rendered state stays, so a
+    // confirmation costs no render while the user types (AC-2.12); server-only stamps (a new
+    // task's `seq`) reach the cache when the browser is idle.
+    const next = this.replay(item.orgId);
+    const view = this.view(item.orgId);
+    if (!view || !equivalentStates(view, next, true)) {
+      this.queryClient.setQueryData(myListKey(item.orgId), next);
+    } else if (!equivalentStates(view, next)) {
+      this.syncWhenIdle(item.orgId);
+    }
     if (merged.refetch) void this.refetch(item.orgId);
+    this.confirmDetails(item, response);
+    const { op } = item;
+    const newTags = op.kind === 'task.create' && (op.payload.tagNames?.length ?? 0) > 0;
+    if (op.kind === 'tag.create' || newTags) {
+      void this.queryClient.invalidateQueries({ queryKey: tagsKey(item.orgId) });
+    }
+  }
+
+  /** Confirmed ops move into every cached task detail they touch (their new server state). */
+  private confirmDetails({ op, ctx }: Queued, response: unknown): void {
+    const applyCtx = { ...ctx, now: op.editTime };
+    for (const [key, detail] of this.queryClient.getQueriesData<TaskDetail>({
+      queryKey: ['task'],
+    })) {
+      if (!detail) continue;
+      const next = mergeDetailResponse(detail, op, response, applyCtx);
+      if (next !== detail) this.queryClient.setQueryData(key, next);
+    }
+  }
+
+  private readonly lazySyncs = new Map<string, () => void>();
+
+  /** Writes base + pending ops to the cache once the browser is idle (or on `idle()`). */
+  private syncWhenIdle(orgId: string): void {
+    if (this.lazySyncs.has(orgId)) return;
+    const run = () => {
+      if (this.lazySyncs.get(orgId) !== run) return;
+      this.lazySyncs.delete(orgId);
+      if (this.bases.has(orgId)) {
+        this.queryClient.setQueryData(myListKey(orgId), this.replay(orgId));
+      }
+    };
+    this.lazySyncs.set(orgId, run);
+    const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: object) => number })
+      .requestIdleCallback;
+    if (idle) idle(run, { timeout: 2_000 });
+    else setTimeout(run, 200);
+  }
+
+  private flushLazySyncs(): void {
+    for (const run of [...this.lazySyncs.values()]) run();
+  }
+
+  private changed(): void {
+    this.version += 1;
+    for (const listener of this.changeListeners) listener();
   }
 
   private async fail(item: Queued, error: unknown): Promise<void> {
@@ -205,6 +356,8 @@ export class ListPipeline {
         this.failures = 0;
         this.queryClient.setQueryData(myListKey(item.orgId), this.replay(item.orgId));
         void this.refetch(item.orgId);
+        void this.queryClient.invalidateQueries({ queryKey: ['task'] });
+        void this.queryClient.invalidateQueries({ queryKey: tagsKey(item.orgId) });
         for (const listener of this.dropListeners) {
           listener({ op: item.op, error: error as ApiError, before });
         }

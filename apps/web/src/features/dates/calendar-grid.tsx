@@ -50,10 +50,20 @@ export function monthWeeks(date: IsoDate, weekStart: WeekStart): (IsoDate | null
 /** How a day was picked: Enter commits even in the time sub-mode (02 §7). */
 export type PickMethod = 'pointer' | 'enter' | 'space';
 
+/** A highlighted start–due range (FR-DATE-2); either end may still be open. */
+export interface CalendarRange {
+  start: IsoDate | null;
+  end: IsoDate | null;
+}
+
 export interface CalendarGridProps {
   ctx: ViewerDateContext;
-  /** The filled day (the current or draft due date). */
+  /** The filled day (the current or draft due date). Ignored when `range` is set. */
   selected: IsoDate | null;
+  /** Range mode: both ends filled, the days between tinted (03 §3.4). */
+  range?: CalendarRange | undefined;
+  /** The day under the pointer or keyboard focus, for previewing a range's open end. */
+  onPreviewDateChange?: ((date: IsoDate | null) => void) | undefined;
   /** The roving-focus day; its month is the one shown. */
   focusedDate: IsoDate;
   onFocusedDateChange: (date: IsoDate) => void;
@@ -69,6 +79,8 @@ export interface CalendarGridProps {
 export function CalendarGrid({
   ctx,
   selected,
+  range,
+  onPreviewDateChange,
   focusedDate,
   onFocusedDateChange,
   onPick,
@@ -130,6 +142,18 @@ export function CalendarGrid({
     event.stopPropagation();
     moveFocusRef.current = true;
     onFocusedDateChange(next);
+    onPreviewDateChange?.(next);
+  };
+
+  const [rangeFrom, rangeTo] =
+    range?.start && range.end && range.end < range.start
+      ? [range.end, range.start]
+      : [range?.start ?? null, range?.end ?? null];
+  const dayState = (date: IsoDate): DayState => {
+    if (!range) return date === selected ? 'selected' : 'none';
+    if (date === rangeFrom || date === rangeTo) return 'selected';
+    if (rangeFrom && rangeTo && date > rangeFrom && date < rangeTo) return 'between';
+    return 'none';
   };
 
   return (
@@ -166,6 +190,12 @@ export function CalendarGrid({
           onFocusedDateChange(date);
           onPick(date, 'pointer');
         }}
+        onPointerOver={(event) => {
+          const date = (event.target as HTMLElement).closest<HTMLElement>('[data-date]')?.dataset
+            .date;
+          if (date) onPreviewDateChange?.(date);
+        }}
+        onPointerLeave={() => onPreviewDateChange?.(null)}
         className="mx-auto border-separate border-spacing-0"
       >
         <thead>
@@ -192,7 +222,7 @@ export function CalendarGrid({
                     date={date}
                     label={text.full(date)}
                     isToday={date === ctx.today}
-                    isSelected={date === selected}
+                    state={dayState(date)}
                     isFocused={date === focusedDate}
                   />
                 ) : (
@@ -207,15 +237,18 @@ export function CalendarGrid({
   );
 }
 
+/** `selected`: the single day or a range end (accent fill); `between`: inside a range. */
+type DayState = 'none' | 'selected' | 'between';
+
 interface DayCellProps {
   date: IsoDate;
   label: string;
   isToday: boolean;
-  isSelected: boolean;
+  state: DayState;
   isFocused: boolean;
 }
 
-function DayCell({ date, label, isToday, isSelected, isFocused }: DayCellProps) {
+function DayCell({ date, label, isToday, state, isFocused }: DayCellProps) {
   const weekday = weekdayOf(date);
   const isWeekend = weekday === 0 || weekday === 6;
   return (
@@ -224,7 +257,7 @@ function DayCell({ date, label, isToday, isSelected, isFocused }: DayCellProps) 
       role="gridcell"
       data-date={date}
       tabIndex={isFocused ? 0 : -1}
-      aria-selected={isSelected}
+      aria-selected={state !== 'none'}
       aria-label={label}
       {...(isToday ? { 'aria-current': 'date' as const } : {})}
       className={cn(
@@ -233,7 +266,9 @@ function DayCell({ date, label, isToday, isSelected, isFocused }: DayCellProps) 
         'transition-colors duration-(--dur-fast) ease-standard',
         isWeekend ? 'text-text-muted' : 'text-text',
         isToday && 'border-border-focus',
-        isSelected ? 'bg-bg-accent font-medium text-text-on-accent' : 'hover:bg-bg-subtle',
+        state === 'selected' && 'bg-bg-accent font-medium text-text-on-accent',
+        state === 'between' && 'rounded-none bg-bg-selected',
+        state === 'none' && 'hover:bg-bg-subtle',
       )}
     >
       {Number(date.slice(8))}

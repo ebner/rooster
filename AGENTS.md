@@ -19,7 +19,7 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - `src/lib/`: errors (problem+json), logger, request id/log, security headers, SPA serving, graceful close.
   - `src/routes/`: one file per resource. Route zod schemas come from `@rooster/core/schemas`, registered in `routes/schemas.ts` with `.openapi('Name')`.
   - `src/auth/`: the better-auth instance (`auth.ts`), mounting under `/api/auth/*`, actor resolution (`actor.ts`), and signed cookies. better-auth handles **authentication only**; orgs are ours (ADR 0002).
-  - `src/services/`: `OrgService`, `UserService`, `AdminService`, `GroupService`, `TaskService`, `PlacementService` (the 05 §4.1 invariant), `OrderingService` (all fractional keys are computed server-side), `BackupService` and `sign-in-policy.ts` (the allowlist rules). **All authorisation lives here.**
+  - `src/services/`: `OrgService`, `UserService`, `AdminService`, `GroupService`, `TaskService` (incl. subtasks and duplicate), `TagService`, `PlacementService` (the 05 §4.1 invariant), `OrderingService` (all fractional keys are computed server-side), `BackupService` and `sign-in-policy.ts` (the allowlist rules). **All authorisation lives here.**
   - Request middleware covers idempotency (`Idempotency-Key`), edit time (`X-Rooster-Edit-Time`, clamped), client id/name, and the per-user rate limit. ADR 0005 has the list semantics.
   - `src/db/`: client and pragmas, `migrate.ts`, `schema/`, `migrations/` (generated, append-only).
   - `src/jobs/`: croner scheduler.
@@ -30,13 +30,22 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
 - `apps/web`: React SPA (+ PWA from P4).
   - `src/routes/`: TanStack file routes. `routeTree.gen.ts` is generated and committed. `src/routes/[_dev]/ui.tsx` is the dev-only kitchen sink at `/_dev/ui`; the brackets escape the underscore.
   - `src/ui/`: Coop components.
-  - `src/features/*`: shell (sidebar, app frame), auth, org-settings, settings, admin (including backups), list (My tasks: rows, editing model, DnD, bulk bar, `controller` holding every command), dates (`DateLabel`, `DateCell`, `DatePopover`, `useViewerDateContext`).
+  - `src/features/*`:
+    - shell (sidebar, app frame), auth, org-settings (incl. the Tags section), settings, admin (including backups)
+    - list (My tasks: rows incl. subtasks and tag chips, editing model, DnD, bulk bar, `controller` holding every command; the UI store is injectable via `ListStoreContext`)
+    - pane (the detail pane: split/overlay/full screen; its state lives in the URL `/o/:slug/t/:taskId`)
+    - tags (picker, chips, `#tag` token)
+    - editor (`MarkdownEditor` on Tiptap, `markdown.ts` converter, a 40-sample round-trip corpus)
+    - dates (`DateLabel`, `DateCell`, `DatePopover` incl. start-date ranges, `useViewerDateContext`)
   - `src/data/`: **the only place that talks to the API.** TanStack Query hooks over `createRoosterClient()`, query keys in `query-keys.ts`, problem+json mapped to `ApiError` in `errors.ts`, and better-auth client calls in `auth.ts` / `auth-client.ts`. Components take props; route components call `src/data` hooks.
   - `src/routes/_app.tsx`: the signed-in layout. Its `beforeLoad` guard redirects to `/login?redirect=…`.
   - `src/lib/`: `cn`, i18n, platform, and `safe-redirect.ts`. **Every redirect target must go through `safeRedirectPath()`.**
   - `src/data/pipeline/`: the **mutation pipeline**. Every list op goes `enqueue → core reducer on the cache → send (Idempotency-Key, edit time, client id) → merge`. Undo pushes inverse ops through it. It is an in-memory FIFO; the IndexedDB outbox arrives in P4.
   - `src/state/`: Zustand stores for list, undo and sync.
-  - `src/keymap.ts`: **the single keymap registry** (02 §6). `useKeymap()` is mounted once at the root. The `?` cheat sheet is generated from it. ADR 0006 covers Tab chords.
+  - `src/keymap.ts`: **the single keymap registry** (02 §6). `useKeymap()` is mounted once at the root. The `?` cheat sheet is generated from it.
+    - Focus zones `list` / `pane` / `paneList`; handlers return `false` to fall through.
+    - `[data-no-chords]` disables Tab chords (the editor).
+    - ADRs 0006 and 0008 have the details.
   - `src/styles/theme.css`: token → Tailwind mapping.
   - `e2e/`: Playwright tests.
     - The config starts the mock IdP, the server (with a fresh temp data dir) and Vite.
@@ -127,8 +136,9 @@ This file is the entry point for every agent and must describe the repository **
 Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to them. A PR that changes any of the above without updating `AGENTS.md` is not done.
 
 ## Status
-- **Current phase:** Phase 3 (detail pane, subtasks, tags) is next.
-- **Last completed phase:** Phase 2, List core (2026-10-05). AC-2.1 to AC-2.12 pass (unit, API and e2e). ADRs 0004 to 0006 record the parser, server and web decisions.
+- **Current phase:** Phase 4 (PWA, offline, realtime, mobile) is next.
+- **Last completed phase:** Phase 3, Detail pane, subtasks, tags (2026-10-05). AC-3.1 to AC-3.5 pass. ADRs 0007 and 0008 record the decisions.
+- **Git:** commit locally; **do not push to origin unless the maintainer explicitly asks.**
 - **Deferred (owned by later WPs):** avatar upload (P10), linked identities (P8). `UserService.reorderOrg` should move onto `OrderingService` when it is next touched.
 
 ## When you finish a WP

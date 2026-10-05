@@ -1,4 +1,10 @@
-import { type DueState, dueState, formatRelative, type IsoDate } from '@rooster/core/dates';
+import {
+  type DueState,
+  diffDays,
+  dueState,
+  formatRelative,
+  type IsoDate,
+} from '@rooster/core/dates';
 import { CircleAlert } from 'lucide-react';
 import { Focusable } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
@@ -25,7 +31,10 @@ export interface DateLabelProps {
   ctx: ViewerDateContext;
   /** Completed tasks use the muted `done` style. */
   completed?: boolean | undefined;
-  /** P3 start date: renders a range ("Oct 10 – 12"), coloured by the due state. */
+  /**
+   * Overrides `value.startDate` (a range, "Oct 10 – 12", coloured by the due state).
+   * Normally left out: the value carries its start date.
+   */
   startDate?: IsoDate | null | undefined;
   /**
    * Shows the full date in a tooltip on hover (02 §8.3). Off inside interactive
@@ -63,7 +72,9 @@ export function useDateLabel(
     },
     { today: ctx.today, nowMs: ctx.nowMs, viewerTz: ctx.timezone },
   );
-  const startDate = options.startDate ?? null;
+  const start = options.startDate === undefined ? (value.startDate ?? null) : options.startDate;
+  // Only a start before the due date is a range (FR-DATE-2).
+  const startDate = start && diffDays(start, local.date) < 0 ? start : null;
   const label = formatRelative(
     { dueDate: local.date, dueTime: local.time, startDate },
     {

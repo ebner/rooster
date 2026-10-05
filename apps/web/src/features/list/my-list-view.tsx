@@ -12,19 +12,28 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useListPipeline, useMyList, useMyListStatus } from '../../data/list';
 import { useMe } from '../../data/me';
+import { useTags } from '../../data/tags';
 import { cn } from '../../lib/cn';
 import { type Draft, persistShowCompleted, useListStore } from '../../state/list-store';
 import { syncProblemAfter, useSyncStore } from '../../state/sync-store';
+import { setTags, useTagsStore } from '../../state/tags-store';
 import { iconStrokeWidth } from '../../ui/button';
 import { IconButton } from '../../ui/icon-button';
 import { Kbd } from '../../ui/kbd';
 import { SkeletonRows } from '../../ui/skeleton';
 import { SyncPill } from '../../ui/sync-pill';
 import { toast } from '../../ui/toast';
-import { useKeymapHandlers } from '../../use-keymap';
+import {
+  eventZone,
+  type ShortcutHandler,
+  type ShortcutHandlers,
+  useKeymapHandlers,
+} from '../../use-keymap';
 import { useViewerDateContext } from '../dates';
+import type { PaneControls } from '../pane/pane-controls';
 import { toggleCheatSheet } from '../shell/cheat-sheet';
-import { AddGroupRowView, AddTaskRow, FirstRunHint } from './add-row';
+import { TagPicker } from '../tags/tag-picker';
+import { AddGroupRowView, AddSubtaskRowView, AddTaskRow, FirstRunHint } from './add-row';
 import { announce, ListLiveRegion } from './announcer';
 import { BulkBar } from './bulk-bar';
 import { completionHoldMs, ListController, type Translate } from './controller';
@@ -48,15 +57,17 @@ function rowElement(row: Row) {
       return <FirstRunHint key={row.id} row={row} />;
     case 'addGroup':
       return <AddGroupRowView key={row.id} row={row} />;
+    case 'addSubtask':
+      return <AddSubtaskRowView key={row.id} row={row} />;
   }
 }
 
-function draftPlaceholder(orgId: string, userId: string, draft: Draft): Task {
+export function draftPlaceholder(orgId: string, userId: string, draft: Draft): Task {
   return {
     id: draft.id,
     orgId,
     seq: null,
-    parentId: null,
+    parentId: draft.parentId ?? null,
     subtaskPosition: null,
     title: '',
     assigneeId: userId,
@@ -68,7 +79,7 @@ function draftPlaceholder(orgId: string, userId: string, draft: Draft): Task {
     tagIds: [],
     completedAt: null,
     counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
-    placement: { groupId: draft.groupId, position: '' },
+    placement: draft.parentId ? null : { groupId: draft.groupId, position: '' },
     createdAt: 0,
     updatedAt: 0,
   };
@@ -91,6 +102,7 @@ const ListRows = memo(function ListRows({ orgId, userId, rowsRef }: ListRowsProp
   const hiding = useListStore((s) => s.hiding);
   const dragCollapsed = useListStore((s) => s.dragCollapsed);
   const hoverExpanded = useListStore((s) => s.hoverExpanded);
+  const tagFilter = useListStore((s) => s.tagFilter);
   const rowCache = useRef<{ orgId: string; cache: RowCache }>({ orgId, cache: new Map() });
   if (rowCache.current.orgId !== orgId) rowCache.current = { orgId, cache: new Map() };
   const draftTasks = useRef(new Map<string, Task>());
@@ -104,9 +116,14 @@ const ListRows = memo(function ListRows({ orgId, userId, rowsRef }: ListRowsProp
         hiding,
         dragCollapsed,
         hoverExpanded,
+        tagFilter,
         draftTask: (draft) => {
           let task = draftTasks.current.get(draft.id);
-          if (!task || task.placement?.groupId !== draft.groupId) {
+          if (
+            !task ||
+            task.placement?.groupId !== (draft.parentId ? undefined : draft.groupId) ||
+            task.parentId !== (draft.parentId ?? null)
+          ) {
             task = draftPlaceholder(orgId, userId, draft);
             draftTasks.current.set(draft.id, task);
           }
@@ -115,7 +132,17 @@ const ListRows = memo(function ListRows({ orgId, userId, rowsRef }: ListRowsProp
       },
       rowCache.current.cache,
     );
-  }, [list.data, drafts, showCompleted, hiding, dragCollapsed, hoverExpanded, orgId, userId]);
+  }, [
+    list.data,
+    drafts,
+    showCompleted,
+    hiding,
+    dragCollapsed,
+    hoverExpanded,
+    tagFilter,
+    orgId,
+    userId,
+  ]);
   rowsRef.current = rows;
   // Same row object → same element: React skips it without even a memo comparison.
   const elements = useRef(new WeakMap<Row, ReactElement>());
@@ -130,7 +157,7 @@ const ListRows = memo(function ListRows({ orgId, userId, rowsRef }: ListRowsProp
 });
 
 /** The list's own text input has focus: commit it before a chord acts on the row. */
-function activeTitle(): { rowId: string; raw: string } | null {
+export function activeTitle(): { rowId: string; raw: string } | null {
   const el = document.activeElement;
   if (!(el instanceof HTMLInputElement) || !el.matches('[data-list-input]')) return null;
   const rowId = el.closest<HTMLElement>('[data-row-id]')?.dataset.rowId;
@@ -153,7 +180,7 @@ function SyncMarker() {
 
 const shortcutHintKey = 'rooster.list.shortcutHintDismissed';
 
-function ShortcutHint() {
+const ShortcutHint = memo(function ShortcutHint() {
   const { t } = useTranslation('list');
   const [dismissed, setDismissed] = useState(() => {
     try {
@@ -164,7 +191,7 @@ function ShortcutHint() {
   });
   if (dismissed) return null;
   return (
-    <div className="fixed right-6 bottom-6 z-(--z-sticky) hidden items-center gap-1 rounded-full border border-border bg-bg-elevated py-1 ps-3 pe-1 text-sm text-text-secondary shadow-sm desktop:flex">
+    <div className="fixed right-6 bottom-6 z-(--z-sticky) hidden items-center in-data-pane-open:hidden! gap-1 rounded-full border border-border bg-bg-elevated py-1 ps-3 pe-1 text-sm text-text-secondary shadow-sm desktop:flex">
       <button
         type="button"
         className="flex items-center gap-2"
@@ -189,13 +216,36 @@ function ShortcutHint() {
       />
     </div>
   );
-}
+});
 
 export interface MyListViewProps {
   orgId: string;
   userId: string;
   /** Accessible name of the tree grid. */
   label: string;
+  /** The detail pane this list drives (02 §9); absent in the kitchen sink. */
+  pane?: PaneControls | undefined;
+}
+
+/** Keys pressed with focus in the pane are the pane's (02 §9.1). */
+function listOnly(handlers: ShortcutHandlers): ShortcutHandlers {
+  const out: ShortcutHandlers = {};
+  // Undo and redo are app-wide (02 §3.7): the pane's edits are on the same stack.
+  const anywhere = new Set<string>(['undo', 'redo']);
+  for (const [id, handler] of Object.entries(handlers) as [
+    keyof ShortcutHandlers,
+    ShortcutHandler,
+  ][]) {
+    if (anywhere.has(id)) {
+      out[id] = handler;
+      continue;
+    }
+    out[id] = (event) => {
+      const zone = eventZone(event);
+      return zone === 'pane' || zone === 'paneList' ? false : handler(event);
+    };
+  }
+  return out;
 }
 
 /**
@@ -203,7 +253,7 @@ export interface MyListViewProps {
  * drafts, selection and the bulk bar, drag and drop, and every list key bound to the
  * controller. All writes go through the mutation pipeline.
  */
-export function MyListView({ orgId, userId, label }: MyListViewProps) {
+export function MyListView({ orgId, userId, label, pane }: MyListViewProps) {
   const { t } = useTranslation('list');
   const status = useMyListStatus(orgId);
   const pipeline = useListPipeline();
@@ -220,6 +270,11 @@ export function MyListView({ orgId, userId, label }: MyListViewProps) {
   const dateRef = useRef(dateCtx);
   dateRef.current = dateCtx;
   const prefs = useMe().data?.prefs;
+  // Re-renders only when the org's tags (or queued tag creations) change.
+  const tags = useTags(orgId).data;
+  useEffect(() => setTags(tags ?? []), [tags]);
+  const paneRef = useRef(pane);
+  paneRef.current = pane;
   const prefsRef = useRef({
     parseTitles: prefs?.parseTitleDates ?? true,
     holdMs: prefs?.completeHideMs ?? completionHoldMs,
@@ -239,14 +294,38 @@ export function MyListView({ orgId, userId, label }: MyListViewProps) {
         rows: () => rowsRef.current,
         dateContext: () => dateRef.current,
         prefs: () => prefsRef.current,
+        tags: () => Object.values(useTagsStore.getState().byId),
+        pane: {
+          isOpen: () => Boolean(paneRef.current?.taskId()),
+          close: () => paneRef.current?.close(),
+        },
       }),
     [orgId, userId, pipeline, t],
   );
 
   const context = useMemo<ListContextValue>(
-    () => ({ controller, dateCtx, parseTitles: prefsRef.current.parseTitles, dragEnabled: true }),
+    () => ({
+      controller,
+      dateCtx,
+      parseTitles: prefsRef.current.parseTitles,
+      dragEnabled: true,
+      onOpenTask: (id, focus) => paneRef.current?.open(id, focus ? 'title' : null),
+    }),
     [controller, dateCtx, prefs?.parseTitleDates],
   );
+
+  // D-29: the open pane follows the selection; a multi-selection closes it (02 §3.3).
+  useEffect(() => {
+    const p = paneRef.current;
+    if (!p?.taskId()) return;
+    if (selectedCount > 1) {
+      p.close();
+      return;
+    }
+    if (cursor && controller.task(cursor) && !cursor.startsWith('group:')) {
+      if (p.taskId() !== cursor) p.open(cursor, null);
+    }
+  }, [cursor, selectedCount, controller]);
 
   // A different org starts with a clean slate (drafts and selection are per list).
   useEffect(() => {
@@ -293,8 +372,20 @@ export function MyListView({ orgId, userId, label }: MyListViewProps) {
     return row?.kind === 'task' && !row.draft ? row : null;
   };
 
+  const openPane = (focus: 'title' | 'description' | null) => {
+    const row = cursorTask();
+    if (!row || !pane) return false;
+    pane.open(row.id, focus);
+  };
+  const openTagPicker = () => {
+    const ids = controller.selectedTaskIds();
+    if (ids.length === 0) return false;
+    const store = useListStore.getState();
+    store.set({ popover: { kind: 'tag', rowId: ids.length > 1 ? 'bulk' : (ids[0] as string) } });
+  };
+
   useKeymapHandlers(
-    {
+    listOnly({
       undo: () => (inForeignInput() ? false : controller.undo() || undefined),
       redo: () => (inForeignInput() ? false : controller.redo() || undefined),
       selectPrevious: () => controller.step(-1),
@@ -373,7 +464,26 @@ export function MyListView({ orgId, userId, label }: MyListViewProps) {
         controller.newGroupAtCursor(pending ? { ...pending, ignored: [] } : undefined);
       },
       escape: () => controller.escape(),
-    },
+      addSubtaskNavigate: () => controller.addSubtask() || undefined,
+      addSubtask: () => withTitle(() => controller.addSubtask() || undefined),
+      tagPickerNavigate: () => openTagPicker(),
+      tagPicker: () => withTitle(() => openTagPicker()),
+      duplicate: () => withTitle(() => (controller.duplicate().length > 0 ? undefined : false)),
+      openPane: () => openPane('title'),
+      openPaneFocus: () => withTitle(() => openPane('title')),
+      focusDescription: () => withTitle(() => openPane('description')),
+      peekPane: () => {
+        if (!pane) return false;
+        if (pane.taskId()) pane.close();
+        else return openPane(null);
+      },
+      paneFullScreen: () =>
+        withTitle(() => {
+          if (!pane) return false;
+          if (!pane.taskId() && openPane(null) === false) return false;
+          pane.toggleFullScreen();
+        }),
+    }),
     ready,
   );
 
@@ -387,6 +497,15 @@ export function MyListView({ orgId, userId, label }: MyListViewProps) {
     popover?.kind === 'moveTo' && popover.rowId !== 'bulk'
       ? root.current?.querySelector(`[data-row-id="${popover.rowId}"]`)
       : null;
+  const tagAnchor =
+    popover?.kind === 'tag'
+      ? popover.rowId === 'bulk'
+        ? document.querySelector('[data-bulk-tag]')
+        : root.current?.querySelector(
+            `[data-row-id="${popover.rowId}"] [data-focus-target], [data-row-id="${popover.rowId}"] input`,
+          )
+      : null;
+  const tagIds = popover?.kind === 'tag' ? controller.selectedTaskIds() : [];
 
   if (status.error && !status.ready) {
     return (
@@ -426,9 +545,51 @@ export function MyListView({ orgId, userId, label }: MyListViewProps) {
       </ListDnd>
       {ids.length > 1 && <BulkBar ids={ids} />}
       {moveAnchor && <MoveToPopover anchor={moveAnchor} ids={controller.selectedTaskIds()} />}
+      {tagAnchor && tagIds.length > 0 && (
+        <RowTagPicker anchor={tagAnchor} ids={tagIds} controller={controller} />
+      )}
       <ListLiveRegion />
       <SyncMarker />
       <ShortcutHint />
     </ListContext.Provider>
+  );
+}
+
+/** The tag picker for the selected rows (Tab+T / T / #, a click on the chips). */
+export function RowTagPicker({
+  anchor,
+  ids,
+  controller,
+}: {
+  anchor: Element;
+  ids: string[];
+  controller: ListController;
+}) {
+  const { t } = useTranslation('tags');
+  const byId = useTagsStore((s) => s.byId);
+  const tags = useMemo(() => Object.values(byId), [byId]);
+  // Re-render on list changes so the checks follow the toggles.
+  useMyList(controller.orgId);
+  const tasks = ids.map((id) => controller.task(id)).filter((x): x is Task => x !== undefined);
+  const applied = tags
+    .filter((tag) => tasks.length > 0 && tasks.every((task) => task.tagIds.includes(tag.id)))
+    .map((tag) => tag.id);
+  const close = () => {
+    controller.ui().set({ popover: null, focusSeq: controller.ui().focusSeq + 1 });
+  };
+  return (
+    <TagPicker
+      anchor={anchor}
+      tags={tags}
+      applied={applied}
+      label={
+        tasks.length === 1
+          ? t('picker.label', { title: tasks[0]?.title ?? '' })
+          : t('picker.labelMany', { count: tasks.length })
+      }
+      onToggle={(tagId) => controller.toggleTag(ids, tagId)}
+      onCreate={(name) => controller.createTagFor(ids, name)}
+      onClose={close}
+    />
   );
 }

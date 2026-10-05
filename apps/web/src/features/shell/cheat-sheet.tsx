@@ -25,6 +25,8 @@ const sections: readonly ShortcutSection[] = [
   'editing',
   'moving',
   'groups',
+  'pane',
+  'editor',
   'dates',
 ];
 

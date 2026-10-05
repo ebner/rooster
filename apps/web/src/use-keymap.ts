@@ -39,12 +39,14 @@ export function useKeymapHandlers(handlers: ShortcutHandlers, enabled = true): v
   }, [enabled]);
 }
 
-function handlerFor(id: ShortcutId): ShortcutHandler | undefined {
+/** Handlers for `id`, most recently mounted layer first. */
+function handlersFor(id: ShortcutId): ShortcutHandler[] {
+  const out: ShortcutHandler[] = [];
   for (let i = layers.length - 1; i >= 0; i--) {
     const handler = layers[i]?.get(id);
-    if (handler) return handler;
+    if (handler) out.push(handler);
   }
-  return undefined;
+  return out;
 }
 
 /** G-sequence timeout (02 §6). */
@@ -65,8 +67,27 @@ function inOverlay(el: Element | null): boolean {
   return Boolean(el?.closest(overlaySelector));
 }
 
+/** Where focus is (02 §6, §9): list keys act on the list, or on the pane's task in the pane. */
+export type FocusZone = 'list' | 'pane' | 'paneList' | 'other';
+
+export function focusZone(el: Element | null): FocusZone {
+  if (!el || inOverlay(el)) return 'other';
+  const pane = el.closest('[data-pane-root]');
+  const list = el.closest('[data-list-root]');
+  if (pane) return list && pane.contains(list) ? 'paneList' : 'pane';
+  return list ? 'list' : 'other';
+}
+
+/** Zone of a key event's target (handlers use it to leave keys to another surface). */
+export function eventZone(event: KeyboardEvent): FocusZone {
+  return focusZone(event.target instanceof Element ? event.target : null);
+}
+
+/** Tab chords work in the list and the pane, except where Tab means something (the editor). */
 function inList(el: Element | null): boolean {
-  return Boolean(el?.closest('[data-list-root]')) && !inOverlay(el);
+  if (!el || el.closest('[data-no-chords]')) return false;
+  const zone = focusZone(el);
+  return zone !== 'other';
 }
 
 const tabbableSelector = [
@@ -105,17 +126,24 @@ interface DispatchState {
 
 function scopesFor(target: Element | null): ShortcutScope[] {
   if (isTextInput(target)) {
-    return target?.matches('[data-list-input]') ? ['global', 'list'] : ['global'];
+    return target?.matches('[data-list-input],[data-pane-input]') ? ['global', 'list'] : ['global'];
   }
-  return inOverlay(target) ? ['global'] : ['global', 'list', 'navigate'];
+  if (inOverlay(target)) return ['global'];
+  // In the pane (outside its subtask list) single keys never fire: it is not the list.
+  return focusZone(target) === 'pane' ? ['global', 'list'] : ['global', 'list', 'navigate'];
 }
 
+/**
+ * Runs the handlers for `id` from the top layer down; a handler that returns `false` passes
+ * the key on (the pane and the list each take only keys pressed in their own zone).
+ */
 function run(id: ShortcutId, event: KeyboardEvent): boolean {
-  const handler = handlerFor(id);
-  if (!handler) return false;
-  if (handler(event) === false) return false;
-  event.preventDefault();
-  return true;
+  for (const handler of handlersFor(id)) {
+    if (handler(event) === false) continue;
+    event.preventDefault();
+    return true;
+  }
+  return false;
 }
 
 /** The dispatcher, separated from React for tests. */

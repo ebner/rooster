@@ -6,7 +6,7 @@ import { iconStrokeWidth } from '../../ui/button';
 import { DropLine } from './drop-line';
 import { GridCell, GridRow } from './grid';
 import { useListContext } from './list-context';
-import type { AddGroupRow, AddRow, HintRow } from './model/rows';
+import type { AddGroupRow, AddRow, AddSubtaskRow, HintRow } from './model/rows';
 
 const addClass = cn(
   'flex w-full cursor-default items-center rounded-sm text-start text-base text-text-muted max-tablet:text-md',
@@ -83,6 +83,37 @@ export const AddGroupRowView = memo(function AddGroupRowView({ row }: { row: Add
             <Plus className="size-4" strokeWidth={iconStrokeWidth} aria-hidden />
           </span>
           <span className="text-base">{t('group.add')}</span>
+        </button>
+      </GridCell>
+    </GridRow>
+  );
+});
+
+/** 03 §3.3: "+ Add subtask" after an expanded parent's subtasks (and in the pane). */
+export const AddSubtaskRowView = memo(function AddSubtaskRowView({ row }: { row: AddSubtaskRow }) {
+  const { t } = useTranslation('list');
+  const { controller, baseLevel = 2 } = useListContext();
+  const indent = row.level - baseLevel;
+  return (
+    <GridRow
+      aria-level={row.level}
+      data-row-id={row.id}
+      style={indent > 0 ? { paddingInlineStart: `calc(var(--space-6) * ${indent})` } : undefined}
+      className={cn('relative flex shrink-0 max-tablet:h-row-mobile', 'h-row-subtask')}
+    >
+      <DropLine rowId={row.id} />
+      <GridCell className="flex flex-1">
+        <button
+          type="button"
+          data-testid="add-subtask"
+          className={addClass}
+          onClick={() => controller.addSubtask(row.parentId)}
+        >
+          <HandleSpacer />
+          <span className="flex size-hit shrink-0 items-center justify-center">
+            <Plus className="size-4" strokeWidth={iconStrokeWidth} aria-hidden />
+          </span>
+          <span className="ps-1 text-sm">{t('subtasks.add')}</span>
         </button>
       </GridCell>
     </GridRow>

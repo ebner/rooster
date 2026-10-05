@@ -14,9 +14,11 @@ import {
   useUpdateMemberRole,
   useUpdateOrg,
 } from '../../data';
+import { useDeleteTag, useMergeTag, useTags, useUpdateTag } from '../../data/tags';
 import { OrgSettingsPage } from '../../features/org-settings/org-settings-page';
 import { ViewBody, ViewHeader } from '../../features/shell/app-shell';
 import { OrgNotFound } from '../../features/shell/org-not-found';
+import { TagsSection } from '../../features/tags/tags-section';
 import { toast } from '../../ui/toast';
 
 export const Route = createFileRoute('/_app/o/$orgSlug/settings')({
@@ -39,6 +41,11 @@ function OrgSettingsRoute() {
   const createInvite = useCreateInvite();
   const revokeInvite = useRevokeInvite();
   const deleteOrg = useDeleteOrg();
+  const tags = useTags(orgId);
+  const updateTag = useUpdateTag(orgId ?? '');
+  const mergeTag = useMergeTag(orgId ?? '');
+  const deleteTag = useDeleteTag(orgId ?? '');
+  const { t: tTags } = useTranslation('tags');
 
   if (org.data === null) return <OrgNotFound />;
   if (!org.data || !orgId || !me.data) return null;
@@ -88,6 +95,44 @@ function OrgSettingsRoute() {
             toast({ message: t('org.danger.deleted', { name: current.name }) });
             await navigate({ to: '/o/$orgSlug/my', params: { orgSlug: 'personal' } });
           }}
+          tagsSection={
+            <TagsSection
+              tags={tags.data ?? []}
+              onRename={(id, name) =>
+                updateTag
+                  .mutateAsync({ id, patch: { name } })
+                  .then(() => toast({ message: tTags('settings.renamed') }))
+                  .catch((error) =>
+                    toast({
+                      message:
+                        errorCode(error) === 'tag_name_taken'
+                          ? tTags('settings.nameTaken')
+                          : t('error.saveFailed'),
+                      tone: 'danger',
+                    }),
+                  )
+              }
+              onRecolor={(id, color) => updateTag.mutateAsync({ id, patch: { color } }).catch(fail)}
+              onMerge={async (id, intoId) => {
+                const into = tags.data?.find((tag) => tag.id === intoId)?.name ?? '';
+                try {
+                  await mergeTag.mutateAsync({ id, intoId });
+                  toast({ message: tTags('settings.merged', { name: into }) });
+                } catch (error) {
+                  fail(error);
+                }
+              }}
+              onDelete={async (id) => {
+                const name = tags.data?.find((tag) => tag.id === id)?.name ?? '';
+                try {
+                  await deleteTag.mutateAsync(id);
+                  toast({ message: tTags('settings.deleted', { name }) });
+                } catch (error) {
+                  fail(error);
+                }
+              }}
+            />
+          }
           onLeaveOrg={async () => {
             try {
               await removeMember.mutateAsync({ orgId, userId });

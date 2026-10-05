@@ -4,7 +4,6 @@ import { type KeyboardEvent, useMemo, useRef, useState } from 'react';
 import { Popover as AriaPopover, Dialog } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
-import { useListStore } from '../../state/list-store';
 import { iconStrokeWidth } from '../../ui/button';
 import { Kbd } from '../../ui/kbd';
 import { overlayOffsetPx, popoverMotion, popoverSurface } from '../../ui/popover';
@@ -29,7 +28,7 @@ export function MoveToPopover({ anchor, ids }: { anchor: Element; ids: readonly 
     const q = query.trim().toLocaleLowerCase();
     return q === '' ? all : all.filter((g) => g.name.toLocaleLowerCase().includes(q));
   }, [state, query]);
-  const close = () => useListStore.getState().set({ popover: null });
+  const close = () => controller.ui().set({ popover: null });
   const choose = (groupId: string | undefined) => {
     if (!groupId) return;
     controller.moveToGroup(groupId, ids);

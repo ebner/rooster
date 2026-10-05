@@ -1,0 +1,40 @@
+{
+  "picker": {
+    "label": "Taggar för {title}",
+    "labelMany": "Taggar för {count, plural, one {# uppgift} other {# uppgifter}}",
+    "filter": "Filtrera taggar",
+    "placeholder": "Lägg till en tagg…",
+    "list": "Taggar",
+    "empty": "Inga taggar än. Skriv ett namn för att skapa en.",
+    "create": "Skapa ”{name}”"
+  },
+  "filter": {
+    "button": "Filtrera",
+    "label": "Filtrera på tagg",
+    "active": "{count, plural, one {# tagg} other {# taggar}}",
+    "clear": "Rensa filtret",
+    "empty": "Organisationen har inga taggar än",
+    "announce": "Visar uppgifter taggade {names}",
+    "cleared": "Taggfiltret har rensats"
+  },
+  "settings": {
+    "title": "Taggar",
+    "description": "Taggar delas av alla i organisationen.",
+    "empty": "Inga taggar än. Skriv #namn i en uppgifts rubrik för att skapa en.",
+    "color": "Färg för {name}",
+    "rename": "Byt namn på {name}",
+    "merge": "Slå ihop med…",
+    "mergeLabel": "Slå ihop {name} med",
+    "mergeConfirm": "Slå ihop ”{name}” med ”{into}”? Alla uppgifter taggade ”{name}” får ”{into}”, och ”{name}” tas bort.",
+    "mergeAction": "Slå ihop taggar",
+    "delete": "Ta bort {name}",
+    "deleteConfirm": "Ta bort ”{name}”? Den tas bort från alla uppgifter. Det går inte att ångra.",
+    "deleteAction": "Ta bort tagg",
+    "cancel": "Avbryt",
+    "renamed": "Taggen har bytt namn",
+    "merged": "Sammanslagen med ”{name}”",
+    "deleted": "”{name}” har tagits bort",
+    "nameTaken": "Det finns redan en tagg med det namnet",
+    "options": "Alternativ för {name}"
+  }
+}

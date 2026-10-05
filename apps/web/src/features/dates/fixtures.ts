@@ -23,7 +23,11 @@ export function sampleDateContext(
   };
 }
 
-/** A due value in the sample zone. */
-export function sampleDue(dueDate: IsoDate, dueTime: string | null = null): DueValue {
-  return { dueDate, dueTime, dueTz: dueTime ? sampleZone : null };
+/** A due value in the sample zone, optionally with a start date. */
+export function sampleDue(
+  dueDate: IsoDate,
+  dueTime: string | null = null,
+  startDate: IsoDate | null = null,
+): DueValue {
+  return { dueDate, dueTime, dueTz: dueTime ? sampleZone : null, startDate };
 }

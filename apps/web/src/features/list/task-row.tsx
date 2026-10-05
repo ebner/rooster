@@ -1,8 +1,8 @@
-import { GripVertical } from 'lucide-react';
+import { ChevronRight, GripVertical } from 'lucide-react';
 import { type MouseEvent, memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
-import { type ListUiState, useListStore } from '../../state/list-store';
+import { type ListUiState, useListUi } from '../../state/list-store';
 import { iconStrokeWidth } from '../../ui/button';
 import { TaskCheckbox } from '../../ui/task-checkbox';
 import { DateCell, type DueValue } from '../dates';
@@ -10,6 +10,7 @@ import { DropLine } from './drop-line';
 import { GridCell, GridRow } from './grid';
 import { useListContext } from './list-context';
 import type { TaskRow as TaskRowModel } from './model/rows';
+import { RowTagChips, SubtaskCounter } from './task-meta';
 import { TitleInput } from './title-input';
 import { useKeyboardDragHandle } from './use-list-dnd';
 
@@ -30,13 +31,14 @@ function caretOffsetAt(event: MouseEvent, within: Element): number | 'end' {
   return 'end';
 }
 
-const flag = { selected: 1, source: 2, dateOpen: 4, hold: 8, collapsing: 16 } as const;
+const flag = { selected: 1, source: 2, dateOpen: 4, hold: 8, collapsing: 16, tagOpen: 32 } as const;
 
 function rowFlags(s: ListUiState, id: string): number {
   let bits = 0;
   if (s.selected[id]) bits |= flag.selected;
   if (s.dragging?.includes(id) || s.keyboardDrag?.ids.includes(id)) bits |= flag.source;
   if (s.popover?.kind === 'date' && s.popover.rowId === id) bits |= flag.dateOpen;
+  if (s.popover?.kind === 'tag' && s.popover.rowId === id) bits |= flag.tagOpen;
   const hiding = s.hiding[id];
   if (hiding === 'hold') bits |= flag.hold;
   if (hiding === 'collapsing') bits |= flag.collapsing;
@@ -45,23 +47,27 @@ function rowFlags(s: ListUiState, id: string): number {
 
 export interface TaskRowProps {
   row: TaskRowModel;
+  /** The pane's subtask list: 36 px rows without indentation. */
+  compact?: boolean;
 }
 
 /**
  * 03 §3.1: drag handle · round checkbox · title · date cell, 40 px (52 px on phones).
  * Navigate shows the title as text (ellipsis); Edit swaps in an input with the same metrics.
  */
-export const TaskRow = memo(function TaskRow({ row }: TaskRowProps) {
+export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowProps) {
   const { t } = useTranslation('list');
-  const { controller, dateCtx, dragEnabled } = useListContext();
-  const { id, task, draft } = row;
+  const { controller, dateCtx, dragEnabled, onOpenTask, baseLevel = 2 } = useListContext();
+  const { id, task, draft, level, expandable, expanded, breadcrumb } = row;
+  const subtaskRow = compact || level > 2;
+  const indent = level - baseLevel;
   // One packed subscription per row: 500 rows × several selectors per store update add up.
-  const flags = useListStore((s) => rowFlags(s, id));
+  const flags = useListUi((s) => rowFlags(s, id));
   const selected = (flags & flag.selected) !== 0;
   const isSource = (flags & flag.source) !== 0;
   const dateOpen = (flags & flag.dateOpen) !== 0;
   const hiding = flags & flag.collapsing ? 'collapsing' : flags & flag.hold ? 'hold' : undefined;
-  const editing = useListStore((s) => (s.editing?.rowId === id ? s.editing : null));
+  const editing = useListUi((s) => (s.editing?.rowId === id ? s.editing : null));
   const done = task.completedAt !== null;
 
   const handleKeys = useKeyboardDragHandle(id);
@@ -70,18 +76,27 @@ export const TaskRow = memo(function TaskRow({ row }: TaskRowProps) {
     (event: MouseEvent<HTMLDivElement>) => {
       const target = event.target as Element;
       if (target.closest(interactiveSelector)) return;
+      if (target.closest('[data-tag-chips]') && !draft) {
+        controller.ui().select(id);
+        controller.ui().set({ popover: { kind: 'tag', rowId: id } });
+        return;
+      }
       const title = target.closest('[data-focus-target]');
       // A click on the title text edits with the caret where clicked (02 §3.3).
       if (title && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
-        useListStore.getState().edit(id, caretOffsetAt(event, title));
+        controller.ui().edit(id, caretOffsetAt(event, title));
         return;
       }
-      const store = useListStore.getState();
+      const store = controller.ui();
       if (event.metaKey || event.ctrlKey) controller.toggleInSelection(id);
       else if (event.shiftKey && store.anchor) controller.selectRange(store.anchor, id);
-      else store.select(id);
+      else {
+        // 02 §3.3: a click on the row body selects it and opens the pane (focus stays here).
+        store.select(id);
+        if (!draft) onOpenTask?.(id, false);
+      }
     },
-    [controller, id],
+    [controller, id, draft, onOpenTask],
   );
 
   const onDueChange = (next: DueValue | null) => controller.setDue([id], next);
@@ -89,8 +104,9 @@ export const TaskRow = memo(function TaskRow({ row }: TaskRowProps) {
   const label = task.title || t('row.untitled');
   return (
     <GridRow
-      aria-level={2}
+      aria-level={level}
       aria-selected={selected}
+      {...(expandable ? { 'aria-expanded': expanded } : {})}
       data-row-id={id}
       data-testid="task-row"
       data-done={done || undefined}
@@ -99,11 +115,15 @@ export const TaskRow = memo(function TaskRow({ row }: TaskRowProps) {
       onFocus={(event) => {
         // Tabbing onto the title (or name) selects the row in Navigate.
         if (!(event.target as Element).matches('[data-focus-target]')) return;
-        const store = useListStore.getState();
+        const store = controller.ui();
         if (store.cursor !== id && store.mode === 'navigate') store.select(id);
       }}
+      data-level={level}
+      data-cv={editing ? undefined : true}
+      style={indent > 0 ? { paddingInlineStart: `calc(var(--space-6) * ${indent})` } : undefined}
       className={cn(
-        'group/row relative flex h-row shrink-0 items-center rounded-sm pe-1 max-tablet:h-row-mobile',
+        'group/row relative flex shrink-0 items-center rounded-sm pe-1 max-tablet:h-row-mobile',
+        subtaskRow ? 'h-row-subtask' : 'h-row',
         'transition-[height,opacity] duration-(--dur-slow) ease-standard',
         selected ? 'bg-bg-selected' : 'hover:bg-bg-subtle',
         'has-[[data-focus-target]:focus-visible]:outline-2 has-[[data-focus-target]:focus-visible]:-outline-offset-2 has-[[data-focus-target]:focus-visible]:outline-border-focus',
@@ -118,7 +138,37 @@ export const TaskRow = memo(function TaskRow({ row }: TaskRowProps) {
         />
       )}
       <DropLine rowId={id} />
-      <GridCell className="flex w-4 shrink-0 justify-center ms-1 pointer-coarse:hidden">
+      <GridCell
+        className={cn(
+          'relative flex w-4 shrink-0 justify-center ms-1',
+          !expandable && 'pointer-coarse:hidden',
+        )}
+      >
+        {expandable && (
+          <button
+            type="button"
+            tabIndex={-1}
+            data-chevron
+            aria-label={t(expanded ? 'subtasks.collapse' : 'subtasks.expand', { title: label })}
+            onClick={(e) => {
+              e.stopPropagation();
+              controller.toggleExpanded(id);
+            }}
+            className={cn(
+              'absolute inset-y-0 start-0 z-10 flex w-4 items-center justify-center rounded-xs text-text-muted hover:text-text',
+              'group-has-[[data-drag-handle]:focus-visible]/row:invisible',
+            )}
+          >
+            <ChevronRight
+              className={cn(
+                'size-4 transition-transform duration-(--dur-fast)',
+                expanded && 'rotate-90',
+              )}
+              strokeWidth={iconStrokeWidth}
+              aria-hidden
+            />
+          </button>
+        )}
         {!draft && dragEnabled && (
           <button
             type="button"
@@ -128,13 +178,15 @@ export const TaskRow = memo(function TaskRow({ row }: TaskRowProps) {
             {...handleKeys}
             className={cn(
               'flex h-6 w-4 cursor-grab items-center justify-center rounded-xs text-text-disabled',
-              'opacity-0 transition-opacity duration-(--dur-fast) group-hover/row:opacity-100 focus-visible:opacity-100',
+              'opacity-0 transition-opacity duration-(--dur-fast) focus-visible:opacity-100',
+              // A parent's chevron owns this column; its rows still drag from the body.
+              !expandable && 'group-hover/row:opacity-100',
               isSource && 'opacity-100',
             )}
             onClick={(e) => {
               // A click on the handle selects the row (it does not edit).
               e.stopPropagation();
-              const store = useListStore.getState();
+              const store = controller.ui();
               if (!store.selected[id]) store.select(id);
             }}
           >
@@ -166,13 +218,29 @@ export const TaskRow = memo(function TaskRow({ row }: TaskRowProps) {
             label={t('row.titleLabel')}
           />
         ) : (
-          <span
-            // biome-ignore lint/a11y/noNoninteractiveTabindex: the title is a tab stop (02 §6).
-            tabIndex={0}
-            data-focus-target
-            className="min-w-0 cursor-text truncate outline-none"
-          >
-            {task.title}
+          <>
+            {breadcrumb !== null && (
+              <span
+                data-testid="row-breadcrumb"
+                className="max-w-[30%] shrink-0 truncate pe-1 text-sm text-text-muted no-underline"
+              >
+                {t('row.breadcrumb', { title: breadcrumb })}
+              </span>
+            )}
+            <span
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: the title is a tab stop (02 §6).
+              tabIndex={0}
+              data-focus-target
+              className="min-w-0 cursor-text truncate outline-none"
+            >
+              {task.title}
+            </span>
+          </>
+        )}
+        {!draft && (
+          <span className="flex shrink-0 items-center gap-2 ps-2 no-underline empty:hidden">
+            <RowTagChips task={task} />
+            <SubtaskCounter task={task} />
           </span>
         )}
       </GridCell>
@@ -181,13 +249,19 @@ export const TaskRow = memo(function TaskRow({ row }: TaskRowProps) {
           <span className="block w-date-cell" />
         ) : (
           <DateCell
-            value={{ dueDate: task.dueDate, dueTime: task.dueTime, dueTz: task.dueTz }}
+            value={{
+              dueDate: task.dueDate,
+              dueTime: task.dueTime,
+              dueTz: task.dueTz,
+              startDate: task.startDate,
+            }}
+            startDate={task.startDate}
             onChange={onDueChange}
             ctx={dateCtx}
             completed={done}
             isOpen={dateOpen}
             onOpenChange={(open) =>
-              useListStore.getState().set({ popover: open ? { kind: 'date', rowId: id } : null })
+              controller.ui().set({ popover: open ? { kind: 'date', rowId: id } : null })
             }
           />
         )}

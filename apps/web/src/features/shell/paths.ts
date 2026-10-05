@@ -15,6 +15,7 @@ export const paths = {
   home: '/',
   login: '/login',
   orgView: (slug: string, view: OrgViewId) => `/o/${slug}/${view}`,
+  task: (slug: string, taskId: string) => `/o/${slug}/t/${taskId}`,
   orgSettings: (slug: string) => `/o/${slug}/settings`,
   orgInvites: (slug: string) => `/o/${slug}/settings#invites`,
   settings: (section: SettingsSection) => `/settings/${section}`,

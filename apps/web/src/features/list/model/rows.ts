@@ -1,7 +1,13 @@
 import { compareKeys } from '@rooster/core/ordering';
-import { inboxOf, type ListState, normalGroups } from '@rooster/core/reducers';
+import { childrenIndex, inboxOf, type ListState, normalGroups } from '@rooster/core/reducers';
 import type { Group, Task } from '@rooster/core/schemas';
-import { addGroupRowId, addRowId, type Draft, groupRowId } from '../../../state/list-store';
+import {
+  addGroupRowId,
+  addRowId,
+  addSubtaskRowId,
+  type Draft,
+  groupRowId,
+} from '../../../state/list-store';
 
 export interface GroupRow {
   kind: 'group';
@@ -18,8 +24,27 @@ export interface TaskRow {
   kind: 'task';
   id: string;
   task: Task;
+  /** The group the row renders in (a subtask: its top-level row's group). */
   groupId: string;
   draft: boolean;
+  /** 02 §3.1 `aria-level`: 2 for tasks, 3 and deeper for subtasks shown under a parent. */
+  level: number;
+  /** Set for a subtask row shown under its parent (P3). */
+  parentId: string | null;
+  /** Has subtasks: shows the chevron. */
+  expandable: boolean;
+  expanded: boolean;
+  /** FR-TASK-12: the parent's title, for an orphan subtask shown as its own row. */
+  breadcrumb: string | null;
+}
+
+/** "+ Add subtask" after an expanded parent's subtasks. */
+export interface AddSubtaskRow {
+  kind: 'addSubtask';
+  id: string;
+  parentId: string;
+  groupId: string;
+  level: number;
 }
 
 export interface AddRow {
@@ -40,7 +65,7 @@ export interface AddGroupRow {
   id: string;
 }
 
-export type Row = GroupRow | TaskRow | AddRow | HintRow | AddGroupRow;
+export type Row = GroupRow | TaskRow | AddRow | HintRow | AddGroupRow | AddSubtaskRow;
 
 export interface RowOptions {
   drafts: readonly Draft[];
@@ -50,6 +75,8 @@ export interface RowOptions {
   hoverExpanded: Readonly<Record<string, true>>;
   /** The placeholder task a draft renders with (stable per draft id). */
   draftTask: (draft: Draft) => Task;
+  /** FR-TAG-4: only top-level rows carrying one of these tags (empty: all). */
+  tagFilter?: readonly string[];
 }
 
 export type RowCache = Map<string, Row>;
@@ -74,18 +101,26 @@ export function buildRows(state: ListState, options: RowOptions, cache?: RowCach
     return result;
   };
   const draftsByGroup = new Map<string, Draft[]>();
+  const draftsByParent = new Map<string, Draft[]>();
   for (const draft of options.drafts) {
-    const list = draftsByGroup.get(draft.groupId) ?? [];
+    const map = draft.parentId ? draftsByParent : draftsByGroup;
+    const key = draft.parentId ?? draft.groupId;
+    const list = map.get(key) ?? [];
     list.push(draft);
-    draftsByGroup.set(draft.groupId, list);
+    map.set(key, list);
   }
   const visible = (task: Task) =>
     task.completedAt === null || options.showCompleted || task.id in options.hiding;
   const firstRun = Object.keys(state.tasks).length === 0 && options.drafts.length === 0;
+  const filter = options.tagFilter ?? [];
+  const passes = (task: Task) =>
+    filter.length === 0 || task.tagIds.some((id) => filter.includes(id));
 
   const inbox = inboxOf(state);
   const groups = normalGroups(state);
   const byGroup = bucketByGroup(state);
+  const children = childrenIndex(Object.values(state.tasks));
+  const expanded = new Set(state.expandedTaskIds);
   const inGroup = (groupId: string) => byGroup.get(groupId) ?? [];
   const inboxTasks = inbox ? inGroup(inbox.id) : [];
   const showInbox =
@@ -93,6 +128,78 @@ export function buildRows(state: ListState, options: RowOptions, cache?: RowCach
     (inboxTasks.some((t) => t.completedAt === null || t.id in options.hiding) ||
       draftsByGroup.has(inbox.id));
   const ordered = showInbox && inbox ? [inbox, ...groups] : groups;
+
+  const draftRow = (draft: Draft, groupId: string, level: number, parentId: string | null) =>
+    reuse<TaskRow>({
+      kind: 'task',
+      id: draft.id,
+      task: options.draftTask(draft),
+      groupId,
+      draft: true,
+      level,
+      parentId,
+      expandable: false,
+      expanded: false,
+      breadcrumb: null,
+    });
+
+  /** Rows of a parent's expanded subtree: subtasks (drafts spliced in), then "+ Add subtask". */
+  const subtree = (parent: Task, groupId: string, level: number, out: Row[], guard: number) => {
+    const items: (TaskRow | Task)[] = (children.get(parent.id) ?? []).filter(visible);
+    for (const draft of draftsByParent.get(parent.id) ?? []) {
+      const at =
+        draft.afterId === null
+          ? 0
+          : items.findIndex((r) => r.id === draft.afterId) + 1 || items.length;
+      items.splice(at, 0, draftRow(draft, groupId, level, parent.id));
+    }
+    for (const item of items) {
+      if ('kind' in item) {
+        out.push(item);
+        continue;
+      }
+      taskRows(item, groupId, level, parent.id, out, guard + 1);
+    }
+    out.push(
+      reuse({
+        kind: 'addSubtask',
+        id: addSubtaskRowId(parent.id),
+        parentId: parent.id,
+        groupId,
+        level,
+      }),
+    );
+  };
+
+  const taskRows = (
+    task: Task,
+    groupId: string,
+    level: number,
+    parentId: string | null,
+    out: Row[],
+    guard = 0,
+  ) => {
+    const hasChildren =
+      task.counts.subtasks > 0 || children.has(task.id) || draftsByParent.has(task.id);
+    const open = hasChildren && expanded.has(task.id) && guard < 8;
+    const orphanParent =
+      parentId === null && task.parentId !== null ? state.tasks[task.parentId] : undefined;
+    out.push(
+      reuse<TaskRow>({
+        kind: 'task',
+        id: task.id,
+        task,
+        groupId,
+        draft: false,
+        level,
+        parentId,
+        expandable: hasChildren,
+        expanded: open,
+        breadcrumb: orphanParent ? orphanParent.title : null,
+      }),
+    );
+    if (open) subtree(task, groupId, level + 1, out, guard);
+  };
 
   ordered.forEach((group, index) => {
     const tasks = group === inbox ? inboxTasks : inGroup(group.id);
@@ -109,27 +216,18 @@ export function buildRows(state: ListState, options: RowOptions, cache?: RowCach
       }),
     );
     if (collapsed) return;
-    const items: TaskRow[] = tasks
-      .filter(visible)
-      .map((task) => reuse({ kind: 'task', id: task.id, task, groupId: group.id, draft: false }));
+    const items: (Task | TaskRow)[] = tasks.filter((t) => visible(t) && passes(t));
     for (const draft of draftsByGroup.get(group.id) ?? []) {
       const at =
         draft.afterId === null
           ? 0
           : items.findIndex((r) => r.id === draft.afterId) + 1 || items.length;
-      items.splice(
-        at,
-        0,
-        reuse({
-          kind: 'task',
-          id: draft.id,
-          task: options.draftTask(draft),
-          groupId: group.id,
-          draft: true,
-        }),
-      );
+      items.splice(at, 0, draftRow(draft, group.id, 2, null));
     }
-    rows.push(...items);
+    for (const item of items) {
+      if ('kind' in item) rows.push(item);
+      else taskRows(item, group.id, 2, null, rows);
+    }
     if (firstRun && group === groups[0]) {
       rows.push(reuse({ kind: 'hint', id: `hint:${group.id}`, groupId: group.id }));
     }
@@ -169,6 +267,11 @@ export function isTaskRow(row: Row): row is TaskRow {
   return row.kind === 'task' && !row.draft;
 }
 
+/** A persisted top-level row of its group (not a subtask shown under its parent). */
+export function isTopTaskRow(row: Row): row is TaskRow {
+  return isTaskRow(row) && row.parentId === null;
+}
+
 export interface GroupOrder {
   id: string;
   collapsed: boolean;
@@ -182,7 +285,7 @@ export function visibleOrder(rows: readonly Row[]): GroupOrder[] {
   for (const row of rows) {
     if (row.kind === 'group') {
       groups.push({ id: row.group.id, collapsed: row.collapsed, taskIds: [] });
-    } else if (isTaskRow(row)) {
+    } else if (isTopTaskRow(row)) {
       groups.at(-1)?.taskIds.push(row.id);
     }
   }
