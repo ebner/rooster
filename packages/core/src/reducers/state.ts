@@ -86,19 +86,19 @@ export function comparePlaced(
   return compareKeys(a.position, b.position) || compareKeys(a.id, b.id);
 }
 
-export function inboxOf(state: ListState): Group | undefined {
+export function inboxOf(state: Pick<ListState, 'groups'>): Group | undefined {
   return Object.values(state.groups).find((g) => g.kind === 'inbox');
 }
 
 /** Normal (non-Inbox) groups in the user's order. */
-export function normalGroups(state: ListState): Group[] {
+export function normalGroups(state: Pick<ListState, 'groups'>): Group[] {
   return Object.values(state.groups)
     .filter((g) => g.kind === 'normal')
     .sort(comparePlaced);
 }
 
 /** Every group in display order: the Inbox first, then the user's order. */
-export function orderedGroups(state: ListState): Group[] {
+export function orderedGroups(state: Pick<ListState, 'groups'>): Group[] {
   const inbox = inboxOf(state);
   const rest = normalGroups(state);
   return inbox ? [inbox, ...rest] : rest;
