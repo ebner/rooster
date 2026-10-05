@@ -46,6 +46,8 @@ export const taskQuerySchema = pageQuerySchema.extend({
    * tag ID, or else a tag name (case-insensitive). An unknown tag matches nothing.
    */
   tag: z.union([tagFilterValue, z.array(tagFilterValue).max(20)]).optional(),
+  /** P5. Full-text query in the `parseSearchQuery` grammar (`@rooster/core/search`). */
+  q: z.string().trim().min(1).max(200).optional(),
 });
 
 export const taskPageSchema = z.object({

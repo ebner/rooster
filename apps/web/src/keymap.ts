@@ -56,6 +56,11 @@ export const keymap = {
   cheatSheet: { keys: ['?'], scope: 'navigate', section: 'general' },
   goMyTasks: { keys: ['G M'], scope: 'navigate', section: 'general' },
   goSettings: { keys: ['G S'], scope: 'navigate', section: 'general' },
+  goToday: { keys: ['G T'], scope: 'navigate', section: 'general' },
+  goWeek: { keys: ['G W'], scope: 'navigate', section: 'general' },
+  goOverdue: { keys: ['G O'], scope: 'navigate', section: 'general' },
+  goNoDate: { keys: ['G N'], scope: 'navigate', section: 'general' },
+  focusSearch: { keys: ['/'], scope: 'navigate', section: 'general' },
 
   // Navigate (single keys).
   selectPrevious: { keys: ['ArrowUp', 'K'], scope: 'navigate', section: 'navigation' },
