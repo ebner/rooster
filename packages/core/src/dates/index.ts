@@ -35,3 +35,17 @@ export {
   type WeekStart,
   weekdayOf,
 } from './iso.ts';
+export {
+  type DateParseContext,
+  type DateParseResult,
+  findDateInTitle,
+  type ParseLocale,
+  parseDatePhrase,
+  type TitleDateMatch,
+} from './parse.ts';
+export {
+  findGroupToken,
+  type GroupTokenMatch,
+  stripBackticks,
+  stripTitleMatch,
+} from './tokens.ts';
