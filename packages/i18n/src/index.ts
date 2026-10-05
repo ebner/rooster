@@ -8,11 +8,13 @@ import enDev from '../locales/en/dev.json' with { type: 'json' };
 import enEditor from '../locales/en/editor.json' with { type: 'json' };
 import enList from '../locales/en/list.json' with { type: 'json' };
 import enMobile from '../locales/en/mobile.json' with { type: 'json' };
+import enPalette from '../locales/en/palette.json' with { type: 'json' };
 import enPane from '../locales/en/pane.json' with { type: 'json' };
 import enPwa from '../locales/en/pwa.json' with { type: 'json' };
 import enSettings from '../locales/en/settings.json' with { type: 'json' };
 import enShell from '../locales/en/shell.json' with { type: 'json' };
 import enTags from '../locales/en/tags.json' with { type: 'json' };
+import enViews from '../locales/en/views.json' with { type: 'json' };
 import svAdmin from '../locales/sv/admin.json' with { type: 'json' };
 import svAuth from '../locales/sv/auth.json' with { type: 'json' };
 import svCommon from '../locales/sv/common.json' with { type: 'json' };
@@ -21,11 +23,13 @@ import svDev from '../locales/sv/dev.json' with { type: 'json' };
 import svEditor from '../locales/sv/editor.json' with { type: 'json' };
 import svList from '../locales/sv/list.json' with { type: 'json' };
 import svMobile from '../locales/sv/mobile.json' with { type: 'json' };
+import svPalette from '../locales/sv/palette.json' with { type: 'json' };
 import svPane from '../locales/sv/pane.json' with { type: 'json' };
 import svPwa from '../locales/sv/pwa.json' with { type: 'json' };
 import svSettings from '../locales/sv/settings.json' with { type: 'json' };
 import svShell from '../locales/sv/shell.json' with { type: 'json' };
 import svTags from '../locales/sv/tags.json' with { type: 'json' };
+import svViews from '../locales/sv/views.json' with { type: 'json' };
 
 /** UI languages (D-23). English is the fallback. */
 export const supportedLocales = ['en', 'sv'] as const;
@@ -52,6 +56,8 @@ export const namespaces = [
   'editor',
   'pwa',
   'mobile',
+  'views',
+  'palette',
 ] as const;
 export type Namespace = (typeof namespaces)[number];
 export const defaultNamespace: Namespace = 'common';
@@ -71,6 +77,8 @@ export const resources = {
     editor: enEditor,
     pwa: enPwa,
     mobile: enMobile,
+    views: enViews,
+    palette: enPalette,
   },
   sv: {
     common: svCommon,
@@ -86,6 +94,8 @@ export const resources = {
     editor: svEditor,
     pwa: svPwa,
     mobile: svMobile,
+    views: svViews,
+    palette: svPalette,
   },
 } as const;
 
