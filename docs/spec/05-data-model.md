@@ -26,7 +26,9 @@ PRAGMA cache_size = -20000;
 - Write transactions use `BEGIN IMMEDIATE`.
 - There is a single connection for writes. Read concurrency is fine with WAL and the same connection, because better-sqlite3 is synchronous and Node is single-threaded.
 
-## 2. better-auth tables
+## 2. better-auth tables (and rooster-owned org tables)
+
+> Per ADR 0002, `organization`, `member` and `invitation` are **rooster-owned** tables managed only by `OrgService`. The better-auth organization plugin is not used. They are listed here because their shape follows the better-auth conventions.
 
 The better-auth CLI generates these through the Drizzle adapter, and they are kept in `schema/auth.ts`. They are listed here with **rooster's additional fields**.
 

@@ -113,7 +113,7 @@ These decisions come from the product requirements and from technical research. 
 | D-30 | **TypeScript end-to-end** in a pnpm monorepo: server, web, CLI and shared packages. |
 | D-31 | **SQLite** in a Docker volume (WAL mode), through Drizzle ORM and better-sqlite3. No Postgres support. |
 | D-32 | **Offline:** offline reads plus queued writes (outbox). Conflicts are resolved by per-field last-write-wins using client edit timestamps. No CRDT and no full local-first replica. |
-| D-33 | **Auth:** better-auth with Google, generic OIDC, the organization plugin, the device authorization grant (CLI), bearer and API keys (PATs). |
+| D-33 | **Auth:** better-auth with Google, generic OIDC, the device authorization grant (CLI), bearer and API keys (PATs). Organisations are rooster-owned tables, not the better-auth organization plugin (ADR 0002). |
 | D-34 | **Realtime:** Server-Sent Events that carry *invalidation* messages. Clients refetch. |
 | D-35 | **Ordering:** fractional-index string keys. The **server is authoritative** and computes keys from `before`/`after` neighbour intents. |
 | D-36 | **IDs:** UUIDv7 strings, generated client-side for creates so that offline creation works. |

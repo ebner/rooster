@@ -36,7 +36,7 @@ Single process, single node. The web app is served from the **same origin** as t
 | Validation / OpenAPI | **Zod 4** + `@hono/zod-openapi` + Scalar API reference | Schemas live in `packages/core/schemas` and are shared by all clients. |
 | DB | **SQLite** via **better-sqlite3 13** | Hidden behind Drizzle; `node:sqlite` is a future swap. |
 | ORM / migrations | **Drizzle ORM 0.45 + drizzle-kit** | SQL migrations committed and applied at boot. Pin 0.45 until 1.0 is GA. |
-| Auth | **better-auth 1.7** | Plugins: `genericOAuth`, `organization`, `deviceAuthorization`, `bearer`, `@better-auth/api-key`. Drizzle adapter. |
+| Auth | **better-auth 1.7** | Plugins: `genericOAuth`, `deviceAuthorization`, `bearer`, `@better-auth/api-key`. Drizzle adapter. Orgs are rooster-owned tables (ADR 0002). |
 | Web framework | **React 19** + **Vite 8** | |
 | Routing | **TanStack Router** (file-based, typed search params) | |
 | Server state | **TanStack Query 5** + IndexedDB persister (`idb-keyval`) | A custom outbox is layered on top (§6). Watch TanStack DB for the future. |

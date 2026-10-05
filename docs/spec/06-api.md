@@ -35,8 +35,8 @@
 | PATCH `/me` | Name, locale, timezone, weekStart, dateFormat, timeFormat, prefs (partial). | 1 |
 | PUT `/me/org-order` | `{orgId, beforeId?, afterId?}` (sidebar order). | 1 |
 | PATCH `/me/orgs/:orgId` | `{collapsed}`: the sidebar section collapse state (`org_member_pref`). | 1 |
-| PUT `/me/avatar` · DELETE `/me/avatar` | multipart `file` (image, ≤ 2 MB). It is resized to 256 px WebP, stored at BlobStore key `avatars/<userId>`, and sets `user.image` to `/api/v1/avatars/<userId>?v=<ts>`. DELETE reverts to the OIDC picture. | 1 |
-| GET `/avatars/:userId` | Serves an avatar to any user sharing an org with that user. | 1 |
+| PUT `/me/avatar` · DELETE `/me/avatar` | multipart `file` (image, ≤ 2 MB). It is resized to 256 px WebP, stored at BlobStore key `avatars/<userId>`, and sets `user.image` to `/api/v1/avatars/<userId>?v=<ts>`. DELETE reverts to the OIDC picture. | 10 |
+| GET `/avatars/:userId` | Serves an avatar to any user sharing an org with that user. | 10 |
 | GET `/me/sessions` · DELETE `/me/sessions/:id` | List and revoke sessions. | 1 |
 | GET/POST `/me/tokens` · DELETE `/me/tokens/:id` | PATs `{name, scopes, expiresInDays?}` → `{token}` (shown once). | 8 |
 | GET `/me/devices` · DELETE `/me/devices/:id` | Authorised CLI devices (bearer sessions). | 8 |
