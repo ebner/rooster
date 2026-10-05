@@ -118,3 +118,18 @@ describe('list schemas', () => {
     expect(parsed.tasks).toHaveLength(1);
   });
 });
+
+describe('sse schemas', () => {
+  it('validates invalidate and hello events', async () => {
+    const { sseInvalidateSchema, sseHelloSchema } = await import('../src/schemas/events.ts');
+    expect(
+      sseInvalidateSchema.safeParse({ org: id(), keys: [['my-list', id()]], origin: null }).success,
+    ).toBe(true);
+    expect(sseInvalidateSchema.safeParse({ org: null, keys: [], origin: null }).success).toBe(
+      false,
+    );
+    expect(
+      sseHelloSchema.safeParse({ version: '0.1.0', gitSha: 'dev', serverTime: 1 }).success,
+    ).toBe(true);
+  });
+});

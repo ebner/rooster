@@ -21,7 +21,9 @@
     "@rooster/core": "workspace:*",
     "@rooster/i18n": "workspace:*",
     "@rooster/tokens": "workspace:*",
+    "@tanstack/query-async-storage-persister": "catalog:",
     "@tanstack/react-query": "catalog:",
+    "@tanstack/react-query-persist-client": "catalog:",
     "@tanstack/react-router": "catalog:",
     "@tiptap/extension-list": "catalog:",
     "@tiptap/extensions": "catalog:",
@@ -33,12 +35,19 @@
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "i18next": "catalog:",
+    "idb-keyval": "catalog:",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-aria-components": "catalog:",
     "react-dom": "catalog:",
     "react-i18next": "catalog:",
     "tailwind-merge": "catalog:",
+    "workbox-core": "catalog:",
+    "workbox-expiration": "catalog:",
+    "workbox-precaching": "catalog:",
+    "workbox-routing": "catalog:",
+    "workbox-strategies": "catalog:",
+    "workbox-window": "catalog:",
     "zustand": "catalog:"
   },
   "devDependencies": {
@@ -50,11 +59,14 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "fake-indexeddb": "catalog:",
     "jsdom": "catalog:",
     "oauth2-mock-server": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:"
+    "vite-plugin-pwa": "catalog:",
+    "vitest": "catalog:",
+    "workbox-build": "catalog:"
   }
 }
