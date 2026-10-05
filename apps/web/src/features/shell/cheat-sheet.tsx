@@ -3,9 +3,10 @@ import { Fragment, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { create } from 'zustand';
 import {
+  isKeyed,
+  type KeyedShortcutId,
   keymap,
   type ShortcutDefinition,
-  type ShortcutId,
   type ShortcutSection,
   shortcutIds,
 } from '../../keymap';
@@ -30,11 +31,15 @@ const sections: readonly ShortcutSection[] = [
   'dates',
 ];
 
-/** Registry entries per section, in registry order (the docs are generated, 02 §6). */
-export function cheatSheetSections(): { section: ShortcutSection; ids: ShortcutId[] }[] {
+/**
+ * Registry entries per section, in registry order (the docs are generated, 02 §6). Palette-only
+ * commands have no keys and are left out.
+ */
+export function cheatSheetSections(): { section: ShortcutSection; ids: KeyedShortcutId[] }[] {
+  const keyed = shortcutIds.filter(isKeyed);
   return sections.map((section) => ({
     section,
-    ids: shortcutIds.filter((id) => keymap[id].section === section),
+    ids: keyed.filter((id) => keymap[id].section === section),
   }));
 }
 

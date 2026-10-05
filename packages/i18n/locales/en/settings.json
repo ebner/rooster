@@ -139,5 +139,36 @@
       "delete": "Delete",
       "none": "Nothing"
     }
+  },
+  "data": {
+    "org": "Organisation",
+    "exportTitle": "Export",
+    "exportBody": "Download your groups, tasks, subtasks and tags in this organisation.",
+    "format": {
+      "json": "Export JSON",
+      "markdown": "Export Markdown"
+    },
+    "offline": "You’re offline. Export and Trash need a connection.",
+    "trashTitle": "Trash",
+    "trashBody": "Deleted tasks stay here for 30 days. Trash is shared by everyone in the organisation.",
+    "trashEmpty": "Trash is empty.",
+    "trashFailed": "Couldn’t load the Trash. Try again.",
+    "deletedBy": "Deleted by {name} · {when}",
+    "you": "you",
+    "someone": "someone",
+    "untitled": "Untitled task",
+    "restore": "Restore",
+    "restoreNamed": "Restore {title}",
+    "restored": "Restored “{title}”",
+    "show": "Show",
+    "delete": "Delete permanently",
+    "deleteNamed": "Delete {title} permanently",
+    "confirm": "Delete for good? This can’t be undone.",
+    "confirmLabel": "Delete {title} permanently?",
+    "deleteForGood": "Delete",
+    "deleted": "Deleted “{title}” for good",
+    "cancel": "Cancel",
+    "loadMore": "Show more",
+    "failed": "Couldn’t do that. Check your connection and try again."
   }
 }

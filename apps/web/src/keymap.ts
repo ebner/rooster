@@ -19,8 +19,23 @@ import type { Platform } from './lib/platform';
  * - `drag`: handled by a focused drag handle.
  * - `picker`: handled inside the date popover (matched by `event.code`, 02 §7).
  * - `editor`: handled by the description editor itself (features/editor, 02 §9.2).
+ * - `palette`: no keys; a command only the palette runs (`keys: []`, skipped by the cheat sheet).
  */
-export type ShortcutScope = 'global' | 'navigate' | 'list' | 'edit' | 'drag' | 'picker' | 'editor';
+export type ShortcutScope =
+  | 'global'
+  | 'navigate'
+  | 'list'
+  | 'edit'
+  | 'drag'
+  | 'picker'
+  | 'editor'
+  | 'palette';
+
+/**
+ * Where a command appears in the command palette (04 §5.3, FR-VIEW-4); entries without it are
+ * not offered there. `task` commands act on the list's selection and only show with one.
+ */
+export type PaletteGroup = 'task' | 'list' | 'navigation' | 'general';
 
 export type ShortcutSection =
   | 'general'
@@ -39,27 +54,34 @@ export interface ShortcutDefinition {
   section: ShortcutSection;
   /** Cheat-sheet label override, e.g. `Mod+1…9` for a range. */
   display?: string;
+  /** Offered as a palette action (labelled `palette:action.<id>`), run via `runShortcut`. */
+  palette?: PaletteGroup;
 }
 
 export const keymap = {
   // Global (modifier chords only, work even while typing).
   search: { keys: ['Mod+K'], scope: 'global', section: 'general' },
-  toggleSidebar: { keys: ['Mod+\\'], scope: 'global', section: 'general' },
+  toggleSidebar: { keys: ['Mod+\\'], scope: 'global', section: 'general', palette: 'general' },
   goToOrg: {
     keys: ['Mod+1', 'Mod+2', 'Mod+3', 'Mod+4', 'Mod+5', 'Mod+6', 'Mod+7', 'Mod+8', 'Mod+9'],
     scope: 'global',
     section: 'general',
     display: 'Mod+1…9',
   },
-  undo: { keys: ['Mod+Z'], scope: 'global', section: 'general' },
-  redo: { keys: ['Mod+Shift+Z', 'Ctrl+Y'], scope: 'global', section: 'general' },
-  cheatSheet: { keys: ['?'], scope: 'navigate', section: 'general' },
-  goMyTasks: { keys: ['G M'], scope: 'navigate', section: 'general' },
-  goSettings: { keys: ['G S'], scope: 'navigate', section: 'general' },
-  goToday: { keys: ['G T'], scope: 'navigate', section: 'general' },
-  goWeek: { keys: ['G W'], scope: 'navigate', section: 'general' },
-  goOverdue: { keys: ['G O'], scope: 'navigate', section: 'general' },
-  goNoDate: { keys: ['G N'], scope: 'navigate', section: 'general' },
+  undo: { keys: ['Mod+Z'], scope: 'global', section: 'general', palette: 'general' },
+  redo: {
+    keys: ['Mod+Shift+Z', 'Ctrl+Y'],
+    scope: 'global',
+    section: 'general',
+    palette: 'general',
+  },
+  cheatSheet: { keys: ['?'], scope: 'navigate', section: 'general', palette: 'general' },
+  goMyTasks: { keys: ['G M'], scope: 'navigate', section: 'general', palette: 'navigation' },
+  goSettings: { keys: ['G S'], scope: 'navigate', section: 'general', palette: 'navigation' },
+  goToday: { keys: ['G T'], scope: 'navigate', section: 'general', palette: 'navigation' },
+  goWeek: { keys: ['G W'], scope: 'navigate', section: 'general', palette: 'navigation' },
+  goOverdue: { keys: ['G O'], scope: 'navigate', section: 'general', palette: 'navigation' },
+  goNoDate: { keys: ['G N'], scope: 'navigate', section: 'general', palette: 'navigation' },
   focusSearch: { keys: ['/'], scope: 'navigate', section: 'general' },
 
   // Navigate (single keys).
@@ -73,7 +95,7 @@ export const keymap = {
   toggleInSelection: { keys: ['X'], scope: 'navigate', section: 'navigation' },
   collapse: { keys: ['ArrowLeft'], scope: 'navigate', section: 'navigation' },
   expand: { keys: ['ArrowRight'], scope: 'navigate', section: 'navigation' },
-  toggleCompleted: { keys: ['Shift+H'], scope: 'navigate', section: 'navigation' },
+  toggleCompleted: { keys: ['Shift+H'], scope: 'navigate', section: 'navigation', palette: 'list' },
   editTitle: { keys: ['Enter', 'F2', 'I'], scope: 'navigate', section: 'editing' },
   newBelowNavigate: { keys: ['N'], scope: 'navigate', section: 'editing' },
   newAboveNavigate: { keys: ['Shift+N'], scope: 'navigate', section: 'editing' },
@@ -95,22 +117,37 @@ export const keymap = {
 
   // Both modes.
   escape: { keys: ['Escape'], scope: 'list', section: 'navigation' },
-  complete: { keys: ['Mod+Enter'], scope: 'list', section: 'editing' },
-  deleteTask: { keys: ['Tab+Delete', 'Tab+Backspace'], scope: 'list', section: 'editing' },
-  quickAdd: { keys: ['Tab+Q'], scope: 'list', section: 'editing' },
-  datePicker: { keys: ['Tab+D'], scope: 'list', section: 'editing' },
-  moveTo: { keys: ['Tab+M'], scope: 'list', section: 'moving' },
-  moveUp: { keys: ['Mod+ArrowUp'], scope: 'list', section: 'moving' },
-  moveDown: { keys: ['Mod+ArrowDown'], scope: 'list', section: 'moving' },
+  complete: { keys: ['Mod+Enter'], scope: 'list', section: 'editing', palette: 'task' },
+  deleteTask: {
+    keys: ['Tab+Delete', 'Tab+Backspace'],
+    scope: 'list',
+    section: 'editing',
+    palette: 'task',
+  },
+  quickAdd: { keys: ['Tab+Q'], scope: 'list', section: 'editing', palette: 'list' },
+  datePicker: { keys: ['Tab+D'], scope: 'list', section: 'editing', palette: 'task' },
+  moveTo: { keys: ['Tab+M'], scope: 'list', section: 'moving', palette: 'task' },
+  moveUp: { keys: ['Mod+ArrowUp'], scope: 'list', section: 'moving', palette: 'task' },
+  moveDown: { keys: ['Mod+ArrowDown'], scope: 'list', section: 'moving', palette: 'task' },
   moveToPreviousGroup: { keys: ['Mod+Shift+ArrowUp'], scope: 'list', section: 'moving' },
   moveToNextGroup: { keys: ['Mod+Shift+ArrowDown'], scope: 'list', section: 'moving' },
-  moveToGroupTop: { keys: ['Alt+Shift+ArrowUp'], scope: 'list', section: 'moving' },
-  moveToGroupBottom: { keys: ['Alt+Shift+ArrowDown'], scope: 'list', section: 'moving' },
-  newGroup: { keys: ['Tab+N'], scope: 'list', section: 'groups' },
-  addSubtask: { keys: ['Tab+S'], scope: 'list', section: 'editing' },
-  tagPicker: { keys: ['Tab+T'], scope: 'list', section: 'editing' },
-  duplicate: { keys: ['Mod+D'], scope: 'list', section: 'editing' },
-  openPaneFocus: { keys: ['Tab+Enter'], scope: 'list', section: 'pane' },
+  moveToGroupTop: {
+    keys: ['Alt+Shift+ArrowUp'],
+    scope: 'list',
+    section: 'moving',
+    palette: 'task',
+  },
+  moveToGroupBottom: {
+    keys: ['Alt+Shift+ArrowDown'],
+    scope: 'list',
+    section: 'moving',
+    palette: 'task',
+  },
+  newGroup: { keys: ['Tab+N'], scope: 'list', section: 'groups', palette: 'list' },
+  addSubtask: { keys: ['Tab+S'], scope: 'list', section: 'editing', palette: 'task' },
+  tagPicker: { keys: ['Tab+T'], scope: 'list', section: 'editing', palette: 'task' },
+  duplicate: { keys: ['Mod+D'], scope: 'list', section: 'editing', palette: 'task' },
+  openPaneFocus: { keys: ['Tab+Enter'], scope: 'list', section: 'pane', palette: 'task' },
   paneFullScreen: { keys: ['Tab+X'], scope: 'list', section: 'pane' },
   focusDescription: { keys: ['Tab+R'], scope: 'list', section: 'pane' },
   renameGroup: { keys: ['F2'], scope: 'navigate', section: 'groups' },
@@ -135,16 +172,51 @@ export const keymap = {
   dateNextWeek: { keys: ['Alt+W'], scope: 'picker', section: 'dates' },
   dateWeekend: { keys: ['Alt+E'], scope: 'picker', section: 'dates' },
   dateNone: { keys: ['Alt+0'], scope: 'picker', section: 'dates' },
+
+  // Palette-only commands (no keys; the palette registers their handlers).
+  makeSubtaskOf: { keys: [], scope: 'palette', section: 'editing', palette: 'task' },
+  openTrash: { keys: [], scope: 'palette', section: 'general', palette: 'navigation' },
+  exportData: { keys: [], scope: 'palette', section: 'general', palette: 'navigation' },
+  openOrgSettings: { keys: [], scope: 'palette', section: 'general', palette: 'navigation' },
+  openAdmin: { keys: [], scope: 'palette', section: 'general', palette: 'navigation' },
 } as const satisfies Record<string, ShortcutDefinition>;
 
 export type ShortcutId = keyof typeof keymap;
 
 export const shortcutIds = Object.keys(keymap) as ShortcutId[];
 
-/** The first (displayed) key combination of a shortcut. */
-export function primaryKeys(id: ShortcutId): string {
-  return keymap[id].keys[0];
+type PaletteOnlyId = {
+  [K in ShortcutId]: (typeof keymap)[K]['scope'] extends 'palette' ? K : never;
+}[ShortcutId];
+
+/** Registry entries bound to keys (the cheat sheet documents exactly these). */
+export type KeyedShortcutId = Exclude<ShortcutId, PaletteOnlyId>;
+
+export function isKeyed(id: ShortcutId): id is KeyedShortcutId {
+  return keymap[id].scope !== 'palette';
 }
+
+/** The first (displayed) key combination of a shortcut; empty for palette-only commands. */
+export function primaryKeys(id: ShortcutId): string {
+  const keys: readonly string[] = keymap[id].keys;
+  return keys[0] ?? '';
+}
+
+/** Registry entries offered as palette actions. */
+export type PaletteCommandId = {
+  [K in ShortcutId]: (typeof keymap)[K] extends { palette: PaletteGroup } ? K : never;
+}[ShortcutId];
+
+/** The palette group of a registry entry (undefined: not a palette action). */
+export function paletteGroupOf(id: ShortcutId): PaletteGroup | undefined {
+  const definition: ShortcutDefinition = keymap[id];
+  return definition.palette;
+}
+
+/** Palette actions in registry order (04 §5.3: generated from the registry). */
+export const paletteCommandIds = shortcutIds.filter(
+  (id): id is PaletteCommandId => paletteGroupOf(id) !== undefined,
+);
 
 export interface KeyEventLike {
   key: string;

@@ -7,6 +7,8 @@ import { useListStore } from '../../state/list-store';
 import { MenuItem, MenuSeparator } from '../../ui/menu';
 import { useBreakpoint, useEditingFocus, useIsMobile } from '../../ui/use-media';
 import { useKeymapHandlers } from '../../use-keymap';
+import { PaletteHost } from '../palette/palette-host';
+import { openPalette, togglePalette } from '../palette/store';
 import { SyncStatus } from '../pwa/sync-status';
 import { CheatSheet, toggleCheatSheet } from './cheat-sheet';
 import { MobileHeader, OrgSwitcherSheet, type ViewTab } from './mobile-header';
@@ -71,6 +73,9 @@ export function AppShell({ renderSidebar, children, navKey, mobile }: AppShellPr
       else toggleCollapsed();
     },
     cheatSheet: () => toggleCheatSheet(),
+    // 02 §6, §12: Mod+K toggles the palette (even while typing); / opens it to search tasks.
+    search: () => togglePalette(),
+    focusSearch: () => openPalette({ mode: 'search' }),
   });
 
   useEffect(() => {
@@ -120,6 +125,7 @@ export function AppShell({ renderSidebar, children, navKey, mobile }: AppShellPr
             onCreateOrg={mobile.onCreateOrg}
           />
           <CheatSheet />
+          <PaletteHost />
         </div>
       </ShellContext.Provider>
     );
@@ -160,6 +166,7 @@ export function AppShell({ renderSidebar, children, navKey, mobile }: AppShellPr
         </div>
         <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">{children}</main>
         <CheatSheet />
+        <PaletteHost />
       </div>
     </ShellContext.Provider>
   );

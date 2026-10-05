@@ -27,6 +27,7 @@ import { cn } from '../../lib/cn';
 import { IconButton } from '../../ui/icon-button';
 import { LogoMark, Wordmark } from '../../ui/logo';
 import { overlayOffsetPx, popoverMotion, popoverSurface } from '../../ui/popover';
+import { openPalette } from '../palette/store';
 import { CreateOrgForm } from './create-org-form';
 import type { OrgViewId } from './paths';
 import { reorderIntent } from './reorder';
@@ -168,7 +169,7 @@ export function Sidebar({
           label={t('sidebar.search')}
           shortcut={primaryKeys('search')}
           rail={rail}
-          isDisabled
+          onPress={() => openPalette()}
         />
 
         <div className={cn('mt-4 flex flex-col', rail ? 'gap-3' : 'gap-4')}>

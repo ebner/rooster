@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import {
   type KeyEventLike,
+  keymap,
   matches,
   matchesSequence,
   matchesTabChord,
@@ -144,6 +145,53 @@ function run(id: ShortcutId, event: KeyboardEvent): boolean {
     return true;
   }
   return false;
+}
+
+/** True when some mounted layer has a handler for `id` (it may still decline at run time). */
+export function hasShortcutHandler(id: ShortcutId): boolean {
+  return handlersFor(id).length > 0;
+}
+
+export interface RunShortcutOptions {
+  /**
+   * Where the key is "pressed": handlers read the focus zone from the event target (the list
+   * leaves keys pressed in the pane to the pane). Default: the focused element.
+   */
+  target?: Element | null | undefined;
+  /** Overrides the key derived from the shortcut's first binding (e.g. `3` for Mod+3). */
+  key?: string | undefined;
+  code?: string | undefined;
+}
+
+/** A keydown for the shortcut's first binding (`Tab+M` → `M`, `G T` → `T`), never dispatched. */
+function syntheticEvent(id: ShortcutId, options: RunShortcutOptions): KeyboardEvent {
+  const keys: readonly string[] = keymap[id].keys;
+  const binding = (keys[0] ?? '').split(' ').at(-1) ?? '';
+  const parts = binding.split('+').filter((part) => part !== 'Tab');
+  const mods = new Set(parts.slice(0, -1));
+  const mac = detectPlatform() === 'mac';
+  const key = options.key ?? parts.at(-1) ?? '';
+  const event = new KeyboardEvent('keydown', {
+    key: key === 'Space' ? ' ' : key,
+    code: options.code ?? '',
+    ctrlKey: mods.has('Ctrl') || (mods.has('Mod') && !mac),
+    metaKey: mods.has('Mod') && mac,
+    altKey: mods.has('Alt'),
+    shiftKey: mods.has('Shift'),
+    cancelable: true,
+  });
+  const target = options.target === undefined ? document.activeElement : options.target;
+  Object.defineProperty(event, 'target', { value: target ?? document.body });
+  return event;
+}
+
+/**
+ * Runs the command bound to `id` exactly as its key would (04 §5.3): the topmost handler layer
+ * that accepts it wins. The palette uses this, so its actions never duplicate command logic.
+ * Returns false when no mounted handler took it.
+ */
+export function runShortcut(id: ShortcutId, options: RunShortcutOptions = {}): boolean {
+  return run(id, syntheticEvent(id, options));
 }
 
 /** The dispatcher, separated from React for tests. */

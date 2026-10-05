@@ -139,5 +139,36 @@
       "delete": "Ta bort",
       "none": "Ingenting"
     }
+  },
+  "data": {
+    "org": "Organisation",
+    "exportTitle": "Exportera",
+    "exportBody": "Ladda ner dina grupper, uppgifter, deluppgifter och taggar i den här organisationen.",
+    "format": {
+      "json": "Exportera JSON",
+      "markdown": "Exportera Markdown"
+    },
+    "offline": "Du är offline. Export och papperskorgen kräver en anslutning.",
+    "trashTitle": "Papperskorg",
+    "trashBody": "Borttagna uppgifter ligger kvar här i 30 dagar. Papperskorgen delas av alla i organisationen.",
+    "trashEmpty": "Papperskorgen är tom.",
+    "trashFailed": "Det gick inte att läsa in papperskorgen. Försök igen.",
+    "deletedBy": "Borttagen av {name} · {when}",
+    "you": "dig",
+    "someone": "någon",
+    "untitled": "Namnlös uppgift",
+    "restore": "Återställ",
+    "restoreNamed": "Återställ {title}",
+    "restored": "Återställde ”{title}”",
+    "show": "Visa",
+    "delete": "Ta bort permanent",
+    "deleteNamed": "Ta bort {title} permanent",
+    "confirm": "Ta bort för gott? Det går inte att ångra.",
+    "confirmLabel": "Ta bort {title} permanent?",
+    "deleteForGood": "Ta bort",
+    "deleted": "Tog bort ”{title}” för gott",
+    "cancel": "Avbryt",
+    "loadMore": "Visa fler",
+    "failed": "Det gick inte. Kontrollera anslutningen och försök igen."
   }
 }

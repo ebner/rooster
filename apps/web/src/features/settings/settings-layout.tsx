@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Hand, Shield, UserRound } from 'lucide-react';
+import { Database, Hand, Shield, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { paths, type SettingsSection as SectionId } from '../shell/paths';
@@ -15,6 +15,7 @@ export const settingsSections: readonly SubNavEntry[] = [
   { id: 'profile', icon: UserRound },
   { id: 'behaviour', icon: Hand },
   { id: 'security', icon: Shield },
+  { id: 'data', icon: Database },
 ];
 
 export interface SettingsLayoutProps {

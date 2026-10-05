@@ -1,1 +1,89 @@
-{}
+{
+  "title": "Command palette",
+  "label": "Search tasks and actions",
+  "results": "Results",
+  "cancel": "Cancel",
+  "placeholder": {
+    "command": "Search tasks, or type > for actions…",
+    "commandIn": "Search {org}, or type > for actions…",
+    "search": "Search tasks…",
+    "searchIn": "Search {org}…"
+  },
+  "scope": {
+    "all": "All organisations"
+  },
+  "section": {
+    "recent": "Recent",
+    "tasks": "Tasks",
+    "actions": "Actions"
+  },
+  "status": {
+    "offline": "Offline — showing cached tasks",
+    "results": "{count, plural, one {# result} other {# results}}"
+  },
+  "empty": {
+    "tasks": "No tasks match “{query}”",
+    "actions": "No matching actions",
+    "picker": "No tasks to choose from",
+    "hint": "Try fewer words, or type > to search actions.",
+    "start": "Search titles, descriptions and comments. Filter with #tag, due:today or is:done."
+  },
+  "picker": {
+    "title": "Make {count, plural, one {the task} other {# tasks}} a subtask of…",
+    "back": "Back to actions"
+  },
+  "action": {
+    "toggleSidebar": "Toggle sidebar",
+    "undo": "Undo",
+    "redo": "Redo",
+    "cheatSheet": "Show keyboard shortcuts",
+    "goMyTasks": "Go to My tasks",
+    "goToOrg": "Go to {name}",
+    "goSettings": "Open settings",
+    "goToday": "Go to Today",
+    "goWeek": "Go to Next 7 days",
+    "goOverdue": "Go to Overdue",
+    "goNoDate": "Go to No date",
+    "toggleCompleted": "Show or hide completed tasks",
+    "complete": "Complete or reopen task",
+    "deleteTask": "Delete task",
+    "quickAdd": "New task",
+    "datePicker": "Set due date",
+    "moveTo": "Move to group…",
+    "moveUp": "Move task up",
+    "moveDown": "Move task down",
+    "moveToGroupTop": "Move to the top of the group",
+    "moveToGroupBottom": "Move to the bottom of the group",
+    "newGroup": "New group",
+    "addSubtask": "Add subtask",
+    "tagPicker": "Add tag",
+    "duplicate": "Duplicate task",
+    "openPaneFocus": "Open task details",
+    "makeSubtaskOf": "Make subtask of…",
+    "openTrash": "Open Trash",
+    "exportData": "Export data",
+    "openOrgSettings": "Organisation settings",
+    "openAdmin": "Open admin"
+  },
+  "dev": {
+    "section": "Command palette",
+    "empty": "Empty query: recent tasks and actions",
+    "results": "Search results with highlights",
+    "offline": "Offline: cached tasks",
+    "noResults": "No results",
+    "actions": "Actions only (>) with shortcuts",
+    "picker": "Make subtask of… picker",
+    "trash": "Trash rows",
+    "trashConfirm": "Trash row: confirm permanent delete",
+    "sampleQuery": "dent",
+    "sampleNoMatch": "dark",
+    "sampleDentist": "Book dentist",
+    "sampleReport": "Write Q4 plan",
+    "sampleSnippet": "…the board wants the report by Friday…",
+    "sampleQueryReport": "report",
+    "samplePassport": "Renew passport",
+    "sampleGroup": "Today",
+    "sampleOrg": "Northwind",
+    "sampleDeletedBy": "Deleted by Anna Berg · 2 days ago"
+  }
+}
