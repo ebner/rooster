@@ -144,7 +144,20 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
 - **Last completed phase:** Phase 4, PWA, offline, realtime, mobile (2026-10-05). AC-4.1 to AC-4.7 pass, including the iPhone 15 (WebKit) and Pixel 8 projects. ADRs 0009 to 0011 record the decisions.
 - **E2E:** never run two Playwright suites at once; they share ports 9400, 3181, 5181 and 3182.
 - **Git:** commit locally; **do not push to origin unless the maintainer explicitly asks.**
-- **Deferred (owned by later WPs):** avatar upload (P10), linked identities (P8). `UserService.reorderOrg` should move onto `OrderingService` when it is next touched.
+- **Deferred to later phases** (from ADRs 0003–0011; pick them up in the phase named):
+  - **P5:**
+    - A "Make subtask of…" palette action (there is no UI re-parent yet; ADR 0008).
+    - Smart-view tabs appended to the phone view switcher and the sidebar view registry.
+    - The Search tab in the phone bottom nav (currently disabled).
+  - **P6:** the Inbox tab in the phone bottom nav, and the sticky comment composer in the detail sheet.
+  - **P7:** the push handlers in `src/sw.ts` are stubs.
+  - **P8:**
+    - Linked identities, PATs and CLI devices (FR-SET-3).
+    - Server-side `parse: true` should also read `#tag` tokens (ADR 0007).
+  - **P10:** avatar upload (needs sharp).
+  - **Whenever touched:**
+    - `UserService.reorderOrg` should move onto `OrderingService` (ADR 0005).
+    - The retention purge job publishes no SSE events (ADR 0009).
 
 ## When you finish a WP
 - Run every gate in 10 §1.
