@@ -33,8 +33,8 @@ Tokens are defined in `packages/tokens/src/tokens.css` as CSS custom properties 
 
 | Token | Hex | Use |
 |---|---|---|
-| `--coral-50` | #FFF3F1 | selected row background |
-| `--coral-100` | #FFE3DF | Inbox header tint, NL highlight |
+| `--coral-50` | #FFF3F1 | selected row background, Inbox header |
+| `--coral-100` | #FFE3DF | NL highlight, drop-target tint |
 | `--coral-200` | #FFC9C2 | — |
 | `--coral-300` | #FFA197 | — |
 | `--coral-400` | #FA766A | drop indicator on hover |
@@ -66,7 +66,8 @@ Tokens are defined in `packages/tokens/src/tokens.css` as CSS custom properties 
 | `--color-bg-selected` | coral-50 | selected row(s) |
 | `--color-bg-accent` | coral-600 | primary buttons |
 | `--color-bg-accent-hover` | coral-700 | |
-| `--color-bg-accent-subtle` | coral-100 | Inbox header, NL token highlight, drop-target group header |
+| `--color-bg-accent-subtle` | coral-100 | NL token highlight, drop-target group header |
+| `--color-bg-inbox` | coral-50 | Inbox group header (softened from coral-100 after review on 2026-10-05, so that "Today" stays the visual anchor) |
 | `--color-bg-success-subtle` | green-50 | swipe-complete reveal (with green-600 icon) |
 | `--color-bg-warning-subtle` | amber-50 | offline pill |
 | `--color-bg-danger-subtle` | rose-50 | destructive confirm popover, error toast |
@@ -233,7 +234,7 @@ Height 44 px, top margin 24 px (except the first), `--text-group`.
   - Count in `--text-sm` `--color-text-muted`, tabular, 8 px after the name
   - On hover only, right-aligned: "+" and "⋯" icon buttons, 28 px each
 - No background at rest. On hover, a subtle background appears.
-- **Inbox variant:** `--color-bg-accent-subtle` background, `--radius-md`, an `inbox` icon before the name, and the hint text in `--text-sm` `--color-text-secondary` (muted fails contrast on coral-100).
+- **Inbox variant:** `--color-bg-inbox` background, `--radius-md`, an `inbox` icon before the name, and the hint text in `--text-sm` `--color-text-secondary` (muted fails contrast on coral-100).
 - **Drop-target state** (dragging over a collapsed group): accent-subtle background plus a 1 px coral-400 inset outline.
 - The header sticks to the top of the scroll container (`position: sticky`) while its group is in view, with a background equal to the app background.
 

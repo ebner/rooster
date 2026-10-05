@@ -62,6 +62,7 @@ export const semanticColors = {
   'bg-accent': 'coral-600',
   'bg-accent-hover': 'coral-700',
   'bg-accent-subtle': 'coral-100',
+  'bg-inbox': 'coral-50',
   'bg-success-subtle': 'green-50',
   'bg-warning-subtle': 'amber-50',
   'bg-danger-subtle': 'rose-50',

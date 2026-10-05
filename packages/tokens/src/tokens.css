@@ -55,6 +55,7 @@
   --color-bg-accent: var(--coral-600);
   --color-bg-accent-hover: var(--coral-700);
   --color-bg-accent-subtle: var(--coral-100);
+  --color-bg-inbox: var(--coral-50);
   --color-bg-success-subtle: var(--green-50);
   --color-bg-warning-subtle: var(--amber-50);
   --color-bg-danger-subtle: var(--rose-50);

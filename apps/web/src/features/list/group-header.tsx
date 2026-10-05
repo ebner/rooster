@@ -128,7 +128,7 @@ export const GroupHeader = memo(function GroupHeader({ row }: GroupHeaderProps) 
       <GridCell
         className={cn(
           'group/header relative flex h-group items-center gap-1 ps-1 pe-1 max-tablet:h-group-mobile',
-          inbox ? 'rounded-md bg-bg-accent-subtle' : 'rounded-sm hover:bg-bg-subtle',
+          inbox ? 'rounded-md bg-bg-inbox' : 'rounded-sm hover:bg-bg-subtle',
           selected && !inbox && 'bg-bg-selected hover:bg-bg-selected',
           dropInside &&
             'bg-bg-accent-subtle outline-1 -outline-offset-1 outline-drop-target-outline',

@@ -71,6 +71,7 @@ const surfaceSwatches = [
   ['bg-muted', 'bg-bg-muted'],
   ['bg-selected', 'bg-bg-selected'],
   ['bg-accent-subtle', 'bg-bg-accent-subtle'],
+  ['bg-inbox', 'bg-bg-inbox'],
   ['bg-accent', 'bg-bg-accent'],
   ['bg-inverse', 'bg-bg-inverse'],
   ['check-done', 'bg-check-done'],
