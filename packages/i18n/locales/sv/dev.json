@@ -23,7 +23,8 @@
     "auth": "Inloggningssidor",
     "orgSettings": "Organisationsinställningar",
     "userSettings": "Användarinställningar",
-    "admin": "Administration"
+    "admin": "Administration",
+    "pwa": "Appinstallation och uppdateringar"
   },
   "group": {
     "colors": "Semantiska färger",
@@ -59,7 +60,11 @@
     "memberView": "Medlem (inte ägare)",
     "deleteConfirm": "Bekräfta borttagning",
     "profile": "Profil",
-    "security": "Säkerhet"
+    "security": "Säkerhet",
+    "sessionExpired": "Sessionen har gått ut",
+    "updateToast": "Uppdateringsfråga",
+    "iosSheet": "Installationsblad för iOS",
+    "installSection": "Inställningar → Installera appen"
   },
   "state": {
     "rest": "Vila",

@@ -207,6 +207,11 @@ export const heights = {
   toolbar: 48,
   'sheet-header': 56,
   'property-row': 36,
+  'property-row-mobile': 48,
+  'bottom-nav': 64,
+  'view-switcher': 48,
+  'accessory-bar': 56,
+  'sheet-handle': 4,
 } as const;
 
 /** Square sizes (03 §3), px. CSS: `--size-<name>`. */
@@ -214,6 +219,7 @@ export const sizes = {
   checkbox: 18,
   hit: 32,
   'hit-touch': 44,
+  fab: 56,
   'calendar-cell': 36,
 } as const;
 
@@ -233,6 +239,7 @@ export const layoutWidths = {
   'date-cell': 112,
   'label-col': 112,
   illustration: 160,
+  'sheet-handle': 36,
 } as const;
 
 /** Border widths that are not whole Tailwind steps, px. CSS: `--border-<name>`. */

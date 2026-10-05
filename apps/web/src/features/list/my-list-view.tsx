@@ -1,4 +1,5 @@
 import type { Task } from '@rooster/core/schemas';
+import { useQueryClient } from '@tanstack/react-query';
 import { Keyboard, X } from 'lucide-react';
 import {
   memo,
@@ -10,19 +11,20 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useListPipeline, useMyList, useMyListStatus } from '../../data/list';
+import { myListKey, useListPipeline, useMyList, useMyListStatus } from '../../data/list';
 import { useMe } from '../../data/me';
+import { syncEngine } from '../../data/sync/engine';
 import { useTags } from '../../data/tags';
 import { cn } from '../../lib/cn';
 import { type Draft, persistShowCompleted, useListStore } from '../../state/list-store';
-import { syncProblemAfter, useSyncStore } from '../../state/sync-store';
+import { useSyncStore } from '../../state/sync-store';
 import { setTags, useTagsStore } from '../../state/tags-store';
 import { iconStrokeWidth } from '../../ui/button';
 import { IconButton } from '../../ui/icon-button';
 import { Kbd } from '../../ui/kbd';
 import { SkeletonRows } from '../../ui/skeleton';
-import { SyncPill } from '../../ui/sync-pill';
 import { toast } from '../../ui/toast';
+import { useIsMobile } from '../../ui/use-media';
 import {
   eventZone,
   type ShortcutHandler,
@@ -39,8 +41,10 @@ import { BulkBar } from './bulk-bar';
 import { completionHoldMs, ListController, type Translate } from './controller';
 import { GroupHeader } from './group-header';
 import { ListContext, type ListContextValue } from './list-context';
+import { MobileListChrome } from './mobile-list-chrome';
 import { buildRows, type Row, type RowCache } from './model/rows';
 import { MoveToPopover } from './move-to-popover';
+import { PullToRefresh } from './pull-to-refresh';
 import { TaskRow } from './task-row';
 import { ListDnd } from './use-list-dnd';
 
@@ -257,14 +261,16 @@ export function MyListView({ orgId, userId, label, pane }: MyListViewProps) {
   const { t } = useTranslation('list');
   const status = useMyListStatus(orgId);
   const pipeline = useListPipeline();
+  const queryClient = useQueryClient();
   const dateCtx = useViewerDateContext();
   const selectedCount = useListStore((s) => Object.keys(s.selected).length);
   const popover = useListStore((s) => s.popover);
   const cursor = useListStore((s) => s.cursor);
   const focusSeq = useListStore((s) => s.focusSeq);
   const mode = useListStore((s) => s.mode);
-  const failures = useSyncStore((s) => s.failures);
+  const mobile = useIsMobile();
   const root = useRef<HTMLDivElement>(null);
+  const layer = useRef<HTMLDivElement>(null);
   /** Written by `ListRows` on every render: the controller always sees the current rows. */
   const rowsRef = useRef<readonly Row[]>([]);
   const dateRef = useRef(dateCtx);
@@ -310,8 +316,27 @@ export function MyListView({ orgId, userId, label, pane }: MyListViewProps) {
       parseTitles: prefsRef.current.parseTitles,
       dragEnabled: true,
       onOpenTask: (id, focus) => paneRef.current?.open(id, focus ? 'title' : null),
+      mobile,
     }),
-    [controller, dateCtx, prefs?.parseTitleDates],
+    [controller, dateCtx, prefs?.parseTitleDates, mobile],
+  );
+
+  // Selection mode is a phone mode; it ends when the layout grows past it.
+  useEffect(() => {
+    if (!mobile && useListStore.getState().selectionMode) controller.exitSelectionMode();
+  }, [mobile, controller]);
+
+  const onLongPress = useMemo(
+    () => (mobile ? (rowId: string) => controller.enterSelectionMode(rowId) : undefined),
+    [mobile, controller],
+  );
+  const refresh = useMemo(
+    () => async () => {
+      // 02 §13.2: flush the outbox (through the leader tab) and refetch.
+      syncEngine()?.syncNow();
+      await queryClient.invalidateQueries({ queryKey: myListKey(orgId) });
+    },
+    [queryClient, orgId],
   );
 
   // D-29: the open pane follows the selection; a multi-selection closes it (02 §3.3).
@@ -492,13 +517,13 @@ export function MyListView({ orgId, userId, label, pane }: MyListViewProps) {
     () => <ListRows orgId={orgId} userId={userId} rowsRef={rowsRef} />,
     [orgId, userId],
   );
-  const ids = selectedCount > 1 ? controller.selectedTaskIds() : [];
+  const ids = selectedCount > 1 && !mobile ? controller.selectedTaskIds() : [];
   const moveAnchor =
-    popover?.kind === 'moveTo' && popover.rowId !== 'bulk'
+    popover?.kind === 'moveTo' && popover.rowId !== 'bulk' && !mobile
       ? root.current?.querySelector(`[data-row-id="${popover.rowId}"]`)
       : null;
   const tagAnchor =
-    popover?.kind === 'tag'
+    popover?.kind === 'tag' && !mobile
       ? popover.rowId === 'bulk'
         ? document.querySelector('[data-bulk-tag]')
         : root.current?.querySelector(
@@ -535,14 +560,35 @@ export function MyListView({ orgId, userId, label, pane }: MyListViewProps) {
 
   return (
     <ListContext.Provider value={context}>
-      {failures >= syncProblemAfter && (
-        <div className="flex justify-end pb-2">
-          <SyncPill state="error" onRetry={() => pipeline.retryNow()} />
-        </div>
+      {mobile && (
+        <PullToRefresh
+          enabled
+          onRefresh={refresh}
+          isBlocked={() => useListStore.getState().dragging !== null}
+        />
       )}
-      <ListDnd rowsRef={rowsRef} label={label} rootRef={root} enabled={context.dragEnabled}>
-        {rowsElement}
-      </ListDnd>
+      <div ref={layer} className="relative">
+        <ListDnd
+          rowsRef={rowsRef}
+          label={label}
+          rootRef={root}
+          enabled={context.dragEnabled}
+          onLongPress={onLongPress}
+        >
+          {rowsElement}
+        </ListDnd>
+      </div>
+      {mobile && (
+        <MobileListChrome
+          orgId={orgId}
+          rootRef={root}
+          layerRef={layer}
+          swipePrefs={{
+            swipeLeft: prefs?.swipeLeft ?? 'date',
+            swipeRight: prefs?.swipeRight ?? 'complete',
+          }}
+        />
+      )}
       {ids.length > 1 && <BulkBar ids={ids} />}
       {moveAnchor && <MoveToPopover anchor={moveAnchor} ids={controller.selectedTaskIds()} />}
       {tagAnchor && tagIds.length > 0 && (

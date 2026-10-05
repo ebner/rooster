@@ -23,7 +23,8 @@
     "auth": "Sign-in screens",
     "orgSettings": "Organisation settings",
     "userSettings": "User settings",
-    "admin": "Admin"
+    "admin": "Admin",
+    "pwa": "App install and updates"
   },
   "group": {
     "colors": "Semantic colours",
@@ -59,7 +60,11 @@
     "memberView": "Member (not owner)",
     "deleteConfirm": "Delete confirmation",
     "profile": "Profile",
-    "security": "Security"
+    "security": "Security",
+    "sessionExpired": "Session expired",
+    "updateToast": "Update prompt",
+    "iosSheet": "iOS install sheet",
+    "installSection": "Settings → Install app"
   },
   "state": {
     "rest": "Rest",

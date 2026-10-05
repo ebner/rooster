@@ -23,24 +23,26 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - Request middleware covers idempotency (`Idempotency-Key`), edit time (`X-Rooster-Edit-Time`, clamped), client id/name, and the per-user rate limit. ADR 0005 has the list semantics.
   - `src/db/`: client and pragmas, `migrate.ts`, `schema/`, `migrations/` (generated, append-only).
   - `src/jobs/`: croner scheduler.
-  - *(planned)* `src/events/` (SSE).
+  - `src/events/`: the after-commit `EventBus` and the SSE `hub` behind `GET /api/v1/events`. Services publish through the per-transaction queue, and audiences are computed in `services/event-audience.ts`. ADR 0009.
   - Tests live in `test/`. Helpers: `createTestDb`, `createTestApp`, `mock-idp.ts`, `signInAs(email)`.
   - `test/authz.matrix.test.ts` enumerates **every** OpenAPI route; a new route without a matrix row fails it.
   - The build bundles **all** JS deps into `dist/main.js`, except native modules (`NATIVE_DEPS` in `tsdown.config.ts`). Add a native dependency there **and** in `docker/Dockerfile`.
 - `apps/web`: React SPA (+ PWA from P4).
   - `src/routes/`: TanStack file routes. `routeTree.gen.ts` is generated and committed. `src/routes/[_dev]/ui.tsx` is the dev-only kitchen sink at `/_dev/ui`; the brackets escape the underscore.
-  - `src/ui/`: Coop components.
+  - `src/ui/`: Coop components. Phone pieces (P4): `BottomSheet`/`SheetOption`, `BottomNav`, `Fab`, `AccessoryBar`, `SwipeReveal`; `use-media.ts` (`useBreakpoint`, `useIsMobile`, `isMobileViewport`, `useKeyboardInset`, `useEditingFocus`); `use-drag-dismiss.ts` (swipe-down sheets).
   - `src/features/*`:
-    - shell (sidebar, app frame), auth, org-settings (incl. the Tags section), settings, admin (including backups)
-    - list (My tasks: rows incl. subtasks and tag chips, editing model, DnD, bulk bar, `controller` holding every command; the UI store is injectable via `ListStoreContext`)
-    - pane (the detail pane: split/overlay/full screen; its state lives in the URL `/o/:slug/t/:taskId`)
+    - shell (sidebar, app frame per breakpoint: desktop sidebar/rail, tablet rail that expands over the content, phone frame with `MobileHeader` + org switcher sheet + view switcher and `MobileNav`), auth, org-settings (incl. the Tags section), settings (incl. Behaviour: swipe actions), admin (including backups)
+    - list (My tasks: rows incl. subtasks and tag chips, editing model, DnD, bulk bar, `controller` holding every command; the UI store is injectable via `ListStoreContext`). Phones: `mobile-list-chrome.tsx` (FAB, accessory bar, selection mode, sheets), `swipe-rows.tsx` + `gestures.ts` (swipes), `pull-to-refresh.tsx`; ADR 0011.
+    - pane (the detail pane: split/overlay (tablet: with scrim)/full screen, and the phone's full-screen sheet with `SheetHeader`; its state lives in the URL `/o/:slug/t/:taskId`)
     - tags (picker, chips, `#tag` token)
     - editor (`MarkdownEditor` on Tiptap, `markdown.ts` converter, a 40-sample round-trip corpus)
     - dates (`DateLabel`, `DateCell`, `DatePopover` incl. start-date ranges, `useViewerDateContext`)
   - `src/data/`: **the only place that talks to the API.** TanStack Query hooks over `createRoosterClient()`, query keys in `query-keys.ts`, problem+json mapped to `ApiError` in `errors.ts`, and better-auth client calls in `auth.ts` / `auth-client.ts`. Components take props; route components call `src/data` hooks.
   - `src/routes/_app.tsx`: the signed-in layout. Its `beforeLoad` guard redirects to `/login?redirect=…`.
   - `src/lib/`: `cn`, i18n, platform, and `safe-redirect.ts`. **Every redirect target must go through `safeRedirectPath()`.**
-  - `src/data/pipeline/`: the **mutation pipeline**. Every list op goes `enqueue → core reducer on the cache → send (Idempotency-Key, edit time, client id) → merge`. Undo pushes inverse ops through it. It is an in-memory FIFO; the IndexedDB outbox arrives in P4.
+  - `src/data/pipeline/`: the **mutation pipeline**. Every list op goes `enqueue → core reducer on the cache → send (Idempotency-Key, edit time, client id) → merge`. Undo pushes inverse ops through it. Ops are written to the IndexedDB outbox before they are sent; only the leader tab sends.
+  - `src/data/sync/`: offline and realtime (04 §6, P4). `engine.ts` (`startSync`, awaited in `main.tsx` before the first render) restores the persisted query cache (`persist.ts`, idb-keyval key `rooster-cache-v1`; `my-list` is stored as the confirmed base, never the optimistic view) and the outbox (`outbox.ts`), elects the flushing tab (`leader.ts`, Web Locks `rooster-outbox`), mirrors queue/confirmations across tabs (`channel.ts`, `BroadcastChannel('rooster')`) and runs the SSE client (`events.ts`). Sign-out calls `clearLocalData()`. Persisted query roots need `gcTime: Infinity` (a 30-day timer overflows).
+  - `src/sw.ts`: the service worker (vite-plugin-pwa `injectManifest`, own `tsconfig.sw.json`). Off in `vite` dev unless `VITE_PWA_DEV=1`. `src/features/pwa/`: registration and the update gate (FR-PWA-6), install prompts, the iOS tip sheet, and `SyncStatus` (the header sync pill; every header uses it).
   - `src/state/`: Zustand stores for list, undo and sync.
   - `src/keymap.ts`: **the single keymap registry** (02 §6). `useKeymap()` is mounted once at the root. The `?` cheat sheet is generated from it.
     - Focus zones `list` / `pane` / `paneList`; handlers return `false` to fall through.
@@ -49,8 +51,9 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - `src/styles/theme.css`: token → Tailwind mapping.
   - `e2e/`: Playwright tests.
     - The config starts the mock IdP, the server (with a fresh temp data dir) and Vite.
+    - PWA specs (`*.pwa.spec.ts`, project `pwa`) run against the production build: the config runs `vite build` and starts a second server on :3182 serving `apps/web/dist` (`ROOSTER_WEB_DIR`). `*.pwa-last.spec.ts` (project `pwa-update`, AC-4.7) rewrites `dist/sw.js` and runs after them.
+    - Phone specs (`*.mobile.spec.ts`) run in the `mobile` (iPhone 15, WebKit) and `mobile-android` (Pixel 8) projects; `e2e/support/touch.ts` has `swipe`, `longPress` and `showKeyboard` (visualViewport emulation).
     - `e2e/support/` has `signInAs`, `newClient` and `apiCall`. The sign-in identity is chosen with `login_hint`, and each browser sends its own `X-Forwarded-For` so the per-IP auth rate limit isn't shared.
-  - *(planned)* the IndexedDB outbox and SSE in `src/data/` (P4).
 - *(planned, P8)* `apps/cli`: CLI, TUI (Ink) and MCP server.
 - `packages/core`: **pure** TS (no IO, no `Date.now()` inside functions):
   - `ids` (uuidv7)
@@ -70,7 +73,7 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
 ## Commands
 ```
 pnpm i                         # install (pnpm 12 via corepack; Node 24)
-pnpm --filter @rooster/web exec playwright install chromium   # once, for e2e
+pnpm --filter @rooster/web exec playwright install chromium webkit   # once, for e2e (webkit: the iPhone project)
 pnpm dev:idp                   # mock OIDC provider on :9400 (start BEFORE pnpm dev; signs in as dev@example.com)
 pnpm dev                       # server (:3000, tsx watch) + web (vite :5173, proxies /api)
 pnpm build                     # all packages (web → apps/web/dist, server → apps/server/dist)
@@ -115,7 +118,8 @@ At least one sign-in provider must be configured, or the server exits with code 
   - sizes: `h-row`, `h-control`, `size-hit-touch`
   - radius and shadow: `rounded-sm`, `shadow-md`
   - motion and stacking: `duration-(--dur-fast)`, `z-(--z-toast)`
-  - breakpoints: `tablet:`, `desktop:`, `wide:`, `pointer-coarse:`
+  - breakpoints: `tablet:`, `desktop:`, `wide:`, `max-tablet:` (phones only), `pointer-coarse:`
+  - safe areas and phone chrome: `pt-safe`, `pb-safe`, `px-safe-2`, `h-bottom-nav-safe`, `max-h-sheet`, `bottom-fab`; sticky list headers use `top-(--list-sticky-top)`
 
   Tailwind's default palette and scales are **removed**, so off-token classes silently do nothing. Use `cn()` from `src/lib/cn.ts` to merge classes.
 - Kitchen-sink states are forced with `data-force="hover|pressed|focus"`.
@@ -136,8 +140,9 @@ This file is the entry point for every agent and must describe the repository **
 Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to them. A PR that changes any of the above without updating `AGENTS.md` is not done.
 
 ## Status
-- **Current phase:** Phase 4 (PWA, offline, realtime, mobile) is next.
-- **Last completed phase:** Phase 3, Detail pane, subtasks, tags (2026-10-05). AC-3.1 to AC-3.5 pass. ADRs 0007 and 0008 record the decisions.
+- **Current phase:** Phase 5 (smart views, search, palette → v1.0) is next.
+- **Last completed phase:** Phase 4, PWA, offline, realtime, mobile (2026-10-05). AC-4.1 to AC-4.7 pass, including the iPhone 15 (WebKit) and Pixel 8 projects. ADRs 0009 to 0011 record the decisions.
+- **E2E:** never run two Playwright suites at once; they share ports 9400, 3181, 5181 and 3182.
 - **Git:** commit locally; **do not push to origin unless the maintainer explicitly asks.**
 - **Deferred (owned by later WPs):** avatar upload (P10), linked identities (P8). `UserService.reorderOrg` should move onto `OrderingService` when it is next touched.
 

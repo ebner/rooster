@@ -7,7 +7,9 @@ import enDates from '../locales/en/dates.json' with { type: 'json' };
 import enDev from '../locales/en/dev.json' with { type: 'json' };
 import enEditor from '../locales/en/editor.json' with { type: 'json' };
 import enList from '../locales/en/list.json' with { type: 'json' };
+import enMobile from '../locales/en/mobile.json' with { type: 'json' };
 import enPane from '../locales/en/pane.json' with { type: 'json' };
+import enPwa from '../locales/en/pwa.json' with { type: 'json' };
 import enSettings from '../locales/en/settings.json' with { type: 'json' };
 import enShell from '../locales/en/shell.json' with { type: 'json' };
 import enTags from '../locales/en/tags.json' with { type: 'json' };
@@ -18,7 +20,9 @@ import svDates from '../locales/sv/dates.json' with { type: 'json' };
 import svDev from '../locales/sv/dev.json' with { type: 'json' };
 import svEditor from '../locales/sv/editor.json' with { type: 'json' };
 import svList from '../locales/sv/list.json' with { type: 'json' };
+import svMobile from '../locales/sv/mobile.json' with { type: 'json' };
 import svPane from '../locales/sv/pane.json' with { type: 'json' };
+import svPwa from '../locales/sv/pwa.json' with { type: 'json' };
 import svSettings from '../locales/sv/settings.json' with { type: 'json' };
 import svShell from '../locales/sv/shell.json' with { type: 'json' };
 import svTags from '../locales/sv/tags.json' with { type: 'json' };
@@ -46,6 +50,8 @@ export const namespaces = [
   'pane',
   'tags',
   'editor',
+  'pwa',
+  'mobile',
 ] as const;
 export type Namespace = (typeof namespaces)[number];
 export const defaultNamespace: Namespace = 'common';
@@ -63,6 +69,8 @@ export const resources = {
     pane: enPane,
     tags: enTags,
     editor: enEditor,
+    pwa: enPwa,
+    mobile: enMobile,
   },
   sv: {
     common: svCommon,
@@ -76,6 +84,8 @@ export const resources = {
     pane: svPane,
     tags: svTags,
     editor: svEditor,
+    pwa: svPwa,
+    mobile: svMobile,
   },
 } as const;
 

@@ -319,6 +319,10 @@ export class ListController {
       store.set({ popover: null });
       return true;
     }
+    if (store.selectionMode) {
+      this.exitSelectionMode();
+      return true;
+    }
     const count = selectedIds(store).length;
     if (count > 1 && store.cursor) {
       store.select(store.cursor);
@@ -333,6 +337,33 @@ export class ListController {
       return true;
     }
     return false;
+  }
+
+  /** Phones (02 §13.2): a long-press without a move selects the row in selection mode. */
+  enterSelectionMode(rowId: string): void {
+    const store = this.store();
+    if (store.editing) store.set({ editing: null, mode: 'navigate' });
+    store.set({
+      selectionMode: true,
+      selected: { [rowId]: true },
+      cursor: rowId,
+      anchor: rowId,
+      popover: null,
+    });
+    announce(this.t('bulk.selected', { count: 1 }));
+  }
+
+  /** A tap in selection mode: toggles the row; the count is announced (02 §15). */
+  toggleSelectionMode(rowId: string): void {
+    const store = this.store();
+    store.toggleSelected(rowId);
+    const count = selectedIds(this.store()).length;
+    if (count === 0) this.exitSelectionMode();
+    announce(this.t('bulk.selected', { count }));
+  }
+
+  exitSelectionMode(): void {
+    this.store().set({ selectionMode: false, selected: {}, anchor: null, popover: null });
   }
 
   selectEdge(edge: 'first' | 'last'): void {
@@ -405,6 +436,19 @@ export class ListController {
       this.newDraft(row.groupId, this.rowAboveInGroup(row.id), row.parentId);
     } else if (row?.kind === 'group') this.newDraft(row.group.id, null);
     else this.quickAdd();
+  }
+
+  /** The accessory bar's group picker (02 §13.3): the draft moves to the top of `groupId`. */
+  moveDraftToGroup(draftId: string, groupId: string): void {
+    const state = this.state();
+    const group = state?.groups[groupId];
+    if (group?.collapsed) this.run('', [listOps.patchGroup(groupId, { collapsed: false })]);
+    this.store().updateDraft(draftId, { groupId, afterId: null });
+  }
+
+  /** The accessory bar's date button: a due date for the draft, applied when it is created. */
+  setDraftDue(draftId: string, due: Draft['due'] | null): void {
+    this.store().updateDraft(draftId, due ? { due } : { due: undefined });
   }
 
   /** "+ Add task": a draft at the end of the group. */
@@ -524,7 +568,8 @@ export class ListController {
           ...(draft.parentId ? { parentId: draft.parentId } : { groupId: draft.groupId }),
           afterId,
           beforeId,
-          ...(p.due ?? {}),
+          // A date picked in the accessory bar applies unless the title names one.
+          ...(p.due ?? (i === 0 && draft.due ? draft.due : {})),
           ...(tagIds.length > 0 ? { tagIds } : {}),
           ...(newNames.length > 0 ? { tagNames: newNames } : {}),
         }),
@@ -679,7 +724,10 @@ export class ListController {
   // -------------------------------------------------------------------------------------
 
   /** Checkbox / Ctrl+Enter: completes (or, in the hold window, un-completes). */
-  toggleComplete(ids: readonly string[] = this.selectedTaskIds()): void {
+  toggleComplete(
+    ids: readonly string[] = this.selectedTaskIds(),
+    options: { immediate?: boolean } = {},
+  ): void {
     const tasks = ids.map((id) => this.task(id)).filter((t): t is Task => t !== undefined);
     if (tasks.length === 0) return;
     const complete = tasks.some((t) => t.completedAt === null);
@@ -697,7 +745,7 @@ export class ListController {
             listOps.bulk(this.orgId, { op: complete ? 'complete' : 'uncomplete', ids: part }),
           );
     for (const id of targets) {
-      if (complete) this.startHiding(id);
+      if (complete) this.startHiding(id, options.immediate ? 0 : undefined);
       else this.clearHiding(id);
     }
     const subtasksOpen = complete
@@ -714,10 +762,11 @@ export class ListController {
     }
   }
 
-  private startHiding(id: string): void {
+  /** `holdMs` 0: a swipe already showed the completion, so the row collapses at once. */
+  private startHiding(id: string, holdMs?: number): void {
     if (this.store().showCompleted) return;
     this.clearHiding(id);
-    const hold = this.deps.prefs?.().holdMs ?? this.deps.holdMs ?? completionHoldMs;
+    const hold = holdMs ?? this.deps.prefs?.().holdMs ?? this.deps.holdMs ?? completionHoldMs;
     const collapse = this.deps.collapseMs ?? completionCollapseMs;
     this.store().setHiding(id, 'hold');
     const timers = [

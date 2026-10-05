@@ -1,0 +1,70 @@
+{
+  "sheet": {
+    "close": "Stäng",
+    "back": "Tillbaka"
+  },
+  "date": {
+    "pick": "Välj datum…"
+  },
+  "swipe": {
+    "complete": "Klar",
+    "date": "Datum",
+    "move": "Flytta",
+    "delete": "Ta bort",
+    "done": {
+      "complete": "”{title}” är klar",
+      "date": "Välj datum för ”{title}”",
+      "move": "Välj grupp för ”{title}”",
+      "delete": "”{title}” togs bort"
+    }
+  },
+  "fab": {
+    "label": "Ny uppgift"
+  },
+  "accessory": {
+    "label": "Alternativ för ny uppgift",
+    "date": "Datum",
+    "group": "Grupp: {name}",
+    "groupTitle": "Lägg i grupp",
+    "tag": "Lägg till tagg",
+    "next": "Nästa"
+  },
+  "subject": {
+    "tasks": "{count, plural, one {# uppgift} other {# uppgifter}}"
+  },
+  "selection": {
+    "done": "Avsluta markering",
+    "hint": "Tryck för att markera"
+  },
+  "refresh": {
+    "refreshing": "Uppdaterar…",
+    "done": "Allt är uppdaterat"
+  },
+  "org": {
+    "title": "Organisationer",
+    "switch": "{name}, byt organisation"
+  },
+  "header": {
+    "more": "Mer",
+    "hideCompleted": "Dölj klara"
+  },
+  "views": {
+    "label": "Vyer"
+  },
+  "nav": {
+    "label": "Huvudmeny",
+    "myTasks": "Mina uppgifter",
+    "search": "Sök",
+    "settings": "Inställningar"
+  },
+  "dev": {
+    "section": "Mobillayout",
+    "header": "Sidhuvud och vyväljare",
+    "bottomNav": "Bottenmeny",
+    "fab": "Flytande knapp",
+    "swipe": "Svepgester",
+    "accessory": "Tangentbordsrad",
+    "sheetHeader": "Detaljvyns sidhuvud",
+    "sheets": "Bottenark"
+  }
+}

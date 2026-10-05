@@ -1,75 +1,163 @@
-import { Menu as MenuIcon } from 'lucide-react';
+import { LogOut, Settings, ShieldCheck } from 'lucide-react';
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
-import { Dialog, Modal, ModalOverlay } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
+import type { CreateOrgInput, Org } from '../../data/types';
 import { cn } from '../../lib/cn';
-import { IconButton } from '../../ui/icon-button';
+import { useListStore } from '../../state/list-store';
+import { MenuItem, MenuSeparator } from '../../ui/menu';
+import { useBreakpoint, useEditingFocus, useIsMobile } from '../../ui/use-media';
 import { useKeymapHandlers } from '../../use-keymap';
+import { SyncStatus } from '../pwa/sync-status';
 import { CheatSheet, toggleCheatSheet } from './cheat-sheet';
+import { MobileHeader, OrgSwitcherSheet, type ViewTab } from './mobile-header';
+import { orgUrlSlug, paths } from './paths';
 import { useSidebarCollapsed } from './use-sidebar-collapsed';
 
 export interface ShellSidebarState {
   collapsed: boolean;
   onToggleCollapsed: () => void;
-  /** True for the off-canvas copy rendered in the mobile drawer. */
+  /** True for the copy that expands over the content (the tablet rail, 02 §2). */
   inDrawer: boolean;
 }
 
+/** What the phone frame needs from the signed-in layout (02 §13.1). */
+export interface MobileShell {
+  orgs: readonly Org[];
+  activeOrg: Org | null;
+  isAdmin: boolean;
+  onSelectOrg: (org: Org) => void;
+  /** Resolve to close the sheet; throw to show the error in the form. */
+  onCreateOrg: (input: CreateOrgInput) => Promise<void>;
+  onSignOut: () => void;
+  /** The bottom nav (My tasks · Search · Settings). */
+  nav: ReactNode;
+}
+
 interface ShellContextValue {
-  openNav: () => void;
+  mobile: MobileShell | null;
+  openOrgs: () => void;
 }
 
 const ShellContext = createContext<ShellContextValue | null>(null);
 
 export interface AppShellProps {
-  /** Rendered twice: inline (tablet and up) and in the mobile drawer when it is open. */
+  /** Inline (rail or full), plus the copy that expands over the content on tablets. */
   renderSidebar: (state: ShellSidebarState) => ReactNode;
   children: ReactNode;
-  /** Closes the mobile drawer whenever this changes (e.g. the pathname). */
+  /** Closes the tablet's expanded sidebar whenever this changes (e.g. the pathname). */
   navKey?: string | undefined;
+  /** The phone frame's data; without it phones get the plain column (kitchen sink). */
+  mobile?: MobileShell | undefined;
 }
 
 /**
- * The app frame (02 §2): sidebar + main. The rail state is persisted and toggled
- * with Mod+\ (02 §6). Below 768 px the sidebar becomes an off-canvas drawer opened
- * from the view header; the full mobile frame (bottom nav, org switcher) is P4.
+ * The app frame per breakpoint (02 §2, §13):
+ * - desktop: sidebar (or the 56 px rail, persisted, Mod+\) + main;
+ * - tablet: the icon rail; expanding opens the full sidebar over the content with a scrim;
+ * - phone: main + the bottom nav; the org switcher lives in the header (`ViewHeader`).
  */
-export function AppShell({ renderSidebar, children, navKey }: AppShellProps) {
-  const { t } = useTranslation('shell');
+export function AppShell({ renderSidebar, children, navKey, mobile }: AppShellProps) {
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
-  const [navOpen, setNavOpen] = useState(false);
+  const breakpoint = useBreakpoint();
+  const [railOpen, setRailOpen] = useState(false);
+  const [orgsOpen, setOrgsOpen] = useState(false);
+  const editingFocus = useEditingFocus();
+  const selectionMode = useListStore((s) => s.selectionMode);
+  const tablet = breakpoint === 'tablet';
 
   useKeymapHandlers({
-    toggleSidebar: () => toggleCollapsed(),
+    toggleSidebar: () => {
+      if (tablet) setRailOpen((open) => !open);
+      else toggleCollapsed();
+    },
     cheatSheet: () => toggleCheatSheet(),
   });
 
-  useEffect(() => setNavOpen(false), [navKey]);
+  useEffect(() => {
+    setRailOpen(false);
+    setOrgsOpen(false);
+  }, [navKey]);
+  useEffect(() => {
+    if (!tablet) setRailOpen(false);
+  }, [tablet]);
+  useEffect(() => {
+    if (!railOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setRailOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [railOpen]);
 
-  const context = useMemo(() => ({ openNav: () => setNavOpen(true) }), []);
+  const phoneFrame = breakpoint === 'mobile' && mobile !== undefined;
+  useEffect(() => {
+    if (!phoneFrame) return;
+    const root = document.documentElement;
+    root.dataset.frame = 'mobile';
+    return () => {
+      delete root.dataset.frame;
+    };
+  }, [phoneFrame]);
+
+  const context = useMemo(
+    () => ({ mobile: mobile ?? null, openOrgs: () => setOrgsOpen(true) }),
+    [mobile],
+  );
+
+  if (phoneFrame && mobile) {
+    return (
+      <ShellContext.Provider value={context}>
+        <div className="flex h-dvh flex-col overflow-hidden bg-bg-app" data-shell="mobile">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">{children}</main>
+          {/* The keyboard and selection mode's bulk bar take the nav's place (02 §13). */}
+          {!editingFocus && !selectionMode && mobile.nav}
+          <OrgSwitcherSheet
+            isOpen={orgsOpen}
+            onOpenChange={setOrgsOpen}
+            orgs={mobile.orgs}
+            activeOrgId={mobile.activeOrg?.id}
+            onSelect={mobile.onSelectOrg}
+            onCreateOrg={mobile.onCreateOrg}
+          />
+          <CheatSheet />
+        </div>
+      </ShellContext.Provider>
+    );
+  }
 
   return (
     <ShellContext.Provider value={context}>
       <div className="flex h-dvh overflow-hidden bg-bg-app">
+        {/* Before the sidebar: same layer, so the expanded sidebar paints over it. */}
+        {tablet && railOpen && (
+          <div
+            aria-hidden
+            data-testid="rail-scrim"
+            onClick={() => setRailOpen(false)}
+            className="fixed inset-0 z-(--z-sidebar) bg-overlay animate-fade-in"
+          />
+        )}
         <div className="relative z-(--z-sidebar) hidden shrink-0 border-e border-border tablet:block">
-          {renderSidebar({ collapsed, onToggleCollapsed: toggleCollapsed, inDrawer: false })}
-        </div>
-        <ModalOverlay
-          isOpen={navOpen}
-          onOpenChange={setNavOpen}
-          isDismissable
-          className="fixed inset-0 z-(--z-sidebar) bg-overlay data-entering:animate-fade-in tablet:hidden"
-        >
-          <Modal className="h-full w-sidebar max-w-full shadow-lg">
-            <Dialog aria-label={t('sidebar.label')} className="h-full outline-none">
+          {tablet
+            ? renderSidebar({
+                collapsed: true,
+                onToggleCollapsed: () => setRailOpen(true),
+                inDrawer: false,
+              })
+            : renderSidebar({ collapsed, onToggleCollapsed: toggleCollapsed, inDrawer: false })}
+          {tablet && railOpen && (
+            <div
+              className="absolute inset-y-0 start-0 z-(--z-sidebar) shadow-lg animate-fade-in"
+              data-testid="rail-expanded"
+            >
               {renderSidebar({
                 collapsed: false,
-                onToggleCollapsed: toggleCollapsed,
-                inDrawer: true,
+                onToggleCollapsed: () => setRailOpen(false),
+                inDrawer: false,
               })}
-            </Dialog>
-          </Modal>
-        </ModalOverlay>
+            </div>
+          )}
+        </div>
         <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">{children}</main>
         <CheatSheet />
       </div>
@@ -82,23 +170,40 @@ export interface ViewHeaderProps {
   /** Muted context after the title, e.g. the org name (02 §2). */
   context?: string | undefined;
   actions?: ReactNode;
+  /**
+   * Phones (02 §13.1): `switcher` shows the org switcher and the view switcher instead of the
+   * title; `actions` replace the desktop actions; `menu` adds screen items to the ⋯ menu.
+   */
+  mobile?:
+    | {
+        switcher?: boolean;
+        actions?: ReactNode;
+        menu?: ReactNode;
+        views?: readonly ViewTab[];
+      }
+    | undefined;
 }
 
-/** The main-area header: view title, org name, and the drawer button on phones. */
-export function ViewHeader({ title, context, actions }: ViewHeaderProps) {
-  const { t } = useTranslation('shell');
+/** The main-area header: view title and org name; the phone header below 768 px. */
+export function ViewHeader({ title, context, actions, mobile }: ViewHeaderProps) {
   const shell = useContext(ShellContext);
+  const isMobile = useIsMobile();
+  if (isMobile && shell?.mobile) {
+    return (
+      <MobileHeader
+        title={title}
+        context={context}
+        org={mobile?.switcher ? shell.mobile.activeOrg : null}
+        onOpenOrgs={shell.openOrgs}
+        actions={mobile?.actions}
+        views={mobile?.views}
+        menu={<ShellMenuItems shell={shell.mobile} extra={mobile?.menu} />}
+      />
+    );
+  }
   return (
     <header className="sticky top-0 z-(--z-sticky) bg-bg-app">
       <div className="mx-auto flex h-sheet-header w-full max-w-list-max items-center gap-2 px-3 tablet:px-6 desktop:px-8">
-        {shell && (
-          <IconButton
-            icon={MenuIcon}
-            aria-label={t('sidebar.open')}
-            onPress={shell.openNav}
-            className="-ms-1.5 tablet:hidden"
-          />
-        )}
         <h1 className="flex min-w-0 flex-1 items-baseline gap-2 text-lg">
           <span className="truncate">{title}</span>
           {context && (
@@ -107,9 +212,35 @@ export function ViewHeader({ title, context, actions }: ViewHeaderProps) {
             </span>
           )}
         </h1>
+        <SyncStatus className="max-tablet:hidden" />
         {actions}
       </div>
     </header>
+  );
+}
+
+/** The phone's ⋯ menu: the screen's items, then org settings, admin and sign out. */
+function ShellMenuItems({ shell, extra }: { shell: MobileShell; extra?: ReactNode }) {
+  const { t } = useTranslation('shell');
+  const org = shell.activeOrg;
+  return (
+    <>
+      {extra}
+      {extra && <MenuSeparator />}
+      {org && (
+        <MenuItem icon={Settings} href={paths.orgSettings(orgUrlSlug(org))}>
+          {t('org.settings')}
+        </MenuItem>
+      )}
+      {shell.isAdmin && (
+        <MenuItem icon={ShieldCheck} href={paths.admin}>
+          {t('user.admin')}
+        </MenuItem>
+      )}
+      <MenuItem icon={LogOut} onAction={shell.onSignOut}>
+        {t('user.signOut')}
+      </MenuItem>
+    </>
   );
 }
 

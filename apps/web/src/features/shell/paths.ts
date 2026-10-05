@@ -3,7 +3,7 @@ import type { Org } from '../../data/types';
 /** Views a sidebar org section can link to. P2+ append today, week, overdue, nodate, everyone. */
 export type OrgViewId = 'my';
 
-export type SettingsSection = 'profile' | 'security';
+export type SettingsSection = 'profile' | 'behaviour' | 'security';
 
 /** The personal org is addressed by the `personal` alias (05 §2), giving stable URLs. */
 export function orgUrlSlug(org: Pick<Org, 'isPersonal' | 'slug'>): string {

@@ -22,6 +22,19 @@ export interface Draft {
   afterId: string | null;
   /** Set for a subtask draft (P3): the parent it is created under. */
   parentId?: string;
+  /**
+   * A due date picked for the draft before it has a title (the phone's accessory bar,
+   * 02 §13.3). A date phrase in the title still wins.
+   */
+  due?: DraftDue | undefined;
+}
+
+/** The due fields a draft can carry (the shape of the date picker's value). */
+export interface DraftDue {
+  dueDate: string | null;
+  dueTime: string | null;
+  dueTz: string | null;
+  startDate?: string | null | undefined;
 }
 
 /** The DnD insertion point, drawn on one row (02 §5). */
@@ -76,6 +89,16 @@ export interface ListUiState {
   keyboardDrag: KeyboardDrag | null;
   /** FR-TAG-4: only rows with one of these tags (empty = no filter). */
   tagFilter: readonly string[];
+  /**
+   * Phones (02 §13.2): a long-press entered selection mode. Checkboxes become selection
+   * circles, a tap toggles a row, and the bulk bar replaces the bottom nav.
+   */
+  selectionMode: boolean;
+  /**
+   * The row whose title edit is paused while a sheet opened from the accessory bar has focus:
+   * its blur neither commits nor discards the draft (02 §13.3).
+   */
+  suspendedEdit: string | null;
 }
 
 export interface ListUiActions {
@@ -91,6 +114,8 @@ export interface ListUiActions {
   addDraft: (draft: Draft) => void;
   removeDraft: (id: string) => void;
   setHiding: (id: string, phase: 'hold' | 'collapsing' | null) => void;
+  /** Patches a draft (its group, position or picked due date). */
+  updateDraft: (id: string, patch: Partial<Omit<Draft, 'id'>>) => void;
   reset: () => void;
 }
 
@@ -131,6 +156,8 @@ const initial = (): ListUiState => ({
   drop: null,
   keyboardDrag: null,
   tagFilter: [],
+  selectionMode: false,
+  suspendedEdit: null,
 });
 
 let editSeq = 0;
@@ -195,6 +222,8 @@ export function createListStore(overrides: Partial<ListUiState> = {}): ListStore
       })),
     addDraft: (draft) => set((s) => ({ drafts: [...s.drafts, draft] })),
     removeDraft: (id) => set((s) => ({ drafts: s.drafts.filter((d) => d.id !== id) })),
+    updateDraft: (id, patch) =>
+      set((s) => ({ drafts: s.drafts.map((d) => (d.id === id ? { ...d, ...patch } : d)) })),
     setHiding: (id, phase) =>
       set((s) => {
         const hiding = { ...s.hiding };

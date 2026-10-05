@@ -1,6 +1,6 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 import { e2eEnv } from './e2e/support/env';
 
@@ -40,6 +40,24 @@ const serverEnv = {
   PORT: String(apiPort),
 };
 
+/**
+ * PWA specs (`*.pwa.spec.ts`, Phase 4) need a service worker, which `vite` dev does not serve:
+ * they run against the production build (`vite build`) served by a second API server on its
+ * own origin and data directory, exactly as in a deployment (strict CSP, SPA fallback, no
+ * proxy in between).
+ */
+const pwaPort = 3182;
+const pwaBaseURL = `http://localhost:${pwaPort}`;
+const pwaDataDir = `${process.env.ROOSTER_E2E_DATA_DIR}-pwa`;
+mkdirSync(pwaDataDir, { recursive: true });
+const pwaServerEnv = {
+  ...serverEnv,
+  ROOSTER_BASE_URL: pwaBaseURL,
+  ROOSTER_DATA_DIR: pwaDataDir,
+  ROOSTER_WEB_DIR: resolve(import.meta.dirname, 'dist'),
+  PORT: String(pwaPort),
+};
+
 export default defineConfig({
   testDir: 'e2e',
   globalTeardown: './e2e/support/teardown.ts',
@@ -52,7 +70,32 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /perf\.spec\.ts$/ },
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      testIgnore: [/perf\.spec\.ts$/, /\.pwa(-last)?\.spec\.ts$/, /\.mobile\.spec\.ts$/],
+    },
+    // Phones (02 §13, AC-4.5): iOS Safari (WebKit) and Android Chrome, touch and safe areas.
+    { name: 'mobile', use: { ...devices['iPhone 15'] }, testMatch: /\.mobile\.spec\.ts$/ },
+    {
+      name: 'mobile-android',
+      use: { ...devices['Pixel 8'] },
+      testMatch: /\.mobile\.spec\.ts$/,
+    },
+    {
+      name: 'pwa',
+      use: { ...devices['Desktop Chrome'], baseURL: pwaBaseURL },
+      testMatch: /\.pwa\.spec\.ts$/,
+    },
+    // AC-4.7 deploys a new sw.js into the served build: last and alone, so no other PWA test
+    // sees the new version.
+    {
+      name: 'pwa-update',
+      use: { ...devices['Desktop Chrome'], baseURL: pwaBaseURL },
+      testMatch: /\.pwa-last\.spec\.ts$/,
+      dependencies: ['pwa'],
+      fullyParallel: false,
+    },
     // Timing budgets (AC-2.12) run last and alone, so other workers do not skew them.
     {
       name: 'perf',
@@ -79,6 +122,14 @@ export default defineConfig({
       // Always a fresh server: tests assume a clean data directory and this env.
       reuseExistingServer: false,
       timeout: 120_000,
+    },
+    {
+      command: `pnpm -C ../web exec vite build --logLevel warn && node ../web/e2e/support/wait-for.mjs ${idpIssuer}/.well-known/openid-configuration && pnpm exec tsx src/main.ts`,
+      cwd: '../server',
+      url: `${pwaBaseURL}/readyz`,
+      env: pwaServerEnv,
+      reuseExistingServer: false,
+      timeout: 240_000,
     },
     {
       command: `pnpm exec vite --port ${webPort} --strictPort`,

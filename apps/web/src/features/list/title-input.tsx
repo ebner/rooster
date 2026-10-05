@@ -31,6 +31,24 @@ const platform = detectPlatform();
  */
 let backspaceLatch = false;
 
+/**
+ * What the phone's accessory bar (02 §13.3) can do to the title being edited: it lives
+ * outside the row, so the input registers these while it is mounted.
+ */
+export interface TitleInputHandle {
+  /** "↵ Next": the same as Enter (commit, then a new draft below). */
+  next: () => void;
+  /** Inserts text at the caret, e.g. `#` to start a tag token. */
+  insert: (text: string) => void;
+  focus: () => void;
+}
+
+const handles = new Map<string, TitleInputHandle>();
+
+export function titleInputHandle(rowId: string): TitleInputHandle | undefined {
+  return handles.get(rowId);
+}
+
 export interface TitleInputProps {
   rowId: string;
   initialValue: string;
@@ -187,6 +205,32 @@ export function TitleInput({
       if (timer.current) clearTimeout(timer.current);
     };
   }, []);
+
+  useEffect(() => {
+    const handle: TitleInputHandle = {
+      next: () => {
+        const el = input.current;
+        if (!el) return;
+        finish(controller.enter(rowId, el.value, spans(), false));
+      },
+      insert: (text) => {
+        const el = input.current;
+        if (!el) return;
+        const start = el.selectionStart ?? el.value.length;
+        const end = el.selectionEnd ?? start;
+        const before = el.value.slice(0, start);
+        const glue = text.startsWith('#') && before !== '' && !before.endsWith(' ') ? ' ' : '';
+        el.focus({ preventScroll: true });
+        el.setRangeText(`${glue}${text}`, start, end, 'end');
+        onInput();
+      },
+      focus: () => input.current?.focus({ preventScroll: true }),
+    };
+    handles.set(rowId, handle);
+    return () => {
+      if (handles.get(rowId) === handle) handles.delete(rowId);
+    };
+  });
 
   const value = () => input.current?.value ?? '';
   const spans = () => ignoredSpans(value(), ignored.current);
@@ -351,6 +395,8 @@ export function TitleInput({
   const onBlur = () => {
     setSuggest(null);
     if (committed.current) return;
+    // A sheet from the accessory bar has focus for a moment; the edit resumes after it.
+    if (controller.ui().suspendedEdit === rowId) return;
     apply(controller.blurEdit(rowId, value(), spans()));
   };
 

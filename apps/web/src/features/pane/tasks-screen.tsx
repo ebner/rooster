@@ -1,11 +1,13 @@
-import { useNavigate, useParams } from '@tanstack/react-router';
-import { useEffect, useMemo, useRef } from 'react';
+import type { ListState } from '@rooster/core/reducers';
+import { useNavigate, useParams, useRouter } from '@tanstack/react-router';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useListPipeline, useMyListStatus } from '../../data/list';
+import { useMyListSelect } from '../../data/list';
 import type { Org } from '../../data/types';
 import { useListStore } from '../../state/list-store';
 import { usePaneStore } from '../../state/pane-store';
-import { ShowCompletedToggle } from '../list/header-actions';
+import { isMobileViewport } from '../../ui/use-media';
+import { ShowCompletedMenuItem, ShowCompletedToggle } from '../list/header-actions';
 import { MyListView } from '../list/my-list-view';
 import { ViewBody, ViewHeader } from '../shell/app-shell';
 import { paths } from '../shell/paths';
@@ -34,6 +36,11 @@ export function createPaneControls(deps: {
   go: (href: string, replace: boolean) => void;
   orgSlug: string;
   focusList: () => void;
+  /**
+   * Phones (02 §13.4): the sheet is a history entry, so closing it steps back when this
+   * session pushed that entry. Returns false to fall back to replacing the URL.
+   */
+  back?: () => boolean;
 }): PaneControls {
   return {
     taskId: deps.current,
@@ -49,7 +56,7 @@ export function createPaneControls(deps: {
       const hadFocus = focusInPane();
       deps.setCurrent(null);
       usePaneStore.getState().setFullScreen(false);
-      deps.go(paths.orgView(deps.orgSlug, 'my'), true);
+      if (!deps.back?.()) deps.go(paths.orgView(deps.orgSlug, 'my'), true);
       if (hadFocus) deps.focusList();
     },
     toggleFullScreen: () => {
@@ -78,15 +85,14 @@ export function TasksScreen({
   const { t } = useTranslation('shell');
   const { t: tPane } = useTranslation('pane');
   const navigate = useNavigate();
+  const router = useRouter();
+  /** Whether this session pushed the pane's history entry (a phone's ‹ back pops it). */
+  const pushed = useRef(false);
   const params = useParams({ strict: false }) as { taskId?: string };
   const taskId = params.taskId ?? null;
   const taskRef = useRef(taskId);
   taskRef.current = taskId;
   const fullScreen = usePaneStore((s) => s.fullScreen);
-  // Status only: subscribing to the list data would re-render the header and the whole list
-  // frame on every keypress (AC-2.12).
-  const listReady = useMyListStatus(org.id).ready;
-  const pipeline = useListPipeline();
 
   const focusList = focusListCursor;
 
@@ -97,34 +103,53 @@ export function TasksScreen({
         setCurrent: (id) => {
           taskRef.current = id;
         },
-        go: (href, replace) => void navigate({ href, replace }),
+        go: (href, replace) => {
+          if (!replace) pushed.current = true;
+          void navigate({ href, replace });
+        },
+        back: () => {
+          if (!isMobileViewport() || !pushed.current) return false;
+          pushed.current = false;
+          router.history.back();
+          return true;
+        },
         orgSlug,
         focusList,
       }),
-    [navigate, orgSlug],
+    [navigate, router, orgSlug],
   );
 
-  // A deep link selects its row when the task is in view; otherwise nothing is selected.
-  const linked = useRef<string | null>(null);
+  // A boolean slice, not the list data: the frame must not re-render per keypress (AC-2.12).
+  // A deep link selects its row once the task is in the list (it may arrive after the first
+  // render, e.g. when the screen mounts over a restored cache); otherwise nothing is selected.
+  // Selecting moves focus to the row and scrolls it into view (`MyListView`).
+  const inList =
+    useMyListSelect(
+      org.id,
+      useCallback((state: ListState) => (taskId ? taskId in state.tasks : false), [taskId]),
+    ).data === true;
+  // Keyed on the task and its presence only (not the selection), so moving the selection
+  // later never snaps it back; re-running is harmless (e.g. StrictMode's second mount pass).
   useEffect(() => {
-    const state = pipeline.view(org.id);
-    if (!taskId || !listReady || !state || linked.current === taskId) return;
-    linked.current = taskId;
+    if (!taskId || !inList) return;
     const store = useListStore.getState();
-    if (store.cursor === taskId) return;
-    if (state.tasks[taskId] && document.querySelector(`[data-row-id="${taskId}"]`)) {
+    if (store.cursor !== taskId && document.querySelector(`[data-row-id="${taskId}"]`)) {
       store.select(taskId);
     }
-  }, [taskId, listReady, pipeline, org.id]);
+  }, [taskId, inList]);
 
   useEffect(() => {
     if (taskId) usePaneStore.setState({ lastTaskId: taskId });
-    else usePaneStore.getState().setFullScreen(false);
+    else {
+      usePaneStore.getState().setFullScreen(false);
+      pushed.current = false;
+    }
   }, [taskId]);
 
   return (
     <SplitView
       label={tPane('label')}
+      onDismiss={() => pane.close()}
       list={
         <>
           <ViewHeader
@@ -136,6 +161,19 @@ export function TasksScreen({
                 <ShowCompletedToggle />
               </>
             }
+            mobile={{
+              switcher: true,
+              actions: <TagFilterButton orgId={org.id} />,
+              menu: <ShowCompletedMenuItem />,
+              views: [
+                {
+                  id: 'my',
+                  label: t('view.my'),
+                  href: paths.orgView(orgSlug, 'my'),
+                  isActive: true,
+                },
+              ],
+            }}
           />
           <ViewBody>
             <MyListView orgId={org.id} userId={userId} label={t('view.my')} pane={pane} />

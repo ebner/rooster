@@ -13,6 +13,11 @@ export interface ListContextValue {
   onOpenTask?: ((taskId: string, focus: boolean) => void) | undefined;
   /** The `aria-level` rows start at (2 in My tasks; the pane's subtask list starts deeper). */
   baseLevel?: number | undefined;
+  /**
+   * The phone layout (02 §13): a tap opens the detail sheet instead of editing the title, and
+   * pickers open as bottom sheets instead of anchored popovers.
+   */
+  mobile?: boolean | undefined;
 }
 
 export const ListContext = createContext<ListContextValue | null>(null);

@@ -162,8 +162,32 @@ export function ToastRegion() {
   const toasts = useToastStore((s) => s.toasts);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
+  const region = useRef<HTMLElement>(null);
+  // The phone's FAB rises above stacked toasts instead of hiding behind them (02 §13.1). The
+  // offset is written on the FAB itself: a custom property on :root would restyle the whole
+  // document on every toast (AC-2.12), and only phones have a FAB.
+  useEffect(() => {
+    const el = region.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let last = -1;
+    const apply = () => {
+      const fab = document.querySelector<HTMLElement>('[data-fab]');
+      if (!fab) return;
+      const height = toasts.length === 0 ? 0 : Math.round(el.getBoundingClientRect().height);
+      if (height === last) return;
+      last = height;
+      fab.style.setProperty('--toast-stack-height', `${height}px`);
+    };
+    if (!document.querySelector('[data-fab]')) return;
+    const observer = new ResizeObserver(apply);
+    observer.observe(el);
+    apply();
+    return () => observer.disconnect();
+  }, [toasts.length]);
   return (
     <section
+      ref={region}
+      data-toast-region
       aria-label={t('toast.region')}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -173,7 +197,7 @@ export function ToastRegion() {
       }}
       className={cn(
         'pointer-events-none fixed z-(--z-toast) flex flex-col gap-2',
-        // The mobile bottom-nav offset is added in Phase 4 together with the nav itself.
+        // Above the phone's bottom nav: see `[data-toast-region]` in theme.css.
         'inset-x-3 bottom-3 items-stretch tablet:inset-x-auto tablet:bottom-6 tablet:left-6 tablet:items-start',
         toasts.length === 0 && 'hidden',
       )}

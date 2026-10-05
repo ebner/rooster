@@ -48,12 +48,15 @@ export function SplitView({
   list,
   pane,
   label,
+  onDismiss,
 }: {
   list: ReactNode;
   /** The pane content, or null when closed. */
   pane: ReactNode | null;
   /** Accessible name of the pane region. */
   label: string;
+  /** A tap on the tablet overlay's scrim (02 §2). */
+  onDismiss?: (() => void) | undefined;
 }) {
   const { t } = useTranslation('pane');
   const container = useRef<HTMLDivElement>(null);
@@ -145,6 +148,15 @@ export function SplitView({
       >
         {list}
       </div>
+      {open && mode === 'overlay' && viewport < 1200 && (
+        // Tablets (02 §2): the overlay pane dims the list; a tap outside closes it.
+        <div
+          aria-hidden
+          data-testid="pane-scrim"
+          onClick={onDismiss}
+          className="absolute inset-0 z-(--z-pane) bg-overlay animate-fade-in"
+        />
+      )}
       {open && (
         <aside
           data-pane-root
@@ -157,7 +169,8 @@ export function SplitView({
             mode === 'overlay' &&
               'absolute inset-y-0 end-0 z-(--z-pane) w-pane-overlay max-w-full shadow-lg',
             mode === 'full' && 'min-w-0 flex-1',
-            mode === 'sheet' && 'fixed inset-0 z-(--z-pane) pb-[env(safe-area-inset-bottom)]',
+            // Phones (02 §13.4): a full-screen sheet sliding up over 250 ms.
+            mode === 'sheet' && 'fixed inset-0 z-(--z-pane) pt-safe duration-(--dur-slow)',
             !entered &&
               mode !== 'full' &&
               (mode === 'sheet' ? 'translate-y-full' : 'translate-x-full'),

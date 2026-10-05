@@ -20,7 +20,7 @@ interface FetchResult<T> {
 export function toApiError(body: unknown, status: number): ApiError {
   if (body && typeof body === 'object' && 'code' in body && typeof body.code === 'string') {
     const detail = 'detail' in body && typeof body.detail === 'string' ? body.detail : undefined;
-    return new ApiError(body.code, status, detail);
+    return new ApiError(body.code, status, detail, body as Record<string, unknown>);
   }
   return new ApiError(status === 401 ? 'unauthenticated' : `http_${status}`, status);
 }

@@ -49,7 +49,7 @@ test('Phase 3 screenshots (1440 pane, 1440 full screen, 390)', async ({ page }) 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${out}/390-pane.png` });
-  await page.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('button', { name: 'Back' }).click();
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${out}/390-list.png` });
 });

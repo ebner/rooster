@@ -38,6 +38,7 @@ import {
 } from '../../state/list-store';
 import { announce } from './announcer';
 import type { ListController } from './controller';
+import { longPressSlopPx, suppressNextClick } from './gestures';
 import { useListContext } from './list-context';
 import { type GroupOrder, type Row, visibleOrder } from './model/rows';
 import {
@@ -230,6 +231,8 @@ interface DragSession {
   container: HTMLElement | null;
   width: number;
   touch: boolean;
+  /** The farthest the pointer got from the start (a still long-press selects, 02 §13.2). */
+  moved: number;
 }
 
 function rowElementAt(x: number, y: number): HTMLElement | null {
@@ -272,6 +275,8 @@ function DragSurface({ label, compact, rootRef, pressed, enabled, children }: Su
     (s) => s.drop !== null || s.dragging !== null || s.keyboardDrag !== null,
   );
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    // Touch drags are the TouchSensor's long-press; a touch moving 4 px is a scroll or a swipe.
+    if (event.pointerType === 'touch') return;
     pressed.current = pressedRow(event.target);
     if (pressed.current) listeners?.onPointerDown?.(event);
   };
@@ -310,6 +315,7 @@ export const ListDnd = memo(function ListDnd({
   rootRef,
   enabled = true,
   compact = false,
+  onLongPress,
   children,
 }: {
   rowsRef: RefObject<readonly Row[]>;
@@ -318,6 +324,8 @@ export const ListDnd = memo(function ListDnd({
   enabled?: boolean;
   /** The pane's subtask list: no trailing space for the bulk bar. */
   compact?: boolean;
+  /** A touch long-press released without moving (02 §13.2: enters selection mode). */
+  onLongPress?: ((rowId: string) => void) | undefined;
   children: ReactNode;
 }) {
   const pressed = useRef<string | null>(null);
@@ -482,6 +490,7 @@ export const ListDnd = memo(function ListDnd({
       container: scrollParent(root),
       width: active.rect.current.initial?.width ?? 0,
       touch,
+      moved: 0,
     };
     if (touch) navigator.vibrate?.(10);
     const state = controller.state();
@@ -519,12 +528,20 @@ export const ListDnd = memo(function ListDnd({
     const s = session.current;
     if (!s) return;
     s.pointer = { x: s.start.x + delta.x, y: s.start.y + delta.y };
+    s.moved = Math.max(s.moved, Math.hypot(delta.x, delta.y));
     computeDrop(s);
     autoScroll(s);
   };
 
   const onDragEnd = (_event: DragEndEvent) => {
     const s = session.current;
+    if (s?.touch) suppressNextClick(s.pointer.x, s.pointer.y);
+    if (s?.touch && s.kind === 'task' && s.moved < longPressSlopPx && onLongPress) {
+      const id = pressed.current;
+      finish();
+      if (id) onLongPress(id);
+      return;
+    }
     const drop = controller.ui().drop;
     if (!s || !drop) {
       finish();
@@ -637,7 +654,9 @@ function DragPreview({
       <div
         className={cn(
           'relative flex items-center gap-3 rounded-sm bg-bg-elevated px-3 shadow-lg',
-          kind === 'group' ? 'h-group text-group' : 'h-row text-base',
+          kind === 'group'
+            ? 'h-group text-group max-tablet:h-group-mobile'
+            : 'h-row text-base max-tablet:h-row-mobile max-tablet:text-md',
         )}
       >
         {kind === 'task' && (

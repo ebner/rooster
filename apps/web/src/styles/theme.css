@@ -28,16 +28,23 @@
  *   Heights (--h-*)               h-control-sm  h-control  h-control-lg  h-row  h-row-mobile
  *                                 h-row-subtask  h-group  h-group-mobile  h-chip  h-pill
  *                                 h-toolbar  h-sheet-header  h-property-row
+ *                                 h-property-row-mobile  h-bottom-nav  h-view-switcher
+ *                                 h-accessory-bar  (h-(--h-sheet-handle): it shares w-'s name)
  *   Squares (--size-*)            size-checkbox  size-hit  size-hit-touch  size-calendar-cell
+ *                                 size-fab
  *   Layout widths (--w-*)         w-/max-w-/min-w-: list-max  list-min  sidebar  rail  pane
  *                                 pane-min  pane-max  pane-overlay  date-popover  palette
- *                                 toast  date-cell  label-col  illustration
+ *                                 toast  date-cell  label-col  illustration  sheet-handle
  *   Radius (--radius-*)           rounded-2xs  rounded-xs  rounded-sm  rounded-md  rounded-lg
  *                                 rounded-full
  *   Shadow (--shadow-*)           shadow-sm  shadow-md  shadow-lg  shadow-pane
  *   Easing (--ease-*)             ease-standard  ease-exit  ease-spring
  *   Animation                     animate-spin  animate-check-pop  animate-popover-in
- *                                 animate-fade-in  animate-toast-in  skeleton-shimmer
+ *                                 animate-fade-in  animate-fade-out  animate-toast-in
+ *                                 animate-sheet-in  animate-sheet-out  skeleton-shimmer
+ *   Safe areas (02 §13.5)         pt-safe  pb-safe  ps-safe  pe-safe; --safe-top/-bottom vars
+ *   Mobile chrome                 max-h-sheet (70 % sheets), bottom-fab, h-bottom-nav-safe,
+ *                                 top-(--list-sticky-top) for sticky list headers
  *   Breakpoints                   tablet: (≥768)  desktop: (≥1200)  wide: (≥1600),
  *                                 max-tablet: = mobile only; pointer-coarse: for touch
  *   Durations / z-index / odd     duration-(--dur-fast|base|slow|pop|fade)
@@ -79,6 +86,9 @@
   --animate-popover-in: popover-in var(--dur-base) var(--ease-standard);
   --animate-fade-in: fade-in var(--dur-fade) var(--ease-standard);
   --animate-toast-in: popover-in var(--dur-base) var(--ease-standard);
+  --animate-sheet-in: sheet-in var(--dur-slow) var(--ease-standard);
+  --animate-sheet-out: sheet-out var(--dur-slow) var(--ease-exit) forwards;
+  --animate-fade-out: fade-out var(--dur-fade) var(--ease-exit) forwards;
 
   @keyframes spin {
     to {
@@ -103,6 +113,21 @@
   @keyframes fade-in {
     from {
       opacity: 0;
+    }
+  }
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes sheet-in {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes sheet-out {
+    to {
+      transform: translateY(100%);
     }
   }
   @keyframes shimmer {
@@ -265,6 +290,11 @@
   --spacing-toolbar: var(--h-toolbar);
   --spacing-sheet-header: var(--h-sheet-header);
   --spacing-property-row: var(--h-property-row);
+  --spacing-property-row-mobile: var(--h-property-row-mobile);
+  --spacing-bottom-nav: var(--h-bottom-nav);
+  --spacing-view-switcher: var(--h-view-switcher);
+  --spacing-accessory-bar: var(--h-accessory-bar);
+  --spacing-fab: var(--size-fab);
   --spacing-checkbox: var(--size-checkbox);
   --spacing-hit: var(--size-hit);
   --spacing-hit-touch: var(--size-hit-touch);
@@ -284,6 +314,7 @@
   --container-date-cell: var(--w-date-cell);
   --container-label-col: var(--w-label-col);
   --container-illustration: var(--w-illustration);
+  --container-sheet-handle: var(--w-sheet-handle);
 }
 
 @custom-variant hover {
@@ -298,6 +329,75 @@
 }
 @custom-variant pressed (&:where(:active, [data-pressed], [data-force~="pressed"]));
 @custom-variant focus-ring (&:where(:focus-visible, [data-focus-visible], [data-force~="focus"]));
+
+/*
+ * Safe areas (02 §13.5): every fixed element on phones respects env(safe-area-inset-*).
+ * --list-sticky-top is where sticky group headers stop: under the view header (desktop)
+ * or under the mobile header plus the view switcher.
+ */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --list-sticky-top: var(--h-sheet-header);
+}
+@media (max-width: 767.98px) {
+  :root {
+    --list-sticky-top: calc(var(--safe-top) + var(--h-sheet-header) + var(--h-view-switcher));
+  }
+}
+
+/*
+ * Toasts sit above the phone's bottom nav (02 §14), which only the mobile frame renders (it
+ * marks <html>; a `:has()` here would be re-checked on every list mutation, AC-2.12).
+ */
+@media (max-width: 767.98px) {
+  [data-frame="mobile"] [data-toast-region] {
+    bottom: calc(var(--h-bottom-nav) + var(--safe-bottom) + var(--space-2));
+  }
+}
+
+@utility pt-safe {
+  padding-top: var(--safe-top);
+}
+@utility pb-safe {
+  padding-bottom: var(--safe-bottom);
+}
+@utility ps-safe {
+  padding-inline-start: var(--safe-left);
+}
+@utility pe-safe {
+  padding-inline-end: var(--safe-right);
+}
+/* 8 px side padding that grows into the landscape safe areas. */
+@utility px-safe-2 {
+  padding-inline-start: max(var(--space-2), var(--safe-left));
+  padding-inline-end: max(var(--space-2), var(--safe-right));
+}
+@utility h-bottom-nav-safe {
+  height: calc(var(--h-bottom-nav) + var(--safe-bottom));
+}
+@utility max-h-sheet {
+  max-height: calc(70dvh - var(--safe-top));
+}
+/* 02 §13.1: 16 px above the bottom nav, and above any stacked toasts. */
+@utility bottom-fab {
+  bottom: calc(
+    var(--h-bottom-nav) +
+    var(--safe-bottom) +
+    var(--space-4) +
+    var(--toast-stack-height, 0px)
+  );
+}
+/* A row scrolled into view clears the sticky headers above and the accessory bar below. */
+@utility scroll-m-list {
+  scroll-margin-top: calc(var(--list-sticky-top) + var(--h-group-mobile));
+  scroll-margin-bottom: calc(var(--h-accessory-bar) + var(--space-2));
+}
+@utility touch-callout-none {
+  -webkit-touch-callout: none;
+}
 
 @utility tabular-nums {
   font-variant-numeric: tabular-nums;
@@ -364,7 +464,10 @@
  * and on the row being edited.
  */
 @layer components {
-  [data-list-root]:not([data-dragging]) > [data-cv] {
-    content-visibility: auto;
+  /* Not on phones: WebKit skips painting rows of a nested scroller that are in view. */
+  @media (min-width: 768px) {
+    [data-list-root]:not([data-dragging]) > [data-cv] {
+      content-visibility: auto;
+    }
   }
 }

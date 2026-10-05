@@ -55,13 +55,21 @@ for (const width of [1440, 390] as const) {
       path: screenshotPath(`real-shell-${width}`, (n) => testInfo.outputPath(n)),
     });
     if (width < 768) {
+      // 02 §13.1: no sidebar on phones; the org switcher sheet and the bottom nav replace it.
       await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
-      await page.getByRole('button', { name: 'Open navigation' }).click();
-      await expect(page.getByRole('dialog', { name: 'Main' })).toBeVisible();
-      await page.waitForTimeout(250);
+      await expect(
+        page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'My tasks' }),
+      ).toHaveAttribute('aria-current', 'page');
+      await page.getByTestId('org-switcher').click();
+      const sheet = page.getByRole('dialog', { name: 'Organisations' });
+      await expect(sheet.getByRole('button', { name: 'Personal' })).toBeVisible();
+      await expect(sheet.getByRole('button', { name: 'Northwind' })).toBeVisible();
+      await page.waitForTimeout(300);
       await page.screenshot({
-        path: screenshotPath(`real-drawer-${width}`, (n) => testInfo.outputPath(n)),
+        path: screenshotPath(`real-orgs-${width}`, (n) => testInfo.outputPath(n)),
       });
+      await expectNoAxeViolations(page);
+      return;
     }
     const nav = page.getByRole('navigation', { name: 'Main' });
     await expect(nav.getByRole('region', { name: 'Personal' })).toBeVisible();

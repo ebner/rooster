@@ -1,0 +1,70 @@
+{
+  "sheet": {
+    "close": "Close",
+    "back": "Back"
+  },
+  "date": {
+    "pick": "Pick date…"
+  },
+  "swipe": {
+    "complete": "Complete",
+    "date": "Date",
+    "move": "Move",
+    "delete": "Delete",
+    "done": {
+      "complete": "Completed “{title}”",
+      "date": "Choose a date for “{title}”",
+      "move": "Choose a group for “{title}”",
+      "delete": "Deleted “{title}”"
+    }
+  },
+  "fab": {
+    "label": "New task"
+  },
+  "accessory": {
+    "label": "New task options",
+    "date": "Date",
+    "group": "Group: {name}",
+    "groupTitle": "Add to group",
+    "tag": "Add tag",
+    "next": "Next"
+  },
+  "subject": {
+    "tasks": "{count, plural, one {# task} other {# tasks}}"
+  },
+  "selection": {
+    "done": "Done selecting",
+    "hint": "Tap to select"
+  },
+  "refresh": {
+    "refreshing": "Refreshing…",
+    "done": "Up to date"
+  },
+  "org": {
+    "title": "Organisations",
+    "switch": "{name}, switch organisation"
+  },
+  "header": {
+    "more": "More",
+    "hideCompleted": "Hide completed"
+  },
+  "views": {
+    "label": "Views"
+  },
+  "nav": {
+    "label": "Primary",
+    "myTasks": "My tasks",
+    "search": "Search",
+    "settings": "Settings"
+  },
+  "dev": {
+    "section": "Phone layout",
+    "header": "Header and view switcher",
+    "bottomNav": "Bottom nav",
+    "fab": "Floating action button",
+    "swipe": "Swipe reveals",
+    "accessory": "Accessory bar",
+    "sheetHeader": "Detail sheet header",
+    "sheets": "Bottom sheets"
+  }
+}

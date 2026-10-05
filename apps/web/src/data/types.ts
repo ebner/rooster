@@ -57,7 +57,7 @@ export interface Me {
   prefs?: Prefs;
 }
 
-export type ProfilePatch = Partial<UserSettings & { name: string }>;
+export type ProfilePatch = Partial<UserSettings & { name: string }> & { prefs?: Partial<Prefs> };
 
 /** `PUT /me/org-order` (06 §1 ordering intents). */
 export interface OrgReorderIntent {

@@ -1,4 +1,4 @@
-import { ChevronRight, GripVertical } from 'lucide-react';
+import { Check, ChevronRight, GripVertical } from 'lucide-react';
 import { type MouseEvent, memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
@@ -31,7 +31,15 @@ function caretOffsetAt(event: MouseEvent, within: Element): number | 'end' {
   return 'end';
 }
 
-const flag = { selected: 1, source: 2, dateOpen: 4, hold: 8, collapsing: 16, tagOpen: 32 } as const;
+const flag = {
+  selected: 1,
+  source: 2,
+  dateOpen: 4,
+  hold: 8,
+  collapsing: 16,
+  tagOpen: 32,
+  selectionMode: 64,
+} as const;
 
 function rowFlags(s: ListUiState, id: string): number {
   let bits = 0;
@@ -42,7 +50,31 @@ function rowFlags(s: ListUiState, id: string): number {
   const hiding = s.hiding[id];
   if (hiding === 'hold') bits |= flag.hold;
   if (hiding === 'collapsing') bits |= flag.collapsing;
+  if (s.selectionMode) bits |= flag.selectionMode;
   return bits;
+}
+
+/**
+ * Selection mode's stand-in for the checkbox (02 §13.2): a circle that fills with the accent
+ * when the row is selected. The row's `aria-selected` carries the state.
+ */
+function SelectionCircle({ selected }: { selected: boolean }) {
+  return (
+    <span aria-hidden className="flex size-hit-touch shrink-0 items-center justify-center">
+      <span
+        data-selection-circle
+        className={cn(
+          'inline-flex size-5 items-center justify-center rounded-full border-(length:--border-check)',
+          'transition-colors duration-(--dur-fast) ease-standard',
+          selected
+            ? 'border-selection-bar bg-selection-bar text-text-on-accent'
+            : 'border-border-strong bg-bg-app text-transparent',
+        )}
+      >
+        <Check className="size-3" strokeWidth={3} />
+      </span>
+    </span>
+  );
 }
 
 export interface TaskRowProps {
@@ -57,7 +89,14 @@ export interface TaskRowProps {
  */
 export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowProps) {
   const { t } = useTranslation('list');
-  const { controller, dateCtx, dragEnabled, onOpenTask, baseLevel = 2 } = useListContext();
+  const {
+    controller,
+    dateCtx,
+    dragEnabled,
+    onOpenTask,
+    baseLevel = 2,
+    mobile = false,
+  } = useListContext();
   const { id, task, draft, level, expandable, expanded, breadcrumb } = row;
   const subtaskRow = compact || level > 2;
   const indent = level - baseLevel;
@@ -66,6 +105,7 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
   const selected = (flags & flag.selected) !== 0;
   const isSource = (flags & flag.source) !== 0;
   const dateOpen = (flags & flag.dateOpen) !== 0;
+  const selectionMode = (flags & flag.selectionMode) !== 0;
   const hiding = flags & flag.collapsing ? 'collapsing' : flags & flag.hold ? 'hold' : undefined;
   const editing = useListUi((s) => (s.editing?.rowId === id ? s.editing : null));
   const done = task.completedAt !== null;
@@ -75,6 +115,18 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
   const onRowClick = useCallback(
     (event: MouseEvent<HTMLDivElement>) => {
       const target = event.target as Element;
+      if (mobile && !draft) {
+        // 02 §13.2: a tap opens the detail sheet (titles are edited there); in selection
+        // mode it toggles the row.
+        if (selectionMode) {
+          if (!target.closest('[data-no-row-press]')) controller.toggleSelectionMode(id);
+          return;
+        }
+        if (target.closest(interactiveSelector)) return;
+        controller.ui().select(id);
+        onOpenTask?.(id, false);
+        return;
+      }
       if (target.closest(interactiveSelector)) return;
       if (target.closest('[data-tag-chips]') && !draft) {
         controller.ui().select(id);
@@ -96,7 +148,7 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
         if (!draft) onOpenTask?.(id, false);
       }
     },
-    [controller, id, draft, onOpenTask],
+    [controller, id, draft, onOpenTask, mobile, selectionMode],
   );
 
   const onDueChange = (next: DueValue | null) => controller.setDue([id], next);
@@ -123,6 +175,10 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
       style={indent > 0 ? { paddingInlineStart: `calc(var(--space-6) * ${indent})` } : undefined}
       className={cn(
         'group/row relative flex shrink-0 items-center rounded-sm pe-1 max-tablet:h-row-mobile',
+        // Phones: vertical pans scroll, horizontal ones are swipes; a long-press lifts the row
+        // without the system's text callout.
+        'pointer-coarse:touch-pan-y pointer-coarse:select-none pointer-coarse:touch-callout-none',
+        'max-tablet:scroll-m-list',
         subtaskRow ? 'h-row-subtask' : 'h-row',
         'transition-[height,opacity] duration-(--dur-slow) ease-standard',
         selected ? 'bg-bg-selected' : 'hover:bg-bg-subtle',
@@ -195,12 +251,17 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
         )}
       </GridCell>
       <GridCell className="flex shrink-0 items-center">
-        <TaskCheckbox
-          aria-label={t(done ? 'row.uncomplete' : 'row.complete', { title: label })}
-          isSelected={done}
-          isDisabled={draft}
-          onChange={() => controller.toggleComplete([id])}
-        />
+        {selectionMode && !draft ? (
+          <SelectionCircle selected={selected} />
+        ) : (
+          <TaskCheckbox
+            aria-label={t(done ? 'row.uncomplete' : 'row.complete', { title: label })}
+            isSelected={done}
+            isDisabled={draft}
+            onChange={() => controller.toggleComplete([id])}
+            className="max-tablet:size-hit-touch"
+          />
+        )}
       </GridCell>
       <GridCell
         className={cn(
@@ -258,8 +319,11 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
             startDate={task.startDate}
             onChange={onDueChange}
             ctx={dateCtx}
+            // Phones give the title the room of the fixed date column (labels stay right-aligned).
+            className="max-tablet:w-auto"
             completed={done}
-            isOpen={dateOpen}
+            // Phones pick dates in a bottom sheet (the list renders it).
+            isOpen={dateOpen && !mobile}
             onOpenChange={(open) =>
               controller.ui().set({ popover: open ? { kind: 'date', rowId: id } : null })
             }

@@ -22,6 +22,7 @@ import {
   useSignOut,
 } from '../data';
 import { AppShell } from '../features/shell/app-shell';
+import { MobileNav } from '../features/shell/mobile-nav';
 import { orgUrlSlug, paths } from '../features/shell/paths';
 import { Sidebar } from '../features/shell/sidebar';
 import { setLocale } from '../lib/i18n';
@@ -60,10 +61,12 @@ function AppLayout() {
   // The session ended while the app was open (revoked elsewhere, signed out).
   const unauthenticated = errorCode(me.error) === 'unauthenticated';
   useEffect(() => {
-    if (!unauthenticated) return;
+    // Already on the way out: the location changes before this layout unmounts, and a second
+    // redirect would nest `redirect=/login?redirect=…` without end.
+    if (!unauthenticated || location.pathname === '/login') return;
     const target = safeRedirectPath(location.href);
     void navigate({ to: '/login', search: target ? { redirect: target } : {}, replace: true });
-  }, [unauthenticated, navigate, location.href]);
+  }, [unauthenticated, navigate, location.href, location.pathname]);
 
   // The profile's language wins once signed in (04 §8); it starts as the browser's.
   const storedLocale = me.data?.user.locale;
@@ -97,10 +100,44 @@ function AppLayout() {
   const activeView =
     location.pathname.endsWith('/my') || location.pathname.includes('/t/') ? 'my' : null;
   const failed = () => toast({ message: t('error.saveFailed'), tone: 'danger' });
+  const homeOrg = activeOrg ?? orgs[0] ?? null;
+  const createOrgAndGo = async (input: Parameters<typeof createOrg.mutateAsync>[0]) => {
+    const org = await createOrg.mutateAsync(input);
+    toast({ message: t('createOrg.created', { name: org.name }) });
+    await navigate({ href: paths.orgView(orgUrlSlug(org), 'my') });
+  };
+  const signOutNow = async () => {
+    try {
+      await signOut.mutateAsync();
+      window.location.replace(paths.login);
+    } catch {
+      failed();
+    }
+  };
 
   return (
     <AppShell
       navKey={location.pathname}
+      mobile={{
+        orgs,
+        activeOrg: activeOrg ?? null,
+        isAdmin: user.isAdmin,
+        onSelectOrg: (org) => void navigate({ href: paths.orgView(orgUrlSlug(org), 'my') }),
+        onCreateOrg: createOrgAndGo,
+        onSignOut: () => void signOutNow(),
+        nav: (
+          <MobileNav
+            myTasksHref={homeOrg ? paths.orgView(orgUrlSlug(homeOrg), 'my') : null}
+            active={
+              activeView === 'my'
+                ? 'my'
+                : location.pathname.startsWith('/settings')
+                  ? 'settings'
+                  : null
+            }
+          />
+        ),
+      }}
       renderSidebar={({ collapsed, onToggleCollapsed, inDrawer }) => (
         <Sidebar
           user={user}
@@ -114,20 +151,9 @@ function AppLayout() {
           onToggleOrgCollapsed={(orgId, value) =>
             setCollapsed.mutateAsync({ orgId, collapsed: value }).catch(failed)
           }
-          onCreateOrg={async (input) => {
-            const org = await createOrg.mutateAsync(input);
-            toast({ message: t('createOrg.created', { name: org.name }) });
-            await navigate({ href: paths.orgView(orgUrlSlug(org), 'my') });
-          }}
+          onCreateOrg={createOrgAndGo}
           onLocaleChange={(locale) => changeLocale.mutateAsync(locale).catch(failed)}
-          onSignOut={async () => {
-            try {
-              await signOut.mutateAsync();
-              window.location.replace(paths.login);
-            } catch {
-              failed();
-            }
-          }}
+          onSignOut={signOutNow}
         />
       )}
     >

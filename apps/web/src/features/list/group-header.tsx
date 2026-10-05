@@ -118,7 +118,7 @@ export const GroupHeader = memo(function GroupHeader({ row }: GroupHeaderProps) 
         if (store.cursor !== id && store.mode === 'navigate') store.select(id);
       }}
       className={cn(
-        'sticky top-sheet-header z-(--z-sticky) shrink-0 bg-bg-app',
+        'sticky top-(--list-sticky-top) z-(--z-sticky) shrink-0 bg-bg-app',
         !first && 'mt-6',
         isSource && 'opacity-40',
       )}

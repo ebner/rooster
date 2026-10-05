@@ -4,6 +4,7 @@ import { authClient } from './auth-client';
 import { ApiError } from './errors';
 import { api, unwrap } from './http';
 import { queryKeys } from './query-keys';
+import { clearLocalData } from './sync/engine';
 import type { AuthProvider, MutationResult, QueryResult } from './types';
 
 /** `GET /meta` → the configured sign-in providers (login page). */
@@ -43,8 +44,8 @@ export function useSignIn(): MutationResult<SignInVariables> {
 }
 
 /**
- * Ends the session. Callers then load `/login` afresh (a full page load), which also
- * drops every cached response of this user.
+ * Ends the session and forgets this user's local copies (the persisted cache and the outbox,
+ * in every tab; 04 §6.1). Callers then load `/login` afresh (a full page load).
  */
 export function useSignOut(): MutationResult<void> {
   return useMutation({
@@ -53,6 +54,7 @@ export function useSignOut(): MutationResult<void> {
       // out of rooster should not sign the user out of their company SSO.
       const result = await authClient.signOut({ disableRedirect: true });
       if (result.error) throw new ApiError('sign_out_failed', result.error.status ?? 500);
+      await clearLocalData();
     },
   });
 }

@@ -18,6 +18,7 @@ import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as Char91_devChar93UiRouteImport } from './routes/[_dev]/ui'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings.index'
+import { Route as AppSettingsBehaviourRouteImport } from './routes/_app/settings.behaviour'
 import { Route as AppSettingsProfileRouteImport } from './routes/_app/settings.profile'
 import { Route as AppSettingsSecurityRouteImport } from './routes/_app/settings.security'
 import { Route as AppOOrgSlugTasksRouteImport } from './routes/_app/o.$orgSlug._tasks'
@@ -69,6 +70,11 @@ const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppSettingsRoute,
 } as any)
+const AppSettingsBehaviourRoute = AppSettingsBehaviourRouteImport.update({
+  id: '/behaviour',
+  path: '/behaviour',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
 const AppSettingsProfileRoute = AppSettingsProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -108,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AppSettingsRouteWithChildren
   '/_dev/ui': typeof Char91_devChar93UiRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/settings/behaviour': typeof AppSettingsBehaviourRoute
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/security': typeof AppSettingsSecurityRoute
   '/settings/': typeof AppSettingsIndexRoute
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AppAdminRoute
   '/_dev/ui': typeof Char91_devChar93UiRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/settings/behaviour': typeof AppSettingsBehaviourRoute
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/security': typeof AppSettingsSecurityRoute
   '/settings': typeof AppSettingsIndexRoute
@@ -141,6 +149,7 @@ export interface FileRoutesById {
   '/_app/settings': typeof AppSettingsRouteWithChildren
   '/_dev/ui': typeof Char91_devChar93UiRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/_app/settings/behaviour': typeof AppSettingsBehaviourRoute
   '/_app/settings/profile': typeof AppSettingsProfileRoute
   '/_app/settings/security': typeof AppSettingsSecurityRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
@@ -159,6 +168,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/_dev/ui'
     | '/invite/$token'
+    | '/settings/behaviour'
     | '/settings/profile'
     | '/settings/security'
     | '/settings/'
@@ -174,6 +184,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/_dev/ui'
     | '/invite/$token'
+    | '/settings/behaviour'
     | '/settings/profile'
     | '/settings/security'
     | '/settings'
@@ -191,6 +202,7 @@ export interface FileRouteTypes {
     | '/_app/settings'
     | '/_dev/ui'
     | '/invite/$token'
+    | '/_app/settings/behaviour'
     | '/_app/settings/profile'
     | '/_app/settings/security'
     | '/_app/settings/'
@@ -274,6 +286,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsIndexRouteImport
       parentRoute: typeof AppSettingsRoute
     }
+    '/_app/settings/behaviour': {
+      id: '/_app/settings/behaviour'
+      path: '/behaviour'
+      fullPath: '/settings/behaviour'
+      preLoaderRoute: typeof AppSettingsBehaviourRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
     '/_app/settings/profile': {
       id: '/_app/settings/profile'
       path: '/profile'
@@ -320,12 +339,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppSettingsRouteChildren {
+  AppSettingsBehaviourRoute: typeof AppSettingsBehaviourRoute
   AppSettingsProfileRoute: typeof AppSettingsProfileRoute
   AppSettingsSecurityRoute: typeof AppSettingsSecurityRoute
   AppSettingsIndexRoute: typeof AppSettingsIndexRoute
 }
 
 const AppSettingsRouteChildren: AppSettingsRouteChildren = {
+  AppSettingsBehaviourRoute: AppSettingsBehaviourRoute,
   AppSettingsProfileRoute: AppSettingsProfileRoute,
   AppSettingsSecurityRoute: AppSettingsSecurityRoute,
   AppSettingsIndexRoute: AppSettingsIndexRoute,

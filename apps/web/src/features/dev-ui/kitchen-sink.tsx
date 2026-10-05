@@ -34,6 +34,8 @@ import { EditorSection } from '../editor/kitchen-sink-section';
 import { ListSection } from '../list/kitchen-sink-section';
 import { LanguageSwitch } from '../locale/language-switch';
 import { PaneSection } from '../pane/kitchen-sink-section';
+import { PwaKitchenSection } from '../pwa/kitchen-sink-section';
+import { MobileKitchenSection } from '../shell/mobile-kitchen-section';
 import { TagsKitchenSection } from '../tags/kitchen-sink-section';
 import { Group, Section, Specimen } from './layout';
 import { Phase1Sections, phase1SectionIds } from './phase1-sections';
@@ -751,12 +753,14 @@ export function KitchenSink() {
         <AvatarSection />
         <SkeletonSection />
         <SyncPillSection />
+        <PwaKitchenSection />
         <Phase1Sections />
         <DatesSection />
         <EditorSection />
         <ListSection />
         <PaneSection />
         <TagsKitchenSection />
+        <MobileKitchenSection />
       </main>
     </div>
   );

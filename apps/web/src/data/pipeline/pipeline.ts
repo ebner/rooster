@@ -11,8 +11,10 @@ import {
 } from '@rooster/core/reducers';
 import type { Task, TaskDetail } from '@rooster/core/schemas';
 import type { QueryClient } from '@tanstack/react-query';
-import { useSyncStore } from '../../state/sync-store';
-import type { ApiError } from '../errors';
+import { type SyncState, useSyncStore } from '../../state/sync-store';
+import { ApiError } from '../errors';
+import type { SyncChannel, SyncMessage, WireError } from '../sync/channel';
+import type { Outbox, OutboxRecord } from '../sync/outbox';
 import { classifyFailure, type ListTransport, RateLimitedError } from './transport';
 
 /** 02 §14: 1, 2, 4, 8, 16, 30 s, capped. */
@@ -24,11 +26,8 @@ export const taskDetailKey = (taskId: string) => ['task', taskId] as const;
 /** `['tags', orgId]` (04 §5.1): GET /orgs/:orgId/tags. */
 export const tagsKey = (orgId: string) => ['tags', orgId] as const;
 
-interface Queued {
-  op: ListOp;
-  orgId: string;
-  ctx: ReducerContext;
-}
+/** A queued op is exactly what the outbox stores. */
+type Queued = OutboxRecord;
 
 export interface PipelineOptions {
   transport: ListTransport;
@@ -37,6 +36,73 @@ export interface PipelineOptions {
   clientId: string;
   now?: () => number;
   backoffMs?: (failures: number) => number;
+  /** P4: durable FIFO; ops are written here before they are sent. Default: memory only. */
+  outbox?: Outbox;
+  /** P4: the other tabs (BroadcastChannel). Default: none. */
+  channel?: SyncChannel;
+  /** Whether this tab holds the outbox lock (only the leader sends). Default: always. */
+  isLeader?: () => boolean;
+  /** Extra gate for sending, e.g. until the signed-in user is known. Default: open. */
+  canSend?: () => boolean;
+  /** Default: `navigator.onLine`. While offline the head op waits instead of failing. */
+  isOnline?: () => boolean;
+  /**
+   * Resolves when outbox writes for a new op may start. The app waits for the frame that shows
+   * the op to be painted: the IndexedDB write and the request then cost the keypress nothing
+   * (AC-2.12), and still happen before the op is sent. Default: at once.
+   */
+  afterPaint?: () => Promise<void>;
+}
+
+/** How long an offline flusher sleeps before looking again (the `online` event wakes it). */
+const offlineRecheckMs = 30_000;
+
+/** The op that created a client tag, and what the server says it really is. */
+interface TagRemap {
+  from: string;
+  to: string;
+}
+
+/** `409 tag_name_taken` carries the id of the tag that already has the name (ADR 0007 P4). */
+function existingTagId(error: unknown): string | undefined {
+  if (!(error instanceof ApiError) || error.code !== 'tag_name_taken') return undefined;
+  const id = error.problem?.existingId;
+  return typeof id === 'string' ? id : undefined;
+}
+
+function toWire(error: unknown): WireError {
+  if (error instanceof ApiError) {
+    return { code: error.code, status: error.status, message: error.message };
+  }
+  return { code: 'unknown', status: 0, message: String(error) };
+}
+
+function lastErrorOf(error: unknown): string {
+  if (error instanceof ApiError) return error.code;
+  return 'network';
+}
+
+/** Rewrites every reference to tag `from` in an op (the ids are part of the request). */
+export function remapTagInOp(op: ListOp, { from, to }: TagRemap): ListOp {
+  if ((op.kind === 'task.addTag' || op.kind === 'task.removeTag') && op.payload.tagId === from) {
+    return { ...op, payload: { ...op.payload, tagId: to } };
+  }
+  if (op.kind === 'task.create' && op.payload.tagIds?.includes(from)) {
+    const tagIds = [...new Set(op.payload.tagIds.map((id) => (id === from ? to : id)))];
+    return { ...op, payload: { ...op.payload, tagIds } };
+  }
+  return op;
+}
+
+/** Replaces tag `from` with `to` on every task of a list state (keeps untouched identities). */
+function remapTagInState(state: ListState, { from, to }: TagRemap): ListState {
+  let tasks: Record<string, Task> | null = null;
+  for (const [id, task] of Object.entries(state.tasks)) {
+    if (!task.tagIds.includes(from)) continue;
+    tasks ??= { ...state.tasks };
+    tasks[id] = { ...task, tagIds: [...new Set(task.tagIds.map((t) => (t === from ? to : t)))] };
+  }
+  return tasks ? { ...state, tasks } : state;
 }
 
 export interface DroppedOp {
@@ -126,7 +192,7 @@ export class ListPipeline {
   private readonly now: () => number;
   private readonly backoffMs: (failures: number) => number;
   private readonly bases = new Map<string, ListState>();
-  private readonly queue: Queued[] = [];
+  private queue: Queued[] = [];
   /** Ops confirmed recently, replayed over snapshots fetched while they were in flight. */
   private readonly confirmed: { seq: number; item: Queued }[] = [];
   private confirmSeq = 0;
@@ -138,6 +204,15 @@ export class ListPipeline {
   private readonly changeListeners = new Set<() => void>();
   private version = 0;
   private idleWaiters: (() => void)[] = [];
+  private readonly outbox: Outbox | undefined;
+  private readonly channel: SyncChannel | undefined;
+  private readonly isLeader: () => boolean;
+  private readonly canSend: () => boolean;
+  private readonly isOnline: () => boolean;
+  private readonly afterPaint: () => Promise<void>;
+  /** Outbox writes in order; a send waits for them (write-ahead, 04 §6.2). */
+  private persisted: Promise<void> = Promise.resolve();
+  private lastError: string | null = null;
 
   constructor(options: PipelineOptions) {
     this.transport = options.transport;
@@ -147,6 +222,12 @@ export class ListPipeline {
     this.backoffMs =
       options.backoffMs ??
       ((n) => backoffScheduleMs[Math.min(n, backoffScheduleMs.length) - 1] ?? 30_000);
+    this.outbox = options.outbox;
+    this.channel = options.channel;
+    this.isLeader = options.isLeader ?? (() => true);
+    this.canSend = options.canSend ?? (() => true);
+    this.isOnline = options.isOnline ?? (() => globalThis.navigator?.onLine ?? true);
+    this.afterPaint = options.afterPaint ?? (() => Promise.resolve());
   }
 
   /** The query function for `['my-list', orgId]`: fetch, rebase, replay pending ops. */
@@ -171,6 +252,43 @@ export class ListPipeline {
   seed(orgId: string, state: ListState): void {
     this.bases.set(orgId, state);
     this.queryClient.setQueryData(myListKey(orgId), this.replay(orgId));
+  }
+
+  /** The last server-confirmed state (what the persisted cache stores, without pending ops). */
+  baseOf(orgId: string): ListState | undefined {
+    return this.bases.get(orgId);
+  }
+
+  /**
+   * Cold start (P4): adopts the confirmed states restored from the persisted cache and the ops
+   * left in the outbox, then renders base + ops, so the restored view equals the one before
+   * the reload.
+   */
+  restore(bases: ReadonlyMap<string, ListState>, records: readonly OutboxRecord[]): void {
+    for (const [orgId, base] of bases) this.bases.set(orgId, base);
+    const known = new Set(this.queue.map((item) => item.op.opId));
+    for (const record of records) {
+      if (!known.has(record.op.opId)) this.queue.push(record);
+    }
+    for (const orgId of new Set([...bases.keys(), ...records.map((r) => r.orgId)])) {
+      this.render(orgId);
+    }
+    this.publish();
+    this.changed();
+  }
+
+  /** Forgets everything local (sign-out, another user): queue, confirmed states, status. */
+  reset(): void {
+    this.queue = [];
+    this.bases.clear();
+    this.confirmed.length = 0;
+    this.failures = 0;
+    this.paused = false;
+    this.lastError = null;
+    this.lazySyncs.clear();
+    this.wake?.();
+    this.publish();
+    this.changed();
   }
 
   get pending(): number {
@@ -201,18 +319,102 @@ export class ListPipeline {
     let view = this.view(orgId) ?? this.bases.get(orgId);
     if (!view) throw new Error(`ListPipeline: no state for org ${orgId}`);
     const ops: ListOp[] = [];
+    const items: Queued[] = [];
     for (const spec of specs) {
       const op = { ...spec, opId: uuidv7(), editTime: this.now(), clientId: this.clientId };
       const item = { op, orgId, ctx };
       view = this.apply(view, item);
       this.queue.push(item);
+      items.push(item);
       ops.push(op);
     }
     this.queryClient.setQueryData(myListKey(orgId), view);
+    this.write(async () => {
+      await this.afterPaint();
+      await this.outbox?.put(items);
+    }).then(() => this.channel?.post({ type: 'enqueued', records: items }));
     this.publish();
     this.changed();
     void this.flush();
     return ops;
+  }
+
+  /** Chains an outbox write; failures (quota, private mode) leave the op in memory only. */
+  private write(run: () => Promise<void> | undefined): Promise<void> {
+    this.persisted = this.persisted.then(run).catch((error: unknown) => {
+      console.warn('rooster: outbox write failed', error);
+    });
+    return this.persisted;
+  }
+
+  /**
+   * A message from another tab (04 §6.2): their queued ops, the leader's confirmations,
+   * drops and tag remaps, its status, and flush requests for the leader.
+   */
+  receive(message: SyncMessage): void {
+    switch (message.type) {
+      case 'enqueued': {
+        const known = new Set(this.queue.map((item) => item.op.opId));
+        const fresh = message.records.filter((r) => !known.has(r.op.opId));
+        if (fresh.length === 0) return;
+        this.queue.push(...fresh);
+        for (const orgId of new Set(fresh.map((r) => r.orgId))) this.render(orgId);
+        this.publish();
+        this.changed();
+        void this.flush();
+        return;
+      }
+      case 'applied': {
+        const item = this.take(message.opId);
+        if (!item) return;
+        this.confirm(item, message.response);
+        this.publish();
+        this.changed();
+        this.settleIdle();
+        return;
+      }
+      case 'dropped': {
+        const item = this.find(message.opId);
+        if (!item) return;
+        const { code, status, message: detail } = message.error;
+        this.drop(item, new ApiError(code, status, detail));
+        this.publish();
+        this.changed();
+        this.settleIdle();
+        return;
+      }
+      case 'remap':
+        this.remapTag(message.opId, { from: message.from, to: message.to }, false);
+        this.publish();
+        this.changed();
+        return;
+      case 'flush':
+        if (this.isLeader()) this.retryNow();
+        return;
+      case 'status':
+        if (!this.isLeader()) useSyncStore.setState(message.status);
+        return;
+      case 'cleared':
+        return;
+    }
+  }
+
+  private find(opId: string): Queued | undefined {
+    return this.queue.find((item) => item.op.opId === opId);
+  }
+
+  /** Removes an op from the queue by id (other tabs may have changed the queue meanwhile). */
+  private take(opId: string): Queued | undefined {
+    const index = this.queue.findIndex((item) => item.op.opId === opId);
+    if (index < 0) return undefined;
+    const [item] = this.queue.splice(index, 1);
+    return item;
+  }
+
+  /** Writes base + pending ops of an org to the cache (nothing before its first load). */
+  private render(orgId: string): void {
+    if (!this.bases.has(orgId)) return;
+    this.queryClient.setQueryData(myListKey(orgId), this.replay(orgId));
   }
 
   onDropped(listener: DropListener): () => void {
@@ -223,7 +425,17 @@ export class ListPipeline {
   /** "Sync problem · Retry", reconnects and sign-in: try the head op now. */
   retryNow(): void {
     this.paused = false;
+    if (!this.isLeader()) {
+      this.channel?.post({ type: 'flush' });
+      return;
+    }
     this.wake?.();
+    void this.flush();
+  }
+
+  /** The leader just took over (or the send gate opened): pick up where the queue stands. */
+  resume(): void {
+    this.publish();
     void this.flush();
   }
 
@@ -254,16 +466,30 @@ export class ListPipeline {
   }
 
   private async flush(): Promise<void> {
-    if (this.flushing || this.paused) return;
+    if (this.flushing || this.paused || !this.isLeader() || !this.canSend()) return;
     this.flushing = true;
     try {
-      while (this.queue.length > 0 && !this.paused) {
-        const head = this.queue[0] as Queued;
+      while (this.queue.length > 0 && !this.paused && this.isLeader() && this.canSend()) {
+        // Write-ahead: an op is in the outbox before its request leaves.
+        await this.persisted;
+        if (!this.isOnline()) {
+          this.publish();
+          await this.sleep(offlineRecheckMs);
+          continue;
+        }
+        const head = this.queue[0];
+        if (!head) break;
+        if (!useSyncStore.getState().syncing) this.publish(true);
         try {
           const response = await this.transport.send(head.op, head.orgId);
-          this.queue.shift();
-          this.failures = 0;
-          this.confirm(head, response);
+          // The head may have left meanwhile (reset, another tab's drop); confirm by id.
+          if (this.take(head.op.opId)) {
+            this.failures = 0;
+            this.lastError = null;
+            this.confirm(head, response);
+            this.write(() => this.outbox?.remove([head.op.opId]));
+            this.channel?.post({ type: 'applied', opId: head.op.opId, response });
+          }
         } catch (error) {
           await this.fail(head, error);
         }
@@ -273,9 +499,13 @@ export class ListPipeline {
     } finally {
       this.flushing = false;
       this.publish();
-      if (this.queue.length === 0) {
-        for (const resolve of this.idleWaiters.splice(0)) resolve();
-      }
+      this.settleIdle();
+    }
+  }
+
+  private settleIdle(): void {
+    if (this.queue.length === 0) {
+      for (const resolve of this.idleWaiters.splice(0)) resolve();
     }
   }
 
@@ -349,32 +579,99 @@ export class ListPipeline {
   private async fail(item: Queued, error: unknown): Promise<void> {
     switch (classifyFailure(error)) {
       case 'drop': {
-        // 403/404/409/410/422: never going to succeed. Revert (the op leaves the replay) and
-        // refetch the affected list; the UI explains why.
-        const before = this.view(item.orgId);
-        this.queue.shift();
+        if (item.op.kind === 'tag.create' && error instanceof ApiError) {
+          const to = existingTagId(error) ?? (await this.findTagByName(item));
+          if (to && to !== item.op.entityId) {
+            this.remapTag(item.op.opId, { from: item.op.entityId, to }, true);
+            return;
+          }
+        }
         this.failures = 0;
-        this.queryClient.setQueryData(myListKey(item.orgId), this.replay(item.orgId));
-        void this.refetch(item.orgId);
-        void this.queryClient.invalidateQueries({ queryKey: ['task'] });
-        void this.queryClient.invalidateQueries({ queryKey: tagsKey(item.orgId) });
-        for (const listener of this.dropListeners) {
-          listener({ op: item.op, error: error as ApiError, before });
+        this.lastError = null;
+        if (this.drop(item, error)) {
+          this.write(() => this.outbox?.remove([item.op.opId]));
+          this.channel?.post({ type: 'dropped', opId: item.op.opId, error: toWire(error) });
         }
         return;
       }
       case 'auth':
         this.paused = true;
+        this.lastError = lastErrorOf(error);
         useSyncStore.setState({ sessionExpired: true });
         return;
       case 'rate':
         await this.sleep(error instanceof RateLimitedError ? error.retryAfterMs : 5_000);
         return;
       case 'transient':
+        // Offline is not a sync problem: the loop waits for the `online` event instead.
+        if (!this.isOnline()) return;
         this.failures += 1;
+        this.lastError = lastErrorOf(error);
+        this.publish();
         await this.sleep(this.backoffMs(this.failures));
         return;
     }
+  }
+
+  /**
+   * 403/404/409/410/422: never going to succeed. Reverts the op (it leaves the replay),
+   * refetches what it touched and tells the UI why. Returns false when it was already gone.
+   */
+  private drop(item: Queued, error: unknown): boolean {
+    const before = this.view(item.orgId);
+    if (!this.take(item.op.opId)) return false;
+    this.render(item.orgId);
+    void this.refetch(item.orgId);
+    void this.queryClient.invalidateQueries({ queryKey: ['task'] });
+    void this.queryClient.invalidateQueries({ queryKey: tagsKey(item.orgId) });
+    for (const listener of this.dropListeners) {
+      listener({ op: item.op, error: error as ApiError, before });
+    }
+    return true;
+  }
+
+  /** Without `existingId` in the problem body, the org's tags tell which tag has the name. */
+  private async findTagByName(item: Queued): Promise<string | undefined> {
+    if (item.op.kind !== 'tag.create') return undefined;
+    const name = item.op.payload.name.toLocaleLowerCase();
+    try {
+      const tags = await this.transport.fetchTags(item.orgId);
+      return tags.find((t) => t.name.toLocaleLowerCase() === name)?.id;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * `409 tag_name_taken` for a queued `tag.create` (two devices created the same tag offline,
+   * ADR 0007): the existing tag wins. The create leaves the queue and every queued op and
+   * cached task that uses the client id switches to the existing id; nothing is reverted.
+   */
+  private remapTag(opId: string, remap: TagRemap, leader: boolean): void {
+    const created = this.take(opId);
+    const orgId = created?.orgId;
+    const rewritten: Queued[] = [];
+    this.queue = this.queue.map((item) => {
+      const op = remapTagInOp(item.op, remap);
+      if (op === item.op) return item;
+      const next = { ...item, op };
+      rewritten.push(next);
+      return next;
+    });
+    for (const [org, base] of this.bases) {
+      const next = remapTagInState(base, remap);
+      if (next !== base) this.bases.set(org, next);
+    }
+    for (const org of new Set([...(orgId ? [orgId] : []), ...rewritten.map((r) => r.orgId)])) {
+      this.render(org);
+      void this.queryClient.invalidateQueries({ queryKey: tagsKey(org) });
+    }
+    if (!leader) return;
+    this.write(async () => {
+      await this.outbox?.remove([opId]);
+      await this.outbox?.put(rewritten);
+    });
+    this.channel?.post({ type: 'remap', opId, ...remap });
   }
 
   private refetch(orgId: string): Promise<void> {
@@ -394,11 +691,32 @@ export class ListPipeline {
     });
   }
 
-  private publish(): void {
-    useSyncStore.setState({
-      pending: this.queue.length,
-      failures: this.failures,
-      ...(this.paused ? {} : { sessionExpired: false }),
-    });
+  /**
+   * Publishes the queue to the sync store. Only the leader knows the sender's state; it shares
+   * it with the other tabs, which keep their own (mirrored) queue length.
+   */
+  private publish(sending = false): void {
+    const leader = this.isLeader();
+    const state: Partial<SyncState> = { pending: this.queue.length };
+    if (leader) {
+      const status = {
+        syncing: (sending || this.flushing) && this.queue.length > 0 && this.isOnline(),
+        failures: this.failures,
+        lastError: this.lastError,
+        // Only a 401 pauses; it sets the flag, and the next unpaused publish clears it.
+        sessionExpired: this.paused && useSyncStore.getState().sessionExpired,
+      };
+      Object.assign(state, status);
+      const current = useSyncStore.getState();
+      if (
+        current.syncing !== status.syncing ||
+        current.failures !== status.failures ||
+        current.lastError !== status.lastError ||
+        current.sessionExpired !== status.sessionExpired
+      ) {
+        this.channel?.post({ type: 'status', status });
+      }
+    }
+    useSyncStore.setState(state);
   }
 }

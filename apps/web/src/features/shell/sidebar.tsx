@@ -229,7 +229,7 @@ const roundRobin: readonly TagColor[] = [
   'gray',
 ];
 
-function nextColor(count: number): TagColor {
+export function nextColor(count: number): TagColor {
   return roundRobin[count % roundRobin.length] ?? 'blue';
 }
 

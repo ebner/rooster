@@ -10,7 +10,11 @@ export const Route = createFileRoute('/_app/settings')({
 function SettingsRoute() {
   const { t } = useTranslation('settings');
   const { pathname } = useLocation();
-  const active = pathname.endsWith('/security') ? 'security' : 'profile';
+  const active = pathname.endsWith('/security')
+    ? 'security'
+    : pathname.endsWith('/behaviour')
+      ? 'behaviour'
+      : 'profile';
   return (
     <>
       <ViewHeader title={t('title')} />

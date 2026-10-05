@@ -3,6 +3,7 @@
   "nav": {
     "label": "Inställningsavsnitt",
     "profile": "Profil",
+    "behaviour": "Beteende",
     "security": "Säkerhet"
   },
   "profile": {
@@ -123,5 +124,19 @@
   },
   "error": {
     "saveFailed": "Det gick inte att spara. Kontrollera anslutningen och försök igen."
+  },
+  "behaviour": {
+    "swipeTitle": "Svepgester",
+    "swipeBody": "Svep en uppgift åt höger eller vänster på mobilen för att direkt göra något med den.",
+    "swipeRight": "Svep åt höger",
+    "swipeLeft": "Svep åt vänster",
+    "sampleTask": "Boka tandläkare",
+    "action": {
+      "complete": "Markera som klar",
+      "date": "Välj datum",
+      "move": "Flytta till grupp",
+      "delete": "Ta bort",
+      "none": "Ingenting"
+    }
   }
 }

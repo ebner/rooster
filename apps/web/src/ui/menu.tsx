@@ -71,7 +71,7 @@ export function MenuItem({
       {...props}
       {...(textValue === undefined ? {} : { textValue })}
       className={cn(
-        'flex h-control cursor-default items-center gap-2 rounded-sm px-2 text-sm outline-none',
+        'flex h-control cursor-default items-center gap-2 rounded-sm px-2 text-sm outline-none pointer-coarse:h-hit-touch pointer-coarse:text-md',
         tone === 'danger' ? 'text-text-danger' : 'text-text',
         'data-focused:bg-bg-muted data-pressed:bg-bg-muted data-open:bg-bg-muted',
         'data-disabled:cursor-not-allowed data-disabled:text-text-disabled',

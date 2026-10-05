@@ -28,6 +28,7 @@ const sections = [
   ['editor', 'Description editor', 'Beskrivningsredigerare'],
   ['pane', 'Detail pane', 'Detaljpanel'],
   ['tags', 'Tags', 'Taggar'],
+  ['mobile', 'Phone layout', 'Mobillayout'],
 ] as const;
 
 async function openKitchenSink(page: Page) {

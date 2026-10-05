@@ -1,0 +1,31 @@
+{
+  "update": {
+    "available": "New version available",
+    "reload": "Reload",
+    "deferred": "Reloading as soon as your changes are saved"
+  },
+  "install": {
+    "toast": "Install rooster for quick access, even offline",
+    "action": "Install",
+    "iosToast": "Add rooster to your Home Screen",
+    "iosAction": "Show me",
+    "title": "Install app",
+    "body": "Open rooster from your home screen or dock in its own window, and keep working offline.",
+    "button": "Install rooster",
+    "installed": "rooster is installed on this device.",
+    "iosButton": "How to install",
+    "otherHint": "Use your browser's menu to install rooster (Install app or Add to Home Screen)."
+  },
+  "ios": {
+    "title": "Add rooster to your Home Screen",
+    "step1": "Tap Share in Safari's toolbar.",
+    "step2": "Choose Add to Home Screen, then Add.",
+    "signInNote": "The installed app keeps its own storage, so you sign in once more after installing.",
+    "close": "Done"
+  },
+  "session": {
+    "expired": "Session expired",
+    "signIn": "Sign in",
+    "kept": "{count, plural, one {# change is kept and syncs after you sign in.} other {# changes are kept and sync after you sign in.}}"
+  }
+}

@@ -3,6 +3,7 @@
   "nav": {
     "label": "Settings sections",
     "profile": "Profile",
+    "behaviour": "Behaviour",
     "security": "Security"
   },
   "profile": {
@@ -123,5 +124,19 @@
   },
   "error": {
     "saveFailed": "Couldn’t save. Check your connection and try again."
+  },
+  "behaviour": {
+    "swipeTitle": "Swipe actions",
+    "swipeBody": "On phones, swipe a task right or left to act on it at once.",
+    "swipeRight": "Swipe right",
+    "swipeLeft": "Swipe left",
+    "sampleTask": "Book dentist",
+    "action": {
+      "complete": "Complete",
+      "date": "Set date",
+      "move": "Move to group",
+      "delete": "Delete",
+      "none": "Nothing"
+    }
   }
 }

@@ -2,6 +2,7 @@ import { ancestorsOf, type ListState, listOps, orderedGroups } from '@rooster/co
 import type { Task } from '@rooster/core/schemas';
 import {
   Check,
+  ChevronDown,
   Copy,
   FolderInput,
   Hash,
@@ -14,7 +15,8 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button as AriaButton, type ButtonProps as AriaButtonProps } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { errorCode, useDisplayPrefs, useMe, useOrgMembers } from '../../data';
 import { useListPipeline, useMyListSelect } from '../../data/list';
@@ -25,7 +27,7 @@ import { formatTimeAgo } from '../../lib/format';
 import { createListStore } from '../../state/list-store';
 import { type PaneFocusTarget, usePaneStore } from '../../state/pane-store';
 import { useTagsStore } from '../../state/tags-store';
-import { Button } from '../../ui/button';
+import { Button, iconStrokeWidth } from '../../ui/button';
 import { ChipGroup } from '../../ui/chip';
 import { IconButton } from '../../ui/icon-button';
 import {
@@ -38,22 +40,28 @@ import {
 } from '../../ui/menu';
 import { Select } from '../../ui/select';
 import { toast } from '../../ui/toast';
+import { useIsMobile } from '../../ui/use-media';
 import {
   eventZone,
   type ShortcutHandler,
   type ShortcutHandlers,
   useKeymapHandlers,
 } from '../../use-keymap';
-import { DateCell, type DueValue, useViewerDateContext } from '../dates';
+import { DateCell, DateLabel, type DueValue, useViewerDateContext } from '../dates';
+import { QuickDateSheet } from '../dates/quick-date-sheet';
 import { completionHoldMs, ListController, type Translate } from '../list/controller';
+import { motionMs } from '../list/gestures';
+import { GroupSheet } from '../list/group-sheet';
 import type { ListContextValue } from '../list/list-context';
 import type { Row } from '../list/model/rows';
 import { TagPicker } from '../tags/tag-picker';
+import { TagSheet } from '../tags/tag-sheet';
 import { DescriptionField } from './description-field';
 import type { PaneControls } from './pane-controls';
 import { PaneSubtasks } from './pane-subtasks';
 import { PaneTitle, type PaneTitleHandle } from './pane-title';
 import { SaveState } from './save-state';
+import { SheetHeader } from './sheet-header';
 
 /**
  * What the pane needs from the list: its task (without the sort key, which a move changes),
@@ -131,6 +139,7 @@ function PaneContent({
 }: DetailPaneProps) {
   const { t } = useTranslation('pane');
   const { t: tList } = useTranslation('list');
+  const { t: tDates } = useTranslation('dates');
   const pipeline = useListPipeline();
   const list = useMyListSelect(
     orgId,
@@ -153,6 +162,8 @@ function PaneContent({
   const subRows = useRef<readonly Row[]>([]);
   const [tagsOpen, setTagsOpen] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
+  const [groupOpen, setGroupOpen] = useState(false);
+  const mobile = useIsMobile();
   const dateRef = useRef(dateCtx);
   dateRef.current = dateCtx;
   const tagsRef = useRef(Object.values(tagsById));
@@ -238,6 +249,25 @@ function PaneContent({
     if (await copyText(taskId)) toast({ message: t('toolbar.idCopied') });
   };
 
+  /**
+   * The phone sheet's ‹ back and swipe down (02 §13.4): it slides away (250 ms), then the
+   * route closes it. The system back gesture closes it through the history entry instead.
+   */
+  const closeSheet = () => {
+    commitTitle();
+    const sheet = bodyRef.current?.closest<HTMLElement>('[data-pane-root]');
+    const ms = motionMs('slow');
+    if (!sheet || ms === 0) {
+      pane.close();
+      return;
+    }
+    if (!sheet.style.transform) {
+      sheet.style.transition = 'transform var(--dur-slow) var(--ease-exit)';
+      sheet.style.transform = 'translateY(100%)';
+    }
+    setTimeout(() => pane.close(), ms);
+  };
+
   /** 02 §9.1: Esc leaves full screen first, then returns focus to the list. */
   const leavePane = () => {
     if (usePaneStore.getState().fullScreen) {
@@ -285,7 +315,11 @@ function PaneContent({
     const missing = errorCode(detail.error) === 'not_found' || detail.error;
     return (
       <div className="flex flex-col">
-        <PaneToolbarShell fullScreen={fullScreen} pane={pane} />
+        {mobile ? (
+          <SheetHeader onBack={() => pane.close()} />
+        ) : (
+          <PaneToolbarShell fullScreen={fullScreen} pane={pane} />
+        )}
         <p
           role={missing ? 'alert' : 'status'}
           className="p-6 text-sm text-text-secondary"
@@ -321,87 +355,131 @@ function PaneContent({
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="detail-pane" data-task-id={taskId}>
-      <div
-        role="toolbar"
-        aria-label={t('toolbar.label')}
-        className="flex h-toolbar shrink-0 items-center gap-1 border-b border-border px-3"
-      >
-        <Button
-          size="sm"
-          variant="secondary"
-          icon={Check}
-          onPress={toggleComplete}
-          aria-pressed={done}
-          data-testid="pane-complete"
-          className={cn(done && 'border-transparent bg-bg-success-subtle text-text-success')}
-        >
-          {done ? t('toolbar.completed') : t('toolbar.complete')}
-        </Button>
-        <SaveState orgId={orgId} taskId={taskId} />
-        <span className="flex-1" />
-        <IconButton icon={Link2} aria-label={t('toolbar.copyLink')} onPress={copyLink} />
-        <IconButton
-          icon={Copy}
-          aria-label={t('toolbar.duplicate')}
-          shortcut={primaryKeys('duplicate')}
-          onPress={duplicate}
-        />
-        <FullScreenButton fullScreen={fullScreen} pane={pane} />
-        <MenuTrigger>
-          <IconButton icon={MoreHorizontal} aria-label={t('toolbar.more')} />
-          <MenuPopover placement="bottom end">
-            <Menu aria-label={t('toolbar.more')}>
+      {mobile ? (
+        <SheetHeader
+          onBack={closeSheet}
+          menu={
+            <>
+              <MenuItem icon={Link2} onAction={copyLink}>
+                {t('toolbar.copyLink')}
+              </MenuItem>
+              <MenuItem icon={Copy} onAction={duplicate}>
+                {t('toolbar.duplicate')}
+              </MenuItem>
               {task.placement && groups.length > 0 && (
-                <SubmenuTrigger>
-                  <MenuItem icon={FolderInput}>{t('toolbar.moveTo')}</MenuItem>
-                  <MenuPopover placement="start top">
-                    <Menu
-                      aria-label={t('toolbar.moveTo')}
-                      selectionMode="single"
-                      selectedKeys={[task.placement.groupId]}
-                      onAction={(key) => controller.moveToGroup(String(key), [taskId])}
-                    >
-                      {groups.map((g) => (
-                        <MenuItem key={g.id} id={g.id}>
-                          {g.name}
-                        </MenuItem>
-                      ))}
-                    </Menu>
-                  </MenuPopover>
-                </SubmenuTrigger>
+                <MenuItem icon={FolderInput} onAction={() => setGroupOpen(true)}>
+                  {t('toolbar.moveTo')}
+                </MenuItem>
               )}
               <MenuItem icon={Hash} onAction={copyId}>
                 {t('toolbar.copyId')}
               </MenuItem>
-              <MenuItem
-                icon={SquareArrowOutUpRight}
-                onAction={() => window.open(taskUrl(orgSlug, taskId), '_blank', 'noopener')}
-              >
-                {t('toolbar.openInNewTab')}
-              </MenuItem>
               <MenuSeparator />
-              <MenuItem
-                icon={Trash2}
-                tone="danger"
-                shortcut={primaryKeys('deleteTask')}
-                onAction={remove}
-              >
+              <MenuItem icon={Trash2} tone="danger" onAction={remove}>
                 {t('toolbar.delete')}
               </MenuItem>
-            </Menu>
-          </MenuPopover>
-        </MenuTrigger>
-        <IconButton
-          icon={X}
-          aria-label={t('toolbar.close')}
-          shortcut={primaryKeys('escape')}
-          onPress={() => pane.close()}
+            </>
+          }
         />
-      </div>
+      ) : (
+        <div
+          role="toolbar"
+          aria-label={t('toolbar.label')}
+          className="flex h-toolbar shrink-0 items-center gap-1 border-b border-border px-3"
+        >
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={Check}
+            onPress={toggleComplete}
+            aria-pressed={done}
+            data-testid="pane-complete"
+            className={cn(done && 'border-transparent bg-bg-success-subtle text-text-success')}
+          >
+            {done ? t('toolbar.completed') : t('toolbar.complete')}
+          </Button>
+          <SaveState orgId={orgId} taskId={taskId} />
+          <span className="flex-1" />
+          <IconButton icon={Link2} aria-label={t('toolbar.copyLink')} onPress={copyLink} />
+          <IconButton
+            icon={Copy}
+            aria-label={t('toolbar.duplicate')}
+            shortcut={primaryKeys('duplicate')}
+            onPress={duplicate}
+          />
+          <FullScreenButton fullScreen={fullScreen} pane={pane} />
+          <MenuTrigger>
+            <IconButton icon={MoreHorizontal} aria-label={t('toolbar.more')} />
+            <MenuPopover placement="bottom end">
+              <Menu aria-label={t('toolbar.more')}>
+                {task.placement && groups.length > 0 && (
+                  <SubmenuTrigger>
+                    <MenuItem icon={FolderInput}>{t('toolbar.moveTo')}</MenuItem>
+                    <MenuPopover placement="start top">
+                      <Menu
+                        aria-label={t('toolbar.moveTo')}
+                        selectionMode="single"
+                        selectedKeys={[task.placement.groupId]}
+                        onAction={(key) => controller.moveToGroup(String(key), [taskId])}
+                      >
+                        {groups.map((g) => (
+                          <MenuItem key={g.id} id={g.id}>
+                            {g.name}
+                          </MenuItem>
+                        ))}
+                      </Menu>
+                    </MenuPopover>
+                  </SubmenuTrigger>
+                )}
+                <MenuItem icon={Hash} onAction={copyId}>
+                  {t('toolbar.copyId')}
+                </MenuItem>
+                <MenuItem
+                  icon={SquareArrowOutUpRight}
+                  onAction={() => window.open(taskUrl(orgSlug, taskId), '_blank', 'noopener')}
+                >
+                  {t('toolbar.openInNewTab')}
+                </MenuItem>
+                <MenuSeparator />
+                <MenuItem
+                  icon={Trash2}
+                  tone="danger"
+                  shortcut={primaryKeys('deleteTask')}
+                  onAction={remove}
+                >
+                  {t('toolbar.delete')}
+                </MenuItem>
+              </Menu>
+            </MenuPopover>
+          </MenuTrigger>
+          <IconButton
+            icon={X}
+            aria-label={t('toolbar.close')}
+            shortcut={primaryKeys('escape')}
+            onPress={() => pane.close()}
+          />
+        </div>
+      )}
       <div
         ref={bodyRef}
-        className="flex min-h-0 flex-1 animate-fade-in flex-col gap-6 overflow-y-auto p-6 max-tablet:px-3"
+        className="flex min-h-0 flex-1 animate-fade-in flex-col gap-6 overflow-y-auto p-6 max-tablet:px-4 max-tablet:pt-4"
       >
+        {mobile && (
+          <div className="flex items-center gap-2">
+            <Button
+              size="lg"
+              variant="secondary"
+              icon={Check}
+              onPress={toggleComplete}
+              aria-pressed={done}
+              data-testid="pane-complete"
+              className={cn(done && 'border-transparent bg-bg-success-subtle text-text-success')}
+            >
+              {done ? t('toolbar.completed') : t('toolbar.complete')}
+            </Button>
+            <SaveState orgId={orgId} taskId={taskId} />
+          </div>
+        )}
         <div className="flex flex-col gap-2">
           {chain.length > 0 && (
             <nav aria-label={t('breadcrumb')} data-testid="pane-breadcrumb">
@@ -430,84 +508,152 @@ function PaneContent({
           />
         </div>
 
-        <dl
-          aria-label={t('props.label')}
-          className="grid grid-cols-[var(--w-label-col)_minmax(0,1fr)] items-center gap-x-3 text-sm"
-        >
-          <dt className="flex h-property-row items-center text-text-muted">{t('props.due')}</dt>
-          <dd className="flex h-property-row min-w-0 items-center">
-            <DateCell
-              value={due}
-              startDate={task.startDate}
-              ctx={dateCtx}
-              completed={done}
-              rowHovered
-              isOpen={dateOpen}
-              onOpenChange={setDateOpen}
-              onChange={(next) => controller.setDue([taskId], next)}
-              className="justify-start"
-            />
-          </dd>
-          {task.placement && groups.length > 0 && (
-            <>
-              <dt className="flex h-property-row items-center text-text-muted">
-                {t('props.group')}
-              </dt>
-              <dd className="flex min-h-property-row min-w-0 items-center">
-                <Select
-                  label={t('props.groupLabel')}
-                  hideLabel
-                  options={groups.map((g) => ({ id: g.id, label: g.name }))}
-                  value={task.placement.groupId}
-                  onChange={(groupId) => controller.moveToGroup(groupId, [taskId])}
-                  className="min-w-0"
+        {mobile ? (
+          <dl
+            aria-label={t('props.label')}
+            className="flex flex-col text-md"
+            data-testid="sheet-props"
+          >
+            <MobileProp label={t('props.due')}>
+              <PropButton onPress={() => setDateOpen(true)} data-testid="sheet-due">
+                {task.dueDate ? (
+                  <DateLabel value={due} ctx={dateCtx} completed={done} />
+                ) : (
+                  <span className="text-text-muted">{tDates('cell.set')}</span>
+                )}
+              </PropButton>
+            </MobileProp>
+            {task.placement && groups.length > 0 && (
+              <MobileProp label={t('props.group')}>
+                <PropButton onPress={() => setGroupOpen(true)} aria-label={t('props.groupLabel')}>
+                  <span className="min-w-0 truncate">
+                    {groups.find((g) => g.id === task.placement?.groupId)?.name}
+                  </span>
+                  <ChevronDown
+                    className="size-4 shrink-0 text-text-secondary"
+                    strokeWidth={iconStrokeWidth}
+                    aria-hidden
+                  />
+                </PropButton>
+              </MobileProp>
+            )}
+            <MobileProp label={t('props.tags')}>
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 py-2">
+                {tagItems.length > 0 && (
+                  <ChipGroup
+                    label={t('props.tags')}
+                    items={tagItems}
+                    onRemove={(tagId) => controller.removeTag(taskId, tagId)}
+                  />
+                )}
+                <IconButton
+                  icon={Plus}
+                  aria-label={t('props.addTag')}
+                  onPress={() => setTagsOpen(true)}
                 />
-              </dd>
-            </>
-          )}
-          <dt className="flex h-property-row items-center text-text-muted">{t('props.tags')}</dt>
-          <dd className="flex min-h-property-row min-w-0 flex-wrap items-center gap-1.5 py-1">
-            {tagItems.length > 0 && (
-              <ChipGroup
-                label={t('props.tags')}
-                items={tagItems}
-                onRemove={(tagId) => controller.removeTag(taskId, tagId)}
+              </div>
+            </MobileProp>
+            <MobileProp label={t('props.created')}>
+              <span className="min-w-0 truncate text-sm text-text-muted">
+                {t('props.createdBy', {
+                  name: creator,
+                  ago: formatTimeAgo(
+                    task.createdAt,
+                    Date.now(),
+                    display.locale,
+                    t('props.justNow'),
+                  ),
+                })}
+              </span>
+            </MobileProp>
+          </dl>
+        ) : (
+          <dl
+            aria-label={t('props.label')}
+            className="grid grid-cols-[var(--w-label-col)_minmax(0,1fr)] items-center gap-x-3 text-sm"
+          >
+            <dt className="flex h-property-row items-center text-text-muted">{t('props.due')}</dt>
+            <dd className="flex h-property-row min-w-0 items-center">
+              <DateCell
+                value={due}
+                startDate={task.startDate}
+                ctx={dateCtx}
+                completed={done}
+                rowHovered
+                isOpen={dateOpen}
+                onOpenChange={setDateOpen}
+                onChange={(next) => controller.setDue([taskId], next)}
+                className="justify-start"
               />
+            </dd>
+            {task.placement && groups.length > 0 && (
+              <>
+                <dt className="flex h-property-row items-center text-text-muted">
+                  {t('props.group')}
+                </dt>
+                <dd className="flex min-h-property-row min-w-0 items-center">
+                  <Select
+                    label={t('props.groupLabel')}
+                    hideLabel
+                    options={groups.map((g) => ({ id: g.id, label: g.name }))}
+                    value={task.placement.groupId}
+                    onChange={(groupId) => controller.moveToGroup(groupId, [taskId])}
+                    className="min-w-0"
+                  />
+                </dd>
+              </>
             )}
-            <span ref={tagButton} className="inline-flex">
-              <IconButton
-                icon={Plus}
-                size="sm"
-                aria-label={t('props.addTag')}
-                shortcut={primaryKeys('tagPicker')}
-                onPress={() => setTagsOpen(true)}
-              />
-            </span>
-            {tagsOpen && tagButton.current && (
-              <TagPicker
-                anchor={tagButton.current}
-                tags={Object.values(tagsById)}
-                applied={task.tagIds}
-                label={t('props.tags')}
-                onToggle={(tagId) => controller.toggleTag([taskId], tagId)}
-                onCreate={(name) => controller.createTagFor([taskId], name)}
-                onClose={() => {
-                  setTagsOpen(false);
-                  tagButton.current?.querySelector('button')?.focus();
-                }}
-              />
-            )}
-          </dd>
-          <dt className="flex h-property-row items-center text-text-muted">{t('props.created')}</dt>
-          <dd className="flex h-property-row min-w-0 items-center text-text-muted">
-            <span className="truncate">
-              {t('props.createdBy', {
-                name: creator,
-                ago: formatTimeAgo(task.createdAt, Date.now(), display.locale, t('props.justNow')),
-              })}
-            </span>
-          </dd>
-        </dl>
+            <dt className="flex h-property-row items-center text-text-muted">{t('props.tags')}</dt>
+            <dd className="flex min-h-property-row min-w-0 flex-wrap items-center gap-1.5 py-1">
+              {tagItems.length > 0 && (
+                <ChipGroup
+                  label={t('props.tags')}
+                  items={tagItems}
+                  onRemove={(tagId) => controller.removeTag(taskId, tagId)}
+                />
+              )}
+              <span ref={tagButton} className="inline-flex">
+                <IconButton
+                  icon={Plus}
+                  size="sm"
+                  aria-label={t('props.addTag')}
+                  shortcut={primaryKeys('tagPicker')}
+                  onPress={() => setTagsOpen(true)}
+                />
+              </span>
+              {tagsOpen && !mobile && tagButton.current && (
+                <TagPicker
+                  anchor={tagButton.current}
+                  tags={Object.values(tagsById)}
+                  applied={task.tagIds}
+                  label={t('props.tags')}
+                  onToggle={(tagId) => controller.toggleTag([taskId], tagId)}
+                  onCreate={(name) => controller.createTagFor([taskId], name)}
+                  onClose={() => {
+                    setTagsOpen(false);
+                    tagButton.current?.querySelector('button')?.focus();
+                  }}
+                />
+              )}
+            </dd>
+            <dt className="flex h-property-row items-center text-text-muted">
+              {t('props.created')}
+            </dt>
+            <dd className="flex h-property-row min-w-0 items-center text-text-muted">
+              <span className="truncate">
+                {t('props.createdBy', {
+                  name: creator,
+                  ago: formatTimeAgo(
+                    task.createdAt,
+                    Date.now(),
+                    display.locale,
+                    t('props.justNow'),
+                  ),
+                })}
+              </span>
+            </dd>
+          </dl>
+        )}
 
         <section aria-label={t('description.label')}>
           <DescriptionField
@@ -557,7 +703,65 @@ function PaneContent({
           />
         </section>
       </div>
+      {mobile && (
+        <>
+          <QuickDateSheet
+            isOpen={dateOpen}
+            onOpenChange={setDateOpen}
+            value={due}
+            ctx={dateCtx}
+            subject={task.title}
+            onCommit={(next) => controller.setDue([taskId], next)}
+          />
+          <GroupSheet
+            isOpen={groupOpen}
+            onOpenChange={setGroupOpen}
+            title={t('toolbar.moveTo')}
+            groups={groups}
+            current={task.placement?.groupId}
+            subject={task.title}
+            onPick={(groupId) => controller.moveToGroup(groupId, [taskId])}
+          />
+          <TagSheet
+            isOpen={tagsOpen}
+            onOpenChange={setTagsOpen}
+            tags={Object.values(tagsById)}
+            applied={task.tagIds}
+            subject={task.title}
+            onToggle={(tagId) => controller.toggleTag([taskId], tagId)}
+            onCreate={(name) => controller.createTagFor([taskId], name)}
+          />
+        </>
+      )}
     </div>
+  );
+}
+
+/** A 48 px property row of the phone sheet (02 §13.4): label column, then the value. */
+function MobileProp({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-h-property-row-mobile items-center gap-3 border-b border-border last:border-b-0">
+      <dt className="w-label-col shrink-0 text-sm text-text-muted">{label}</dt>
+      <dd className="flex min-w-0 flex-1 items-center">{children}</dd>
+    </div>
+  );
+}
+
+/** The tappable value of a sheet property: opens the matching bottom sheet. */
+function PropButton({
+  children,
+  ...props
+}: { children: ReactNode } & Omit<AriaButtonProps, 'children' | 'className'>) {
+  return (
+    <AriaButton
+      {...props}
+      className={cn(
+        'flex h-property-row-mobile min-w-0 flex-1 cursor-default items-center gap-2 rounded-sm text-start text-md',
+        'pressed:bg-bg-subtle outline-none focus-ring:outline-2 focus-ring:outline-border-focus',
+      )}
+    >
+      {children}
+    </AriaButton>
   );
 }
 

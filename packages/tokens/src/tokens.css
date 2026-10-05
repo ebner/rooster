@@ -188,11 +188,18 @@
   --h-toolbar: 48px;
   --h-sheet-header: 56px;
   --h-property-row: 36px;
+  /* Mobile frame (02 §13, 03 §3.11) */
+  --h-property-row-mobile: 48px;
+  --h-bottom-nav: 64px;
+  --h-view-switcher: 48px;
+  --h-accessory-bar: 56px;
+  --h-sheet-handle: 4px;
 
   /* Square sizes: checkbox, hit areas (desktop / touch), calendar cells */
   --size-checkbox: 18px;
   --size-hit: 32px;
   --size-hit-touch: 44px;
+  --size-fab: 56px;
   --size-calendar-cell: 36px;
 
   /* Layout widths (03 §2.8, §3; D-27, D-29, D-29a) */
@@ -210,6 +217,7 @@
   --w-date-cell: 112px;
   --w-label-col: 112px;
   --w-illustration: 160px;
+  --w-sheet-handle: 36px;
 
   /* Border widths that are not whole Tailwind steps */
   --border-check: 1.5px;

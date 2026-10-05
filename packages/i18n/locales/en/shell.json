@@ -4,8 +4,7 @@
     "search": "Search",
     "newOrg": "New organisation",
     "collapse": "Collapse sidebar",
-    "expand": "Expand sidebar",
-    "open": "Open navigation"
+    "expand": "Expand sidebar"
   },
   "view": {
     "my": "My tasks"

@@ -243,8 +243,10 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
       }
       if (op.kind === 'tag.create') {
         const name = op.payload.name.toLocaleLowerCase();
-        const exists = tagsOf(orgId).some((t) => t.name.toLocaleLowerCase() === name);
-        if (exists) throw new ApiError('tag_name_taken', 409);
+        const existing = tagsOf(orgId).find((t) => t.name.toLocaleLowerCase() === name);
+        if (existing && existing.id !== op.payload.id) {
+          throw new ApiError('tag_name_taken', 409, undefined, { existingId: existing.id });
+        }
         return structuredClone(tagNamed(orgId, op.payload.name, op.payload.id, op.payload.color));
       }
       if (op.kind === 'task.create' && op.payload.tagNames?.length) {

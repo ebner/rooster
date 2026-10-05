@@ -12,8 +12,15 @@ export type { ListTransport } from './pipeline/transport';
 
 const clientIdKey = 'rooster.clientId';
 
+let cachedClientId: string | null = null;
+
 /** X-Rooster-Client-Id: one per browser profile, kept across reloads where storage allows. */
-function clientId(): string {
+export function getClientId(): string {
+  cachedClientId ??= readClientId();
+  return cachedClientId;
+}
+
+function readClientId(): string {
   try {
     const stored = globalThis.localStorage?.getItem(clientIdKey);
     if (stored) return stored;
@@ -42,10 +49,27 @@ export function getListPipeline(queryClient: QueryClient, transport: ListTranspo
   }
   let pipeline = byTransport.get(transport);
   if (!pipeline) {
-    pipeline = new ListPipeline({ transport, queryClient, clientId: clientId() });
+    pipeline = new ListPipeline({ transport, queryClient, clientId: getClientId() });
     byTransport.set(transport, pipeline);
   }
   return pipeline;
+}
+
+/**
+ * Installs a preconfigured pipeline (P4: the HTTP one with the IndexedDB outbox, leader
+ * election and the tab channel; see `data/sync/engine.ts`) before anything asks for it.
+ */
+export function registerListPipeline(
+  queryClient: QueryClient,
+  transport: ListTransport,
+  pipeline: ListPipeline,
+): void {
+  let byTransport = pipelines.get(queryClient);
+  if (!byTransport) {
+    byTransport = new Map();
+    pipelines.set(queryClient, byTransport);
+  }
+  byTransport.set(transport, pipeline);
 }
 
 export function useListPipeline(): ListPipeline {
