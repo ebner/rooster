@@ -25,6 +25,16 @@ const { db, instanceId } = prepared;
 
 const app = createApp({ config, db, logger, version: VERSION });
 
+// 05 §3: a search index whose row count disagrees with the live tasks (a restored backup, a
+// crash between versions) is rebuilt before the first request.
+const reindexed = app.services.search.rebuildIfStale();
+if (reindexed !== null) {
+  logger.warn(
+    { before: reindexed.before, indexed: reindexed.indexed, durationMs: reindexed.durationMs },
+    'search index rebuilt',
+  );
+}
+
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
   logger.info(
     { port: info.port, version: VERSION, gitSha: config.gitSha, instanceId },

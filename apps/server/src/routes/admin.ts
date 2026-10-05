@@ -10,6 +10,7 @@ import {
   AllowlistCreateSchema,
   AllowlistEntrySchema,
   BackupSchema,
+  ReindexResultSchema,
 } from './schemas.ts';
 
 const tags = ['admin'];
@@ -98,7 +99,20 @@ const downloadBackup = createRoute({
   },
 });
 
-export function registerAdminRoutes(app: OpenAPIHono<AppEnv>, { admin, backups }: Services): void {
+const reindexSearch = createRoute({
+  method: 'post',
+  path: '/api/v1/admin/search/reindex',
+  tags,
+  operationId: 'reindexSearch',
+  summary: 'Rebuild the search index from the tasks (instance admins)',
+  responses: { 200: json(ReindexResultSchema, 'The rebuild'), ...problems(...AUTHED) },
+});
+
+export function registerAdminRoutes(
+  app: OpenAPIHono<AppEnv>,
+  { admin, backups, search }: Services,
+): void {
+  app.openapi(reindexSearch, (c) => c.json(search.reindex(actorOf(c)), 200));
   app.openapi(listBackups, (c) => c.json(backups.list(actorOf(c)), 200));
   app.openapi(createBackup, (c) => c.json(backups.createManual(actorOf(c)), 201));
   app.openapi(downloadBackup, (c) => {

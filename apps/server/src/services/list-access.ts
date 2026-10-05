@@ -4,6 +4,7 @@ import { member, organization, placement, task, taskGroup, taskTag } from '../db
 import { AppError } from '../lib/errors.ts';
 import type { Tx } from './context.ts';
 import type { OrderDomain } from './ordering-service.ts';
+import { indexTasks } from './search-index.ts';
 
 export type TaskRow = typeof task.$inferSelect;
 export type GroupRow = typeof taskGroup.$inferSelect;
@@ -449,4 +450,5 @@ export function softDeleteTasks(
     .set({ deletedAt: input.now, deletedBy: input.userId, updatedAt: input.now })
     .where(and(inArray(task.id, all), isNull(task.deletedAt)))
     .run();
+  indexTasks(tx, all);
 }

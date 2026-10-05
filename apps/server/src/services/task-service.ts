@@ -1,6 +1,4 @@
 import {
-  addDays,
-  dueState,
   findDateInTitle,
   findGroupToken,
   stripBackticks,
@@ -32,6 +30,7 @@ import {
   type TaskQuery,
   type TrashPage,
 } from '@rooster/core/schemas';
+import { inSmartView, selectView } from '@rooster/core/views';
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import {
@@ -95,6 +94,8 @@ import type { OrderingService, OrderTarget } from './ordering-service.ts';
 import { requireMembership } from './org-access.ts';
 import type { MemberRemovalStep } from './org-service.ts';
 import type { PlacementService, PlacementTarget } from './placement-service.ts';
+import { indexTasks } from './search-index.ts';
+import type { SearchService } from './search-service.ts';
 import { attachTags, emitTaskTagged, resolveTagsForCreate, setTaskTag } from './tag-service.ts';
 
 const DAY_MS = 86_400_000;
@@ -197,6 +198,7 @@ export class TaskService {
     private readonly deps: ServiceDeps,
     private readonly placements: PlacementService,
     private readonly ordering: OrderingService,
+    private readonly search: SearchService,
   ) {}
 
   private now(): number {
@@ -385,6 +387,7 @@ export class TaskService {
       deletedBy: null,
     };
     tx.insert(task).values(row).run();
+    indexTasks(tx, [row.id]);
     return row;
   }
 
@@ -592,6 +595,9 @@ export class TaskService {
       const next = { ...changes, fieldClock: JSON.stringify(clock), updatedAt: this.now() };
       tx.update(task).set(next).where(eq(task.id, row.id)).run();
       Object.assign(row, next);
+      if (changes.title !== undefined || changes.description !== undefined) {
+        indexTasks(tx, [row.id]);
+      }
     }
     if (reparented) this.placements.reconcilePlacements(tx, [row.id]);
     if (applied) {
@@ -689,6 +695,7 @@ export class TaskService {
       .set({ deletedAt: null, deletedBy: null, updatedAt: now })
       .where(inArray(task.id, ids))
       .run();
+    indexTasks(tx, ids);
     tx.update(task)
       .set({ fieldClock: JSON.stringify(clock) })
       .where(eq(task.id, row.id))
@@ -722,7 +729,9 @@ export class TaskService {
         throw new AppError('not_in_trash', 409, 'Only deleted tasks can be deleted permanently.');
       }
       const before = taskReach(tx, [row.id]);
+      const gone = [row.id, ...descendantsOf(tx, [row.id])];
       tx.delete(task).where(eq(task.id, row.id)).run();
+      indexTasks(tx, gone);
       this.emit(tx, actor, 'task.purged', row.orgId, [row.id], { before, trash: true });
     });
   }
@@ -1194,9 +1203,11 @@ export class TaskService {
   }
 
   /**
-   * The general task query (06 §2.3) for the CLI and MCP. Due-based views use the actor's
-   * timezone (FR-VIEW-1). Results are ordered like the list for `my`/`groupId`, else by due
-   * date, time and number.
+   * The general task query (06 §2.3) for the CLI and MCP. `my` (and any `groupId`) lists my
+   * list in order. The smart views use the shared core selector (`selectView`), so they hold
+   * exactly the tasks, in the order, the web shows: dates in the actor's timezone, sections
+   * flattened in display order. `q` narrows any view with the search grammar (terms through
+   * the FTS index, filters through the shared matcher).
    */
   query(actor: Actor, orgRef: string, query: TaskQuery): TaskPage {
     return immediate(this.deps.db, (tx) => {
@@ -1205,19 +1216,19 @@ export class TaskService {
       const completed = query.completed ?? 'false';
       const limit = query.limit ?? PAGE_LIMIT_DEFAULT;
       const offset = decodeCursor(query.cursor, isOffsetCursor)?.o ?? 0;
-      const tz =
+      const viewerTz =
         tx.select({ timezone: user.timezone }).from(user).where(eq(user.id, actor.userId)).get()
           ?.timezone ?? 'UTC';
-      const now = this.now();
-      const today = todayIn(tz, now);
+      const nowMs = this.now();
+      const due = { today: todayIn(viewerTz, nowMs), nowMs, viewerTz };
 
       const groupFilter =
         query.groupId === undefined
           ? undefined
           : requireOwnGroup(tx, actor.userId, query.groupId, { orgId: org.id }).id;
-      const placed = view === 'my' || groupFilter !== undefined;
-      let rows: { task: TaskRow; place: typeof placement.$inferSelect | null }[];
-      if (placed) {
+      const groups = listGroups(tx, actor.userId, org.id);
+      let rows: { task: TaskRow; place: PlacementRow | null }[];
+      if (view === 'my' || groupFilter !== undefined) {
         rows = tx
           .select({ task, place: placement })
           .from(placement)
@@ -1233,15 +1244,16 @@ export class TaskService {
             ),
           )
           .all();
-        const order = new Map(listGroups(tx, actor.userId, org.id).map((g, i) => [g.id, i]));
+        const order = new Map(groups.map((g, i) => [g.id, i]));
         rows.sort(
           (a, b) =>
             (order.get(a.place?.groupId ?? '') ?? 0) - (order.get(b.place?.groupId ?? '') ?? 0) ||
             compareKeys(a.place?.position ?? '', b.place?.position ?? '') ||
             compareKeys(a.task.id, b.task.id),
         );
+        if (view !== 'my') rows = rows.filter((r) => inSmartView(r.task, view, due));
       } else {
-        const tasks = tx
+        const mine = tx
           .select()
           .from(task)
           .where(
@@ -1251,18 +1263,25 @@ export class TaskService {
         const places = placementsFor(
           tx,
           actor.userId,
-          tasks.map((t) => t.id),
+          mine.map((t) => t.id),
         );
-        rows = tasks.map((t) => ({ task: t, place: places.get(t.id) ?? null }));
-        rows.sort(
-          (a, b) =>
-            compareKeys(a.task.dueDate ?? '', b.task.dueDate ?? '') ||
-            compareKeys(a.task.dueTime ?? '', b.task.dueTime ?? '') ||
-            (a.task.seq ?? 0) - (b.task.seq ?? 0),
+        const dtos = taskDtos(tx, actor.userId, mine, { places });
+        const byId = new Map(mine.map((t) => [t.id, t]));
+        const sections = selectView(
+          {
+            groups: Object.fromEntries(groups.map((g) => [g.id, toGroupDto(g)])),
+            tasks: Object.fromEntries(dtos.map((d) => [d.id, d])),
+          },
+          view,
+          { ...due, viewerId: actor.userId, showCompleted: completed !== 'false' },
         );
+        const ids = [...new Set(sections.flatMap((s) => s.taskIds))];
+        rows = ids.flatMap((id) => {
+          const t = byId.get(id);
+          return t === undefined ? [] : [{ task: t, place: places.get(id) ?? null }];
+        });
       }
 
-      const week = addDays(today, 6);
       const wantedTags = this.resolveTagFilter(tx, org.id, query.tag);
       const tagged =
         wantedTags === null
@@ -1271,7 +1290,7 @@ export class TaskService {
               tx,
               rows.map((r) => r.task.id),
             );
-      const filtered = rows.filter(({ task: t }) => {
+      let filtered = rows.filter(({ task: t }) => {
         if (wantedTags !== null) {
           const has = tagged?.get(t.id);
           if (wantedTags.some((id) => id === null || has?.has(id) !== true)) return false;
@@ -1285,29 +1304,9 @@ export class TaskService {
         if (query.dueTo !== undefined && (t.dueDate === null || t.dueDate > query.dueTo)) {
           return false;
         }
-        switch (view) {
-          case 'today':
-            return t.dueDate !== null && t.dueDate <= today;
-          case 'week':
-            return t.dueDate !== null && t.dueDate >= today && t.dueDate <= week;
-          case 'overdue':
-            return (
-              dueState(
-                {
-                  dueDate: t.dueDate,
-                  dueTime: t.dueTime,
-                  dueTz: t.dueTz,
-                  completed: false,
-                },
-                { today, nowMs: now, viewerTz: tz },
-              ) === 'overdue'
-            );
-          case 'nodate':
-            return t.dueDate === null;
-          default:
-            return true;
-        }
+        return true;
       });
+      if (query.q !== undefined) filtered = this.matchQuery(tx, actor, org.id, query.q, filtered);
       const page = filtered.slice(offset, offset + limit);
       return {
         items: taskDtos(
@@ -1319,6 +1318,28 @@ export class TaskService {
         nextCursor: offset + limit < filtered.length ? encodeCursor({ o: offset + limit }) : null,
       };
     });
+  }
+
+  /** `?q=`: keeps the rows matching the search query (06 §2.3), in their order. */
+  private matchQuery<R extends { task: TaskRow; place: PlacementRow | null }>(
+    tx: Tx,
+    actor: Actor,
+    orgId: string,
+    q: string,
+    rows: R[],
+  ): R[] {
+    const matcher = this.search.matcher(tx, actor, [orgId], q);
+    if (matcher === null) return [];
+    const ids = this.search.matchingIds(tx, [orgId], matcher.fts);
+    const hits = ids === null ? rows : rows.filter((r) => ids.has(r.task.id));
+    if (!matcher.hasFilters) return hits;
+    const dtos = taskDtos(
+      tx,
+      actor.userId,
+      hits.map((r) => r.task),
+      { places: new Map(hits.map((r) => [r.task.id, r.place])) },
+    );
+    return hits.filter((_, i) => matcher.accepts(dtos[i] as Task));
   }
 
   /**

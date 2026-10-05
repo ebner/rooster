@@ -22,6 +22,7 @@ import { DOCS_PATH, securityHeaders } from './lib/security-headers.ts';
 import { webApp } from './lib/web-app.ts';
 import { registerAdminRoutes } from './routes/admin.ts';
 import { registerEventRoutes } from './routes/events.ts';
+import { registerExportRoutes } from './routes/export.ts';
 import { registerGroupRoutes } from './routes/groups.ts';
 import { registerHealthRoutes } from './routes/health.ts';
 import { registerInviteRoutes } from './routes/invites.ts';
@@ -29,6 +30,7 @@ import { registerMeRoutes } from './routes/me.ts';
 import { registerMetaRoutes } from './routes/meta.ts';
 import { registerOrgRoutes } from './routes/orgs.ts';
 import { ProblemSchema } from './routes/problem.ts';
+import { registerSearchRoutes } from './routes/search.ts';
 import { registerTagRoutes } from './routes/tags.ts';
 import { registerTaskRoutes } from './routes/tasks.ts';
 import { createServices, type Services } from './services/index.ts';
@@ -127,6 +129,8 @@ export function createApp(deps: AppDeps): App {
   registerGroupRoutes(app, services);
   registerTaskRoutes(app, services);
   registerTagRoutes(app, services);
+  registerSearchRoutes(app, services);
+  registerExportRoutes(app, services);
   registerEventRoutes(app, { hub, services });
 
   app.openAPIRegistry.register('Problem', ProblemSchema);

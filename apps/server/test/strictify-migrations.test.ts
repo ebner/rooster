@@ -20,6 +20,8 @@ describe('strictify-migrations', () => {
           'CREATE TABLE `kv` (`k` text PRIMARY KEY) WITHOUT ROWID;',
           'CREATE TABLE `done` (`id` text) STRICT;',
           'CREATE VIRTUAL TABLE task_fts USING fts5(title);',
+          // The shape of hand-written migrations (0004_task_fts): quoted name, options.
+          "CREATE VIRTUAL TABLE `task_fts2` USING fts5(\n\ttitle,\n\ttokenize='unicode61'\n);",
         ].join('\n--> statement-breakpoint\n'),
       );
       execFileSync(process.execPath, [script, dir.path]);
@@ -33,6 +35,8 @@ describe('strictify-migrations', () => {
       expect(once).toContain('WITHOUT ROWID, STRICT;');
       expect(once).toContain('CREATE TABLE `done` (`id` text) STRICT;');
       expect(once).toContain('USING fts5(title);');
+      expect(once).toContain("tokenize='unicode61'\n);");
+      expect(once).not.toMatch(/fts5[^;]*STRICT/);
       execFileSync(process.execPath, [script, dir.path]);
       expect(readFileSync(file, 'utf8')).toBe(once);
     } finally {

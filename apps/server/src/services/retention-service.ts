@@ -3,6 +3,7 @@ import { placement, task, taskGroup } from '../db/schema/index.ts';
 import { immediate, type ServiceDeps } from './context.ts';
 import type { IdempotencyStore } from './idempotency-store.ts';
 import type { PlacementService } from './placement-service.ts';
+import { pruneIndex } from './search-index.ts';
 
 /** Soft-deleted tasks and groups are kept for 30 days (05 §4.5). */
 export const TRASH_RETENTION_MS = 30 * 86_400_000;
@@ -34,6 +35,9 @@ export class RetentionService {
         .delete(task)
         .where(and(isNotNull(task.deletedAt), lt(task.deletedAt, cutoff)))
         .run().changes;
+      // Subtasks went with their parents (FK cascade); none of them was indexed, but a stray
+      // row must never outlive its task.
+      if (tasks > 0) pruneIndex(tx);
       const groups = tx
         .select({ id: taskGroup.id, userId: taskGroup.userId, orgId: taskGroup.orgId })
         .from(taskGroup)

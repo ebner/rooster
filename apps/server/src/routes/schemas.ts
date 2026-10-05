@@ -6,6 +6,7 @@ import {
   backupSchema,
   bulkOpSchema,
   bulkResultSchema,
+  exportTaskSchema,
   groupCreateResultSchema,
   groupCreateSchema,
   groupDeleteSchema,
@@ -24,6 +25,7 @@ import {
   myListSchema,
   orgCreateSchema,
   orgDeleteSchema,
+  orgExportSchema,
   orgOrderResultSchema,
   orgOrderSchema,
   orgPatchSchema,
@@ -31,6 +33,8 @@ import {
   orgSchema,
   placementSchema,
   prefsSchema,
+  reindexResultSchema,
+  searchHitSchema,
   sessionSchema,
   subtaskReorderResultSchema,
   subtaskReorderSchema,
@@ -143,3 +147,22 @@ export const TagSchema = named(tagSchema, 'Tag');
 export const TagCreateSchema = named(tagCreateSchema, 'TagCreate');
 export const TagPatchSchema = named(tagPatchSchema, 'TagPatch');
 export const TagMergeSchema = named(tagMergeSchema, 'TagMerge');
+
+// Phase 5: search, reindex and export (06 §2.8, ADR 0012).
+export const SearchHitSchema = named(searchHitSchema.extend({ task: TaskSchema }), 'SearchHit');
+export const SearchResultSchema = named(z.array(SearchHitSchema), 'SearchResult');
+export const ReindexResultSchema = named(reindexResultSchema, 'ReindexResult');
+export const ExportTaskSchema = named(
+  exportTaskSchema.extend({ placement: PlacementSchema.nullable() }),
+  'ExportTask',
+);
+export const OrgExportSchema = named(
+  orgExportSchema.extend({
+    groups: z.array(GroupSchema),
+    tags: z.array(TagSchema),
+    tasks: z.array(ExportTaskSchema),
+    // Always empty in v1.0 (comments arrive in Phase 6); `never` has no OpenAPI form.
+    comments: z.array(z.never()).max(0).openapi({ type: 'array', maxItems: 0, items: {} }),
+  }),
+  'OrgExport',
+);

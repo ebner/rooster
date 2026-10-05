@@ -40,6 +40,7 @@ import {
 import type { OrderingService, OrderTarget } from './ordering-service.ts';
 import { requireMembership } from './org-access.ts';
 import type { PlacementService } from './placement-service.ts';
+import { indexTasks } from './search-index.ts';
 
 const inboxImmutable = () =>
   new AppError('inbox_immutable', 409, 'The Inbox cannot be renamed, moved or deleted.');
@@ -343,6 +344,7 @@ export class GroupService {
           .set({ deletedAt: null, deletedBy: null, updatedAt: now })
           .where(inArray(task.id, all))
           .run();
+        indexTasks(tx, all);
       }
       this.emit(tx, actor, 'group.restored', group, ids);
       return toGroupDto({ ...group, deletedAt: null, updatedAt: now, fieldClock });

@@ -349,6 +349,19 @@ const ROWS: Record<string, Row> = {
     request: (f) => ({ path: `/api/v1/tags/${f.tagId}/merge`, body: { intoId: f.otherTagId } }),
     expect: orgScoped(200, 200),
   },
+  // Phase 5: search, export and reindex (06 §2.8, ADR 0012).
+  'GET /api/v1/search': {
+    request: (f) => ({ path: `/api/v1/search?q=task&orgId=${f.orgId}` }),
+    expect: orgScoped(200, 200),
+  },
+  'GET /api/v1/orgs/{orgId}/export': {
+    request: (f) => ({ path: `/api/v1/orgs/${f.orgId}/export?format=json` }),
+    expect: orgScoped(200, 200),
+  },
+  'POST /api/v1/admin/search/reindex': {
+    request: () => ({ path: '/api/v1/admin/search/reindex' }),
+    expect: adminOnly(200),
+  },
 };
 
 const dataDirs: (() => void)[] = [];

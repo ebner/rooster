@@ -273,6 +273,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/search/reindex": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rebuild the search index from the tasks (instance admins) */
+        post: operations["reindexSearch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/backups": {
         parameters: {
             query?: never;
@@ -761,6 +778,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Full-text search over the tasks of my orgs, best match first
+         * @description Free words are prefix matches over title and description (case and diacritics ignored); `#tag`, `@person`, `due:today|overdue|week|none` and `is:open|done` filter. Open tasks rank before completed ones, then by relevance; a filter-only query ranks by due date. Without `orgId` every org I belong to is searched; an org I do not belong to is 404. Matches in `snippet` are wrapped in U+E000 … U+E001.
+         */
+        get: operations["search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{orgId}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download my data in an org as JSON (lossless) or Markdown
+         * @description My groups, my tasks (open and completed) with their subtasks, and their tags, as an attachment named `rooster-<slug>-<yyyy-mm-dd>.json` or `.md`.
+         */
+        get: operations["exportOrg"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/events": {
         parameters: {
             query?: never;
@@ -992,6 +1049,11 @@ export interface components {
             valid: boolean;
             /** @enum {string|null} */
             reason: "expired" | "revoked" | "used" | "org_deleted" | null;
+        };
+        ReindexResult: {
+            indexed: number;
+            durationMs: number;
+            finishedAt: number;
         };
         Backup: {
             name: string;
@@ -1282,6 +1344,61 @@ export interface components {
         };
         TagMerge: {
             intoId: string;
+        };
+        SearchResult: components["schemas"]["SearchHit"][];
+        SearchHit: {
+            task: components["schemas"]["Task"];
+            orgId: string;
+            snippet: string;
+        };
+        OrgExport: {
+            /** @enum {string} */
+            format: "rooster-export";
+            /** @enum {number} */
+            version: 1;
+            exportedAt: number;
+            org: {
+                id: string;
+                slug: string;
+                name: string;
+            };
+            user: {
+                id: string;
+                email: string;
+                name: string;
+            };
+            groups: components["schemas"]["Group"][];
+            tags: components["schemas"]["Tag"][];
+            tasks: components["schemas"]["ExportTask"][];
+            comments: unknown[];
+        };
+        ExportTask: {
+            id: string;
+            orgId: string;
+            seq: number | null;
+            parentId: string | null;
+            subtaskPosition: string | null;
+            title: string;
+            description: string;
+            assigneeId: string | null;
+            createdBy: string;
+            dueDate: string | null;
+            dueTime: string | null;
+            dueTz: string | null;
+            startDate: string | null;
+            completedAt: number | null;
+            tagIds: string[];
+            counts: {
+                subtasks: number;
+                subtasksDone: number;
+                comments: number;
+                attachments: number;
+            };
+            placement: components["schemas"]["Placement"];
+            createdAt: number;
+            updatedAt: number;
+            deletedAt?: number;
+            deletedBy?: string;
         };
     };
     responses: never;
@@ -2562,6 +2679,71 @@ export interface operations {
             };
         };
     };
+    reindexSearch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The rebuild */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReindexResult"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     listBackups: {
         parameters: {
             query?: never;
@@ -3568,6 +3750,7 @@ export interface operations {
                 dueFrom?: string;
                 dueTo?: string;
                 tag?: string | string[];
+                q?: string;
             };
             header?: never;
             path: {
@@ -5294,6 +5477,128 @@ export interface operations {
             };
             /** @description Not JSON */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    search: {
+        parameters: {
+            query: {
+                q: string;
+                orgId?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Hits, best first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResult"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    exportOrg: {
+        parameters: {
+            query?: {
+                format?: "json" | "markdown";
+            };
+            header?: never;
+            path: {
+                /** @description Org ID, slug, or `personal` for your personal org. */
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The export (`Content-Disposition: attachment`) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgExport"];
+                    "text/markdown": string;
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed) */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

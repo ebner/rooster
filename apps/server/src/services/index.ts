@@ -2,12 +2,14 @@ import { EventBus } from '../events/bus.ts';
 import { AdminService } from './admin-service.ts';
 import { BackupService } from './backup-service.ts';
 import type { ServiceDeps } from './context.ts';
+import { ExportService } from './export-service.ts';
 import { GroupService } from './group-service.ts';
 import { IdempotencyStore } from './idempotency-store.ts';
 import { OrderingService } from './ordering-service.ts';
 import { OrgService, type OrgServiceOptions } from './org-service.ts';
 import { PlacementService } from './placement-service.ts';
 import { RetentionService } from './retention-service.ts';
+import { SearchService } from './search-service.ts';
 import { SignInPolicy } from './sign-in-policy.ts';
 import { TagService } from './tag-service.ts';
 import { expansionRemovalStep, TaskService } from './task-service.ts';
@@ -23,6 +25,8 @@ export interface Services {
   groups: GroupService;
   tasks: TaskService;
   tags: TagService;
+  search: SearchService;
+  exports: ExportService;
   idempotency: IdempotencyStore;
   retention: RetentionService;
   backups: BackupService;
@@ -45,6 +49,7 @@ export function createServices(
       ...(options.memberRemovalSteps ?? []),
     ],
   });
+  const search = new SearchService(deps);
   return {
     orgs,
     users: new UserService(deps),
@@ -53,8 +58,10 @@ export function createServices(
     ordering,
     placements,
     groups: new GroupService(deps, ordering, placements),
-    tasks: new TaskService(deps, placements, ordering),
+    tasks: new TaskService(deps, placements, ordering, search),
     tags: new TagService(deps),
+    search,
+    exports: new ExportService(deps),
     idempotency,
     retention: new RetentionService(deps, placements, idempotency),
     backups: new BackupService(deps),

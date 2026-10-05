@@ -432,12 +432,14 @@ describe('reads', () => {
 
     const view = async (q: string) =>
       (await a.ok<TaskPage>('GET', `/api/v1/orgs/personal/tasks?${q}`)).items.map((t) => t.title);
-    expect(await view('view=today')).toEqual(['yesterday', 'today', 'today passed', 'today later']);
+    // The shared selector (ADR 0012): Overdue first by due date, then each section in My
+    // tasks order (new tasks go to the top of the Inbox, so the newest comes first).
+    expect(await view('view=today')).toEqual(['yesterday', 'today passed', 'today later', 'today']);
     expect(await view('view=overdue')).toEqual(['yesterday', 'today passed']);
     expect(await view('view=week')).toEqual([
-      'today',
-      'today passed',
       'today later',
+      'today passed',
+      'today',
       'in six days',
     ]);
     expect(await view('view=nodate')).toEqual(['none']);
