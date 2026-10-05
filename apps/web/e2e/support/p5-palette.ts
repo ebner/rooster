@@ -14,15 +14,23 @@ export async function englishUi(page: Page) {
   });
 }
 
+export type Seed = string | { title: string; dueDate?: string };
+
 /** Signs in and seeds `titles` into Today, in order; returns their ids. */
-export async function seed(page: Page, name: string, titles: string[]) {
+export async function seed(page: Page, name: string, titles: Seed[]) {
   await signInAs(page, uniqueEmail(name));
   const orgId = await personalOrg(page);
   const today = await groupId(page, orgId, 'Today');
   const ids: string[] = [];
   let afterId: string | null = null;
-  for (const title of titles) {
-    const task = await createTask(page, orgId, { title, groupId: today, afterId, beforeId: null });
+  for (const entry of titles) {
+    const fields = typeof entry === 'string' ? { title: entry } : entry;
+    const task = await createTask(page, orgId, {
+      ...fields,
+      groupId: today,
+      afterId,
+      beforeId: null,
+    });
     ids.push(task.id);
     afterId = task.id;
   }

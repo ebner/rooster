@@ -24,7 +24,6 @@ import { useTranslation } from 'react-i18next';
 import type { PaletteGroup } from '../../keymap';
 import { cn } from '../../lib/cn';
 import { Button, buttonVariants, iconStrokeWidth } from '../../ui/button';
-import { Chip } from '../../ui/chip';
 import { IconButton } from '../../ui/icon-button';
 import { Kbd } from '../../ui/kbd';
 import { DateLabel, type ViewerDateContext } from '../dates';
@@ -35,6 +34,7 @@ import {
   type PaletteSection,
   type Segment,
   stepActiveKey,
+  type TaskChip,
   type TaskItem,
 } from './model';
 
@@ -109,6 +109,23 @@ function Shortcut({ keys }: { keys: string }) {
   );
 }
 
+/** The group or org of a result, muted and outlined like the smart views' group chip. */
+function ResultChip({ chip }: { chip: TaskChip }) {
+  const { t } = useTranslation('palette');
+  return (
+    <span
+      data-testid="palette-chip"
+      data-kind={chip.kind}
+      className="inline-flex h-chip max-w-date-cell shrink-0 items-center rounded-xs border border-border px-1.5 text-xs text-text-muted"
+    >
+      <span className="sr-only">{t(`chip.${chip.kind}`, { name: chip.name })}</span>
+      <span aria-hidden className="truncate">
+        {chip.name}
+      </span>
+    </span>
+  );
+}
+
 function TaskOption({ item, dateCtx }: { item: TaskItem; dateCtx: ViewerDateContext }) {
   const { task } = item;
   const done = task.completedAt !== null;
@@ -130,7 +147,7 @@ function TaskOption({ item, dateCtx }: { item: TaskItem; dateCtx: ViewerDateCont
           </span>
         )}
       </span>
-      {item.chip && <Chip className="max-w-40 shrink">{item.chip}</Chip>}
+      {item.chip && <ResultChip chip={item.chip} />}
       <DateLabel
         value={task}
         ctx={dateCtx}

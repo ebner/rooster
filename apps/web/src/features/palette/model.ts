@@ -37,8 +37,13 @@ export interface TaskItem {
   title: Segment[];
   /** Where the match is outside the title (description, comments), the excerpt; else null. */
   snippet: Segment[] | null;
-  /** The group (current org) or the org (another org). */
-  chip: string | null;
+  /** The group (current org) or the org (another org), 02 §12. */
+  chip: TaskChip | null;
+}
+
+export interface TaskChip {
+  kind: 'group' | 'org';
+  name: string;
 }
 
 export interface ActionItem {
@@ -264,6 +269,36 @@ export function subtreeOf(list: ListState | undefined, ids: readonly string[]): 
   if (!list) return out;
   for (const id of ids) for (const d of descendantIds(list, id)) out.add(d);
   return out;
+}
+
+export interface ChipContext {
+  /** The org in the URL; tasks elsewhere get an org chip (when the viewer has several). */
+  currentOrgId: string | null;
+  orgNames: ReadonlyMap<string, string>;
+  lists: readonly ListState[];
+  /** The Inbox's label in the UI language (its stored name is not localised). */
+  inboxLabel: string;
+}
+
+/**
+ * The chip of a result (02 §12): the org's name for a task outside the current org, else the
+ * name of the viewer's group holding it. The cached placement wins over the payload's (the
+ * list may hold a newer, optimistic move).
+ */
+export function taskChip(
+  orgId: string,
+  task: Pick<Task, 'id'> & Partial<Pick<Task, 'placement'>>,
+  { currentOrgId, orgNames, lists, inboxLabel }: ChipContext,
+): TaskChip | null {
+  if (orgId !== currentOrgId && orgNames.size > 1) {
+    const name = orgNames.get(orgId);
+    return name ? { kind: 'org', name } : null;
+  }
+  const list = lists.find((l) => l.orgId === orgId);
+  const groupId = list?.tasks[task.id]?.placement?.groupId ?? task.placement?.groupId;
+  const group = groupId ? list?.groups[groupId] : undefined;
+  if (!group) return null;
+  return { kind: 'group', name: group.kind === 'inbox' ? inboxLabel : group.name };
 }
 
 /** A task by ID in any cached list (open or completed, not deleted). */

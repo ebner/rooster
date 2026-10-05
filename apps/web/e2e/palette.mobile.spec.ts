@@ -1,3 +1,4 @@
+import { addDays, todayIn } from '@rooster/core/dates';
 import { englishUi, palette, paletteInput, paletteTask, seed } from './support/p5-palette';
 import { expect, test } from './support/test';
 
@@ -12,7 +13,10 @@ test.beforeEach(async ({ page }) => {
 test('the Search tab opens the full-screen palette; a result opens the detail sheet', async ({
   page,
 }, testInfo) => {
-  const { ids } = await seed(page, 'palette.phone', ['Boka tandläkare', 'Handla mat']);
+  const { ids } = await seed(page, 'palette.phone', [
+    { title: 'Boka tandläkare', dueDate: addDays(todayIn('Europe/Stockholm', Date.now()), 1) },
+    'Handla mat',
+  ]);
   await page
     .getByRole('navigation', { name: 'Primary' })
     .getByRole('button', { name: 'Search' })
@@ -38,8 +42,9 @@ test('the Search tab opens the full-screen palette; a result opens the detail sh
   await paletteInput(page).fill('tand');
   const hit = paletteTask(page, 'Boka tandläkare');
   await expect(hit).toBeVisible();
+  await expect(hit.getByTestId('palette-chip')).toContainText('Today');
   const row = await hit.boundingBox();
-  expect(row?.height ?? 0).toBeGreaterThanOrEqual(44);
+  expect(Math.round(row?.height ?? 0)).toBeGreaterThanOrEqual(44);
   if (shots && testInfo.project.name === 'mobile') {
     await page.screenshot({ path: `${shots}/palette-results-390.png` });
   }

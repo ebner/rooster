@@ -85,5 +85,10 @@
     "sampleGroup": "Today",
     "sampleOrg": "Northwind",
     "sampleDeletedBy": "Deleted by Anna Berg · 2 days ago"
+  },
+  "chip": {
+    "inbox": "Inbox",
+    "group": "Group: {name}",
+    "org": "Organisation: {name}"
   }
 }

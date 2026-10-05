@@ -18,6 +18,7 @@ import { currentPaletteCommands, subscribePaletteCommands } from './commands';
 import {
   type ActionItem,
   buildSections,
+  type ChipContext,
   findCachedTask,
   highlightTerms,
   nextActiveKey,
@@ -30,6 +31,7 @@ import {
   subtreeOf,
   type TaskItem,
   type TaskSummary,
+  taskChip,
 } from './model';
 import { PalettePanel } from './palette-panel';
 import { readRecentTasks, updateRecentTitles } from './recent-tasks';
@@ -146,10 +148,11 @@ function PaletteSession({ me, currentOrg }: { me: Me; currentOrg: Org | null }) 
   const exclude = step?.exclude;
 
   const orgById = useMemo(() => new Map(me.orgs.map((o) => [o.id, o])), [me.orgs]);
-  const chipFor = (orgId: string, task: Partial<Task>): string | null => {
-    if (orgId !== currentOrg?.id && me.orgs.length > 1) return orgById.get(orgId)?.name ?? null;
-    const groupId = task.placement?.groupId;
-    return groupId ? (listOf(orgId)?.groups[groupId]?.name ?? null) : null;
+  const chipContext: ChipContext = {
+    currentOrgId: currentOrg?.id ?? null,
+    orgNames: new Map(me.orgs.map((o) => [o.id, o.name])),
+    lists,
+    inboxLabel: t('chip.inbox'),
   };
   const taskItem = (
     section: SectionId,
@@ -171,7 +174,7 @@ function PaletteSession({ me, currentOrg }: { me: Me; currentOrg: Org | null }) 
       orgId,
       title,
       snippet: inTitle || marked === null || !marked.some((s) => s.mark) ? null : marked,
-      chip: chipFor(orgId, task),
+      chip: taskChip(orgId, task, chipContext),
     };
   };
 

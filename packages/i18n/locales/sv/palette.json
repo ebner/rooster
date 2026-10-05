@@ -85,5 +85,10 @@
     "sampleGroup": "Idag",
     "sampleOrg": "Northwind",
     "sampleDeletedBy": "Borttagen av Anna Berg · för 2 dagar sedan"
+  },
+  "chip": {
+    "inbox": "Inkorg",
+    "group": "Grupp: {name}",
+    "org": "Organisation: {name}"
   }
 }

@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
+import { addDays, todayIn } from '@rooster/core/dates';
 import type { MyList, Task, TaskDetail } from '@rooster/core/schemas';
 import { apiCall } from './support/auth';
 import { clickRowBody, mod, myList, waitForSync } from './support/p3';
@@ -54,12 +55,20 @@ test('AC-5.3 Ctrl+K → ">dark" shows no results gracefully; ">move" lists the m
 test('AC-5.2 "tand" finds "Boka tandläkare" (prefix); Enter opens it; it then shows under Recent', async ({
   page,
 }) => {
-  const { ids } = await seed(page, 'ac.fivetwo', ['Boka tandläkare', 'Handla mat']);
+  const tomorrow = addDays(todayIn('Europe/Stockholm', Date.now()), 1);
+  const { ids } = await seed(page, 'ac.fivetwo', [
+    { title: 'Boka tandläkare', dueDate: tomorrow },
+    'Handla mat',
+  ]);
   await openPalette(page);
   await paletteInput(page).fill('tand');
   const hit = paletteTask(page, 'Boka tandläkare');
   await expect(hit).toBeVisible();
   await expect(hit.locator('mark')).toHaveText('tand');
+  // 02 §12: the group chip and the due label.
+  await expect(hit.getByTestId('palette-chip')).toHaveAttribute('data-kind', 'group');
+  await expect(hit.getByTestId('palette-chip')).toContainText('Today');
+  await expect(hit).toContainText('Tomorrow');
   await expect(paletteTask(page, 'Handla mat')).toHaveCount(0);
   if (shots) {
     await page.waitForTimeout(300);
@@ -249,5 +258,37 @@ test('kitchen sink: the palette and Trash states render without axe violations',
   const axe = await new AxeBuilder({ page }).include('#palette').withTags(wcag).analyze();
   expect(axe.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(' | ')}`)).toEqual(
     [],
+  );
+});
+
+test('searching all organisations shows the org chip for hits in another org', async ({ page }) => {
+  await seed(page, 'palette.orgs', ['Boka tandläkare']);
+  const created = await apiCall(page, 'POST', '/api/v1/orgs', { name: 'Tandklubben' });
+  expect(created.status(), await created.text()).toBe(201);
+  const other = (await created.json()) as { id: string };
+  const task = await apiCall(page, 'POST', `/api/v1/orgs/${other.id}/tasks`, {
+    title: 'Tandkräm till klubben',
+  });
+  expect(task.status()).toBe(201);
+  await page.reload();
+  await expect(page.getByTestId('task-row').first()).toBeVisible();
+
+  await openPalette(page);
+  await paletteInput(page).fill('tand');
+  await expect(paletteTask(page, 'Boka tandläkare')).toBeVisible();
+  await expect(paletteTask(page, 'Tandkräm till klubben')).toHaveCount(0);
+  await expect(paletteTask(page, 'Boka tandläkare').getByTestId('palette-chip')).toHaveAttribute(
+    'data-kind',
+    'group',
+  );
+
+  await page.getByTestId('palette-scope').click();
+  const theirs = paletteTask(page, 'Tandkräm till klubben');
+  await expect(theirs).toBeVisible();
+  await expect(theirs.getByTestId('palette-chip')).toHaveAttribute('data-kind', 'org');
+  await expect(theirs.getByTestId('palette-chip')).toContainText('Tandklubben');
+  // The current org's hit keeps its group chip.
+  await expect(paletteTask(page, 'Boka tandläkare').getByTestId('palette-chip')).toContainText(
+    'Today',
   );
 });

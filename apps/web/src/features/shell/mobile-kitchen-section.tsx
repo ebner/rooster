@@ -97,7 +97,13 @@ export function MobileKitchenSection() {
           onPress: noop,
           isActive: active === 'my',
         },
-        { id: 'search', label: t('nav.search'), icon: Search, isDisabled: true },
+        {
+          id: 'search',
+          label: t('nav.search'),
+          icon: Search,
+          onPress: noop,
+          isActive: active === 'search',
+        },
         {
           id: 'settings',
           label: t('nav.settings'),
@@ -136,6 +142,7 @@ export function MobileKitchenSection() {
       </Group>
       <Group title={t('dev.bottomNav')}>
         <Phone>{nav('my')}</Phone>
+        <Phone>{nav('search')}</Phone>
         <Phone>{nav('settings', 'pressed')}</Phone>
       </Group>
       <Group title={t('dev.fab')}>

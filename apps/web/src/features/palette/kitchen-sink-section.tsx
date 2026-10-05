@@ -70,7 +70,7 @@ export function PaletteKitchenSection() {
     orgId: task.orgId,
     title: highlightTerms(task.title, terms),
     snippet: null,
-    chip: t('dev.sampleGroup'),
+    chip: { kind: 'group', name: t('dev.sampleGroup') },
     ...extra,
   });
 
@@ -97,7 +97,7 @@ export function PaletteKitchenSection() {
       item(dentist, 'tasks', [query]),
       item(report, 'tasks', [reportQuery], {
         snippet: splitSnippet(t('dev.sampleSnippet')),
-        chip: t('dev.sampleOrg'),
+        chip: { kind: 'org', name: t('dev.sampleOrg') },
       }),
     ],
     actions,

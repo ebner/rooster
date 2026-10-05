@@ -17,6 +17,7 @@ import {
   stepActiveKey,
   subtreeOf,
   type TaskItem,
+  taskChip,
 } from './model';
 
 const orgId = '0192f5d0-7a1e-7c3a-9f10-0000000000a1';
@@ -284,5 +285,61 @@ describe('offline search over the cache (FR-PWA-2)', () => {
     const list = listOf([parent, child, grandchild]);
     expect(subtreeOf(list, [parent.id])).toEqual(new Set([parent.id, child.id, grandchild.id]));
     expect(subtreeOf(undefined, ['x'])).toEqual(new Set(['x']));
+  });
+});
+
+describe('result chips (02 §12: the group or org chip)', () => {
+  const inbox = {
+    id: 'g-inbox',
+    orgId,
+    kind: 'inbox' as const,
+    name: 'Inbox',
+    position: 'a0',
+    collapsed: false,
+  };
+  const today = {
+    id: 'g-today',
+    orgId,
+    kind: 'normal' as const,
+    name: 'Today',
+    position: 'a1',
+    collapsed: false,
+  };
+  const placed = task('Placed', { placement: { groupId: today.id, position: 'a0' } });
+  const inInbox = task('Inboxed', { placement: { groupId: inbox.id, position: 'a0' } });
+  const list: ListState = {
+    ...listOf([placed, inInbox]),
+    groups: { [inbox.id]: inbox, [today.id]: today },
+  };
+  const chipCtx = {
+    currentOrgId: orgId,
+    orgNames: new Map([
+      [orgId, 'Personal'],
+      ['org-2', 'Northwind'],
+    ]),
+    lists: [list],
+    inboxLabel: 'Inkorg',
+  };
+
+  test('a hit in the current org shows its group; the Inbox gets the translated label', () => {
+    expect(taskChip(orgId, placed, chipCtx)).toEqual({ kind: 'group', name: 'Today' });
+    expect(taskChip(orgId, inInbox, chipCtx)).toEqual({ kind: 'group', name: 'Inkorg' });
+  });
+
+  test('the cached placement wins; unplaced or uncached tasks have no chip', () => {
+    const stale = { ...placed, placement: { groupId: inbox.id, position: 'a0' } };
+    expect(taskChip(orgId, stale, chipCtx)?.name).toBe('Today');
+    expect(taskChip(orgId, task('Elsewhere'), chipCtx)).toBeNull();
+    expect(taskChip(orgId, placed, { ...chipCtx, lists: [] })).toBeNull();
+  });
+
+  test('searching all orgs: a hit from another org shows the org chip', () => {
+    expect(taskChip('org-2', task('Theirs', { orgId: 'org-2' }), chipCtx)).toEqual({
+      kind: 'org',
+      name: 'Northwind',
+    });
+    // With a single org there is nothing to tell apart.
+    const single = { ...chipCtx, orgNames: new Map([[orgId, 'Personal']]), currentOrgId: null };
+    expect(taskChip(orgId, placed, single)).toEqual({ kind: 'group', name: 'Today' });
   });
 });
