@@ -110,7 +110,11 @@ export const taskSchema = z.object({
   dueDate: isoDateSchema.nullable(),
   dueTime: timeSchema.nullable(),
   dueTz: timezoneNameSchema.nullable(),
+  /** P3. Part of the due unit; only set together with a due date, and ≤ dueDate. */
+  startDate: isoDateSchema.nullable(),
   completedAt: timestampSchema.nullable(),
+  /** P3. Tag ids (org tags); order = the order they were added. */
+  tagIds: z.array(idSchema),
   counts: taskCountsSchema,
   /** The requesting user's placement; null when the task is not in their My tasks. */
   placement: placementSchema.nullable(),
@@ -123,7 +127,12 @@ export const taskSchema = z.object({
 
 export const myListSchema = z.object({
   groups: z.array(groupSchema),
-  /** Every task placed in my list (open + completed within `completedSince`). */
+  /**
+   * Every task placed in my list (open + completed within `completedSince`), PLUS (P3, with
+   * `placement: null`): all non-deleted subtasks (any depth, any assignee) of those tasks, and
+   * the parent chain of my orphan subtasks (for breadcrumbs). Clients tell them apart by
+   * `placement` and `parentId`.
+   */
   tasks: z.array(taskSchema),
   expandedTaskIds: z.array(idSchema),
   serverTime: timestampSchema,
@@ -134,17 +143,22 @@ const dueFields = {
   dueDate: isoDateSchema.nullable().optional(),
   dueTime: timeSchema.nullable().optional(),
   dueTz: timezoneNameSchema.nullable().optional(),
+  startDate: isoDateSchema.nullable().optional(),
 };
 
 function dueConsistent(v: {
   dueDate?: string | null | undefined;
   dueTime?: string | null | undefined;
   dueTz?: string | null | undefined;
+  startDate?: string | null | undefined;
 }): boolean {
   // A time needs a date and a timezone.
-  if (v.dueTime) return Boolean(v.dueDate) && Boolean(v.dueTz);
+  if (v.dueTime && !(v.dueDate && v.dueTz)) return false;
+  // A start date needs a due date and must not be after it (ISO strings compare correctly).
+  if (v.startDate) return Boolean(v.dueDate) && v.startDate <= (v.dueDate as string);
   return true;
 }
+const DUE_ERROR = 'dueTime requires dueDate and dueTz; startDate requires dueDate and must be ≤ it';
 
 export const taskCreateSchema = orderingIntentSchema
   .extend({
@@ -152,12 +166,21 @@ export const taskCreateSchema = orderingIntentSchema
     title: taskTitleSchema,
     description: descriptionSchema.optional(),
     ...dueFields,
-    /** Target group in the actor's list; defaults to the Inbox (FR-GRP-5). */
+    /** Target group in the actor's list; defaults to the Inbox (FR-GRP-5). Ignored for subtasks. */
     groupId: idSchema.optional(),
+    /**
+     * P3. Creates a subtask (same org, depth ≤ 5). Ordering intents then refer to SIBLING
+     * subtasks; with no intent the subtask goes to the end of its siblings.
+     */
+    parentId: idSchema.optional(),
+    /** P3. Existing org tags to attach. */
+    tagIds: z.array(idSchema).max(50).optional(),
+    /** P3. Tag names to attach; unknown names are created with the next palette colour. */
+    tagNames: z.array(z.string().min(1).max(40)).max(50).optional(),
     /** CLI/MCP: run the NL parser on the title server-side (06 §2.4). */
     parse: z.boolean().optional(),
   })
-  .refine(dueConsistent, { error: 'dueTime requires dueDate and dueTz', path: ['dueTime'] });
+  .refine(dueConsistent, { error: DUE_ERROR, path: ['dueTime'] });
 
 /**
  * Partial update. Due semantics: if any of dueDate/dueTime/dueTz is present the unit is replaced
@@ -168,8 +191,13 @@ export const taskPatchSchema = z
     title: taskTitleSchema.optional(),
     description: descriptionSchema.optional(),
     ...dueFields,
+    /**
+     * P3. Re-parent: an id makes it a subtask (appended to the new parent's subtasks; cycles and
+     * depth > 5 → 422), null makes it top-level (placed at the top of the assignee's Inbox).
+     */
+    parentId: idSchema.nullable().optional(),
   })
-  .refine(dueConsistent, { error: 'dueTime requires dueDate and dueTz', path: ['dueTime'] })
+  .refine(dueConsistent, { error: DUE_ERROR, path: ['dueTime'] })
   .refine((v) => Object.values(v).some((x) => x !== undefined), { error: 'Nothing to update' });
 
 export const taskPatchResultSchema = z.object({
@@ -201,17 +229,36 @@ export const bulkOpSchema = z.discriminatedUnion('op', [
     ids: bulkIds,
     args: taskMoveSchema,
   }),
+  z.object({ op: z.literal('addTag'), ids: bulkIds, args: z.object({ tagId: idSchema }) }),
+  z.object({ op: z.literal('removeTag'), ids: bulkIds, args: z.object({ tagId: idSchema }) }),
   z.object({
     op: z.literal('setDue'),
     ids: bulkIds,
-    args: z
-      .object(dueFields)
-      .refine(dueConsistent, { error: 'dueTime requires dueDate and dueTz' }),
+    args: z.object(dueFields).refine(dueConsistent, { error: DUE_ERROR }),
   }),
 ]);
 
 export const bulkResultSchema = z.object({
   results: z.array(z.object({ id: idSchema, ok: z.boolean(), code: z.string().optional() })),
+});
+
+/** P3. GET /tasks/:id. */
+export const taskDetailSchema = taskSchema.extend({
+  description: z.string(),
+  /** Direct subtasks in sibling order (deeper levels are loaded via their own detail). */
+  subtasks: z.array(taskSchema),
+  /** Ancestors from the root down to the direct parent. */
+  parentChain: z.array(z.object({ id: idSchema, title: z.string() })),
+});
+
+/** P3. POST /tasks/:id/reorder — among subtask siblings. */
+export const subtaskReorderSchema = orderingIntentSchema;
+export const subtaskReorderResultSchema = z.object({ subtaskPosition: positionSchema });
+
+/** P3. POST /tasks/:id/duplicate — the copy is placed directly after the original. */
+export const taskDuplicateSchema = z.object({
+  id: idSchema.optional(),
+  includeSubtasks: z.boolean().default(true),
 });
 
 export const trashPageSchema = z.object({
@@ -241,4 +288,7 @@ export type TaskCompleteResult = z.infer<typeof taskCompleteResultSchema>;
 export type BulkOp = z.infer<typeof bulkOpSchema>;
 export type BulkResult = z.infer<typeof bulkResultSchema>;
 export type TrashPage = z.infer<typeof trashPageSchema>;
+export type TaskDetail = z.infer<typeof taskDetailSchema>;
+export type SubtaskReorder = z.infer<typeof subtaskReorderSchema>;
+export type TaskDuplicate = z.infer<typeof taskDuplicateSchema>;
 export type OrderingIntent = z.infer<typeof orderingIntentSchema>;

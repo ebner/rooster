@@ -74,6 +74,8 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
           dueDate: spec.dueDate ?? null,
           dueTime: spec.dueTime ?? null,
           dueTz: spec.dueTz ?? null,
+          startDate: null,
+          tagIds: [],
           completedAt: spec.completed ? 1 : null,
           counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
           placement: { groupId: group.id, position: positions[i] as string },

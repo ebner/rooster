@@ -39,6 +39,16 @@ describe('list schemas', () => {
     ).toBe(true);
   });
 
+  it('requires a due date for a start date, not after it', () => {
+    expect(taskPatchSchema.safeParse({ startDate: '2026-10-10' }).success).toBe(false);
+    expect(
+      taskPatchSchema.safeParse({ dueDate: '2026-10-09', startDate: '2026-10-10' }).success,
+    ).toBe(false);
+    expect(
+      taskPatchSchema.safeParse({ dueDate: '2026-10-12', startDate: '2026-10-10' }).success,
+    ).toBe(true);
+  });
+
   it('rejects impossible calendar dates', () => {
     expect(taskCreateSchema.safeParse({ title: 'a', dueDate: '2026-02-30' }).success).toBe(false);
   });
@@ -93,7 +103,9 @@ describe('list schemas', () => {
           dueDate: null,
           dueTime: null,
           dueTz: null,
+          startDate: null,
           completedAt: null,
+          tagIds: [],
           counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
           placement: { groupId, position: 'a0' },
           createdAt: 1,

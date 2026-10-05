@@ -102,6 +102,7 @@ function createTask(state: ListState, p: TaskCreateBody, ctx: ApplyContext): Lis
     createdBy: ctx.userId,
     ...dueUnit(p),
     completedAt: null,
+    tagIds: [],
     counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
     placement: { groupId, position },
     createdAt: ctx.now,
@@ -110,15 +111,25 @@ function createTask(state: ListState, p: TaskCreateBody, ctx: ApplyContext): Lis
   return withTask(state, task);
 }
 
-type DueFields = Pick<TaskPatch, 'dueDate' | 'dueTime' | 'dueTz'>;
+type DueFields = Pick<TaskPatch, 'dueDate' | 'dueTime' | 'dueTz' | 'startDate'>;
 
 /** The due unit is replaced as a whole; absent members become null (taskPatchSchema). */
-function dueUnit(p: DueFields): Pick<Task, 'dueDate' | 'dueTime' | 'dueTz'> {
-  return { dueDate: p.dueDate ?? null, dueTime: p.dueTime ?? null, dueTz: p.dueTz ?? null };
+function dueUnit(p: DueFields): Pick<Task, 'dueDate' | 'dueTime' | 'dueTz' | 'startDate'> {
+  return {
+    dueDate: p.dueDate ?? null,
+    dueTime: p.dueTime ?? null,
+    dueTz: p.dueTz ?? null,
+    startDate: p.startDate ?? null,
+  };
 }
 
 export function touchesDue(p: DueFields): boolean {
-  return p.dueDate !== undefined || p.dueTime !== undefined || p.dueTz !== undefined;
+  return (
+    p.dueDate !== undefined ||
+    p.dueTime !== undefined ||
+    p.dueTz !== undefined ||
+    p.startDate !== undefined
+  );
 }
 
 function mapTasks(
@@ -230,7 +241,30 @@ function applyBulk(state: ListState, op: BulkOp, now: number): ListState {
       return moveTasks(state, op.ids, op.args);
     case 'setDue':
       return patchTasks(state, op.ids, dueUnit(op.args), now);
+    case 'addTag':
+    case 'removeTag':
+      return tagTasks(state, op.ids, op.args.tagId, op.op === 'addTag');
   }
+}
+
+function tagTasks(
+  state: ListState,
+  ids: readonly string[],
+  tagId: string,
+  add: boolean,
+): ListState {
+  const tasks = { ...state.tasks };
+  let changed = false;
+  for (const id of ids) {
+    const task = tasks[id];
+    if (!task || task.tagIds.includes(tagId) === add) continue;
+    tasks[id] = {
+      ...task,
+      tagIds: add ? [...task.tagIds, tagId] : task.tagIds.filter((t) => t !== tagId),
+    };
+    changed = true;
+  }
+  return changed ? { ...state, tasks } : state;
 }
 
 function createGroup(state: ListState, p: GroupCreateBody): ListState {

@@ -44,7 +44,9 @@ function task(id: string, groupId: string, position: string, extra: Partial<Task
     dueDate: null,
     dueTime: null,
     dueTz: null,
+    startDate: null,
     completedAt: null,
+    tagIds: [],
     counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
     placement: { groupId, position },
     createdAt: 1,
@@ -726,5 +728,42 @@ describe('mergeResponse', () => {
     expect(
       mergeResponse(base, listOps.restoreGroup('prio'), group('prio', 'P', 'a1')).refetch,
     ).toBe(false);
+  });
+});
+
+describe('P3 contract additions', () => {
+  it('adds and removes tags in bulk, and inverts', () => {
+    const base = fixture();
+    const before = applyOp(
+      base,
+      listOps.bulk(ORG, { op: 'addTag', ids: ['a2'], args: { tagId: 'x' } }),
+      ctx,
+    );
+    const add = listOps.bulk(ORG, { op: 'addTag', ids: ['a1', 'a2'], args: { tagId: 'x' } });
+    const after = applyOp(before, add, ctx);
+    expect(after.tasks.a1?.tagIds).toEqual(['x']);
+    expect(after.tasks.a2?.tagIds).toEqual(['x']);
+    expect(applyOp(after, add, ctx)).toBe(after);
+    const undone = applyOps(after, inverseOf(add, before, ctx), ctx);
+    expect(undone.tasks.a1?.tagIds).toEqual([]);
+    expect(undone.tasks.a2?.tagIds).toEqual(['x']);
+    const remove = listOps.bulk(ORG, { op: 'removeTag', ids: ['a2'], args: { tagId: 'x' } });
+    const removed = applyOp(after, remove, ctx);
+    expect(removed.tasks.a2?.tagIds).toEqual([]);
+    expect(applyOps(removed, inverseOf(remove, after, ctx), ctx).tasks.a2?.tagIds).toEqual(['x']);
+  });
+
+  it('treats startDate as part of the due unit', () => {
+    const before = fixture();
+    const op = listOps.bulk(ORG, {
+      op: 'setDue',
+      ids: ['a1'],
+      args: { dueDate: '2026-10-12', startDate: '2026-10-10' },
+    });
+    const after = applyOp(before, op, ctx);
+    expect(after.tasks.a1?.startDate).toBe('2026-10-10');
+    const undone = applyOps(after, inverseOf(op, before, ctx), ctx);
+    expect(undone.tasks.a1?.startDate).toBeNull();
+    expect(undone.tasks.a1?.dueDate).toBeNull();
   });
 });

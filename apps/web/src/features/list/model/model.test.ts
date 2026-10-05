@@ -39,6 +39,8 @@ const task = (id: string, groupId: string, position: string, done = false): Task
   dueDate: null,
   dueTime: null,
   dueTz: null,
+  startDate: null,
+  tagIds: [],
   completedAt: done ? 1 : null,
   counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
   placement: { groupId, position },

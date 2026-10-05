@@ -1147,12 +1147,25 @@
             "minLength": 1,
             "maxLength": 64
           },
+          "startDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "completedAt": {
             "type": [
               "integer",
               "null"
             ],
             "minimum": 0
+          },
+          "tagIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
           },
           "counts": {
             "type": "object",
@@ -1213,7 +1226,9 @@
           "dueDate",
           "dueTime",
           "dueTz",
+          "startDate",
           "completedAt",
+          "tagIds",
           "counts",
           "placement",
           "createdAt",
@@ -1445,9 +1460,36 @@
             "minLength": 1,
             "maxLength": 64
           },
+          "startDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "groupId": {
             "type": "string",
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "parentId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "tagIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "maxItems": 50
+          },
+          "tagNames": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            },
+            "maxItems": 50
           },
           "parse": {
             "type": "boolean"
@@ -1506,6 +1548,19 @@
             ],
             "minLength": 1,
             "maxLength": 64
+          },
+          "startDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "parentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
           }
         }
       },
@@ -1756,6 +1811,80 @@
               "op": {
                 "type": "string",
                 "enum": [
+                  "addTag"
+                ]
+              },
+              "ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "minItems": 1,
+                "maxItems": 200
+              },
+              "args": {
+                "type": "object",
+                "properties": {
+                  "tagId": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                  }
+                },
+                "required": [
+                  "tagId"
+                ]
+              }
+            },
+            "required": [
+              "op",
+              "ids",
+              "args"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": [
+                  "removeTag"
+                ]
+              },
+              "ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "minItems": 1,
+                "maxItems": 200
+              },
+              "args": {
+                "type": "object",
+                "properties": {
+                  "tagId": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                  }
+                },
+                "required": [
+                  "tagId"
+                ]
+              }
+            },
+            "required": [
+              "op",
+              "ids",
+              "args"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": [
                   "setDue"
                 ]
               },
@@ -1790,6 +1919,12 @@
                     ],
                     "minLength": 1,
                     "maxLength": 64
+                  },
+                  "startDate": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 }
               }

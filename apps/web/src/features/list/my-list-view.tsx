@@ -64,6 +64,8 @@ function draftPlaceholder(orgId: string, userId: string, draft: Draft): Task {
     dueDate: null,
     dueTime: null,
     dueTz: null,
+    startDate: null,
+    tagIds: [],
     completedAt: null,
     counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
     placement: { groupId: draft.groupId, position: '' },

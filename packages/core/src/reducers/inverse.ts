@@ -107,7 +107,12 @@ function inversePatch(before: ListState, id: string, p: TaskPatch): ListOpSpec[]
       ? {}
       : { description: task.description ?? '' }),
     ...(touchesDue(p) && !sameDue(task, p)
-      ? { dueDate: task.dueDate, dueTime: task.dueTime, dueTz: task.dueTz }
+      ? {
+          dueDate: task.dueDate,
+          dueTime: task.dueTime,
+          dueTz: task.dueTz,
+          startDate: task.startDate,
+        }
       : {}),
   };
   return Object.keys(undo).length === 0 ? [] : [listOps.patchTask(id, undo)];
@@ -117,13 +122,15 @@ type Due = {
   dueDate?: string | null | undefined;
   dueTime?: string | null | undefined;
   dueTz?: string | null | undefined;
+  startDate?: string | null | undefined;
 };
 
 function sameDue(a: Due, b: Due): boolean {
   return (
     (a.dueDate ?? null) === (b.dueDate ?? null) &&
     (a.dueTime ?? null) === (b.dueTime ?? null) &&
-    (a.dueTz ?? null) === (b.dueTz ?? null)
+    (a.dueTz ?? null) === (b.dueTz ?? null) &&
+    (a.startDate ?? null) === (b.startDate ?? null)
   );
 }
 
@@ -191,7 +198,12 @@ function inverseBulk(
       for (const i of op.ids) {
         const task = before.tasks[i];
         if (!task || sameDue(task, op.args)) continue;
-        const due = { dueDate: task.dueDate, dueTime: task.dueTime, dueTz: task.dueTz };
+        const due = {
+          dueDate: task.dueDate,
+          dueTime: task.dueTime,
+          dueTz: task.dueTz,
+          startDate: task.startDate,
+        };
         const key = JSON.stringify(due);
         const entry = byUnit.get(key) ?? { due, ids: [] };
         entry.ids.push(i);
@@ -199,6 +211,22 @@ function inverseBulk(
       }
       return [...byUnit.values()].flatMap(({ due, ids }) =>
         chunks(ids).map((part) => listOps.bulk(orgId, { op: 'setDue', ids: part, args: due })),
+      );
+    }
+    case 'addTag':
+    case 'removeTag': {
+      const add = op.op === 'addTag';
+      // Only tasks whose tag state actually changes need the opposite op.
+      const ids = op.ids.filter((i) => {
+        const task = before.tasks[i];
+        return task !== undefined && task.tagIds.includes(op.args.tagId) !== add;
+      });
+      return chunks(ids).map((part) =>
+        listOps.bulk(orgId, {
+          op: add ? 'removeTag' : 'addTag',
+          ids: part,
+          args: { tagId: op.args.tagId },
+        }),
       );
     }
   }

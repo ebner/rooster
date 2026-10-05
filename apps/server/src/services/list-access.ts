@@ -205,7 +205,10 @@ export function toTaskDto(
     dueDate: row.dueDate,
     dueTime: row.dueTime,
     dueTz: row.dueTz,
+    startDate: row.startDate,
     completedAt: row.completedAt,
+    // Tags arrive with WP 3.5; until then no task carries any.
+    tagIds: [],
     // Subtasks (P3), comments (P6) and attachments (P10) do not exist yet.
     counts: { ...ZERO_COUNTS },
     placement: place === null ? null : { groupId: place.groupId, position: place.position },

@@ -878,7 +878,9 @@ export interface components {
             dueDate: string | null;
             dueTime: string | null;
             dueTz: string | null;
+            startDate: string | null;
             completedAt: number | null;
+            tagIds: string[];
             counts: {
                 subtasks: number;
                 subtasksDone: number;
@@ -939,7 +941,11 @@ export interface components {
             dueDate?: string | null;
             dueTime?: string | null;
             dueTz?: string | null;
+            startDate?: string | null;
             groupId?: string;
+            parentId?: string;
+            tagIds?: string[];
+            tagNames?: string[];
             parse?: boolean;
         };
         TaskPatchResult: {
@@ -952,6 +958,8 @@ export interface components {
             dueDate?: string | null;
             dueTime?: string | null;
             dueTz?: string | null;
+            startDate?: string | null;
+            parentId?: string | null;
         };
         TaskMoveResult: {
             placement: components["schemas"]["Placement"];
@@ -1002,12 +1010,27 @@ export interface components {
             };
         } | {
             /** @enum {string} */
+            op: "addTag";
+            ids: string[];
+            args: {
+                tagId: string;
+            };
+        } | {
+            /** @enum {string} */
+            op: "removeTag";
+            ids: string[];
+            args: {
+                tagId: string;
+            };
+        } | {
+            /** @enum {string} */
             op: "setDue";
             ids: string[];
             args: {
                 dueDate?: string | null;
                 dueTime?: string | null;
                 dueTz?: string | null;
+                startDate?: string | null;
             };
         };
         TrashPage: {
