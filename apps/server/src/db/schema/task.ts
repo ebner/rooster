@@ -4,6 +4,7 @@ import {
   check,
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
   uniqueIndex,
@@ -89,4 +90,18 @@ export const placement = sqliteTable(
     updatedAt: integer('updated_at').notNull(),
   },
   (t) => [index('placement_list').on(t.userId, t.orgId, t.groupId, t.position)],
+);
+
+/** Per-user expanded parents in the list (05 §3, FR-TASK-11). */
+export const taskExpansion = sqliteTable(
+  'task_expansion',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => task.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.taskId] })],
 );

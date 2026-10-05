@@ -8,7 +8,8 @@ import { OrgService, type OrgServiceOptions } from './org-service.ts';
 import { PlacementService } from './placement-service.ts';
 import { RetentionService } from './retention-service.ts';
 import { SignInPolicy } from './sign-in-policy.ts';
-import { TaskService } from './task-service.ts';
+import { TagService } from './tag-service.ts';
+import { expansionRemovalStep, TaskService } from './task-service.ts';
 import { UserService } from './user-service.ts';
 
 export interface Services {
@@ -20,6 +21,7 @@ export interface Services {
   placements: PlacementService;
   groups: GroupService;
   tasks: TaskService;
+  tags: TagService;
   idempotency: IdempotencyStore;
   retention: RetentionService;
   backups: BackupService;
@@ -30,7 +32,11 @@ export function createServices(deps: ServiceDeps, options: OrgServiceOptions = {
   const placements = new PlacementService(deps, ordering);
   const idempotency = new IdempotencyStore(deps);
   const orgs = new OrgService(deps, {
-    memberRemovalSteps: [placements.memberRemovalStep, ...(options.memberRemovalSteps ?? [])],
+    memberRemovalSteps: [
+      placements.memberRemovalStep,
+      expansionRemovalStep,
+      ...(options.memberRemovalSteps ?? []),
+    ],
   });
   return {
     orgs,
@@ -40,7 +46,8 @@ export function createServices(deps: ServiceDeps, options: OrgServiceOptions = {
     ordering,
     placements,
     groups: new GroupService(deps, ordering, placements),
-    tasks: new TaskService(deps, placements),
+    tasks: new TaskService(deps, placements, ordering),
+    tags: new TagService(deps),
     idempotency,
     retention: new RetentionService(deps, placements, idempotency),
     backups: new BackupService(deps),

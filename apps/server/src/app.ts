@@ -26,6 +26,7 @@ import { registerMeRoutes } from './routes/me.ts';
 import { registerMetaRoutes } from './routes/meta.ts';
 import { registerOrgRoutes } from './routes/orgs.ts';
 import { ProblemSchema } from './routes/problem.ts';
+import { registerTagRoutes } from './routes/tags.ts';
 import { registerTaskRoutes } from './routes/tasks.ts';
 import { createServices, type Services } from './services/index.ts';
 
@@ -110,6 +111,7 @@ export function createApp(deps: AppDeps): App {
   registerAdminRoutes(app, services);
   registerGroupRoutes(app, services);
   registerTaskRoutes(app, services);
+  registerTagRoutes(app, services);
 
   app.openAPIRegistry.register('Problem', ProblemSchema);
   app.doc31(OPENAPI_PATH, openApiDocumentConfig(version));

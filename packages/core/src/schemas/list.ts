@@ -15,6 +15,11 @@ import { nameSchema } from './text.ts';
 export const TASK_TITLE_MAX = 500;
 export const GROUP_NAME_MAX = 80;
 export const BULK_MAX = 200;
+/**
+ * P3. Maximum subtask depth (05 §4.3): the number of ancestors a task may have. A top-level
+ * task has depth 0, so subtasks nest at most five levels below their root.
+ */
+export const SUBTASK_DEPTH_MAX = 5;
 
 export const taskTitleSchema = nameSchema(TASK_TITLE_MAX);
 export const groupNameSchema = nameSchema(GROUP_NAME_MAX);
@@ -290,5 +295,6 @@ export type BulkResult = z.infer<typeof bulkResultSchema>;
 export type TrashPage = z.infer<typeof trashPageSchema>;
 export type TaskDetail = z.infer<typeof taskDetailSchema>;
 export type SubtaskReorder = z.infer<typeof subtaskReorderSchema>;
+export type SubtaskReorderResult = z.infer<typeof subtaskReorderResultSchema>;
 export type TaskDuplicate = z.infer<typeof taskDuplicateSchema>;
 export type OrderingIntent = z.infer<typeof orderingIntentSchema>;

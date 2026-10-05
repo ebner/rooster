@@ -32,9 +32,17 @@ import {
   placementSchema,
   prefsSchema,
   sessionSchema,
+  subtaskReorderResultSchema,
+  subtaskReorderSchema,
+  tagCreateSchema,
+  tagMergeSchema,
+  tagPatchSchema,
+  tagSchema,
   taskCompleteResultSchema,
   taskCompleteSchema,
   taskCreateSchema,
+  taskDetailSchema,
+  taskDuplicateSchema,
   taskMoveResultSchema,
   taskMoveSchema,
   taskPageSchema,
@@ -119,3 +127,19 @@ export const TaskPageSchema = named(
   'TaskPage',
 );
 export const BackupSchema = named(backupSchema, 'Backup');
+
+// Phase 3: detail pane, subtasks and tags (06 §2.3–2.5).
+export const TaskDetailSchema = named(
+  taskDetailSchema.extend({
+    placement: PlacementSchema.nullable(),
+    subtasks: z.array(TaskSchema),
+  }),
+  'TaskDetail',
+);
+export const SubtaskReorderSchema = named(subtaskReorderSchema, 'SubtaskReorder');
+export const SubtaskReorderResultSchema = named(subtaskReorderResultSchema, 'SubtaskReorderResult');
+export const TaskDuplicateSchema = named(taskDuplicateSchema, 'TaskDuplicate');
+export const TagSchema = named(tagSchema, 'Tag');
+export const TagCreateSchema = named(tagCreateSchema, 'TagCreate');
+export const TagPatchSchema = named(tagPatchSchema, 'TagPatch');
+export const TagMergeSchema = named(tagMergeSchema, 'TagMerge');

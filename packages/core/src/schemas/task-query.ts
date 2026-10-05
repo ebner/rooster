@@ -8,6 +8,7 @@ import { taskSchema } from './list.ts';
  */
 
 export const PAGE_LIMIT_DEFAULT = 50;
+const tagFilterValue = z.string().min(1).max(64);
 export const PAGE_LIMIT_MAX = 200;
 
 export const pageQuerySchema = z.object({
@@ -40,6 +41,11 @@ export const taskQuerySchema = pageQuerySchema.extend({
   completed: taskCompletedFilterSchema.optional(),
   dueFrom: isoDateSchema.optional(),
   dueTo: isoDateSchema.optional(),
+  /**
+   * P3. Repeatable (`?tag=a&tag=b`), AND-combined: only tasks carrying every tag. A value is a
+   * tag ID, or else a tag name (case-insensitive). An unknown tag matches nothing.
+   */
+  tag: z.union([tagFilterValue, z.array(tagFilterValue).max(20)]).optional(),
 });
 
 export const taskPageSchema = z.object({

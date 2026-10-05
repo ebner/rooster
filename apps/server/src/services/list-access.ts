@@ -1,6 +1,6 @@
 import type { Group, Task } from '@rooster/core/schemas';
-import { and, asc, eq, inArray, isNull, notInArray } from 'drizzle-orm';
-import { member, organization, placement, task, taskGroup } from '../db/schema/index.ts';
+import { and, asc, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
+import { member, organization, placement, task, taskGroup, taskTag } from '../db/schema/index.ts';
 import { AppError } from '../lib/errors.ts';
 import type { Tx } from './context.ts';
 import type { OrderDomain } from './ordering-service.ts';
@@ -185,13 +185,65 @@ export function toGroupDto(row: GroupRow): Group {
   };
 }
 
-const ZERO_COUNTS = { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 } as const;
+/** Keeps `IN (…)` lists well below SQLite's bound-parameter limit. */
+const IN_CHUNK = 500;
+
+export function chunked<T>(items: readonly T[], size = IN_CHUNK): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+/** Derived TaskDTO fields loaded per batch: tag IDs in add order and subtask counts. */
+export interface TaskExtras {
+  tagIds: Map<string, string[]>;
+  counts: Map<string, { subtasks: number; subtasksDone: number }>;
+}
+
+/**
+ * Tags (ordered by `added_at`, then insertion) and direct live subtask counts of `taskIds`
+ * (FR-TASK-10). Completing a subtask counts it as done; deleted subtasks do not count.
+ */
+export function loadTaskExtras(tx: Tx, taskIds: readonly string[]): TaskExtras {
+  const extras: TaskExtras = { tagIds: new Map(), counts: new Map() };
+  for (const ids of chunked([...new Set(taskIds)])) {
+    const tags = tx
+      .select({ taskId: taskTag.taskId, tagId: taskTag.tagId })
+      .from(taskTag)
+      .where(inArray(taskTag.taskId, ids))
+      .orderBy(asc(taskTag.addedAt), sql`${taskTag}.rowid`)
+      .all();
+    for (const t of tags) {
+      const list = extras.tagIds.get(t.taskId);
+      if (list === undefined) extras.tagIds.set(t.taskId, [t.tagId]);
+      else list.push(t.tagId);
+    }
+    const counts = tx
+      .select({
+        parentId: task.parentId,
+        subtasks: sql<number>`count(*)`,
+        subtasksDone: sql<number>`coalesce(sum(${task.completedAt} IS NOT NULL), 0)`,
+      })
+      .from(task)
+      .where(and(inArray(task.parentId, ids), isNull(task.deletedAt)))
+      .groupBy(task.parentId)
+      .all();
+    for (const c of counts) {
+      if (c.parentId !== null) {
+        extras.counts.set(c.parentId, { subtasks: c.subtasks, subtasksDone: c.subtasksDone });
+      }
+    }
+  }
+  return extras;
+}
 
 export function toTaskDto(
   row: TaskRow,
   place: Pick<PlacementRow, 'groupId' | 'position'> | null,
   options: { description?: boolean; trash?: boolean } = {},
+  extras?: TaskExtras,
 ): Task {
+  const counts = extras?.counts.get(row.id);
   return {
     id: row.id,
     orgId: row.orgId,
@@ -207,10 +259,14 @@ export function toTaskDto(
     dueTz: row.dueTz,
     startDate: row.startDate,
     completedAt: row.completedAt,
-    // Tags arrive with WP 3.5; until then no task carries any.
-    tagIds: [],
-    // Subtasks (P3), comments (P6) and attachments (P10) do not exist yet.
-    counts: { ...ZERO_COUNTS },
+    tagIds: [...(extras?.tagIds.get(row.id) ?? [])],
+    // Comments (P6) and attachments (P10) do not exist yet.
+    counts: {
+      subtasks: counts?.subtasks ?? 0,
+      subtasksDone: counts?.subtasksDone ?? 0,
+      comments: 0,
+      attachments: 0,
+    },
     placement: place === null ? null : { groupId: place.groupId, position: place.position },
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -229,21 +285,130 @@ export function placementsFor(
   userId: string,
   taskIds: readonly string[],
 ): Map<string, PlacementRow> {
-  if (taskIds.length === 0) return new Map();
-  const rows = tx
-    .select()
-    .from(placement)
-    .where(and(eq(placement.userId, userId), inArray(placement.taskId, [...taskIds])))
-    .all();
-  return new Map(rows.map((r) => [r.taskId, r]));
+  const out = new Map<string, PlacementRow>();
+  for (const ids of chunked(taskIds)) {
+    const rows = tx
+      .select()
+      .from(placement)
+      .where(and(eq(placement.userId, userId), inArray(placement.taskId, ids)))
+      .all();
+    for (const r of rows) out.set(r.taskId, r);
+  }
+  return out;
 }
 
 /** Task DTO with the actor's placement, as returned by single-task mutations. */
 export function taskDtoFor(tx: Tx, userId: string, row: TaskRow): Task {
   const place = placementOf(tx, row.id);
-  return toTaskDto(row, place !== undefined && place.userId === userId ? place : null, {
-    description: true,
-  });
+  return toTaskDto(
+    row,
+    place !== undefined && place.userId === userId ? place : null,
+    { description: true },
+    loadTaskExtras(tx, [row.id]),
+  );
+}
+
+/** DTOs for many rows with `userId`'s placements (or the given ones) and the extras. */
+export function taskDtos(
+  tx: Tx,
+  userId: string,
+  rows: readonly TaskRow[],
+  options: { trash?: boolean; places?: ReadonlyMap<string, PlacementRow | null> } = {},
+): Task[] {
+  const ids = rows.map((r) => r.id);
+  const places = options.places ?? placementsFor(tx, userId, ids);
+  const extras = loadTaskExtras(tx, ids);
+  return rows.map((r) =>
+    toTaskDto(r, places.get(r.id) ?? null, options.trash === true ? { trash: true } : {}, extras),
+  );
+}
+
+/** Live rows by ID (any order; missing and deleted IDs are skipped). */
+export function liveTasksById(tx: Tx, ids: readonly string[]): TaskRow[] {
+  const out: TaskRow[] = [];
+  for (const chunk of chunked([...new Set(ids)])) {
+    out.push(
+      ...tx
+        .select()
+        .from(task)
+        .where(and(inArray(task.id, chunk), isNull(task.deletedAt)))
+        .all(),
+    );
+  }
+  return out;
+}
+
+/** Ancestors of a task, from its direct parent up to the root. */
+export function ancestorsOf(tx: Tx, row: Pick<TaskRow, 'id' | 'parentId'>): TaskRow[] {
+  const out: TaskRow[] = [];
+  const seen = new Set([row.id]);
+  let parentId = row.parentId;
+  while (parentId !== null && !seen.has(parentId)) {
+    const parent = tx.select().from(task).where(eq(task.id, parentId)).get();
+    if (parent === undefined) break;
+    out.push(parent);
+    seen.add(parent.id);
+    parentId = parent.parentId;
+  }
+  return out;
+}
+
+/** Levels of descendants below `id` (deleted ones included, they may come back): 0 = a leaf. */
+export function subtreeHeight(tx: Tx, id: string): number {
+  let height = 0;
+  let frontier = [id];
+  const seen = new Set(frontier);
+  while (frontier.length > 0) {
+    const next: string[] = [];
+    for (const chunk of chunked(frontier)) {
+      for (const c of tx
+        .select({ id: task.id })
+        .from(task)
+        .where(inArray(task.parentId, chunk))
+        .all()) {
+        if (!seen.has(c.id)) {
+          seen.add(c.id);
+          next.push(c.id);
+        }
+      }
+    }
+    if (next.length === 0) break;
+    height++;
+    frontier = next;
+  }
+  return height;
+}
+
+/**
+ * The siblings of a parent's subtasks: `task(parent_id)` ordered by `subtask_position, id`.
+ * Soft-deleted subtasks keep their key so a restore returns them to their slot.
+ */
+export function subtaskDomain(
+  tx: Tx,
+  input: { parentId: string; now: number },
+  exclude: readonly string[] = [],
+): OrderDomain {
+  const items = tx
+    .select({ id: task.id, position: task.subtaskPosition })
+    .from(task)
+    .where(
+      and(
+        eq(task.parentId, input.parentId),
+        exclude.length > 0 ? notInArray(task.id, [...exclude]) : undefined,
+      ),
+    )
+    .orderBy(asc(task.subtaskPosition), asc(task.id))
+    .all()
+    .map((r) => ({ id: r.id, position: r.position ?? '' }));
+  return {
+    items,
+    write: (id, position) => {
+      tx.update(task)
+        .set({ subtaskPosition: position, updatedAt: input.now })
+        .where(eq(task.id, id))
+        .run();
+    },
+  };
 }
 
 /**

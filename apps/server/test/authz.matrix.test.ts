@@ -45,6 +45,10 @@ interface Fixture {
   /** The owner's task in the shared org, and one in Trash. */
   taskId: string;
   trashedTaskId: string;
+  /** A subtask of `taskId`, and two tags of the shared org. */
+  subtaskId: string;
+  tagId: string;
+  otherTagId: string;
   backupName: string;
   jars: Record<Exclude<ActorKind, 'anonymous' | 'readOnlyPat'>, CookieJar>;
   sessions: Record<Exclude<ActorKind, 'anonymous' | 'readOnlyPat'>, string>;
@@ -287,6 +291,56 @@ const ROWS: Record<string, Row> = {
     request: (f) => ({ path: `/api/v1/orgs/${f.orgId}/trash` }),
     expect: orgScoped(200, 200),
   },
+  // Phase 3: detail, subtasks, expansion and tags. Everything is org-scoped; expansion is
+  // per user, so every member may expand any task they can see.
+  'GET /api/v1/tasks/{id}': {
+    request: (f) => ({ path: `/api/v1/tasks/${f.taskId}` }),
+    expect: orgScoped(200, 200),
+  },
+  'POST /api/v1/tasks/{id}/reorder': {
+    request: (f) => ({ path: `/api/v1/tasks/${f.subtaskId}/reorder`, body: { afterId: null } }),
+    expect: orgScoped(200, 200),
+  },
+  'POST /api/v1/tasks/{id}/duplicate': {
+    request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/duplicate`, body: {} }),
+    expect: orgScoped(201, 201),
+  },
+  'PUT /api/v1/tasks/{id}/expanded': {
+    request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/expanded` }),
+    expect: orgScoped(204, 204),
+  },
+  'DELETE /api/v1/tasks/{id}/expanded': {
+    request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/expanded` }),
+    expect: orgScoped(204, 204),
+  },
+  'PUT /api/v1/tasks/{id}/tags/{tagId}': {
+    request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/tags/${f.otherTagId}` }),
+    expect: orgScoped(200, 200),
+  },
+  'DELETE /api/v1/tasks/{id}/tags/{tagId}': {
+    request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/tags/${f.tagId}` }),
+    expect: orgScoped(200, 200),
+  },
+  'GET /api/v1/orgs/{orgId}/tags': {
+    request: (f) => ({ path: `/api/v1/orgs/${f.orgId}/tags` }),
+    expect: orgScoped(200, 200),
+  },
+  'POST /api/v1/orgs/{orgId}/tags': {
+    request: (f) => ({ path: `/api/v1/orgs/${f.orgId}/tags`, body: { name: 'New tag' } }),
+    expect: orgScoped(201, 201),
+  },
+  'PATCH /api/v1/tags/{id}': {
+    request: (f) => ({ path: `/api/v1/tags/${f.tagId}`, body: { name: 'Renamed' } }),
+    expect: orgScoped(200, 200),
+  },
+  'DELETE /api/v1/tags/{id}': {
+    request: (f) => ({ path: `/api/v1/tags/${f.tagId}` }),
+    expect: orgScoped(204, 204),
+  },
+  'POST /api/v1/tags/{id}/merge': {
+    request: (f) => ({ path: `/api/v1/tags/${f.tagId}/merge`, body: { intoId: f.otherTagId } }),
+    expect: orgScoped(200, 200),
+  },
 };
 
 const dataDirs: (() => void)[] = [];
@@ -339,6 +393,11 @@ function fixture(): Fixture {
   const task = tasks.create(ownerActor, org.id, { title: 'Task', groupId: groupA });
   const trashed = tasks.create(ownerActor, org.id, { title: 'Trashed' });
   tasks.remove(ownerActor, trashed.id, meta);
+  const tag = app.services.tags.create(ownerActor, org.id, { name: 'Tag' });
+  const otherTag = app.services.tags.create(ownerActor, org.id, { name: 'Other tag' });
+  app.services.tags.setOnTask(ownerActor, task.id, tag.id, true);
+  const subtask = tasks.create(ownerActor, org.id, { title: 'Subtask', parentId: task.id });
+  tasks.create(ownerActor, org.id, { title: 'Sibling', parentId: task.id });
 
   // A disabled user whose session somehow survived must still be rejected.
   db.orm.update(user).set({ disabledAt: Date.now() }).where(eq(user.id, disabled.userId)).run();
@@ -363,6 +422,9 @@ function fixture(): Fixture {
     deletedGroupId: deleted,
     taskId: task.id,
     trashedTaskId: trashed.id,
+    subtaskId: subtask.id,
+    tagId: tag.id,
+    otherTagId: otherTag.id,
     backupName: backup.name,
     jars: {
       owner: owner.jar,

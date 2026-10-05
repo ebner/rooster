@@ -17,9 +17,13 @@ import {
   type OrderingIntent,
   PAGE_LIMIT_DEFAULT,
   type PageQuery,
+  SUBTASK_DEPTH_MAX,
+  type SubtaskReorder,
   type Task,
   type TaskCompleteResult,
   type TaskCreate,
+  type TaskDetail,
+  type TaskDuplicate,
   type TaskMove,
   type TaskMoveResult,
   type TaskPage,
@@ -30,15 +34,29 @@ import {
 } from '@rooster/core/schemas';
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
-import { organization, placement, task, taskGroup, user } from '../db/schema/index.ts';
+import {
+  organization,
+  placement,
+  tag as tagTable,
+  task,
+  taskExpansion,
+  taskGroup,
+  taskTag,
+  user,
+} from '../db/schema/index.ts';
 import { AppError } from '../lib/errors.ts';
 import { type Actor, immediate, type OpMeta, type ServiceDeps, type Tx } from './context.ts';
 import { listGroups } from './group-service.ts';
 import {
+  ancestorsOf,
+  chunked,
   clockAllows,
   descendantsOf,
   type GroupRow,
   inboxOf,
+  liveTasksById,
+  loadTaskExtras,
+  type PlacementRow,
   parseClock,
   placementOf,
   placementsFor,
@@ -46,32 +64,40 @@ import {
   requireOwnGroup,
   requireTask,
   softDeleteTasks,
+  subtaskDomain,
+  subtreeHeight,
   type TaskRow,
   taskDeleted,
   taskDtoFor,
+  taskDtos,
   taskNotFound,
   toGroupDto,
   toTaskDto,
 } from './list-access.ts';
-import type { OrderTarget } from './ordering-service.ts';
+import type { OrderingService, OrderTarget } from './ordering-service.ts';
 import { requireMembership } from './org-access.ts';
-import type { PlacementService } from './placement-service.ts';
+import type { MemberRemovalStep } from './org-service.ts';
+import type { PlacementService, PlacementTarget } from './placement-service.ts';
+import { attachTags, resolveTagsForCreate, setTaskTag } from './tag-service.ts';
 
 const DAY_MS = 86_400_000;
 /** my-list includes tasks completed within the last 14 days by default (06 §2.3). */
 export const COMPLETED_WINDOW_MS = 14 * DAY_MS;
 
-const DUE_KEYS = ['dueDate', 'dueTime', 'dueTz'] as const;
+const DUE_KEYS = ['dueDate', 'dueTime', 'dueTz', 'startDate'] as const;
 
 interface DueUnit {
   dueDate: string | null;
   dueTime: string | null;
   dueTz: string | null;
+  startDate: string | null;
 }
 
 /**
  * The due unit as stored (05 §4.4): absent members are null, and a timezone is kept only
- * together with a time. An unknown timezone is a validation error, never a 5xx.
+ * together with a time. The whole unit is validated here, not only by the route schema,
+ * because bulk `setDue`, `parse: true` and other service callers bypass it: an unknown
+ * timezone or a start date without (or after) the due date is a 422, never a CHECK 5xx.
  */
 function dueUnit(
   input: {
@@ -86,7 +112,17 @@ function dueUnit(
       { path: 'dueTz', message: 'Expected an IANA timezone such as Europe/Stockholm' },
     ]);
   }
-  return { dueDate, dueTime, dueTz };
+  const startDate = input.startDate ?? null;
+  // ISO dates compare correctly as strings (05 §3 CHECK task_start_before_due).
+  if (startDate !== null && (dueDate === null || startDate > dueDate)) {
+    throw new AppError(
+      'validation_failed',
+      422,
+      'A start date needs a due date and must not be after it.',
+      [{ path: 'startDate', message: 'Expected a date on or before the due date' }],
+    );
+  }
+  return { dueDate, dueTime, dueTz, startDate };
 }
 
 function hasDue(input: object): boolean {
@@ -112,6 +148,9 @@ function decodeCursor<T>(cursor: string | undefined, check: (v: unknown) => v is
 
 const isTrashCursor = (v: unknown): v is [number, string] =>
   Array.isArray(v) && typeof v[0] === 'number' && typeof v[1] === 'string';
+const invalidParent = (detail: string) =>
+  new AppError('invalid_parent', 422, detail, [{ path: 'parentId', message: detail }]);
+
 const isOffsetCursor = (v: unknown): v is { o: number } =>
   typeof v === 'object' &&
   v !== null &&
@@ -119,11 +158,28 @@ const isOffsetCursor = (v: unknown): v is { o: number } =>
   Number.isInteger((v as { o: number }).o) &&
   (v as { o: number }).o >= 0;
 
+/** Member removal (05 §4.2 step 3): the leaving member's expansions in that org go too. */
+export const expansionRemovalStep: MemberRemovalStep = (tx, { orgId, userId }) => {
+  const ids = tx
+    .select({ id: task.id })
+    .from(taskExpansion)
+    .innerJoin(task, eq(task.id, taskExpansion.taskId))
+    .where(and(eq(taskExpansion.userId, userId), eq(task.orgId, orgId)))
+    .all()
+    .map((r) => r.id);
+  for (const chunk of chunked(ids)) {
+    tx.delete(taskExpansion)
+      .where(and(eq(taskExpansion.userId, userId), inArray(taskExpansion.taskId, chunk)))
+      .run();
+  }
+};
+
 /** Tasks (FR-TASK, 05 §4.3) and the actor's list reads. Authorisation is org membership. */
 export class TaskService {
   constructor(
     private readonly deps: ServiceDeps,
     private readonly placements: PlacementService,
+    private readonly ordering: OrderingService,
   ) {}
 
   private now(): number {
@@ -133,10 +189,12 @@ export class TaskService {
   // --- create -------------------------------------------------------------------------------
 
   /**
-   * Creates a task assigned to the actor and places it in their list: in `groupId` (default
-   * the Inbox) at the intent. Without any intent it goes to the top of the Inbox, or the end
-   * of a named group. A repeated create with the same client `id` and content
-   * returns the existing task; the same `id` with other content is `409 id_conflict`.
+   * Creates a task. A top-level task is assigned to the actor and placed in their list: in
+   * `groupId` (default the Inbox) at the intent; without any intent it goes to the top of the
+   * Inbox, or the end of a named group. With `parentId` it is a subtask (same org, depth ≤ 5)
+   * assigned to the parent's assignee, placed among its siblings at the intent (default: the
+   * end). A repeated create with the same client `id` and content returns the existing task;
+   * the same `id` with other content is `409 id_conflict`.
    */
   create(actor: Actor, orgRef: string, input: TaskCreate, _meta?: OpMeta): Task {
     return immediate(this.deps.db, (tx) => {
@@ -151,61 +209,173 @@ export class TaskService {
           const same =
             existing.orgId === org.id &&
             existing.createdBy === actor.userId &&
+            existing.parentId === (input.parentId ?? null) &&
             existing.title === fields.title &&
             existing.description === description &&
             existing.dueDate === due.dueDate &&
             existing.dueTime === due.dueTime &&
-            existing.dueTz === due.dueTz;
+            existing.dueTz === due.dueTz &&
+            existing.startDate === due.startDate;
           if (!same) throw new AppError('id_conflict', 409, 'That ID is already in use.');
           return taskDtoFor(tx, actor.userId, existing);
         }
       }
 
-      const group =
-        fields.groupId === undefined
-          ? inboxOf(tx, actor.userId, org.id)
-          : requireOwnGroup(tx, actor.userId, fields.groupId, { orgId: org.id });
-      const seq = tx
-        .update(organization)
-        .set({ taskSeq: sql`${organization.taskSeq} + 1` })
-        .where(eq(organization.id, org.id))
-        .returning({ taskSeq: organization.taskSeq })
-        .get();
       const now = this.now();
-      const row: TaskRow = {
-        id: input.id ?? uuidv7(),
-        orgId: org.id,
-        seq: seq?.taskSeq ?? null,
-        parentId: null,
-        subtaskPosition: null,
-        title: fields.title,
-        description,
-        assigneeId: actor.userId,
-        createdBy: actor.userId,
-        ...due,
-        startDate: null,
-        recurrence: null,
-        recurrenceBasis: null,
-        seriesId: null,
-        completedAt: null,
-        completedBy: null,
-        fieldClock: '{}',
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-        deletedBy: null,
-      };
-      tx.insert(task).values(row).run();
-      const intent: { afterId?: string | null; beforeId?: string | null } = {};
+      const parent =
+        input.parentId === undefined
+          ? null
+          : this.requireParent(tx, actor, org.id, input.parentId, null);
+      const intent: OrderingIntent = {};
       if ('afterId' in input) intent.afterId = input.afterId ?? null;
       if ('beforeId' in input) intent.beforeId = input.beforeId ?? null;
-      this.placements.reconcilePlacements(tx, [row.id], {
-        userId: actor.userId,
-        group,
-        intent,
+      const group =
+        parent !== null
+          ? null
+          : fields.groupId === undefined
+            ? inboxOf(tx, actor.userId, org.id)
+            : requireOwnGroup(tx, actor.userId, fields.groupId, { orgId: org.id });
+      const tagIds = resolveTagsForCreate(tx, {
+        orgId: org.id,
+        ...(input.tagIds === undefined ? {} : { tagIds: input.tagIds }),
+        ...(input.tagNames === undefined ? {} : { tagNames: input.tagNames }),
+        now,
       });
+      const row = this.insertTask(tx, {
+        id: input.id ?? uuidv7(),
+        orgId: org.id,
+        parentId: parent?.id ?? null,
+        subtaskPosition:
+          parent === null
+            ? null
+            : this.siblingKey(
+                tx,
+                parent.id,
+                'afterId' in intent || 'beforeId' in intent ? intent : 'end',
+              ),
+        title: fields.title,
+        description,
+        // A subtask belongs to whoever owns its parent, so it stays inside the parent's row
+        // instead of becoming an orphan (05 §4.1).
+        assigneeId: parent === null ? actor.userId : parent.assigneeId,
+        createdBy: actor.userId,
+        ...due,
+        now,
+      });
+      attachTags(tx, row.id, tagIds, now);
+      this.placements.reconcilePlacements(
+        tx,
+        [row.id],
+        group === null ? undefined : { userId: actor.userId, group, intent },
+      );
       return taskDtoFor(tx, actor.userId, row);
     });
+  }
+
+  /** Inserts a task row with the next org sequence number and fresh clocks. */
+  private insertTask(
+    tx: Tx,
+    input: Pick<
+      TaskRow,
+      | 'id'
+      | 'orgId'
+      | 'parentId'
+      | 'subtaskPosition'
+      | 'title'
+      | 'description'
+      | 'assigneeId'
+      | 'createdBy'
+      | 'dueDate'
+      | 'dueTime'
+      | 'dueTz'
+      | 'startDate'
+    > &
+      Partial<Pick<TaskRow, 'recurrence' | 'recurrenceBasis'>> & { now: number },
+  ): TaskRow {
+    const seq = tx
+      .update(organization)
+      .set({ taskSeq: sql`${organization.taskSeq} + 1` })
+      .where(eq(organization.id, input.orgId))
+      .returning({ taskSeq: organization.taskSeq })
+      .get();
+    const { now, ...fields } = input;
+    const row: TaskRow = {
+      ...fields,
+      seq: seq?.taskSeq ?? null,
+      recurrence: input.recurrence ?? null,
+      recurrenceBasis: input.recurrenceBasis ?? null,
+      seriesId: null,
+      completedAt: null,
+      completedBy: null,
+      fieldClock: '{}',
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+      deletedBy: null,
+    };
+    tx.insert(task).values(row).run();
+    return row;
+  }
+
+  /** A fractional key among the subtasks of `parentId` (04 §7), excluding `exclude`. */
+  private siblingKey(
+    tx: Tx,
+    parentId: string,
+    target: OrderTarget,
+    exclude: readonly string[] = [],
+  ): string {
+    const domain = subtaskDomain(tx, { parentId, now: this.now() }, exclude);
+    const [key] = this.ordering.place(domain, target).keys;
+    return key as string;
+  }
+
+  /**
+   * The parent for a create or re-parent (05 §4.3): a live task of the same org, not the
+   * task itself or one of its descendants (`422 subtask_cycle`), and shallow enough that the
+   * moved subtree stays within SUBTASK_DEPTH_MAX ancestors (`422 subtask_depth`). An unknown
+   * or invisible parent is `422 invalid_parent`; a deleted one `410`.
+   */
+  private requireParent(
+    tx: Tx,
+    actor: Actor,
+    orgId: string,
+    parentId: string,
+    moving: TaskRow | null,
+  ): TaskRow {
+    let parent: TaskRow;
+    try {
+      parent = requireTask(tx, actor.userId, parentId);
+    } catch (err) {
+      if (err instanceof AppError && err.status === 404) {
+        throw invalidParent('The parent task does not exist.');
+      }
+      throw err;
+    }
+    if (parent.orgId !== orgId) {
+      throw invalidParent('A subtask must be in the same organisation as its parent.');
+    }
+    if (parent.deletedAt !== null) {
+      throw new AppError('conflict_deleted', 410, 'The parent task is deleted.');
+    }
+    const ancestors = ancestorsOf(tx, parent);
+    if (moving !== null && (parent.id === moving.id || ancestors.some((a) => a.id === moving.id))) {
+      throw new AppError(
+        'subtask_cycle',
+        422,
+        'A task cannot become a subtask of itself or of its own subtasks.',
+        [{ path: 'parentId', message: 'The parent is the task or one of its subtasks' }],
+      );
+    }
+    const depth = ancestors.length + 1 + (moving === null ? 0 : subtreeHeight(tx, moving.id));
+    if (depth > SUBTASK_DEPTH_MAX) {
+      throw new AppError(
+        'subtask_depth',
+        422,
+        `Subtasks can be nested at most ${SUBTASK_DEPTH_MAX} levels deep.`,
+        [{ path: 'parentId', message: `Depth would be ${depth}` }],
+      );
+    }
+    return parent;
   }
 
   /**
@@ -276,8 +446,10 @@ export class TaskService {
 
   /**
    * Partial update with per-field LWW (04 §6.2): a field applies when the edit time is not
-   * older than its clock. The due unit is one field (05 §4.4). Skipped fields are listed in
-   * `ignoredFields`.
+   * older than its clock. The due unit (with the start date) is one field, and so is the
+   * parent (`parent_id` with `subtask_position`, 05 §4.4). Skipped fields are listed in
+   * `ignoredFields`. Re-parenting appends to the new parent's subtasks; `parentId: null`
+   * makes the task top-level, which places it at the top of its assignee's Inbox.
    */
   patch(actor: Actor, taskId: string, input: TaskPatch, meta: OpMeta): TaskPatchResult {
     return immediate(this.deps.db, (tx) => {
@@ -326,11 +498,27 @@ export class TaskService {
         () => Object.assign(changes, due),
       );
     }
+    let reparented = false;
+    const parentId = input.parentId;
+    if (parentId !== undefined && parentId !== row.parentId) {
+      apply('parent', ['parentId'], () => {
+        if (parentId === null) {
+          changes.parentId = null;
+          changes.subtaskPosition = null;
+        } else {
+          const parent = this.requireParent(tx, actor, row.orgId, parentId, row);
+          changes.parentId = parent.id;
+          changes.subtaskPosition = this.siblingKey(tx, parent.id, 'end');
+        }
+        reparented = true;
+      });
+    }
     if (applied) {
       const next = { ...changes, fieldClock: JSON.stringify(clock), updatedAt: this.now() };
       tx.update(task).set(next).where(eq(task.id, row.id)).run();
       Object.assign(row, next);
     }
+    if (reparented) this.placements.reconcilePlacements(tx, [row.id]);
     return { task: taskDtoFor(tx, actor.userId, row), ignoredFields };
   }
 
@@ -425,6 +613,17 @@ export class TaskService {
       .set({ fieldClock: JSON.stringify(clock) })
       .where(eq(task.id, row.id))
       .run();
+    // A subtask deleted on its own, whose parent was deleted later, comes back top-level:
+    // it cannot live under a parent in Trash.
+    const parent = row.parentId === null ? undefined : this.reload(tx, row.parentId);
+    if (parent !== undefined && parent.deletedAt !== null) {
+      clock.parent = meta.editTime;
+      tx.update(task)
+        .set({ parentId: null, subtaskPosition: null, fieldClock: JSON.stringify(clock) })
+        .where(eq(task.id, row.id))
+        .run();
+      this.placements.reconcilePlacements(tx, [row.id]);
+    }
     const orphaned = tx
       .select({ taskId: placement.taskId, userId: placement.userId, orgId: placement.orgId })
       .from(placement)
@@ -535,6 +734,16 @@ export class TaskService {
             case 'restore':
               this.applyRestore(tx, requireTask(tx, actor.userId, id), meta);
               break;
+            case 'addTag':
+            case 'removeTag':
+              setTaskTag(tx, {
+                userId: actor.userId,
+                taskId: id,
+                tagId: op.args.tagId,
+                on: op.op === 'addTag',
+                now: this.now(),
+              });
+              break;
             case 'setDue': {
               const due = dueUnit(op.args);
               const patch: TaskPatch = { ...due };
@@ -581,11 +790,193 @@ export class TaskService {
     });
   }
 
+  // --- subtasks, duplicate, expansion (P3) -------------------------------------------------
+
+  /**
+   * Reorders a subtask among its siblings (LWW key `parent`). A newer clock keeps the current
+   * position, which is returned like any other result.
+   */
+  reorder(actor: Actor, taskId: string, input: SubtaskReorder, meta: OpMeta) {
+    return immediate(this.deps.db, (tx) => {
+      const row = this.requireLive(tx, actor, taskId);
+      if (row.parentId === null || row.subtaskPosition === null) {
+        throw new AppError('not_subtask', 409, 'Only subtasks can be reordered among siblings.');
+      }
+      const clock = parseClock(row.fieldClock);
+      if (!clockAllows(clock, 'parent', meta.editTime)) {
+        return { subtaskPosition: row.subtaskPosition };
+      }
+      clock.parent = meta.editTime;
+      const target: OrderTarget = {
+        ...(input.afterId === undefined ? {} : { afterId: input.afterId }),
+        ...(input.beforeId === undefined ? {} : { beforeId: input.beforeId }),
+      };
+      const subtaskPosition = this.siblingKey(tx, row.parentId, target, [row.id]);
+      tx.update(task)
+        .set({ subtaskPosition, fieldClock: JSON.stringify(clock), updatedAt: this.now() })
+        .where(eq(task.id, row.id))
+        .run();
+      return { subtaskPosition };
+    });
+  }
+
+  /**
+   * Duplicate (FR-TASK-13): copies title, description, the due unit and tags, and with
+   * `includeSubtasks` every live subtask recursively (reopened, same sibling order). The
+   * copies get new sequence numbers; each is assigned like a create (top-level: the actor;
+   * subtask: its parent's assignee). A top-level copy goes directly below the original in the
+   * actor's group (top of the Inbox if the original is not in the actor's list); a subtask
+   * copy directly below the original among its siblings. A repeated call with the same `id`
+   * returns the copy.
+   */
+  duplicate(actor: Actor, taskId: string, input: TaskDuplicate, _meta?: OpMeta): Task {
+    return immediate(this.deps.db, (tx) => {
+      const source = this.requireLive(tx, actor, taskId);
+      if (input.id !== undefined) {
+        const existing = tx.select().from(task).where(eq(task.id, input.id)).get();
+        if (existing !== undefined) {
+          const same =
+            existing.orgId === source.orgId &&
+            existing.createdBy === actor.userId &&
+            existing.parentId === source.parentId &&
+            existing.title === source.title;
+          if (!same) throw new AppError('id_conflict', 409, 'That ID is already in use.');
+          return taskDtoFor(tx, actor.userId, existing);
+        }
+      }
+      const now = this.now();
+      const parent = source.parentId === null ? null : this.reload(tx, source.parentId);
+      const copyOf = (
+        from: TaskRow,
+        id: string,
+        under: TaskRow | null,
+        subtaskPosition: string | null,
+      ): TaskRow => {
+        const row = this.insertTask(tx, {
+          id,
+          orgId: from.orgId,
+          parentId: under?.id ?? null,
+          subtaskPosition,
+          title: from.title,
+          description: from.description,
+          assigneeId: under === null ? actor.userId : under.assigneeId,
+          createdBy: actor.userId,
+          dueDate: from.dueDate,
+          dueTime: from.dueTime,
+          dueTz: from.dueTz,
+          startDate: from.startDate,
+          recurrence: from.recurrence,
+          recurrenceBasis: from.recurrenceBasis,
+          now,
+        });
+        const tags = tx
+          .select({ tagId: taskTag.tagId })
+          .from(taskTag)
+          .where(eq(taskTag.taskId, from.id))
+          .orderBy(asc(taskTag.addedAt), sql`${taskTag}.rowid`)
+          .all()
+          .map((t) => t.tagId);
+        attachTags(tx, row.id, tags, now);
+        return row;
+      };
+      const top = copyOf(
+        source,
+        input.id ?? uuidv7(),
+        parent,
+        parent === null ? null : this.siblingKey(tx, parent.id, { afterId: source.id }),
+      );
+      // An omitted body skips schema defaults, so absent means "include".
+      if (input.includeSubtasks !== false) {
+        let frontier: [TaskRow, TaskRow][] = [[source, top]];
+        while (frontier.length > 0) {
+          const next: [TaskRow, TaskRow][] = [];
+          for (const [from, to] of frontier) {
+            const children = tx
+              .select()
+              .from(task)
+              .where(and(eq(task.parentId, from.id), isNull(task.deletedAt)))
+              .orderBy(asc(task.subtaskPosition), asc(task.id))
+              .all();
+            for (const child of children) {
+              // The new parent's domain is empty, so the original keys keep the order.
+              next.push([child, copyOf(child, uuidv7(), to, child.subtaskPosition)]);
+            }
+          }
+          frontier = next;
+        }
+      }
+      let target: PlacementTarget | undefined;
+      const place = parent === null ? placementOf(tx, source.id) : undefined;
+      if (place !== undefined && place.userId === actor.userId) {
+        const group = tx.select().from(taskGroup).where(eq(taskGroup.id, place.groupId)).get();
+        if (group !== undefined && group.deletedAt === null) {
+          target = { userId: actor.userId, group, intent: { afterId: source.id } };
+        }
+      }
+      this.placements.reconcilePlacements(tx, [top.id], target);
+      return taskDtoFor(tx, actor.userId, top);
+    });
+  }
+
+  /**
+   * Persists the actor's expansion of a parent row (FR-TASK-11). Idempotent; any task the
+   * actor can see. Expanding a deleted task is `410`; collapsing always succeeds.
+   */
+  setExpanded(actor: Actor, taskId: string, expanded: boolean): void {
+    immediate(this.deps.db, (tx) => {
+      const row = requireTask(tx, actor.userId, taskId);
+      if (expanded) {
+        if (row.deletedAt !== null) throw taskDeleted();
+        tx.insert(taskExpansion)
+          .values({ userId: actor.userId, taskId: row.id })
+          .onConflictDoNothing()
+          .run();
+      } else {
+        tx.delete(taskExpansion)
+          .where(and(eq(taskExpansion.userId, actor.userId), eq(taskExpansion.taskId, row.id)))
+          .run();
+      }
+    });
+  }
+
+  /**
+   * The full task (06 §2.4): description, live direct subtasks in sibling order and the
+   * parent chain (root first). A deleted task is returned with `deletedAt` (Trash).
+   */
+  detail(actor: Actor, taskId: string): TaskDetail {
+    return immediate(this.deps.db, (tx) => {
+      const row = requireTask(tx, actor.userId, taskId);
+      const subtasks = tx
+        .select()
+        .from(task)
+        .where(and(eq(task.parentId, row.id), isNull(task.deletedAt)))
+        .orderBy(asc(task.subtaskPosition), asc(task.id))
+        .all();
+      const place = placementOf(tx, row.id);
+      const dto = toTaskDto(
+        row,
+        place !== undefined && place.userId === actor.userId ? place : null,
+        { description: true, trash: true },
+        loadTaskExtras(tx, [row.id]),
+      );
+      return {
+        ...dto,
+        description: row.description,
+        subtasks: taskDtos(tx, actor.userId, subtasks),
+        parentChain: ancestorsOf(tx, row)
+          .reverse()
+          .map((a) => ({ id: a.id, title: a.title })),
+      };
+    });
+  }
+
   // --- reads --------------------------------------------------------------------------------
 
   /**
    * The actor's list in an org (06 §2.3): live groups (Inbox first) and every live task
-   * placed in them, open or completed since `completedSince` (default: 14 days ago).
+   * placed in them, open or completed since `completedSince` (default: 14 days ago). Then,
+   * with `placement: null`: every live subtask (any depth, any assignee, open or completed)
+   * of those tasks, and the live parent chain of the actor's orphan subtasks (breadcrumbs).
    */
   myList(actor: Actor, orgRef: string, completedSince?: number): MyList {
     return immediate(this.deps.db, (tx) => {
@@ -593,7 +984,7 @@ export class TaskService {
       const now = this.now();
       const since = completedSince ?? now - COMPLETED_WINDOW_MS;
       const groups = listGroups(tx, actor.userId, org.id);
-      const rows = tx
+      const placed = tx
         .select({ task, place: placement })
         .from(placement)
         .innerJoin(task, eq(task.id, placement.taskId))
@@ -609,10 +1000,46 @@ export class TaskService {
         )
         .orderBy(asc(placement.groupId), asc(placement.position), asc(placement.taskId))
         .all();
+      const included = new Set(placed.map((r) => r.task.id));
+      const extraIds = descendantsOf(tx, [...included], { deletedAt: null }).filter(
+        (id) => !included.has(id),
+      );
+      for (const id of extraIds) included.add(id);
+      const extra = liveTasksById(tx, extraIds);
+      for (const { task: t } of placed) {
+        if (t.parentId === null) continue;
+        for (const a of ancestorsOf(tx, t)) {
+          if (included.has(a.id) || a.deletedAt !== null) continue;
+          included.add(a.id);
+          extra.push(a);
+        }
+      }
+      extra.sort(
+        (a, b) =>
+          compareKeys(a.parentId ?? '', b.parentId ?? '') ||
+          compareKeys(a.subtaskPosition ?? '', b.subtaskPosition ?? '') ||
+          compareKeys(a.id, b.id),
+      );
+      const places = new Map<string, PlacementRow | null>(placed.map((r) => [r.task.id, r.place]));
+      const rows = [...placed.map((r) => r.task), ...extra];
+      const expandedTaskIds = tx
+        .select({ id: taskExpansion.taskId })
+        .from(taskExpansion)
+        .innerJoin(task, eq(task.id, taskExpansion.taskId))
+        .where(
+          and(
+            eq(taskExpansion.userId, actor.userId),
+            eq(task.orgId, org.id),
+            isNull(task.deletedAt),
+          ),
+        )
+        .orderBy(asc(taskExpansion.taskId))
+        .all()
+        .map((r) => r.id);
       return {
         groups: groups.map(toGroupDto),
-        tasks: rows.map((r) => toTaskDto(r.task, r.place)),
-        expandedTaskIds: [],
+        tasks: taskDtos(tx, actor.userId, rows, { places }),
+        expandedTaskIds,
         serverTime: now,
       };
     });
@@ -652,14 +1079,9 @@ export class TaskService {
         .all()
         .map((r) => r.task);
       const page = rows.slice(0, limit);
-      const places = placementsFor(
-        tx,
-        actor.userId,
-        page.map((r) => r.id),
-      );
       const last = page[page.length - 1];
       return {
-        items: page.map((r) => toTaskDto(r, places.get(r.id) ?? null, { trash: true })),
+        items: taskDtos(tx, actor.userId, page, { trash: true }),
         nextCursor:
           rows.length > limit && last !== undefined
             ? encodeCursor([last.deletedAt ?? 0, last.id])
@@ -738,7 +1160,19 @@ export class TaskService {
       }
 
       const week = addDays(today, 6);
+      const wantedTags = this.resolveTagFilter(tx, org.id, query.tag);
+      const tagged =
+        wantedTags === null
+          ? null
+          : this.tagSets(
+              tx,
+              rows.map((r) => r.task.id),
+            );
       const filtered = rows.filter(({ task: t }) => {
+        if (wantedTags !== null) {
+          const has = tagged?.get(t.id);
+          if (wantedTags.some((id) => id === null || has?.has(id) !== true)) return false;
+        }
         const done = t.completedAt !== null;
         if (completed === 'false' && done) return false;
         if (completed === 'true' && !done) return false;
@@ -773,9 +1207,42 @@ export class TaskService {
       });
       const page = filtered.slice(offset, offset + limit);
       return {
-        items: page.map((r) => toTaskDto(r.task, r.place)),
+        items: taskDtos(
+          tx,
+          actor.userId,
+          page.map((r) => r.task),
+          { places: new Map(page.map((r) => [r.task.id, r.place])) },
+        ),
         nextCursor: offset + limit < filtered.length ? encodeCursor({ o: offset + limit }) : null,
       };
     });
+  }
+
+  /**
+   * `?tag=` values as tag IDs of the org: an ID of an org tag, else a name (case-insensitive).
+   * An unknown value stays `null`, which matches no task. No filter: `null`.
+   */
+  private resolveTagFilter(
+    tx: Tx,
+    orgId: string,
+    raw: string | string[] | undefined,
+  ): (string | null)[] | null {
+    if (raw === undefined) return null;
+    const values = Array.isArray(raw) ? raw : [raw];
+    const tags = tx.select().from(tagTable).where(eq(tagTable.orgId, orgId)).all();
+    return values.map((v) => {
+      const lower = v.toLowerCase();
+      return (
+        tags.find((t) => t.id === v)?.id ??
+        tags.find((t) => t.name.toLowerCase() === lower)?.id ??
+        null
+      );
+    });
+  }
+
+  private tagSets(tx: Tx, taskIds: readonly string[]): Map<string, Set<string>> {
+    const out = new Map<string, Set<string>>();
+    for (const [id, tagIds] of loadTaskExtras(tx, taskIds).tagIds) out.set(id, new Set(tagIds));
+    return out;
   }
 }

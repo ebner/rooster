@@ -33,6 +33,15 @@ describe('task query schemas', () => {
     });
   });
 
+  it('accepts one or several tag filters (P3)', () => {
+    expect(taskQuerySchema.parse({ tag: 'urgent' })).toEqual({ tag: 'urgent' });
+    expect(taskQuerySchema.parse({ tag: ['a', 'b'] })).toEqual({ tag: ['a', 'b'] });
+    expect(taskQuerySchema.safeParse({ tag: '' }).success).toBe(false);
+    expect(taskQuerySchema.safeParse({ tag: Array.from({ length: 21 }, () => 'x') }).success).toBe(
+      false,
+    );
+  });
+
   it('group move result carries the position', () => {
     expect(groupMoveResultSchema.parse({ position: 'a0' })).toEqual({ position: 'a0' });
   });

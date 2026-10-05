@@ -75,8 +75,11 @@ describe('migrations', () => {
       'org_member_pref',
       'organization',
       'placement',
+      'tag',
       'task',
+      'task_expansion',
       'task_group',
+      'task_tag',
     ]);
     expect(tables.map((t) => t.name)).toEqual(
       expect.arrayContaining(['user', 'session', 'account', 'verification']),

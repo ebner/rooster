@@ -2,13 +2,27 @@ import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi';
 import { pageQuerySchema, taskQuerySchema } from '@rooster/core/schemas';
 import type { AppEnv } from '../lib/context.ts';
 import type { Services } from '../services/index.ts';
-import { AUTHED, actorOf, body, idParam, json, metaOf, orgIdParam, problems } from './common.ts';
+import {
+  AUTHED,
+  actorOf,
+  body,
+  idParam,
+  json,
+  metaOf,
+  optionalBody,
+  orgIdParam,
+  problems,
+} from './common.ts';
 import {
   BulkOpSchema,
   BulkResultSchema,
+  SubtaskReorderResultSchema,
+  SubtaskReorderSchema,
   TaskCompleteResultSchema,
   TaskCompleteSchema,
   TaskCreateSchema,
+  TaskDetailSchema,
+  TaskDuplicateSchema,
   TaskMoveResultSchema,
   TaskMoveSchema,
   TaskPageSchema,
@@ -125,6 +139,65 @@ const bulk = createRoute({
   responses: { 200: json(BulkResultSchema, 'Per-task results'), ...problems(...AUTHED) },
 });
 
+const getTask = createRoute({
+  method: 'get',
+  path: '/api/v1/tasks/{id}',
+  tags,
+  operationId: 'getTask',
+  summary: 'The full task: description, direct subtasks in order and the parent chain',
+  description:
+    '`parentChain` runs from the root down to the direct parent. A task in Trash is returned with `deletedAt`.',
+  request: { params: taskParams },
+  responses: { 200: json(TaskDetailSchema, 'The task'), ...problems(401, 404, 429) },
+});
+
+const reorderSubtask = createRoute({
+  method: 'post',
+  path: '/api/v1/tasks/{id}/reorder',
+  tags,
+  operationId: 'reorderSubtask',
+  summary: 'Move a subtask among its siblings; the server computes the key',
+  description:
+    'Last write wins on the `parent` clock: a newer edit keeps the current position, which is returned. A top-level task is `409 not_subtask`.',
+  request: { params: taskParams, body: body(SubtaskReorderSchema) },
+  responses: {
+    200: json(SubtaskReorderResultSchema, 'The actual subtask position'),
+    ...problems(...AUTHED, 404, 409, 410),
+  },
+});
+
+const duplicateTask = createRoute({
+  method: 'post',
+  path: '/api/v1/tasks/{id}/duplicate',
+  tags,
+  operationId: 'duplicateTask',
+  summary: 'Duplicate a task (and its subtasks) directly below the original',
+  description:
+    'Copies title, description, dates and tags; with `includeSubtasks` (default) every live subtask recursively, reopened. The response is the new top task.',
+  request: { params: taskParams, body: optionalBody(TaskDuplicateSchema) },
+  responses: { 201: json(TaskSchema, 'The copy'), ...problems(...AUTHED, 404, 409, 410) },
+});
+
+const expandTask = createRoute({
+  method: 'put',
+  path: '/api/v1/tasks/{id}/expanded',
+  tags,
+  operationId: 'expandTask',
+  summary: 'Remember that I expanded this parent row (idempotent)',
+  request: { params: taskParams },
+  responses: { 204: { description: 'Expanded' }, ...problems(...AUTHED, 404, 410) },
+});
+
+const collapseTask = createRoute({
+  method: 'delete',
+  path: '/api/v1/tasks/{id}/expanded',
+  tags,
+  operationId: 'collapseTask',
+  summary: 'Forget my expansion of this parent row (idempotent)',
+  request: { params: taskParams },
+  responses: { 204: { description: 'Collapsed' }, ...problems(...AUTHED, 404) },
+});
+
 const listTrash = createRoute({
   method: 'get',
   path: '/api/v1/orgs/{orgId}/trash',
@@ -169,6 +242,24 @@ export function registerTaskRoutes(app: OpenAPIHono<AppEnv>, { tasks }: Services
     return c.body(null, 204);
   });
   app.openapi(bulk, (c) => c.json(tasks.bulk(actorOf(c), c.req.valid('json'), metaOf(c)), 200));
+  app.openapi(getTask, (c) => c.json(tasks.detail(actorOf(c), c.req.valid('param').id), 200));
+  app.openapi(reorderSubtask, (c) =>
+    c.json(tasks.reorder(actorOf(c), c.req.valid('param').id, c.req.valid('json'), metaOf(c)), 200),
+  );
+  app.openapi(duplicateTask, (c) =>
+    c.json(
+      tasks.duplicate(actorOf(c), c.req.valid('param').id, c.req.valid('json'), metaOf(c)),
+      201,
+    ),
+  );
+  app.openapi(expandTask, (c) => {
+    tasks.setExpanded(actorOf(c), c.req.valid('param').id, true);
+    return c.body(null, 204);
+  });
+  app.openapi(collapseTask, (c) => {
+    tasks.setExpanded(actorOf(c), c.req.valid('param').id, false);
+    return c.body(null, 204);
+  });
   app.openapi(listTrash, (c) =>
     c.json(tasks.trash(actorOf(c), c.req.valid('param').orgId, c.req.valid('query')), 200),
   );
