@@ -11,7 +11,10 @@ const PROBE_PATHS = new Set(['/healthz', '/readyz']);
  */
 export const requestIdMiddleware = (): MiddlewareHandler<AppEnv> => requestId({ limitLength: 128 });
 
-/** Attaches a child logger with `reqId` and logs one line per request when it completes. */
+/**
+ * Attaches a child logger with `reqId` and logs one line per request when it completes:
+ * `{reqId, method, path, status, ms, userId?}` (04 §9).
+ */
 export function requestLogger(logger: Logger): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     const start = performance.now();
@@ -25,6 +28,7 @@ export function requestLogger(logger: Logger): MiddlewareHandler<AppEnv> {
       path: c.req.path,
       status,
       ms: Math.round((performance.now() - start) * 10) / 10,
+      ...(c.var.actor === undefined ? {} : { userId: c.var.actor.userId }),
     };
     if (status >= 500) logger.error(fields, 'request');
     // Probes hit these every few seconds; keep them out of the default log stream.

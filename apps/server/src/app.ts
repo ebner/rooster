@@ -3,17 +3,26 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { Scalar } from '@scalar/hono-api-reference';
+import { actorMiddleware } from './auth/actor.ts';
+import { createAuth, providerOrigins } from './auth/auth.ts';
+import { registerAuthRoutes } from './auth/mount.ts';
 import type { Config } from './config.ts';
 import type { AppDb } from './db/client.ts';
 import type { AppEnv } from './lib/context.ts';
+import { csrfProtection } from './lib/csrf.ts';
 import { createErrorHandler, notFoundHandler, validationHook } from './lib/errors.ts';
 import type { Logger } from './lib/logger.ts';
 import { requestIdMiddleware, requestLogger } from './lib/request-log.ts';
 import { DOCS_PATH, securityHeaders } from './lib/security-headers.ts';
 import { webApp } from './lib/web-app.ts';
+import { registerAdminRoutes } from './routes/admin.ts';
 import { registerHealthRoutes } from './routes/health.ts';
+import { registerInviteRoutes } from './routes/invites.ts';
+import { registerMeRoutes } from './routes/me.ts';
 import { registerMetaRoutes } from './routes/meta.ts';
+import { registerOrgRoutes } from './routes/orgs.ts';
 import { ProblemSchema } from './routes/problem.ts';
+import { createServices, type Services } from './services/index.ts';
 
 export interface AppDeps {
   config: Config;
@@ -22,6 +31,10 @@ export interface AppDeps {
   version: string;
   /** Overrides the bundled migrations folder used by `/readyz`. */
   migrationsDir?: string;
+  /** ms epoch; defaults to `Date.now`. */
+  clock?: () => number;
+  /** better-auth's rate limiter on `/api/auth/*`; tests switch it off. Default on. */
+  authRateLimit?: boolean;
 }
 
 export const OPENAPI_PATH = '/api/v1/openapi.json';
@@ -48,11 +61,24 @@ export function openApiDocumentConfig(version: string) {
   };
 }
 
-export type App = OpenAPIHono<AppEnv>;
+export type App = OpenAPIHono<AppEnv> & {
+  /** Domain services, exposed for tests and the auth hooks. */
+  services: Services;
+};
 
 /** Pure factory: no listening, no timers. Tests drive it through `app.request()`. */
 export function createApp(deps: AppDeps): App {
   const { config, db, logger, version } = deps;
+  const clock = deps.clock ?? Date.now;
+  const services = createServices({ db, config, logger, clock });
+  const auth = createAuth({
+    config,
+    db,
+    logger,
+    services,
+    clock,
+    rateLimit: deps.authRateLimit,
+  });
   const app = new OpenAPIHono<AppEnv>({ defaultHook: validationHook });
 
   app.onError(createErrorHandler(logger));
@@ -60,10 +86,17 @@ export function createApp(deps: AppDeps): App {
 
   app.use(requestIdMiddleware());
   app.use(requestLogger(logger));
-  app.use(securityHeaders());
+  app.use(securityHeaders(providerOrigins(config)));
+  app.use('/api/v1/*', actorMiddleware({ auth, services }));
+  app.use('/api/v1/*', csrfProtection(config.baseUrl));
 
   registerHealthRoutes(app, { db, migrationsDir: deps.migrationsDir });
+  registerAuthRoutes(app, { auth, config });
   registerMetaRoutes(app, { config, version });
+  registerMeRoutes(app, services);
+  registerOrgRoutes(app, services);
+  registerInviteRoutes(app, services, { config, clock });
+  registerAdminRoutes(app, services);
 
   app.openAPIRegistry.register('Problem', ProblemSchema);
   app.doc31(OPENAPI_PATH, openApiDocumentConfig(version));
@@ -93,5 +126,5 @@ export function createApp(deps: AppDeps): App {
   // Last: everything no route claimed is the web app (or a problem+json 404).
   app.use(webApp(config.webDir, logger));
 
-  return app;
+  return Object.assign(app, { services });
 }

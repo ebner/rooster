@@ -13,6 +13,8 @@ const parsed = parseConfig({
   ROOSTER_BASE_URL: 'http://localhost:3000',
   ROOSTER_AUTH_SECRET: 'openapi-emitter-placeholder-secret-0000',
   ROOSTER_ADMIN_EMAILS: 'admin@example.com',
+  ROOSTER_GOOGLE_CLIENT_ID: 'openapi-emitter',
+  ROOSTER_GOOGLE_CLIENT_SECRET: 'openapi-emitter',
   ROOSTER_DATA_DIR: '/nonexistent',
 });
 if (!parsed.ok) throw new Error(parsed.errors.join('\n'));

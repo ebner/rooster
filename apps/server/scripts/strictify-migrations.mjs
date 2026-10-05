@@ -11,14 +11,12 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // better-auth owns these tables (its adapter decides their types), so they stay non-STRICT.
+// `organization`, `member` and `invitation` are rooster's own tables (ADR 0002) and are STRICT.
 const NON_STRICT_TABLES = new Set([
   'user',
   'session',
   'account',
   'verification',
-  'organization',
-  'member',
-  'invitation',
   'apikey',
   'deviceCode',
 ]);

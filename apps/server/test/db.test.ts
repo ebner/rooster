@@ -57,6 +57,56 @@ describe('migrations', () => {
     db.close();
   });
 
+  it('rooster tables are STRICT; better-auth tables are not', () => {
+    const db = createTestDb();
+    const tables = db.sqlite
+      .prepare(
+        "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE '%drizzle%'",
+      )
+      .all() as { name: string; sql: string }[];
+    const strict = tables.filter((t) => /\)\s*STRICT$/.test(t.sql)).map((t) => t.name);
+    expect(strict.sort()).toEqual([
+      'allowlist_entry',
+      'instance_setting',
+      'invitation',
+      'invite_link',
+      'member',
+      'org_member_pref',
+      'organization',
+      'task_group',
+    ]);
+    expect(tables.map((t) => t.name)).toEqual(
+      expect.arrayContaining(['user', 'session', 'account', 'verification']),
+    );
+    db.close();
+  });
+
+  it('allows one inbox per user and org, and compares allowlist values case-insensitively', () => {
+    const db = createTestDb();
+    const now = Date.now();
+    db.sqlite
+      .prepare(
+        "INSERT INTO user (id, name, email, email_verified, created_at, updated_at) VALUES ('u', 'U', 'u@x.test', 1, ?, ?)",
+      )
+      .run(now, now);
+    db.sqlite
+      .prepare("INSERT INTO organization (id, name, slug, created_at) VALUES ('o', 'O', 'o1', ?)")
+      .run(now);
+    const group = db.sqlite.prepare(
+      "INSERT INTO task_group (id, org_id, user_id, kind, name, position, created_at, updated_at) VALUES (?, 'o', 'u', ?, 'G', 'a0', ?, ?)",
+    );
+    group.run('g1', 'inbox', now, now);
+    group.run('g2', 'normal', now, now);
+    group.run('g3', 'normal', now, now);
+    expect(() => group.run('g4', 'inbox', now, now)).toThrow(/UNIQUE/);
+    const allow = db.sqlite.prepare(
+      "INSERT INTO allowlist_entry (id, kind, value, created_at) VALUES (?, 'email', ?, ?)",
+    );
+    allow.run('a1', 'Ann@Example.com', now);
+    expect(() => allow.run('a2', 'ann@example.com', now)).toThrow(/UNIQUE/);
+    db.close();
+  });
+
   it('instance_setting is STRICT', () => {
     const db = createTestDb();
     expect(() =>

@@ -1,0 +1,16 @@
+{
+  "group": {
+    "inbox": "Inkorg",
+    "today": "Idag",
+    "prio": "Prio",
+    "upcoming": "Kommande"
+  },
+  "org": {
+    "personal": "Personligt"
+  },
+  "signIn": {
+    "notInvited": "Den här e-postadressen har inte bjudits in till den här rooster-instansen.",
+    "disabled": "Kontot har inaktiverats av en administratör.",
+    "unverifiedEmail": "Din inloggningstjänst har inte verifierat den här e-postadressen."
+  }
+}

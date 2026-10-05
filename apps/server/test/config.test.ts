@@ -26,7 +26,10 @@ describe('parseConfig', () => {
     expect(config.backup).toEqual({ cron: '0 3 * * *', keepDaily: 7, keepWeekly: 4 });
     expect(config.uploadMaxMb).toBe(25);
     expect(config.oidcProviders).toEqual([]);
-    expect(config.google).toBeNull();
+    expect(config.google).toEqual({
+      clientId: TEST_ENV.ROOSTER_GOOGLE_CLIENT_ID,
+      clientSecret: TEST_ENV.ROOSTER_GOOGLE_CLIENT_SECRET,
+    });
     expect(config.smtp).toBeNull();
     expect(config.s3).toBeNull();
     expect(config.gitSha).toBe('dev');
@@ -88,6 +91,7 @@ describe('parseConfig', () => {
       ROOSTER_BACKUP_CRON: 'every day',
       ROOSTER_LOG_LEVEL: 'loud',
       ROOSTER_GOOGLE_CLIENT_ID: 'id-only',
+      ROOSTER_GOOGLE_CLIENT_SECRET: undefined,
       ROOSTER_SMTP_URL: 'smtp://mail.example.com',
     });
     const keys = errors.map((e) => e.split(':')[0]);
@@ -102,6 +106,47 @@ describe('parseConfig', () => {
         'ROOSTER_MAIL_FROM',
       ]),
     );
+  });
+
+  it('requires at least one sign-in provider', () => {
+    const errors = errorsOf({
+      ...TEST_ENV,
+      ROOSTER_GOOGLE_CLIENT_ID: undefined,
+      ROOSTER_GOOGLE_CLIENT_SECRET: undefined,
+    });
+    expect(errors).toEqual([
+      expect.stringMatching(/^ROOSTER_OIDC_PROVIDERS: at least one sign-in provider is required/),
+    ]);
+    const empty = errorsOf({
+      ...TEST_ENV,
+      ROOSTER_GOOGLE_CLIENT_ID: undefined,
+      ROOSTER_GOOGLE_CLIENT_SECRET: undefined,
+      ROOSTER_OIDC_PROVIDERS: '[]',
+    });
+    expect(empty).toHaveLength(1);
+  });
+
+  it('accepts OIDC providers alone and rejects duplicate provider IDs', () => {
+    const sso = {
+      id: 'sso',
+      name: 'SSO',
+      discoveryUrl: 'https://sso.example.com/.well-known/openid-configuration',
+      clientId: 'c',
+      clientSecret: 's',
+    };
+    const only = parseConfig({
+      ...TEST_ENV,
+      ROOSTER_GOOGLE_CLIENT_ID: undefined,
+      ROOSTER_GOOGLE_CLIENT_SECRET: undefined,
+      ROOSTER_OIDC_PROVIDERS: JSON.stringify([sso]),
+    });
+    expect(only.ok).toBe(true);
+    expect(errorsOf({ ...TEST_ENV, ROOSTER_OIDC_PROVIDERS: JSON.stringify([sso, sso]) })).toEqual([
+      'ROOSTER_OIDC_PROVIDERS: provider id "sso" is used twice',
+    ]);
+    expect(
+      errorsOf({ ...TEST_ENV, ROOSTER_OIDC_PROVIDERS: JSON.stringify([{ ...sso, id: 'google' }]) }),
+    ).toEqual(['ROOSTER_OIDC_PROVIDERS: provider id "google" is used twice']);
   });
 
   it('reads <NAME>_FILE values, which win over the plain variable', () => {
@@ -128,22 +173,35 @@ describe('parseConfig', () => {
 });
 
 describe('process boot', () => {
-  it('AC-0.3 exits with code 78 and a readable error when ROOSTER_BASE_URL is missing', () => {
+  function boot(extra: Record<string, string>) {
     const env = Object.fromEntries(
       Object.entries(process.env).filter(([k]) => !k.startsWith('ROOSTER_') && k !== 'PORT'),
     );
-    const result = spawnSync(process.execPath, ['--import', 'tsx', 'src/main.ts'], {
+    return spawnSync(process.execPath, ['--import', 'tsx', 'src/main.ts'], {
       cwd: serverRoot,
-      env: {
-        ...env,
-        ROOSTER_AUTH_SECRET: TEST_ENV.ROOSTER_AUTH_SECRET,
-        ROOSTER_ADMIN_EMAILS: 'a@b.test',
-      },
+      env: { ...env, ...extra },
       encoding: 'utf8',
       timeout: 30_000,
+    });
+  }
+
+  it('AC-0.3 exits with code 78 and a readable error when ROOSTER_BASE_URL is missing', () => {
+    const result = boot({
+      ROOSTER_AUTH_SECRET: TEST_ENV.ROOSTER_AUTH_SECRET,
+      ROOSTER_ADMIN_EMAILS: 'a@b.test',
     });
     expect(result.status).toBe(EXIT_CONFIG);
     expect(result.stderr).toContain('invalid configuration');
     expect(result.stderr).toContain('ROOSTER_BASE_URL: is required');
+  });
+
+  it('exits with code 78 when no sign-in provider is configured', () => {
+    const result = boot({
+      ROOSTER_BASE_URL: TEST_ENV.ROOSTER_BASE_URL,
+      ROOSTER_AUTH_SECRET: TEST_ENV.ROOSTER_AUTH_SECRET,
+      ROOSTER_ADMIN_EMAILS: 'a@b.test',
+    });
+    expect(result.status).toBe(EXIT_CONFIG);
+    expect(result.stderr).toContain('at least one sign-in provider is required');
   });
 });

@@ -53,6 +53,9 @@ const oidcProviderSchema = z.object({
 
 export type OidcProviderConfig = z.infer<typeof oidcProviderSchema>;
 
+/** better-auth's ID for the built-in Google provider. */
+export const GOOGLE_PROVIDER_ID = 'google';
+
 const oidcProviders = z
   .string()
   .optional()
@@ -138,9 +141,20 @@ function crossFieldErrors(values: Record<string, string>): string[] {
   requireWith('ROOSTER_MAIL_FROM', 'ROOSTER_SMTP_URL');
   requireWith('ROOSTER_S3_ACCESS_KEY_ID', 'ROOSTER_S3_BUCKET');
   requireWith('ROOSTER_S3_SECRET_ACCESS_KEY', 'ROOSTER_S3_BUCKET');
-  // The "at least one sign-in provider" rule (Google or ROOSTER_OIDC_PROVIDERS) belongs to
-  // Phase 1, which introduces sign-in; Phase 0 boots without any provider.
   return errors;
+}
+
+/** Rules on parsed values: sign-in needs at least one provider, and provider IDs are unique. */
+function providerErrors(env: Env): string[] {
+  const ids = env.ROOSTER_OIDC_PROVIDERS.map((p) => p.id);
+  if (env.ROOSTER_GOOGLE_CLIENT_ID !== undefined) ids.unshift(GOOGLE_PROVIDER_ID);
+  if (ids.length === 0) {
+    return [
+      'ROOSTER_OIDC_PROVIDERS: at least one sign-in provider is required (set ROOSTER_GOOGLE_CLIENT_ID and ROOSTER_GOOGLE_CLIENT_SECRET, or ROOSTER_OIDC_PROVIDERS)',
+    ];
+  }
+  const duplicates = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+  return duplicates.map((id) => `ROOSTER_OIDC_PROVIDERS: provider id "${id}" is used twice`);
 }
 
 function toConfig(env: Env) {
@@ -248,6 +262,7 @@ export function parseConfig(
     }
   }
   errors.push(...crossFieldErrors(values));
+  if (parsed.success) errors.push(...providerErrors(parsed.data));
   if (errors.length > 0 || !parsed.success) return { ok: false, errors };
   return { ok: true, config: toConfig(parsed.data) };
 }

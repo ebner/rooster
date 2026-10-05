@@ -15,6 +15,7 @@ describe('strictify-migrations', () => {
         file,
         [
           'CREATE TABLE `user` (\n\t`id` text PRIMARY KEY NOT NULL\n);',
+          'CREATE TABLE `organization` (\n\t`id` text PRIMARY KEY NOT NULL\n);',
           "CREATE TABLE `task_group` (\n\t`name` text DEFAULT '(' NOT NULL\n);",
           'CREATE TABLE `kv` (`k` text PRIMARY KEY) WITHOUT ROWID;',
           'CREATE TABLE `done` (`id` text) STRICT;',
@@ -24,6 +25,10 @@ describe('strictify-migrations', () => {
       execFileSync(process.execPath, [script, dir.path]);
       const once = readFileSync(file, 'utf8');
       expect(once).toContain('CREATE TABLE `user` (\n\t`id` text PRIMARY KEY NOT NULL\n);');
+      // Rooster owns the org tables (ADR 0002), so they are STRICT.
+      expect(once).toContain(
+        'CREATE TABLE `organization` (\n\t`id` text PRIMARY KEY NOT NULL\n) STRICT;',
+      );
       expect(once).toContain("`name` text DEFAULT '(' NOT NULL\n) STRICT;");
       expect(once).toContain('WITHOUT ROWID, STRICT;');
       expect(once).toContain('CREATE TABLE `done` (`id` text) STRICT;');

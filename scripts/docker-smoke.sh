@@ -10,6 +10,7 @@ docker run -d --name "$NAME" -p 127.0.0.1::3000 \
   -e ROOSTER_BASE_URL=http://localhost:3000 \
   -e ROOSTER_AUTH_SECRET="$(head -c 48 /dev/urandom | base64)" \
   -e ROOSTER_ADMIN_EMAILS=admin@example.com \
+  -e ROOSTER_OIDC_PROVIDERS='[{"id":"dev","name":"Dev login","discoveryUrl":"http://127.0.0.1:9/.well-known/openid-configuration","clientId":"smoke","clientSecret":"smoke"}]' \
   "$IMAGE" >/dev/null
 PORT="$(docker port "$NAME" 3000 | head -1 | sed 's/.*://')"
 
@@ -19,7 +20,10 @@ for i in $(seq 1 30); do
   if [[ "$i" == 30 ]]; then echo "readyz never became ready"; docker logs "$NAME"; exit 1; fi
 done
 echo "✓ /readyz ok"
-curl -fsS "http://127.0.0.1:${PORT}/api/v1/meta" >/dev/null && echo "✓ /api/v1/meta ok"
+curl -fsS "http://127.0.0.1:${PORT}/api/v1/meta" | grep -q '"id":"dev"' \
+  && echo "✓ /api/v1/meta lists the sign-in provider" || { echo "✗ /api/v1/meta has no provider"; exit 1; }
+ME_STATUS="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/api/v1/me")"
+[[ "$ME_STATUS" == 401 ]] && echo "✓ /api/v1/me requires a session" || { echo "✗ /api/v1/me → $ME_STATUS"; exit 1; }
 curl -fsS "http://127.0.0.1:${PORT}/api/docs" >/dev/null && echo "✓ /api/docs ok"
 curl -fsS "http://127.0.0.1:${PORT}/" | grep -qi "<html" && echo "✓ web app served"
 

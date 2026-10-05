@@ -52,7 +52,7 @@ describe('web app serving', () => {
     expect(res.headers.get('cache-control')).toBeNull();
   });
 
-  it.each(['/api/v1/nope', '/api', '/ical/feed.ics'])('does not fall back for %s', async (path) => {
+  it.each(['/api/nope', '/api', '/ical/feed.ics'])('does not fall back for %s', async (path) => {
     const res = await app.request(path);
     expect(res.status).toBe(404);
     expect(res.headers.get('content-type')).toBe('application/problem+json');

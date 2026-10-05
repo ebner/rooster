@@ -1,9 +1,11 @@
 import { createRoute, type OpenAPIHono } from '@hono/zod-openapi';
 import { type Meta, metaSchema } from '@rooster/core/schemas';
+import { configuredProviders } from '../auth/auth.ts';
 import type { Config } from '../config.ts';
 import type { AppEnv } from '../lib/context.ts';
+import { named } from '../lib/openapi.ts';
 
-export const MetaSchema = metaSchema.openapi('Meta');
+export const MetaSchema = named(metaSchema, 'Meta');
 
 const metaRoute = createRoute({
   method: 'get',
@@ -28,8 +30,7 @@ export function registerMetaRoutes(
   const body: Meta = {
     version,
     gitSha: config.gitSha,
-    // Sign-in providers are advertised from Phase 1, when sign-in exists.
-    providers: [],
+    providers: configuredProviders(config),
     features: {
       email: config.smtp !== null,
       push: config.vapid !== null,

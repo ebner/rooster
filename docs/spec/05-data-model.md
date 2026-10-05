@@ -48,7 +48,7 @@ Invariant: an org with `is_personal = 1` has exactly one `member` row (role `own
 
 **Slugs:**
 - `organization.slug` is unique instance-wide. Pattern: `^[a-z0-9][a-z0-9-]{1,38}$`.
-- A personal org gets the slug `personal-<first 8 hex chars of userId>`.
+- A personal org gets the slug `personal-<last 8 hex chars of userId>` (the first 8 encode the UUIDv7 timestamp; ADR 0003).
 - The reserved alias **`personal`** is accepted everywhere a slug is accepted (web URLs `/o/personal/...`, the API `orgId`/slug lookups, CLI `--org personal`, refs like `personal#42`). It resolves to the **caller's** personal org. No org may be created with the slug `personal`.
 - API paths take an org **ID or slug** in `:orgId`.
 

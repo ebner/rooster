@@ -77,7 +77,7 @@ P8 depends only on v1.0. It can start in parallel with P6 and P7 if capacity all
 
 | WP | Content | Depends on |
 |---|---|---|
-| 2.1 Data and services | `task`, `task_group` and `placement` tables; GroupService, TaskService (create, patch with LWW and field clocks, complete, delete and restore, bulk), PlacementService.reconcile, OrderingService (with rebalance), idempotency middleware, the `my-list` endpoint, the trash endpoints and the purge job. | — |
+| 2.1 Data and services | `task` and `placement` tables (`task_group` exists since P1); the per-user API rate limit (600/min, 06 §1); GroupService, TaskService (create, patch with LWW and field clocks, complete, delete and restore, bulk), PlacementService.reconcile, OrderingService (with rebalance), idempotency middleware, the `my-list` endpoint, the trash endpoints and the purge job. | — |
 | 2.2 Date engine | `packages/core/dates`: the NL parser EN+SV (02 §8 full table as test cases), `formatRelative` EN/SV, `dueState`, and week-start-aware helpers. A property test checks that `parse(format(d)) == d` for explicit dates. | — |
 | 2.3 List rendering | Flat row model selector, TaskRow, GroupHeader, AddRow, sticky headers, Inbox behaviour, empty states, skeletons, and "show completed". | 2.1 API types |
 | 2.4 Editing model | The Navigate/Edit modes, the keymap registry plus cheat sheet, draft rows, Enter/Shift+Enter/Backspace rules (02 §3.4–3.5), paste multi-line, title token highlighting (dates and `>Group`; `#tag` and `@` come later), and the selection and multi-select bulk bar. | 2.3 |

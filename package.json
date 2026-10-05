@@ -19,7 +19,8 @@
     "i18n:check": "node scripts/i18n-check.mjs",
     "db:generate": "pnpm --filter @rooster/server db:generate",
     "ci": "bash scripts/ci.sh",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "dev:idp": "node scripts/dev-idp.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",

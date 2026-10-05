@@ -167,6 +167,7 @@ rooster/
      - `GET /invite/:token` (the web page) sets a short-lived (15 min), signed, httpOnly cookie `rooster.invite` before starting the sign-in.
      - The hook validates it against `invite_link`.
      - After user creation, the membership is created and `uses` is incremented. A single-use link is then exhausted.
+  6. The user already exists and is a member of at least one live shared org (ADR 0003).
 
   Otherwise the user is redirected to `/not-invited`. If none of the allowlist sources are configured, **only** admin emails can sign in (safe default).
 - **Personal org bootstrap:** `databaseHooks.user.create.after` creates the personal org, the owner membership, the Inbox and the default groups (localised from `Accept-Language`) in one transaction.

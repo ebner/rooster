@@ -2,7 +2,7 @@ import { createRoute, z } from '@hono/zod-openapi';
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../src/db/client.ts';
 import { AppError } from '../src/lib/errors.ts';
-import { captureLogger, createTestApp } from './helpers.ts';
+import { captureLogger, createTestApp, createUserWithSession } from './helpers.ts';
 
 describe('probes', () => {
   it('GET /healthz returns ok', async () => {
@@ -43,7 +43,7 @@ describe('GET /api/v1/meta', () => {
     expect(await res.json()).toEqual({
       version: '0.0.0-test',
       gitSha: 'abc1234',
-      providers: [],
+      providers: [{ id: 'google', name: 'Google' }],
       features: { email: false, push: false, s3: false },
     });
   });
@@ -95,16 +95,23 @@ describe('OpenAPI', () => {
 describe('errors (problem+json)', () => {
   it('returns a 404 problem for unknown API routes', async () => {
     const { app } = createTestApp();
-    const res = await app.request('/api/v1/nope');
+    const res = await app.request('/api/nope');
     expect(res.status).toBe(404);
     expect(res.headers.get('content-type')).toBe('application/problem+json');
     expect(await res.json()).toEqual({
       type: 'about:blank',
       title: 'Not Found',
       status: 404,
-      detail: 'No route for GET /api/v1/nope.',
+      detail: 'No route for GET /api/nope.',
       code: 'not_found',
     });
+  });
+
+  it('answers 401 for any /api/v1 path without a session, so routes are not revealed', async () => {
+    const { app } = createTestApp();
+    const res = await app.request('/api/v1/nope');
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ code: 'unauthenticated', status: 401 });
   });
 
   it('returns 422 validation_failed with field errors from zod-openapi routes', async () => {
@@ -112,7 +119,7 @@ describe('errors (problem+json)', () => {
     app.openapi(
       createRoute({
         method: 'post',
-        path: '/api/v1/_test/echo',
+        path: '/api/_test/echo',
         request: {
           body: {
             content: {
@@ -124,7 +131,7 @@ describe('errors (problem+json)', () => {
       }),
       (c) => c.json({ ok: true }, 200),
     );
-    const res = await app.request('/api/v1/_test/echo', {
+    const res = await app.request('/api/_test/echo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: '', n: 'x' }),
@@ -141,10 +148,10 @@ describe('errors (problem+json)', () => {
 
   it('renders AppError with its code and status', async () => {
     const { app } = createTestApp();
-    app.get('/api/v1/_test/conflict', () => {
+    app.get('/api/_test/conflict', () => {
       throw new AppError('personal_org', 409, 'Personal orgs cannot have members.');
     });
-    const res = await app.request('/api/v1/_test/conflict');
+    const res = await app.request('/api/_test/conflict');
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
       status: 409,
@@ -157,10 +164,10 @@ describe('errors (problem+json)', () => {
   it('hides internals of unexpected errors and logs them with the request ID', async () => {
     const { logger, lines } = captureLogger();
     const { app } = createTestApp({ logger });
-    app.get('/api/v1/_test/boom', () => {
+    app.get('/api/_test/boom', () => {
       throw new Error('secret internals');
     });
-    const res = await app.request('/api/v1/_test/boom');
+    const res = await app.request('/api/_test/boom');
     expect(res.status).toBe(500);
     const text = await res.text();
     expect(text).not.toContain('secret internals');
@@ -200,6 +207,18 @@ describe('request IDs and logging', () => {
       status: 200,
     });
     expect(typeof line?.ms).toBe('number');
+    expect(line).not.toHaveProperty('userId');
+  });
+
+  it('adds the userId of authenticated requests', async () => {
+    const { logger, lines } = captureLogger();
+    const { app, db } = createTestApp({ logger });
+    const { userId, jar } = createUserWithSession(app, db, { email: 'ann@example.com' });
+    await app.request('/api/v1/me', { headers: { cookie: jar.header() } });
+    expect(lines.find((l) => l.msg === 'request' && l.path === '/api/v1/me')).toMatchObject({
+      userId,
+      status: 200,
+    });
   });
 });
 
@@ -221,7 +240,7 @@ describe('security headers', () => {
 
   it('also protects problem responses', async () => {
     const { app } = createTestApp();
-    const res = await app.request('/api/v1/nope');
+    const res = await app.request('/api/nope');
     expect(res.headers.get('content-security-policy')).toContain("default-src 'self'");
   });
 });

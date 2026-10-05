@@ -1,0 +1,16 @@
+{
+  "group": {
+    "inbox": "Inbox",
+    "today": "Today",
+    "prio": "Prio",
+    "upcoming": "Upcoming"
+  },
+  "org": {
+    "personal": "Personal"
+  },
+  "signIn": {
+    "notInvited": "This email address has not been invited to this rooster instance.",
+    "disabled": "This account has been deactivated by an administrator.",
+    "unverifiedEmail": "Your sign-in provider has not verified this email address."
+  }
+}
