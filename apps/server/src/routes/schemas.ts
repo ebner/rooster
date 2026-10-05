@@ -3,6 +3,16 @@ import {
   adminUserSchema,
   allowlistCreateSchema,
   allowlistEntrySchema,
+  backupSchema,
+  bulkOpSchema,
+  bulkResultSchema,
+  groupCreateResultSchema,
+  groupCreateSchema,
+  groupDeleteSchema,
+  groupMoveResultSchema,
+  groupMoveSchema,
+  groupPatchSchema,
+  groupSchema,
   inviteCreatedSchema,
   inviteCreateSchema,
   invitePreviewSchema,
@@ -11,6 +21,7 @@ import {
   memberSchema,
   mePatchSchema,
   meSchema,
+  myListSchema,
   orgCreateSchema,
   orgDeleteSchema,
   orgOrderResultSchema,
@@ -18,8 +29,19 @@ import {
   orgPatchSchema,
   orgPrefPatchSchema,
   orgSchema,
+  placementSchema,
   prefsSchema,
   sessionSchema,
+  taskCompleteResultSchema,
+  taskCompleteSchema,
+  taskCreateSchema,
+  taskMoveResultSchema,
+  taskMoveSchema,
+  taskPageSchema,
+  taskPatchResultSchema,
+  taskPatchSchema,
+  taskSchema,
+  trashPageSchema,
 } from '@rooster/core/schemas';
 import { named, z } from '../lib/openapi.ts';
 
@@ -49,3 +71,51 @@ export const AllowlistEntrySchema = named(allowlistEntrySchema, 'AllowlistEntry'
 export const AllowlistCreateSchema = named(allowlistCreateSchema, 'AllowlistCreate');
 export const AdminUserSchema = named(adminUserSchema, 'AdminUser');
 export const AdminUserPatchSchema = named(adminUserPatchSchema, 'AdminUserPatch');
+
+// Phase 2: the list (05 §5, 06 §2.3–2.4).
+export const GroupSchema = named(groupSchema, 'Group');
+export const GroupCreateSchema = named(groupCreateSchema, 'GroupCreate');
+export const GroupCreateResultSchema = named(
+  groupCreateResultSchema.extend({ group: GroupSchema }),
+  'GroupCreateResult',
+);
+export const GroupPatchSchema = named(groupPatchSchema, 'GroupPatch');
+export const GroupMoveSchema = named(groupMoveSchema, 'GroupMove');
+export const GroupMoveResultSchema = named(groupMoveResultSchema, 'GroupMoveResult');
+export const GroupDeleteSchema = named(groupDeleteSchema, 'GroupDelete');
+export const PlacementSchema = named(placementSchema, 'Placement');
+export const TaskSchema = named(
+  taskSchema.extend({ placement: PlacementSchema.nullable() }),
+  'Task',
+);
+export const MyListSchema = named(
+  myListSchema.extend({ groups: z.array(GroupSchema), tasks: z.array(TaskSchema) }),
+  'MyList',
+);
+export const TaskCreateSchema = named(taskCreateSchema, 'TaskCreate');
+export const TaskPatchSchema = named(taskPatchSchema, 'TaskPatch');
+export const TaskPatchResultSchema = named(
+  taskPatchResultSchema.extend({ task: TaskSchema }),
+  'TaskPatchResult',
+);
+export const TaskMoveSchema = named(taskMoveSchema, 'TaskMove');
+export const TaskMoveResultSchema = named(
+  taskMoveResultSchema.extend({ placement: PlacementSchema }),
+  'TaskMoveResult',
+);
+export const TaskCompleteSchema = named(taskCompleteSchema, 'TaskComplete');
+export const TaskCompleteResultSchema = named(
+  taskCompleteResultSchema.extend({ task: TaskSchema, next: TaskSchema.optional() }),
+  'TaskCompleteResult',
+);
+export const BulkOpSchema = named(bulkOpSchema, 'BulkOp');
+export const BulkResultSchema = named(bulkResultSchema, 'BulkResult');
+export const TrashPageSchema = named(
+  trashPageSchema.extend({ items: z.array(TaskSchema) }),
+  'TrashPage',
+);
+export const TaskPageSchema = named(
+  taskPageSchema.extend({ items: z.array(TaskSchema) }),
+  'TaskPage',
+);
+export const BackupSchema = named(backupSchema, 'Backup');

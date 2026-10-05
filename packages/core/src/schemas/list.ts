@@ -70,6 +70,8 @@ export const groupPatchSchema = z
   });
 
 export const groupMoveSchema = orderingIntentSchema;
+/** Response of POST /groups/:id/move: the group's actual (server-computed) position. */
+export const groupMoveResultSchema = z.object({ position: positionSchema });
 
 /** Exactly one of the two for a non-empty group; neither for an empty group. */
 export const groupDeleteSchema = z.object({
@@ -223,6 +225,7 @@ export type GroupCreate = z.infer<typeof groupCreateSchema>;
 export type GroupCreateResult = z.infer<typeof groupCreateResultSchema>;
 export type GroupPatch = z.infer<typeof groupPatchSchema>;
 export type GroupMove = z.infer<typeof groupMoveSchema>;
+export type GroupMoveResult = z.infer<typeof groupMoveResultSchema>;
 export type GroupDelete = z.infer<typeof groupDeleteSchema>;
 export type Placement = z.infer<typeof placementSchema>;
 export type TaskCounts = z.infer<typeof taskCountsSchema>;

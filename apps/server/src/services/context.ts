@@ -16,6 +16,16 @@ export interface Actor {
   scopes: readonly Scope[];
 }
 
+/**
+ * Per-mutation metadata from the request headers (06 §1): the LWW edit time (already
+ * clamped), the originating client instance and the client kind (`web`, `cli/1.2`, …).
+ */
+export interface OpMeta {
+  editTime: number;
+  clientId: string | null;
+  client: string | null;
+}
+
 export interface ServiceDeps {
   db: AppDb;
   config: Config;

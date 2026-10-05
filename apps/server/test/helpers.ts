@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { uuidv7 } from '@rooster/core/ids';
 import type { Locale } from '@rooster/i18n';
-import { type App, createApp } from '../src/app.ts';
+import { type App, type AppDeps, createApp } from '../src/app.ts';
 import { SESSION_COOKIE } from '../src/auth/cookies.ts';
 import { type Config, parseConfig } from '../src/config.ts';
 import { type AppDb, openDb } from '../src/db/client.ts';
@@ -43,7 +43,13 @@ export function idpEnv(idp: MockIdp): Record<string, string> {
 }
 
 export function createTestApp(
-  options: { env?: Record<string, string>; db?: AppDb; logger?: Logger; clock?: () => number } = {},
+  options: {
+    env?: Record<string, string>;
+    db?: AppDb;
+    logger?: Logger;
+    clock?: () => number;
+    apiRateLimit?: AppDeps['apiRateLimit'];
+  } = {},
 ): { app: App; db: AppDb; config: Config } {
   const config = testConfig({ ROOSTER_WEB_DIR: '/nonexistent/web', ...options.env });
   const db = options.db ?? createTestDb();
@@ -55,6 +61,7 @@ export function createTestApp(
     version: '0.0.0-test',
     authRateLimit: false,
     ...(options.clock === undefined ? {} : { clock: options.clock }),
+    ...(options.apiRateLimit === undefined ? {} : { apiRateLimit: options.apiRateLimit }),
   });
   return { app, db, config };
 }

@@ -1,3 +1,5 @@
+import { createReadStream } from 'node:fs';
+import { Readable } from 'node:stream';
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi';
 import type { AppEnv } from '../lib/context.ts';
 import type { Services } from '../services/index.ts';
@@ -7,6 +9,7 @@ import {
   AdminUserSchema,
   AllowlistCreateSchema,
   AllowlistEntrySchema,
+  BackupSchema,
 } from './schemas.ts';
 
 const tags = ['admin'];
@@ -60,7 +63,54 @@ const patchUser = createRoute({
   responses: { 200: json(AdminUserSchema, 'The user'), ...problems(...AUTHED, 404, 409) },
 });
 
-export function registerAdminRoutes(app: OpenAPIHono<AppEnv>, { admin }: Services): void {
+const listBackups = createRoute({
+  method: 'get',
+  path: '/api/v1/admin/backups',
+  tags,
+  operationId: 'listBackups',
+  summary: 'Database snapshots, newest first (instance admins)',
+  responses: { 200: json(z.array(BackupSchema), 'Backups'), ...problems(401, 403, 429) },
+});
+
+const createBackup = createRoute({
+  method: 'post',
+  path: '/api/v1/admin/backups',
+  tags,
+  operationId: 'createBackup',
+  summary: 'Take a snapshot now (instance admins)',
+  responses: { 201: json(BackupSchema, 'The new backup'), ...problems(...AUTHED) },
+});
+
+const downloadBackup = createRoute({
+  method: 'get',
+  path: '/api/v1/admin/backups/{name}',
+  tags,
+  operationId: 'downloadBackup',
+  summary: 'Download a snapshot (instance admins)',
+  description: 'Only names from the list are accepted; anything else is 404.',
+  request: { params: z.object({ name: idParam('name', 'Backup file name') }) },
+  responses: {
+    200: {
+      description: 'The SQLite database file',
+      content: { 'application/vnd.sqlite3': { schema: z.string().openapi({ format: 'binary' }) } },
+    },
+    ...problems(401, 403, 404, 429),
+  },
+});
+
+export function registerAdminRoutes(app: OpenAPIHono<AppEnv>, { admin, backups }: Services): void {
+  app.openapi(listBackups, (c) => c.json(backups.list(actorOf(c)), 200));
+  app.openapi(createBackup, (c) => c.json(backups.createManual(actorOf(c)), 201));
+  app.openapi(downloadBackup, (c) => {
+    const file = backups.file(actorOf(c), c.req.valid('param').name);
+    const stream = Readable.toWeb(createReadStream(file.path)) as ReadableStream<Uint8Array>;
+    return c.body(stream, 200, {
+      'Content-Type': 'application/vnd.sqlite3',
+      'Content-Length': String(file.size),
+      'Content-Disposition': `attachment; filename="${file.name}"`,
+      'Cache-Control': 'no-store',
+    });
+  });
   app.openapi(listAllowlist, (c) => c.json(admin.listAllowlist(actorOf(c)), 200));
   app.openapi(addAllowlist, (c) =>
     c.json(admin.addAllowlist(actorOf(c), c.req.valid('json')), 201),

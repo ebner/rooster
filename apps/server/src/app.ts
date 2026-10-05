@@ -11,17 +11,22 @@ import type { AppDb } from './db/client.ts';
 import type { AppEnv } from './lib/context.ts';
 import { csrfProtection } from './lib/csrf.ts';
 import { createErrorHandler, notFoundHandler, validationHook } from './lib/errors.ts';
+import { idempotencyMiddleware } from './lib/idempotency.ts';
 import type { Logger } from './lib/logger.ts';
+import { API_RATE_LIMIT, type RateLimitOptions, userRateLimit } from './lib/rate-limit.ts';
 import { requestIdMiddleware, requestLogger } from './lib/request-log.ts';
+import { requestMeta } from './lib/request-meta.ts';
 import { DOCS_PATH, securityHeaders } from './lib/security-headers.ts';
 import { webApp } from './lib/web-app.ts';
 import { registerAdminRoutes } from './routes/admin.ts';
+import { registerGroupRoutes } from './routes/groups.ts';
 import { registerHealthRoutes } from './routes/health.ts';
 import { registerInviteRoutes } from './routes/invites.ts';
 import { registerMeRoutes } from './routes/me.ts';
 import { registerMetaRoutes } from './routes/meta.ts';
 import { registerOrgRoutes } from './routes/orgs.ts';
 import { ProblemSchema } from './routes/problem.ts';
+import { registerTaskRoutes } from './routes/tasks.ts';
 import { createServices, type Services } from './services/index.ts';
 
 export interface AppDeps {
@@ -35,6 +40,8 @@ export interface AppDeps {
   clock?: () => number;
   /** better-auth's rate limiter on `/api/auth/*`; tests switch it off. Default on. */
   authRateLimit?: boolean;
+  /** The per-user API limit (06 §1); default 600/min, `false` switches it off (tests). */
+  apiRateLimit?: RateLimitOptions | false;
 }
 
 export const OPENAPI_PATH = '/api/v1/openapi.json';
@@ -89,6 +96,10 @@ export function createApp(deps: AppDeps): App {
   app.use(securityHeaders(providerOrigins(config)));
   app.use('/api/v1/*', actorMiddleware({ auth, services }));
   app.use('/api/v1/*', csrfProtection(config.baseUrl));
+  const rateLimit = deps.apiRateLimit ?? API_RATE_LIMIT;
+  if (rateLimit !== false) app.use('/api/v1/*', userRateLimit(rateLimit, clock));
+  app.use('/api/v1/*', requestMeta(clock));
+  app.use('/api/v1/*', idempotencyMiddleware(services.idempotency));
 
   registerHealthRoutes(app, { db, migrationsDir: deps.migrationsDir });
   registerAuthRoutes(app, { auth, config });
@@ -97,6 +108,8 @@ export function createApp(deps: AppDeps): App {
   registerOrgRoutes(app, services);
   registerInviteRoutes(app, services, { config, clock });
   registerAdminRoutes(app, services);
+  registerGroupRoutes(app, services);
+  registerTaskRoutes(app, services);
 
   app.openAPIRegistry.register('Problem', ProblemSchema);
   app.doc31(OPENAPI_PATH, openApiDocumentConfig(version));

@@ -15,6 +15,13 @@
       "when": 1791180361472,
       "tag": "0001_auth_orgs",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791185309999,
+      "tag": "0002_list_core",
+      "breakpoints": true
     }
   ]
 }

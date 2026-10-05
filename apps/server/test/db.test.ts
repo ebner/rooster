@@ -67,12 +67,15 @@ describe('migrations', () => {
     const strict = tables.filter((t) => /\)\s*STRICT$/.test(t.sql)).map((t) => t.name);
     expect(strict.sort()).toEqual([
       'allowlist_entry',
+      'idempotency',
       'instance_setting',
       'invitation',
       'invite_link',
       'member',
       'org_member_pref',
       'organization',
+      'placement',
+      'task',
       'task_group',
     ]);
     expect(tables.map((t) => t.name)).toEqual(
