@@ -125,7 +125,9 @@ The server also sends the `X-Accel-Buffering: no` header on the SSE route.
 | Provider | Redirect URI to register |
 |---|---|
 | Google | `${ROOSTER_BASE_URL}/api/auth/callback/google` (OAuth consent screen: "Internal" for Workspace, or "External" + test users) |
-| Generic (`id` = `authentik`) | `${ROOSTER_BASE_URL}/api/auth/oauth2/callback/authentik` |
+| Generic (`id` = `authentik`) | `${ROOSTER_BASE_URL}/api/auth/callback/authentik` (better-auth 1.7 serves generic OIDC providers on the core callback route) |
+
+Step-by-step instructions for Google, Authentik and Keycloak are in [`docs/oidc-setup.md`](../oidc-setup.md).
 
 The required claims are `email`, `email_verified` and `name`, with `picture` optional. Users whose email is not verified are rejected.
 

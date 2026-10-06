@@ -1,7 +1,7 @@
 # Example deployment. Copy .env.example (apps/server/.env.example) to .env and fill it in.
 services:
   rooster:
-    image: ghcr.io/201works/rooster:latest
+    image: ghcr.io/201works/rooster:1
     build:
       context: .
       dockerfile: docker/Dockerfile
@@ -9,6 +9,7 @@ services:
     env_file: .env
     environment:
       ROOSTER_TRUST_PROXY: "true"
+      ROOSTER_DATA_DIR: /data   # the volume; overrides the template's local-dev ./data
     volumes:
       - rooster-data:/data
     ports:

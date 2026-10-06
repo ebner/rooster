@@ -19,9 +19,10 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - `src/lib/`: errors (problem+json), logger, request id/log, security headers, SPA serving, graceful close.
   - `src/routes/`: one file per resource. Route zod schemas come from `@rooster/core/schemas`, registered in `routes/schemas.ts` with `.openapi('Name')`.
   - `src/auth/`: the better-auth instance (`auth.ts`), mounting under `/api/auth/*`, actor resolution (`actor.ts`), and signed cookies. better-auth handles **authentication only**; orgs are ours (ADR 0002).
-  - `src/services/`: `OrgService`, `UserService`, `AdminService`, `GroupService`, `TaskService` (incl. subtasks and duplicate), `TagService`, `PlacementService` (the 05 §4.1 invariant), `OrderingService` (all fractional keys are computed server-side), `BackupService` and `sign-in-policy.ts` (the allowlist rules). **All authorisation lives here.**
+  - `src/services/`: `OrgService`, `UserService`, `AdminService`, `GroupService`, `TaskService` (incl. subtasks and duplicate), `TagService`, `PlacementService` (the 05 §4.1 invariant), `OrderingService` (all fractional keys are computed server-side), `BackupService`, `SearchService` (FTS5 queries), `ExportService` (JSON/Markdown) and `sign-in-policy.ts` (the allowlist rules). **All authorisation lives here.**
+  - `services/search-index.ts`: `indexTasks(tx, ids)` keeps `task_fts` in step. **Call it in the same transaction from any new write that changes a task's title, description or `deleted_at`** (ADR 0013). Boot rebuilds the index when its row count is off; `POST /admin/search/reindex` rebuilds it on demand.
   - Request middleware covers idempotency (`Idempotency-Key`), edit time (`X-Rooster-Edit-Time`, clamped), client id/name, and the per-user rate limit. ADR 0005 has the list semantics.
-  - `src/db/`: client and pragmas, `migrate.ts`, `schema/`, `migrations/` (generated, append-only).
+  - `src/db/`: client and pragmas, `migrate.ts`, `schema/`, `migrations/` (generated, append-only). Hand-written migrations (FTS, triggers, pragmas only) are created with `pnpm --filter @rooster/server exec drizzle-kit generate --custom --name <name>`, statements separated by `--> statement-breakpoint`; `0004_task_fts.sql` is the example.
   - `src/jobs/`: croner scheduler.
   - `src/events/`: the after-commit `EventBus` and the SSE `hub` behind `GET /api/v1/events`. Services publish through the per-transaction queue, and audiences are computed in `services/event-audience.ts`. ADR 0009.
   - Tests live in `test/`. Helpers: `createTestDb`, `createTestApp`, `mock-idp.ts`, `signInAs(email)`.
@@ -31,15 +32,18 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - `src/routes/`: TanStack file routes. `routeTree.gen.ts` is generated and committed. `src/routes/[_dev]/ui.tsx` is the dev-only kitchen sink at `/_dev/ui`; the brackets escape the underscore.
   - `src/ui/`: Coop components. Phone pieces (P4): `BottomSheet`/`SheetOption`, `BottomNav`, `Fab`, `AccessoryBar`, `SwipeReveal`; `use-media.ts` (`useBreakpoint`, `useIsMobile`, `isMobileViewport`, `useKeyboardInset`, `useEditingFocus`); `use-drag-dismiss.ts` (swipe-down sheets).
   - `src/features/*`:
-    - shell (sidebar, app frame per breakpoint: desktop sidebar/rail, tablet rail that expands over the content, phone frame with `MobileHeader` + org switcher sheet + view switcher and `MobileNav`), auth, org-settings (incl. the Tags section), settings (incl. Behaviour: swipe actions), admin (including backups)
-    - list (My tasks: rows incl. subtasks and tag chips, editing model, DnD, bulk bar, `controller` holding every command; the UI store is injectable via `ListStoreContext`). Phones: `mobile-list-chrome.tsx` (FAB, accessory bar, selection mode, sheets), `swipe-rows.tsx` + `gestures.ts` (swipes), `pull-to-refresh.tsx`; ADR 0011.
+    - shell (sidebar, app frame per breakpoint: desktop sidebar/rail, tablet rail that expands over the content, phone frame with `MobileHeader` + org switcher sheet + view switcher and `MobileNav`), auth, org-settings (incl. the Tags section), settings (incl. Behaviour: swipe actions; Data: export and Trash), admin (including backups)
+    - views (smart views Today / Next 7 days / Overdue / No date over core `selectView`: `view-counts.tsx` (live sidebar badges), `view-tabs.ts` (phone switcher), `last-view.ts`; routes `o.$orgSlug._tasks.{today,week,overdue,nodate}.tsx`; the rows come from `list/model/view-rows.ts`; ADR 0015)
+    - palette (Ctrl+K, lazy chunk: search, offline filtering over cached lists, recents, actions from the keymap registry via `runShortcut`; `commands.ts` is how a screen publishes argument-taking commands such as `makeSubtaskOf`; ADR 0014)
+    - list (My tasks and the smart views: rows incl. subtasks and tag chips, editing model, DnD, bulk bar, `controller` holding every command incl. `makeSubtaskOf`; the UI store is injectable via `ListStoreContext`). Phones: `mobile-list-chrome.tsx` (FAB, accessory bar, selection mode, sheets), `swipe-rows.tsx` + `gestures.ts` (swipes), `pull-to-refresh.tsx`; ADR 0011.
     - pane (the detail pane: split/overlay (tablet: with scrim)/full screen, and the phone's full-screen sheet with `SheetHeader`; its state lives in the URL `/o/:slug/t/:taskId`)
     - tags (picker, chips, `#tag` token)
     - editor (`MarkdownEditor` on Tiptap, `markdown.ts` converter, a 40-sample round-trip corpus)
     - dates (`DateLabel`, `DateCell`, `DatePopover` incl. start-date ranges, `useViewerDateContext`)
+  - **Bundle budget (10 §4, ADR 0016):** UI that appears only on interaction (popovers, the editor, the palette, the better-auth client) is loaded with `lazyWithPreload` (`src/lib/lazy.ts`) and warmed by `InteractionPrefetch`. On the initial route, import constants from `@rooster/core/limits` and i18n helpers from `@rooster/i18n/core`; value imports from `@rooster/core/schemas` or `@rooster/i18n` pull in zod or every catalog. `pnpm bundle:check` fails CI above 450 KB gzip.
   - `src/data/`: **the only place that talks to the API.** TanStack Query hooks over `createRoosterClient()`, query keys in `query-keys.ts`, problem+json mapped to `ApiError` in `errors.ts`, and better-auth client calls in `auth.ts` / `auth-client.ts`. Components take props; route components call `src/data` hooks.
   - `src/routes/_app.tsx`: the signed-in layout. Its `beforeLoad` guard redirects to `/login?redirect=…`.
-  - `src/lib/`: `cn`, i18n, platform, and `safe-redirect.ts`. **Every redirect target must go through `safeRedirectPath()`.**
+  - `src/lib/`: `cn`, i18n (loads only the active locale via `@rooster/i18n/lazy`; `main.tsx` awaits `i18nReady`), `lazy.ts`, platform, and `safe-redirect.ts`. **Every redirect target must go through `safeRedirectPath()`.**
   - `src/data/pipeline/`: the **mutation pipeline**. Every list op goes `enqueue → core reducer on the cache → send (Idempotency-Key, edit time, client id) → merge`. Undo pushes inverse ops through it. Ops are written to the IndexedDB outbox before they are sent; only the leader tab sends.
   - `src/data/sync/`: offline and realtime (04 §6, P4). `engine.ts` (`startSync`, awaited in `main.tsx` before the first render) restores the persisted query cache (`persist.ts`, idb-keyval key `rooster-cache-v1`; `my-list` is stored as the confirmed base, never the optimistic view) and the outbox (`outbox.ts`), elects the flushing tab (`leader.ts`, Web Locks `rooster-outbox`), mirrors queue/confirmations across tabs (`channel.ts`, `BroadcastChannel('rooster')`) and runs the SSE client (`events.ts`). Sign-out calls `clearLocalData()`. Persisted query roots need `gcTime: Infinity` (a 30-day timer overflows).
   - `src/sw.ts`: the service worker (vite-plugin-pwa `injectManifest`, own `tsconfig.sw.json`). Off in `vite` dev unless `VITE_PWA_DEV=1`. `src/features/pwa/`: registration and the update gate (FR-PWA-6), install prompts, the iOS tip sheet, and `SyncStatus` (the header sync pill; every header uses it).
@@ -59,16 +63,20 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - `ids` (uuidv7)
   - `ordering` (fractional keys)
   - `dates` (iso helpers, `dueState`, `formatRelative`, and the NL parser `parseDatePhrase` / `findDateInTitle` / `findGroupToken`; ADR 0004)
+  - `views` (`selectView`, `viewCounts`, `inSmartView`: smart views shared by the web and `?view=`; ADR 0012)
+  - `search` (`parseSearchQuery`, `toFtsMatch`, `matchesTask`, `matchesFilters`, `fuzzyScore`: the search grammar shared by the server's FTS and the palette's offline filter; ADR 0012)
   - `reducers` (`applyOp`, `inverseOf`, `mergeResponse`). These are the optimistic client-side mirror of the server semantics in ADR 0005; **change both together**.
-  - `schemas` (shared zod)
+  - `schemas` (shared zod); `limits` (zod-free constants that `schemas` re-exports) and `sse` (zod-free SSE payload guards) for the web's initial bundle
 
   Imported as `@rooster/core/<module>`.
 - `packages/api-client`: `schema.d.ts` is **generated** from `apps/server/openapi.json` (`pnpm gen:api`), so do not edit it. `src/index.ts` wraps it as `createRoosterClient()`.
-- `packages/i18n`: `locales/{en,sv}/<namespace>.json` (ICU messages), plus `createI18n`/`initI18n`/`detectLocale`.
+- `packages/i18n`: `locales/{en,sv}/<namespace>.json` (ICU messages). `.` bundles every catalog (`createI18n`/`initI18n`; server, CLI, tests), `./core` has the catalog-free helpers (`detectLocale`, `isLocale`, namespaces), `./lazy` loads one locale per chunk (`initLazyI18n`, `ensureLocale`; the web). A new namespace goes in `core.ts` and both `catalog-*.ts`.
 - `packages/tokens`: Coop tokens. `src/tokens.css` and `src/index.ts` must agree. A contrast test guards every allowed pair.
 - `docker/`: `Dockerfile` (distroless, nonroot) and `proxy/` snippets. `compose.yaml` sits at the root.
-- `scripts/`: `ci.sh` (the whole pipeline), `docker-smoke.sh`, `i18n-check.mjs`, and `dev-idp.mjs` (a mock OIDC provider for local dev and tests).
-- `docs/spec/` (the spec), `docs/adr/` (decisions made during implementation).
+- `scripts/`: `ci.sh` (the whole pipeline), `docker-smoke.sh`, `i18n-check.mjs`, `bundle-budget.mjs`, and `dev-idp.mjs` (a mock OIDC provider for local dev and tests).
+- `.github/workflows/`: `ci.yml`, and `release.yml` (a pushed `vX.Y.Z` tag builds, smoke-tests and publishes the image to GHCR as `x.y.z`, `x.y`, `x` and `latest`; the tag must equal the root `package.json` version).
+- `CHANGELOG.md` (Keep a Changelog; list every migration), `README.md` (quick start), `docs/oidc-setup.md` (sign-in provider guide).
+- `docs/spec/` (the spec; `09-phases.md` §Backlog holds specified but unscheduled work), `docs/adr/` (decisions made during implementation).
 
 ## Commands
 ```
@@ -83,6 +91,7 @@ pnpm e2e                       # playwright (apps/web/e2e)
 pnpm lint / pnpm format / pnpm typecheck
 pnpm gen:api                   # emit apps/server/openapi.json, then regenerate packages/api-client
 pnpm i18n:check                # en/sv parity, ICU validity, unused keys
+pnpm bundle:check              # initial JS for /o/:slug/my ≤ 450 KB gzip (after pnpm build; ADR 0016)
 pnpm db:generate               # drizzle-kit generate + STRICT post-processing
 pnpm ci                        # full pipeline (scripts/ci.sh); add --with-docker for image build + smoke
 node apps/web/scripts/render-icons.mjs   # regenerate PNG icons from the SVG mark
@@ -140,19 +149,20 @@ This file is the entry point for every agent and must describe the repository **
 Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to them. A PR that changes any of the above without updating `AGENTS.md` is not done.
 
 ## Status
-- **Current phase:** Phase 5 (smart views, search, palette, export and Trash → v1.0) is next.
-- **Last completed phase:** Phase 4, PWA, offline, realtime, mobile (2026-10-05). AC-4.1 to AC-4.7 pass, including the iPhone 15 (WebKit) and Pixel 8 projects. ADRs 0009 to 0011 record the decisions.
+- **Current phase:** Phase 6 (collaboration) is next. P8 (CLI, PATs) may start in parallel (09).
+- **Last completed phase:** Phase 5, smart views, search, palette, export and Trash (2026-10-06), released as **v1.0.0** (local tag `v1.0.0`). AC-5.1 to AC-5.3 pass on desktop and the phone projects. ADRs 0012 to 0016 record the decisions; ADR 0016 relaxed the initial-bundle budget to 450 KB.
+- **Backlog:** `docs/spec/09-phases.md` §Backlog. Do not build an item unless it is scheduled.
 - **E2E:** never run two Playwright suites at once; they share ports 9400, 3181, 5181 and 3182.
 - **Git:** commit locally; **do not push to origin unless the maintainer explicitly asks.**
 - **Deferred to later phases** (from ADRs 0003–0011; pick them up in the phase named):
-  - **P5:**
-    - A "Make subtask of…" palette action (there is no UI re-parent yet; ADR 0008).
-    - Smart-view tabs appended to the phone view switcher and the sidebar view registry.
-    - The Search tab in the phone bottom nav (currently disabled).
-  - **P6:** the Inbox tab in the phone bottom nav, and the sticky comment composer in the detail sheet.
+  - **P6:**
+    - The Inbox tab in the phone bottom nav, and the sticky comment composer in the detail sheet.
+    - `indexTasks` must fill the `comments` column of `task_fts`, and comment writes must reindex their task (ADR 0013).
+    - Everyone's tasks appends `everyone` to `OrgViewId`, the sidebar view registry and the phone view tabs.
   - **P7:** the push handlers in `src/sw.ts` are stubs.
   - **P8:**
     - Linked identities, PATs and CLI devices (FR-SET-3).
+    - `rooster admin reindex` calls `POST /api/v1/admin/search/reindex` (ADR 0013).
     - Server-side `parse: true` should also read `#tag` tokens (ADR 0007).
   - **P10:** avatar upload (needs sharp).
   - **Whenever touched:**
