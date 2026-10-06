@@ -7,11 +7,11 @@ import {
   Sun,
   Sunrise,
 } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, Suspense, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BottomSheet, SheetOption } from '../../ui/bottom-sheet';
-import { DatePanel } from './date-popover';
 import { toDueValue, toLocalDue, useDateText } from './date-text';
+import { LazyDatePanel } from './lazy';
 import { type QuickDateId, quickDateValue } from './quick-dates';
 import type { DueValue, ViewerDateContext } from './types';
 
@@ -79,13 +79,15 @@ export function QuickDateSheet({
     >
       {picking ? (
         <div className="px-2 pb-2" data-testid="date-sheet-picker">
-          <DatePanel
-            value={value}
-            ctx={ctx}
-            autoFocus={false}
-            onCommit={commit}
-            onCancel={() => setPicking(false)}
-          />
+          <Suspense fallback={null}>
+            <LazyDatePanel
+              value={value}
+              ctx={ctx}
+              autoFocus={false}
+              onCommit={commit}
+              onCancel={() => setPicking(false)}
+            />
+          </Suspense>
         </div>
       ) : (
         <div className="flex flex-col" data-testid="quick-date-sheet">

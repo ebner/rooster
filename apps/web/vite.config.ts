@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import optimizeLocales from '@react-aria/optimize-locales-plugin';
 import tailwindcss from '@tailwindcss/vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react';
@@ -22,6 +23,8 @@ export default defineConfig({
     // Must run before the React plugin so route files are code-split first.
     tanstackRouter({ target: 'react', autoCodeSplitting: true, quoteStyle: 'single' }),
     react(),
+    // 10 §4: react-aria bundles UI strings for ~34 locales; keep only the ones we ship.
+    { ...optimizeLocales.vite({ locales: ['en-US', 'sv-SE'] }), enforce: 'pre' as const },
     tailwindcss(),
     // 04 §6.3: a custom service worker (injectManifest), registered by the app with an
     // update prompt (`features/pwa`). Off in `vite` dev unless VITE_PWA_DEV=1.
@@ -73,5 +76,7 @@ export default defineConfig({
   build: {
     target: 'es2023',
     sourcemap: true,
+    // `scripts/bundle-budget.mjs` walks it (10 §4).
+    manifest: true,
   },
 });

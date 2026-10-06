@@ -1,4 +1,5 @@
-import { BULK_MAX, type BulkOp, type TaskPatch } from '../schemas/list.ts';
+import { BULK_MAX } from '../limits.ts';
+import type { BulkOp, TaskPatch } from '../schemas/list.ts';
 import { type ApplyContext, applyOp, touchesDue } from './apply.ts';
 import { type ListOpSpec, listOps } from './ops.ts';
 import {

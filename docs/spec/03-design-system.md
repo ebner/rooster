@@ -298,7 +298,7 @@ Height 20 px, `--radius-xs`, 6 px horizontal padding, `--text-xs`, weight 500, t
   - Property grid rows 36 px, with the label column 112 px in `--text-sm` muted.
 - **Mobile sheet:** full-screen. The header is 56 px with ‹ back, a centred drag handle (36 × 4, n-300, radius full) and an actions "⋯".
 - **Bottom sheet** (quick date, org switcher): top `--radius-lg`, max height 70 %, scrim `--color-overlay`, slides up 250 ms.
-- **Palette:** 640 px wide, `--radius-lg`, `--shadow-lg`, input 48 px tall `--text-md`, result rows 40 px, and the active result in `--color-bg-muted` with an accent left bar.
+- **Palette:** 640 px wide, `--radius-lg`, `--shadow-lg`, input 48 px tall `--text-md`, result rows 40 px, and the active result in `--color-bg-subtle` with an accent left bar (not bg-muted: `date-today` on it is only 4.4:1; ADR 0014).
 - **Bulk bar:** floating bottom-centre with a 24 px offset, n-900 background, white text, `--radius-lg`, `--shadow-lg`, height 48. Its buttons are ghost-inverse.
 
 ### 3.12 Focus

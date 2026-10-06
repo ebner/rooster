@@ -13,13 +13,7 @@ export const SEARCH_QUERY_MAX = 200;
 export const SEARCH_LIMIT_DEFAULT = 50;
 export const SEARCH_LIMIT_MAX = 50;
 
-/**
- * Snippet highlight markers (Unicode private use area). The server wraps every matched term in
- * the snippet with these, so titles that contain brackets or HTML stay unambiguous. Clients
- * split on them; they never appear in stored text.
- */
-export const SNIPPET_MARK_START = '';
-export const SNIPPET_MARK_END = '';
+export { SNIPPET_MARK_END, SNIPPET_MARK_START } from '../limits.ts';
 
 export const searchQuerySchema = z.object({
   q: z.string().trim().min(1).max(SEARCH_QUERY_MAX),

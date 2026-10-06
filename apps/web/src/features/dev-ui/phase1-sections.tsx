@@ -1,6 +1,6 @@
 import { DndContext } from '@dnd-kit/core';
 import { SortableContext } from '@dnd-kit/sortable';
-import { isLocale } from '@rooster/i18n';
+import { isLocale } from '@rooster/i18n/core';
 import type { TagColor } from '@rooster/tokens';
 import { ListChecks, Search } from 'lucide-react';
 import { useState } from 'react';

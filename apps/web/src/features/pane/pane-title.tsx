@@ -1,4 +1,4 @@
-import { TASK_TITLE_MAX } from '@rooster/core/schemas';
+import { TASK_TITLE_MAX } from '@rooster/core/limits';
 import { type Ref, useImperativeHandle, useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';

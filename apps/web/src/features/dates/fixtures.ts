@@ -1,5 +1,5 @@
 import { dueInstant, type IsoDate } from '@rooster/core/dates';
-import type { Locale } from '@rooster/i18n';
+import type { Locale } from '@rooster/i18n/core';
 import type { DueValue, ViewerDateContext } from './types';
 
 export const sampleZone = 'Europe/Stockholm';

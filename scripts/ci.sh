@@ -12,6 +12,7 @@ step "i18n";         pnpm i18n:check
 step "unit+coverage"; pnpm test:coverage  # full run: coverage globs are repo-relative
 step "api client";   pnpm gen:api && git diff --exit-code -- apps/server/openapi.json packages/api-client/src/schema.d.ts
 step "build";        pnpm build
+step "bundle budget"; pnpm bundle:check
 step "e2e";          pnpm e2e
 
 if [[ "${1:-}" == "--with-docker" ]]; then

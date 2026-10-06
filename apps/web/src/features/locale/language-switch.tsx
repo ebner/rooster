@@ -1,4 +1,4 @@
-import { isLocale, type Locale, supportedLocales } from '@rooster/i18n';
+import { isLocale, type Locale, supportedLocales } from '@rooster/i18n/core';
 import { ToggleButton, ToggleButtonGroup } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';

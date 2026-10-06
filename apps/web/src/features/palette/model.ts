@@ -1,6 +1,6 @@
+import { SNIPPET_MARK_END, SNIPPET_MARK_START } from '@rooster/core/limits';
 import { descendantIds, type ListState } from '@rooster/core/reducers';
 import type { Task } from '@rooster/core/schemas';
-import { SNIPPET_MARK_END, SNIPPET_MARK_START } from '@rooster/core/schemas';
 import {
   foldText,
   fuzzyScore,

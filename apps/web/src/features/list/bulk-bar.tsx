@@ -1,14 +1,15 @@
 import { Calendar, CheckCircle2, FolderInput, Hash, Trash2, X } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { Suspense, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { primaryKeys } from '../../keymap';
 import { cn } from '../../lib/cn';
 import { useListUi } from '../../state/list-store';
 import { Button } from '../../ui/button';
 import { IconButton } from '../../ui/icon-button';
-import { DatePopover, type DueValue, noDue, sameDue } from '../dates';
+import { type DueValue, noDue, sameDue } from '../dates';
+import { LazyDatePopover } from '../dates/lazy';
+import { LazyMoveToPopover } from './lazy';
 import { useListContext } from './list-context';
-import { MoveToPopover } from './move-to-popover';
 
 /**
  * 03 §3.11 / 02 §3.3: with ≥ 2 tasks selected, a floating bar at the bottom centre:
@@ -113,16 +114,20 @@ export function BulkBar({
           store.set({ selected: store.cursor ? { [store.cursor]: true } : {} });
         }}
       />
-      <DatePopover
-        triggerRef={dateRef}
-        isOpen={dateOpen}
-        onOpenChange={setDateOpen}
-        value={common}
-        onChange={(next) => controller.setDue(ids, next)}
-        ctx={dateCtx}
-        placement="top"
-      />
-      {moveOpen && moveRef.current && <MoveToPopover anchor={moveRef.current} ids={ids} />}
+      <Suspense fallback={null}>
+        {dateOpen && (
+          <LazyDatePopover
+            triggerRef={dateRef}
+            isOpen={dateOpen}
+            onOpenChange={setDateOpen}
+            value={common}
+            onChange={(next) => controller.setDue(ids, next)}
+            ctx={dateCtx}
+            placement="top"
+          />
+        )}
+        {moveOpen && moveRef.current && <LazyMoveToPopover anchor={moveRef.current} ids={ids} />}
+      </Suspense>
     </div>
   );
 }

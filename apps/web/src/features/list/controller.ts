@@ -1,4 +1,5 @@
 import { uuidv7 } from '@rooster/core/ids';
+import { BULK_MAX } from '@rooster/core/limits';
 import {
   type ApplyContext,
   ancestorsOf,
@@ -15,13 +16,7 @@ import {
   type TaskCreateBody,
   tasksInGroup,
 } from '@rooster/core/reducers';
-import {
-  BULK_MAX,
-  type OrderingIntent,
-  type Tag,
-  type Task,
-  type TaskMove,
-} from '@rooster/core/schemas';
+import type { OrderingIntent, Tag, Task, TaskMove } from '@rooster/core/schemas';
 import type { SmartView, ViewSection } from '@rooster/core/views';
 import type { DroppedOp, ListPipeline } from '../../data/list';
 import {

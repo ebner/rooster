@@ -1,4 +1,6 @@
-import { createI18n, detectLocale, isLocale, type Locale } from '@rooster/i18n';
+import { detectLocale, isLocale, type Locale } from '@rooster/i18n/core';
+import { ensureLocale, initLazyI18n } from '@rooster/i18n/lazy';
+import i18next from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
 const storageKey = 'rooster.locale';
@@ -24,14 +26,23 @@ export function initialLocale(): Locale {
   return readStoredLocale() ?? detectLocale(browserLanguages());
 }
 
-export const i18n = createI18n(initialLocale(), { plugins: [initReactI18next] });
+export const i18n = i18next.createInstance();
 
 function syncDocumentLanguage(locale: string): void {
   if (typeof document !== 'undefined') document.documentElement.lang = locale;
 }
 
-syncDocumentLanguage(i18n.language);
-i18n.on('languageChanged', syncDocumentLanguage);
+/**
+ * Loads the active locale's catalog only (10 §4: the other language is a separate chunk);
+ * `main.tsx` awaits this before the first render.
+ */
+export const i18nReady = initLazyI18n(i18n, initialLocale(), { plugins: [initReactI18next] }).then(
+  (instance) => {
+    syncDocumentLanguage(instance.language);
+    instance.on('languageChanged', syncDocumentLanguage);
+    return instance;
+  },
+);
 
 /** Switches the UI language and remembers it on this device. */
 export async function setLocale(locale: Locale): Promise<void> {
@@ -40,5 +51,6 @@ export async function setLocale(locale: Locale): Promise<void> {
   } catch {
     // Not persisting is acceptable: the language still changes for this session.
   }
+  await ensureLocale(i18n, locale);
   await i18n.changeLanguage(locale);
 }

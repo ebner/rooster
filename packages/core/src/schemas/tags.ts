@@ -1,10 +1,11 @@
 import { z } from 'zod';
+/** P3 tag contract (01 FR-TAG, 05 §3 `tag`/`task_tag`, 06 §2.4–2.5). Names are unique per org, case-insensitively. */
+import { TAG_NAME_MAX } from '../limits.ts';
 import { idSchema, timestampSchema } from './common.ts';
 import { tagColorSchema } from './org.ts';
 import { nameSchema } from './text.ts';
 
-/** P3 tag contract (01 FR-TAG, 05 §3 `tag`/`task_tag`, 06 §2.4–2.5). Names are unique per org, case-insensitively. */
-export const TAG_NAME_MAX = 40;
+export { TAG_NAME_MAX } from '../limits.ts';
 export const tagNameSchema = nameSchema(TAG_NAME_MAX);
 
 export const tagSchema = z.object({

@@ -1,160 +1,27 @@
-import i18next, { type InitOptions, type i18n, type Module, type Newable } from 'i18next';
-import ICU from 'i18next-icu';
-import enAdmin from '../locales/en/admin.json' with { type: 'json' };
-import enAuth from '../locales/en/auth.json' with { type: 'json' };
-import enCommon from '../locales/en/common.json' with { type: 'json' };
-import enDates from '../locales/en/dates.json' with { type: 'json' };
-import enDev from '../locales/en/dev.json' with { type: 'json' };
-import enEditor from '../locales/en/editor.json' with { type: 'json' };
-import enList from '../locales/en/list.json' with { type: 'json' };
-import enMobile from '../locales/en/mobile.json' with { type: 'json' };
-import enPalette from '../locales/en/palette.json' with { type: 'json' };
-import enPane from '../locales/en/pane.json' with { type: 'json' };
-import enPwa from '../locales/en/pwa.json' with { type: 'json' };
-import enSettings from '../locales/en/settings.json' with { type: 'json' };
-import enShell from '../locales/en/shell.json' with { type: 'json' };
-import enTags from '../locales/en/tags.json' with { type: 'json' };
-import enViews from '../locales/en/views.json' with { type: 'json' };
-import svAdmin from '../locales/sv/admin.json' with { type: 'json' };
-import svAuth from '../locales/sv/auth.json' with { type: 'json' };
-import svCommon from '../locales/sv/common.json' with { type: 'json' };
-import svDates from '../locales/sv/dates.json' with { type: 'json' };
-import svDev from '../locales/sv/dev.json' with { type: 'json' };
-import svEditor from '../locales/sv/editor.json' with { type: 'json' };
-import svList from '../locales/sv/list.json' with { type: 'json' };
-import svMobile from '../locales/sv/mobile.json' with { type: 'json' };
-import svPalette from '../locales/sv/palette.json' with { type: 'json' };
-import svPane from '../locales/sv/pane.json' with { type: 'json' };
-import svPwa from '../locales/sv/pwa.json' with { type: 'json' };
-import svSettings from '../locales/sv/settings.json' with { type: 'json' };
-import svShell from '../locales/sv/shell.json' with { type: 'json' };
-import svTags from '../locales/sv/tags.json' with { type: 'json' };
-import svViews from '../locales/sv/views.json' with { type: 'json' };
+import i18next, { type i18n } from 'i18next';
+import { en } from './catalog-en.ts';
+import { sv } from './catalog-sv.ts';
+import { defaultLocale, type I18nOptions, initI18nWith, type Locale } from './core.ts';
 
-/** UI languages (D-23). English is the fallback. */
-export const supportedLocales = ['en', 'sv'] as const;
-export type Locale = (typeof supportedLocales)[number];
-export const defaultLocale: Locale = 'en';
+export * from './core.ts';
 
-/**
- * Catalog namespaces. `common` is the default; `dev` holds kitchen-sink copy; `shell`,
- * `auth`, `settings` and `admin` are the web app's screens.
- * Add a namespace by adding `locales/<locale>/<ns>.json` for every locale and
- * registering it here.
- */
-export const namespaces = [
-  'common',
-  'dev',
-  'shell',
-  'auth',
-  'settings',
-  'admin',
-  'dates',
-  'list',
-  'pane',
-  'tags',
-  'editor',
-  'pwa',
-  'mobile',
-  'views',
-  'palette',
-] as const;
-export type Namespace = (typeof namespaces)[number];
-export const defaultNamespace: Namespace = 'common';
-
-export const resources = {
-  en: {
-    common: enCommon,
-    dev: enDev,
-    shell: enShell,
-    auth: enAuth,
-    settings: enSettings,
-    admin: enAdmin,
-    dates: enDates,
-    list: enList,
-    pane: enPane,
-    tags: enTags,
-    editor: enEditor,
-    pwa: enPwa,
-    mobile: enMobile,
-    views: enViews,
-    palette: enPalette,
-  },
-  sv: {
-    common: svCommon,
-    dev: svDev,
-    shell: svShell,
-    auth: svAuth,
-    settings: svSettings,
-    admin: svAdmin,
-    dates: svDates,
-    list: svList,
-    pane: svPane,
-    tags: svTags,
-    editor: svEditor,
-    pwa: svPwa,
-    mobile: svMobile,
-    views: svViews,
-    palette: svPalette,
-  },
-} as const;
+/** Every catalog, bundled. The web app loads one locale at a time instead (`lazy.ts`). */
+export const resources = { en, sv } as const;
 
 /** The English catalog shape; used for typed keys (`CustomTypeOptions['resources']`). */
 export type Resources = (typeof resources)['en'];
-
-export function isLocale(value: unknown): value is Locale {
-  return typeof value === 'string' && (supportedLocales as readonly string[]).includes(value);
-}
-
-/**
- * Picks the first supported locale from a preference list such as
- * `navigator.languages` (`['sv-SE', 'en']` → `'sv'`). Falls back to English.
- */
-export function detectLocale(languages: readonly string[]): Locale {
-  for (const tag of languages) {
-    const primary = tag.trim().toLowerCase().split(/[-_]/)[0];
-    if (isLocale(primary)) return primary;
-  }
-  return defaultLocale;
-}
-
-type I18nPlugin = Module | Newable<Module>;
-
-export interface I18nOptions {
-  /** Extra i18next plugins, e.g. `initReactI18next`. ICU is always installed. */
-  plugins?: readonly I18nPlugin[];
-}
-
-function initOptions(locale: Locale): InitOptions {
-  return {
-    lng: locale,
-    fallbackLng: defaultLocale,
-    supportedLngs: [...supportedLocales],
-    load: 'languageOnly',
-    ns: [...namespaces],
-    defaultNS: defaultNamespace,
-    resources,
-    initAsync: false,
-    returnNull: false,
-    // React (and the CLI's terminal output) escape on their own; emails escape in templates.
-    interpolation: { escapeValue: false },
-  };
-}
 
 /**
  * Initialises an existing i18next instance with the rooster catalogs and ICU
  * message format. Resources are bundled, so this completes synchronously; the
  * returned promise is for callers that prefer to await.
  */
-export async function initI18n(
+export function initI18n(
   instance: i18n,
   locale: Locale = defaultLocale,
   options: I18nOptions = {},
 ): Promise<i18n> {
-  instance.use(ICU);
-  for (const plugin of options.plugins ?? []) instance.use(plugin);
-  await instance.init(initOptions(locale));
-  return instance;
+  return initI18nWith(instance, locale, resources, options);
 }
 
 /** Creates a new, fully initialised, isolated i18next instance (synchronously usable). */

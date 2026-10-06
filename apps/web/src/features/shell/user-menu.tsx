@@ -1,4 +1,4 @@
-import { isLocale, type Locale, supportedLocales } from '@rooster/i18n';
+import { isLocale, type Locale, supportedLocales } from '@rooster/i18n/core';
 import { ChevronsUpDown, Languages, LogOut, Settings, ShieldCheck } from 'lucide-react';
 import { Button as AriaButton } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';

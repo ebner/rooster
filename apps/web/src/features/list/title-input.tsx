@@ -1,4 +1,4 @@
-import { TASK_TITLE_MAX } from '@rooster/core/schemas';
+import { TASK_TITLE_MAX } from '@rooster/core/limits';
 import {
   type ClipboardEvent,
   type KeyboardEvent,
@@ -15,7 +15,7 @@ import { detectPlatform } from '../../lib/platform';
 import type { Caret } from '../../state/list-store';
 import { useTagsStore } from '../../state/tags-store';
 import { TagDot } from '../tags/tag-dot';
-import { type TagOption, tagOptions } from '../tags/tag-picker';
+import { type TagOption, tagOptions } from '../tags/tag-options';
 import type { CommitResult } from './controller';
 import { useListContext } from './list-context';
 import {

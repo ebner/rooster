@@ -1,11 +1,6 @@
+import { SUBTASK_DEPTH_MAX } from '../limits.ts';
 import { compareKeys, generateKeyBetween, generateNKeysBetween } from '../ordering.ts';
-import {
-  type Group,
-  type MyList,
-  type OrderingIntent,
-  SUBTASK_DEPTH_MAX,
-  type Task,
-} from '../schemas/list.ts';
+import type { Group, MyList, OrderingIntent, Task } from '../schemas/list.ts';
 
 /**
  * A task soft-deleted on this client. `withGroupId` marks tasks deleted together with a group;
@@ -19,7 +14,7 @@ export interface DeletedTask {
 }
 
 /** 05 §4.3 / ADR 0007: depth = number of ancestors, at most this many. */
-export { SUBTASK_DEPTH_MAX } from '../schemas/list.ts';
+export { SUBTASK_DEPTH_MAX } from '../limits.ts';
 
 /**
  * The normalized My tasks cache (04 §5.1 `['my-list', orgId]`). Optimistic reducers produce a

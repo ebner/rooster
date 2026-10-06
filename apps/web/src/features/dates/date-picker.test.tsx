@@ -1,10 +1,11 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
-import { describe, expect, test, vi } from 'vitest';
+import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { DateCell } from './date-cell';
 import { DateLabel, useDateLabel } from './date-label';
 import { DatePanel } from './date-popover';
 import { sampleDateContext, sampleDue, sampleToday, sampleZone } from './fixtures';
+import { LazyDatePopover } from './lazy';
 import { parseRangeInput } from './parser';
 import { type DueValue, noDue, type ViewerDateContext } from './types';
 
@@ -40,6 +41,12 @@ function openPicker(cell: HTMLElement) {
 function type(input: HTMLElement, text: string) {
   fireEvent.change(input, { target: { value: text } });
 }
+
+// DateCell loads its popover lazily (10 §4); preloaded, it renders synchronously like the app
+// after its idle prefetch.
+beforeAll(async () => {
+  await LazyDatePopover.preload();
+});
 
 describe('DateCell', () => {
   test('a quick chip commits and closes the picker', () => {

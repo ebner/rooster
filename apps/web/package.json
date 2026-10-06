@@ -52,6 +52,7 @@
   "devDependencies": {
     "@axe-core/playwright": "catalog:",
     "@playwright/test": "catalog:",
+    "@react-aria/optimize-locales-plugin": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/router-plugin": "catalog:",
     "@testing-library/react": "catalog:",

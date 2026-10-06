@@ -1,4 +1,4 @@
-import { isLocale } from '@rooster/i18n';
+import { isLocale } from '@rooster/i18n/core';
 import {
   createFileRoute,
   Outlet,

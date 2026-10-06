@@ -1,5 +1,5 @@
 import { formatRelative, formatTime } from '@rooster/core/dates';
-import { type Locale, supportedLocales } from '@rooster/i18n';
+import { type Locale, supportedLocales } from '@rooster/i18n/core';
 import { useTranslation } from 'react-i18next';
 import type { CurrentUser, ProfilePatch } from '../../data/types';
 import { Avatar } from '../../ui/avatar';

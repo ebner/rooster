@@ -29,7 +29,9 @@ export const timeZoneSchema = z
   .string()
   .refine(isValidTimeZone, { error: 'Expected an IANA timezone such as Europe/Stockholm' });
 
-export const SWIPE_ACTIONS = ['complete', 'date', 'move', 'delete', 'none'] as const;
+import { DEFAULT_PREFS, SWIPE_ACTIONS } from '../limits.ts';
+
+export { DEFAULT_PREFS, SWIPE_ACTIONS } from '../limits.ts';
 export const swipeActionSchema = z.enum(SWIPE_ACTIONS);
 
 /** `user.prefs` (05 §2). Every key is optional in storage; reads apply `DEFAULT_PREFS`. */
@@ -44,15 +46,6 @@ export const prefsSchema = z.object({
 });
 
 export const prefsPatchSchema = prefsSchema.partial();
-
-export const DEFAULT_PREFS: Prefs = {
-  parseTitleDates: true,
-  completeHideMs: 1500,
-  swipeLeft: 'date',
-  swipeRight: 'complete',
-  reminderTime: '08:00',
-  digestTime: '07:00',
-};
 
 /** Stored prefs merged over the defaults; unknown or invalid stored keys are dropped. */
 export function resolvePrefs(stored: unknown): Prefs {

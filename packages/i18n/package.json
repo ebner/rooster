@@ -5,6 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./core": "./src/core.ts",
+    "./lazy": "./src/lazy.ts",
     "./locales/*": "./locales/*"
   },
   "scripts": {

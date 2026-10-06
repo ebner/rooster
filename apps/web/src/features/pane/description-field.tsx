@@ -1,6 +1,36 @@
-import { memo } from 'react';
+import { memo, Suspense, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MarkdownEditor } from '../editor';
+import { lazyWithPreload, preloadWhenIdle } from '../../lib/lazy';
+import { LazyDatePanel, LazyDatePopover } from '../dates/lazy';
+import { LazyGroupDeletePopover, LazyMoveToPopover, LazyTagPicker } from '../list/lazy';
+
+// 10 §4: Tiptap and ProseMirror stay out of the initial bundle (see `lib/lazy.ts`).
+const MarkdownEditor = lazyWithPreload(() =>
+  import('../editor/markdown-editor').then((m) => m.MarkdownEditor),
+);
+
+let prefetched = false;
+
+/**
+ * Warms the lazily loaded interaction chunks (editor, date picker, tag picker, menus) once the
+ * app is idle, so their first open needs no network, also offline before the service worker
+ * has cached them. Mounted by the tasks screen.
+ */
+export function InteractionPrefetch() {
+  useEffect(() => {
+    if (prefetched) return;
+    prefetched = true;
+    preloadWhenIdle([
+      MarkdownEditor.preload,
+      LazyDatePopover.preload,
+      LazyDatePanel.preload,
+      LazyTagPicker.preload,
+      LazyMoveToPopover.preload,
+      LazyGroupDeletePopover.preload,
+    ]);
+  }, []);
+  return null;
+}
 
 export interface DescriptionFieldProps {
   /** Markdown. */
@@ -30,17 +60,26 @@ export const DescriptionField = memo(function DescriptionField({
   const { t } = useTranslation('pane');
   return (
     <div data-no-chords data-testid="description-field">
-      <MarkdownEditor
-        value={value}
-        onChange={onChange}
-        ariaLabel={t('description.label')}
-        placeholder={t('description.placeholder')}
-        collapsedLines={12}
-        autoFocus={autoFocus}
-        readOnly={readOnly}
-        onEscape={onEscape}
-        onModEnter={onModEnter}
-      />
+      <Suspense
+        fallback={
+          // The raw Markdown in the editor's type, so the pane doesn't jump when it loads.
+          <div className="line-clamp-12 min-h-row w-full whitespace-pre-wrap text-md text-text-secondary">
+            {value || t('description.placeholder')}
+          </div>
+        }
+      >
+        <MarkdownEditor
+          value={value}
+          onChange={onChange}
+          ariaLabel={t('description.label')}
+          placeholder={t('description.placeholder')}
+          collapsedLines={12}
+          autoFocus={autoFocus}
+          readOnly={readOnly}
+          onEscape={onEscape}
+          onModEnter={onModEnter}
+        />
+      </Suspense>
     </div>
   );
 });

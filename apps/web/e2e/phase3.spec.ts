@@ -158,7 +158,10 @@ test('AC-3.3 subtasks expand inline, Enter adds a sibling, completing updates th
   await expect(row(page, 'Parent').getByTestId('subtask-counter')).toHaveText(/1\/3/);
   // ← on a subtask selects the parent, ← again collapses it; the state is persisted.
   await row(page, 'Sub one').click({ position: { x: 600, y: 10 } });
+  // The click opens the pane; Esc must reach the pane, not race its mount under load.
+  await expect(page.locator('[data-pane-root]')).toBeVisible();
   await page.keyboard.press('Escape'); // keep focus in the list, close the pane
+  await expect(page.locator('[data-pane-root]')).toHaveCount(0);
   await page.keyboard.press('ArrowLeft');
   await expect(row(page, 'Parent')).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('ArrowLeft');

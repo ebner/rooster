@@ -1,5 +1,5 @@
 import { type DateFormat, formatRelative, type TimeFormat, todayIn } from '@rooster/core/dates';
-import type { Locale } from '@rooster/i18n';
+import type { Locale } from '@rooster/i18n/core';
 
 /** What a screen needs to render instants for the viewer (04 §8). */
 export interface DisplayPrefs {

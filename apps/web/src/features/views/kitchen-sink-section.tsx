@@ -1,7 +1,7 @@
 import { addDays } from '@rooster/core/dates';
 import type { Task } from '@rooster/core/schemas';
 import { SMART_VIEWS } from '@rooster/core/views';
-import { isLocale } from '@rooster/i18n';
+import { isLocale } from '@rooster/i18n/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CircleAlert } from 'lucide-react';
 import { type ReactElement, useMemo, useState } from 'react';

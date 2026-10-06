@@ -1,4 +1,4 @@
-import { DEFAULT_PREFS } from '@rooster/core/schemas';
+import { DEFAULT_PREFS } from '@rooster/core/limits';
 import { createFileRoute } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { useMe, useUpdateProfile } from '../../data';

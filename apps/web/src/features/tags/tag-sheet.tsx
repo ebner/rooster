@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { BottomSheet, SheetOption } from '../../ui/bottom-sheet';
 import { TextField } from '../../ui/input';
 import { TagDot } from './tag-dot';
-import { tagOptions } from './tag-picker';
+import { tagOptions } from './tag-options';
 
 export interface TagSheetProps {
   isOpen: boolean;

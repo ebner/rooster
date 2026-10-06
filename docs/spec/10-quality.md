@@ -64,7 +64,7 @@ A corpus of 40 Markdown samples (`apps/web/src/features/editor/markdown.corpus.t
 
 | Metric | Budget |
 |---|---|
-| Initial JS (gzip) for `/o/:slug/my` | ≤ 250 KB. Tiptap, the palette, settings, import and admin are lazy-loaded. |
+| Initial JS (gzip) for `/o/:slug/my` | ≤ 450 KB, including the active locale's catalog; `pnpm bundle:check` enforces it in CI (ADR 0016; was 250 KB, which the 04 §2 stack cannot reach). Tiptap, the palette, the list popovers (date, tags, move, group delete), the better-auth client, settings, import and admin are lazy-loaded. |
 | Cold load LCP (desktop, cached SW, local server) | ≤ 1.0 s |
 | Warm start of the installed PWA to an interactive list (cached data) | ≤ 800 ms on an iPhone 13-class device |
 | Keypress → paint for create, complete and move with 500 tasks | ≤ 50 ms (p95) |

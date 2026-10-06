@@ -1,6 +1,6 @@
 import type { Task } from '@rooster/core/schemas';
 import { parseSearchQuery } from '@rooster/core/search';
-import { isLocale } from '@rooster/i18n';
+import { isLocale } from '@rooster/i18n/core';
 import { useTranslation } from 'react-i18next';
 import { sampleDateContext, sampleToday } from '../dates/fixtures';
 import { Group, Section } from '../dev-ui/layout';

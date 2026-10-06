@@ -1,11 +1,13 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { safeRedirectPath } from '../lib/safe-redirect';
-import { authClient } from './auth-client';
 import { ApiError } from './errors';
 import { api, unwrap } from './http';
 import { queryKeys } from './query-keys';
 import { clearLocalData } from './sync/engine';
 import type { AuthProvider, MutationResult, QueryResult } from './types';
+
+/** 10 §4: the better-auth client (~8 KB gzip) is only needed to sign in or out. */
+const loadAuthClient = () => import('./auth-client').then((m) => m.authClient);
 
 /** `GET /meta` → the configured sign-in providers (login page). */
 export function useAuthProviders(): QueryResult<AuthProvider[]> {
@@ -29,6 +31,7 @@ export interface SignInVariables {
 export async function startSignIn({ providerId, callbackUrl }: SignInVariables): Promise<void> {
   const callbackURL = safeRedirectPath(callbackUrl) ?? '/';
   const errorCallbackURL = '/login';
+  const authClient = await loadAuthClient();
   const result = await authClient.signIn.social({
     provider: providerId,
     callbackURL,
@@ -52,6 +55,7 @@ export function useSignOut(): MutationResult<void> {
     mutationFn: async () => {
       // Leaves the identity provider's session alone (no RP-initiated logout): signing
       // out of rooster should not sign the user out of their company SSO.
+      const authClient = await loadAuthClient();
       const result = await authClient.signOut({ disableRedirect: true });
       if (result.error) throw new ApiError('sign_out_failed', result.error.status ?? 500);
       await clearLocalData();

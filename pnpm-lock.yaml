@@ -197,6 +197,9 @@ catalogs:
     '@playwright/test':
       specifier: 1.63.0
       version: 1.63.0
+    '@react-aria/optimize-locales-plugin':
+      specifier: 2.0.2
+      version: 2.0.2
     '@scalar/api-reference':
       specifier: 1.72.4
       version: 1.72.4
@@ -594,6 +597,9 @@ importers:
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.63.0
+      '@react-aria/optimize-locales-plugin':
+        specifier: 'catalog:'
+        version: 2.0.2
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -2122,6 +2128,9 @@ packages:
 
   '@quansync/fs@1.1.0':
     resolution: {integrity: sha512-qAPG/t3HqML1TlN7sY/pTbEjzFVAKsMjNNMGheyDosro+kT4iw2KCUoHcVdmliwWjorm4elZbgNQyU2eD97eDg==}
+
+  '@react-aria/optimize-locales-plugin@2.0.2':
+    resolution: {integrity: sha512-YxRwGC76G/aOozUEzl93irjhGuLsC63clF5abOX+lNAlg7EGns7250Ud8Ice6dy5oLv9mSXQx8LEf0b+56Cclg==}
 
   '@react-types/shared@3.36.1':
     resolution: {integrity: sha512-AzsuD9OfxTOZMMvTRhlN3oHBwOmFN7tDh27LzqmHt4+uOgPhJT7ZM7/kVs/8/o0WxayMUIk3hBmCFRHv1FUoag==}
@@ -5613,6 +5622,10 @@ packages:
     resolution: {integrity: sha512-gptHNQghINnc/vTGIk0SOFGFNXw7JVrlRUtConJRlvaw6DuX0wO5Jeko9sWrMBhh+PsYAZ7oXAiOnf/UKogyiw==}
     engines: {node: '>= 10.0.0'}
 
+  unplugin@2.3.11:
+    resolution: {integrity: sha512-5uKD0nqiYVzlmCRs01Fhs2BdkEgBS3SAVP6ndrBsuK42iC2+JHyxM05Rm9G8+5mkmRtzMZGY8Ct5+mliZxU/Ww==}
+    engines: {node: '>=18.12.0'}
+
   unplugin@3.4.0:
     resolution: {integrity: sha512-9skdIFlCsPdFV7wUfZxNsFInlW+7nJmGu2gkTu0OUhF56aXGsHab9x52/QhdJ4lC7ZDPWTxbiC4ANqVlsuaW3w==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -7346,6 +7359,10 @@ snapshots:
   '@quansync/fs@1.1.0':
     dependencies:
       quansync: 1.0.0
+
+  '@react-aria/optimize-locales-plugin@2.0.2':
+    dependencies:
+      unplugin: 2.3.11
 
   '@react-types/shared@3.36.1(react@19.3.0)':
     dependencies:
@@ -11177,6 +11194,13 @@ snapshots:
       unist-util-visit-parents: 6.0.2
 
   universalify@2.0.1: {}
+
+  unplugin@2.3.11:
+    dependencies:
+      '@jridgewell/remapping': 2.3.5
+      acorn: 8.18.0
+      picomatch: 4.0.7
+      webpack-virtual-modules: 0.6.2
 
   unplugin@3.4.0(esbuild@0.28.2)(rolldown@1.2.12)(rollup@4.64.0)(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)):
     dependencies:

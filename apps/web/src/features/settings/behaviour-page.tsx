@@ -1,4 +1,5 @@
-import { SWIPE_ACTIONS, type SwipeAction } from '@rooster/core/schemas';
+import { SWIPE_ACTIONS } from '@rooster/core/limits';
+import type { SwipeAction } from '@rooster/core/schemas';
 import { useTranslation } from 'react-i18next';
 import { Select } from '../../ui/select';
 import { SwipeReveal } from '../../ui/swipe-reveal';

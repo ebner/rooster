@@ -13,6 +13,7 @@ import { ViewBody, ViewHeader } from '../shell/app-shell';
 import { type OrgViewId, paths } from '../shell/paths';
 import { TagFilterButton } from '../tags/tag-filter';
 import { useViewTabs } from '../views/view-tabs';
+import { InteractionPrefetch } from './description-field';
 import { DetailPane } from './detail-pane';
 import type { PaneControls } from './pane-controls';
 import { SplitView } from './split-view';
@@ -163,6 +164,7 @@ export function TasksScreen({
       onDismiss={() => pane.close()}
       list={
         <>
+          <InteractionPrefetch />
           <ViewHeader
             title={title}
             context={org.name}

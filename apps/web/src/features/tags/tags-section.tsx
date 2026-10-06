@@ -1,4 +1,5 @@
-import { TAG_NAME_MAX, type Tag } from '@rooster/core/schemas';
+import { TAG_NAME_MAX } from '@rooster/core/limits';
+import type { Tag } from '@rooster/core/schemas';
 import type { TagColor } from '@rooster/tokens';
 import { GitMerge, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';

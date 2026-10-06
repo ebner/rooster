@@ -6,6 +6,7 @@ import {
   memo,
   type ReactElement,
   type RefObject,
+  Suspense,
   useEffect,
   useMemo,
   useRef,
@@ -41,17 +42,16 @@ import { useViewerDateContext } from '../dates';
 import { type PaletteCommands, usePaletteCommands } from '../palette/commands';
 import type { PaneControls } from '../pane/pane-controls';
 import { toggleCheatSheet } from '../shell/cheat-sheet';
-import { TagPicker } from '../tags/tag-picker';
 import { AddGroupRowView, AddSubtaskRowView, AddTaskRow, FirstRunHint } from './add-row';
 import { announce, ListLiveRegion } from './announcer';
 import { BulkBar } from './bulk-bar';
 import { completionHoldMs, ListController, type Translate, type ViewModel } from './controller';
 import { GroupHeader } from './group-header';
+import { LazyMoveToPopover, LazyTagPicker } from './lazy';
 import { ListContext, type ListContextValue } from './list-context';
 import { MobileListChrome } from './mobile-list-chrome';
 import { buildRows, type Row, type RowCache } from './model/rows';
 import { buildViewRows } from './model/view-rows';
-import { MoveToPopover } from './move-to-popover';
 import { PullToRefresh } from './pull-to-refresh';
 import { SectionHeader } from './section-header';
 import { TaskRow } from './task-row';
@@ -684,7 +684,11 @@ export function MyListView({ orgId, userId, label, pane, view }: MyListViewProps
         />
       )}
       {ids.length > 1 && <BulkBar ids={ids} />}
-      {moveAnchor && <MoveToPopover anchor={moveAnchor} ids={controller.selectedTaskIds()} />}
+      {moveAnchor && (
+        <Suspense fallback={null}>
+          <LazyMoveToPopover anchor={moveAnchor} ids={controller.selectedTaskIds()} />
+        </Suspense>
+      )}
       {tagAnchor && tagIds.length > 0 && (
         <RowTagPicker anchor={tagAnchor} ids={tagIds} controller={controller} />
       )}
@@ -718,18 +722,20 @@ export function RowTagPicker({
     controller.ui().set({ popover: null, focusSeq: controller.ui().focusSeq + 1 });
   };
   return (
-    <TagPicker
-      anchor={anchor}
-      tags={tags}
-      applied={applied}
-      label={
-        tasks.length === 1
-          ? t('picker.label', { title: tasks[0]?.title ?? '' })
-          : t('picker.labelMany', { count: tasks.length })
-      }
-      onToggle={(tagId) => controller.toggleTag(ids, tagId)}
-      onCreate={(name) => controller.createTagFor(ids, name)}
-      onClose={close}
-    />
+    <Suspense fallback={null}>
+      <LazyTagPicker
+        anchor={anchor}
+        tags={tags}
+        applied={applied}
+        label={
+          tasks.length === 1
+            ? t('picker.label', { title: tasks[0]?.title ?? '' })
+            : t('picker.labelMany', { count: tasks.length })
+        }
+        onToggle={(tagId) => controller.toggleTag(ids, tagId)}
+        onCreate={(name) => controller.createTagFor(ids, name)}
+        onClose={close}
+      />
+    </Suspense>
   );
 }

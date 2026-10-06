@@ -1,13 +1,13 @@
 import type { IsoDate } from '@rooster/core/dates';
 import { Calendar } from 'lucide-react';
-import { type KeyboardEvent, type Ref, useCallback, useRef, useState } from 'react';
+import { type KeyboardEvent, type Ref, Suspense, useCallback, useRef, useState } from 'react';
 import { Button as AriaButton } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
 import { iconStrokeWidth } from '../../ui/button';
 import { Tooltip } from '../../ui/tooltip';
 import { DateLabel, DateLabelContent, dueStateClass, useDateLabel } from './date-label';
-import { DatePopover } from './date-popover';
+import { LazyDatePopover } from './lazy';
 import type { DueValue, ViewerDateContext } from './types';
 
 /** The single-key shortcut that opens the picker from a focused cell (02 §6). */
@@ -73,6 +73,8 @@ export function DateCell({
   const info = useDateLabel(value, ctx, { completed, startDate });
   const [isOpenState, setOpenState] = useState(false);
   const isOpen = isOpenProp ?? isOpenState;
+  const everOpened = useRef(false);
+  if (isOpen) everOpened.current = true;
   const setOpen = (open: boolean) => {
     setOpenState(open);
     onOpenChange?.(open);
@@ -157,14 +159,19 @@ export function DateCell({
           )}
         </AriaButton>
       </Tooltip>
-      <DatePopover
-        triggerRef={buttonRef}
-        isOpen={isOpen}
-        onOpenChange={setOpen}
-        value={value}
-        onChange={onChange}
-        ctx={ctx}
-      />
+      {/* Mounted from the first open on, so later closes keep their exit animation. */}
+      {(isOpen || everOpened.current) && (
+        <Suspense fallback={null}>
+          <LazyDatePopover
+            triggerRef={buttonRef}
+            isOpen={isOpen}
+            onOpenChange={setOpen}
+            value={value}
+            onChange={onChange}
+            ctx={ctx}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

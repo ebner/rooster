@@ -1,4 +1,4 @@
-import { isLocale, type Locale } from '@rooster/i18n';
+import { isLocale, type Locale } from '@rooster/i18n/core';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';

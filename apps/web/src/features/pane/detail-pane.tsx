@@ -15,7 +15,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button as AriaButton, type ButtonProps as AriaButtonProps } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { errorCode, useDisplayPrefs, useMe, useOrgMembers } from '../../data';
@@ -52,9 +52,9 @@ import { QuickDateSheet } from '../dates/quick-date-sheet';
 import { completionHoldMs, ListController, type Translate } from '../list/controller';
 import { motionMs } from '../list/gestures';
 import { GroupSheet } from '../list/group-sheet';
+import { LazyTagPicker } from '../list/lazy';
 import type { ListContextValue } from '../list/list-context';
 import type { Row } from '../list/model/rows';
-import { TagPicker } from '../tags/tag-picker';
 import { TagSheet } from '../tags/tag-sheet';
 import { DescriptionField } from './description-field';
 import type { PaneControls } from './pane-controls';
@@ -622,18 +622,20 @@ function PaneContent({
                 />
               </span>
               {tagsOpen && !mobile && tagButton.current && (
-                <TagPicker
-                  anchor={tagButton.current}
-                  tags={Object.values(tagsById)}
-                  applied={task.tagIds}
-                  label={t('props.tags')}
-                  onToggle={(tagId) => controller.toggleTag([taskId], tagId)}
-                  onCreate={(name) => controller.createTagFor([taskId], name)}
-                  onClose={() => {
-                    setTagsOpen(false);
-                    tagButton.current?.querySelector('button')?.focus();
-                  }}
-                />
+                <Suspense fallback={null}>
+                  <LazyTagPicker
+                    anchor={tagButton.current}
+                    tags={Object.values(tagsById)}
+                    applied={task.tagIds}
+                    label={t('props.tags')}
+                    onToggle={(tagId) => controller.toggleTag([taskId], tagId)}
+                    onCreate={(name) => controller.createTagFor([taskId], name)}
+                    onClose={() => {
+                      setTagsOpen(false);
+                      tagButton.current?.querySelector('button')?.focus();
+                    }}
+                  />
+                </Suspense>
               )}
             </dd>
             <dt className="flex h-property-row items-center text-text-muted">

@@ -1,9 +1,5 @@
-import {
-  type SseHello,
-  type SseInvalidate,
-  sseHelloSchema,
-  sseInvalidateSchema,
-} from '@rooster/core/schemas';
+import type { SseHello, SseInvalidate } from '@rooster/core/schemas';
+import { parseSseHello, parseSseInvalidate } from '@rooster/core/sse';
 import type { SseState } from '../../state/sync-store';
 
 export const eventsUrl = '/api/v1/events';
@@ -208,12 +204,12 @@ export class EventStream {
   }
 
   private onHello(data: string): void {
-    const hello = parse(data, sseHelloSchema);
+    const hello = parse(data, parseSseHello);
     if (hello) this.options.onHello(hello);
   }
 
   private onInvalidate(data: string): void {
-    const event = parse(data, sseInvalidateSchema);
+    const event = parse(data, parseSseInvalidate);
     if (!event) return;
     const keys = invalidationKeys(event, this.options.clientId);
     for (const key of keys) this.options.invalidate(key);
@@ -254,13 +250,9 @@ export class EventStream {
   }
 }
 
-function parse<T>(
-  data: string,
-  schema: { safeParse: (v: unknown) => { success: boolean; data?: T } },
-) {
+function parse<T>(data: string, guard: (value: unknown) => T | null): T | null {
   try {
-    const result = schema.safeParse(JSON.parse(data));
-    return result.success ? (result.data as T) : null;
+    return guard(JSON.parse(data));
   } catch {
     return null;
   }

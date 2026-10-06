@@ -1,6 +1,13 @@
-import { GROUP_NAME_MAX } from '@rooster/core/schemas';
+import { GROUP_NAME_MAX } from '@rooster/core/limits';
 import { ChevronRight, Inbox, MoreHorizontal, Pencil, Plus, Rows3, Trash2 } from 'lucide-react';
-import { type KeyboardEvent, type MouseEvent, memo, useLayoutEffect, useRef } from 'react';
+import {
+  type KeyboardEvent,
+  type MouseEvent,
+  memo,
+  Suspense,
+  useLayoutEffect,
+  useRef,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { primaryKeys } from '../../keymap';
 import { cn } from '../../lib/cn';
@@ -10,7 +17,7 @@ import { IconButton } from '../../ui/icon-button';
 import { Menu, MenuItem, MenuPopover, MenuTrigger } from '../../ui/menu';
 import { DropLine } from './drop-line';
 import { GridCell, GridRow } from './grid';
-import { GroupDeletePopover } from './group-delete-popover';
+import { LazyGroupDeletePopover } from './lazy';
 import { useListContext } from './list-context';
 import type { GroupRow } from './model/rows';
 import { placeCaret } from './title-input';
@@ -239,7 +246,11 @@ export const GroupHeader = memo(function GroupHeader({ row }: GroupHeaderProps) 
           )}
         </div>
       </GridCell>
-      {deleteOpen && <GroupDeletePopover groupId={group.id} triggerRef={headerRef} />}
+      {deleteOpen && (
+        <Suspense fallback={null}>
+          <LazyGroupDeletePopover groupId={group.id} triggerRef={headerRef} />
+        </Suspense>
+      )}
     </GridRow>
   );
 });

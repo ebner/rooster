@@ -15,7 +15,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import type { Locale } from '@rooster/i18n';
+import type { Locale } from '@rooster/i18n/core';
 import type { TagColor } from '@rooster/tokens';
 import { PanelLeftClose, PanelLeftOpen, Plus, Search } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
