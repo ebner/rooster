@@ -31,7 +31,11 @@ export const AddTaskRow = memo(function AddTaskRow({ row }: { row: AddRow }) {
     >
       <DropLine rowId={row.id} />
       <GridCell className="flex flex-1">
-        <button type="button" className={addClass} onClick={() => controller.addAtEnd(row.groupId)}>
+        <button
+          type="button"
+          className={addClass}
+          onClick={() => controller.addAtEnd(row.groupId, row.sectionId)}
+        >
           <HandleSpacer />
           <span className="flex size-hit shrink-0 items-center justify-center">
             <Plus className="size-4" strokeWidth={iconStrokeWidth} aria-hidden />

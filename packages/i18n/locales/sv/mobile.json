@@ -49,7 +49,14 @@
     "hideCompleted": "Dölj klara"
   },
   "views": {
-    "label": "Vyer"
+    "label": "Vyer",
+    "tab": {
+      "my": "Mina uppgifter",
+      "today": "Idag",
+      "week": "7 dagar",
+      "overdue": "Försenade",
+      "nodate": "Utan datum"
+    }
   },
   "nav": {
     "label": "Huvudmeny",

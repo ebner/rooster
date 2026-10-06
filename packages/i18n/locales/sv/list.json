@@ -63,7 +63,8 @@
   "hint": {
     "emptyTitle": "Namnet kan inte vara tomt",
     "useTabDelete": "Använd Tab+Delete för att ta bort uppgifter med innehåll",
-    "subtaskDepth": "Deluppgifter kan bara ligga {max} nivåer djupt"
+    "subtaskDepth": "Deluppgifter kan bara ligga {max} nivåer djupt",
+    "subtaskCycle": "En uppgift kan inte bli deluppgift till sig själv eller till sina egna deluppgifter"
   },
   "undo": {
     "action": "Ångra",
@@ -88,7 +89,8 @@
     "renamed": "Gruppen bytte namn",
     "duplicated": "{count, plural, one {Uppgiften duplicerades} other {# uppgifter duplicerades}}",
     "tagged": "Taggen lades till",
-    "untagged": "Taggen togs bort"
+    "untagged": "Taggen togs bort",
+    "madeSubtask": "{count, plural, one {Blev deluppgift till ”{parent}”} other {# uppgifter blev deluppgifter till ”{parent}”}}"
   },
   "dnd": {
     "handleRole": "Draghandtag",

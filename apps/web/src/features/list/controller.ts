@@ -1,14 +1,18 @@
 import { uuidv7 } from '@rooster/core/ids';
 import {
   type ApplyContext,
+  ancestorsOf,
   childrenOf,
   depthOf,
+  inboxOf,
   inverseOfSequence,
   type ListOpSpec,
   type ListState,
   listOps,
   normalGroups,
   SUBTASK_DEPTH_MAX,
+  subtreeHeight,
+  type TaskCreateBody,
   tasksInGroup,
 } from '@rooster/core/reducers';
 import {
@@ -18,6 +22,7 @@ import {
   type Task,
   type TaskMove,
 } from '@rooster/core/schemas';
+import type { SmartView, ViewSection } from '@rooster/core/views';
 import type { DroppedOp, ListPipeline } from '../../data/list';
 import {
   type Caret,
@@ -36,7 +41,15 @@ import type { ViewerDateContext } from '../dates';
 import { announce } from './announcer';
 import { groupStepTarget, type KeyboardMove, keyboardMoveTarget } from './model/moves';
 import { isNavigable, isTaskRow, type Row, type TaskRow, visibleOrder } from './model/rows';
-import { parseTitle, type Span } from './title-tokens';
+import { sectionTakesAdds } from './model/view-rows';
+import {
+  blankSpan,
+  type GroupTokenHit,
+  type ParsedTitle,
+  parseTitle,
+  resolveGroupToken,
+  type Span,
+} from './title-tokens';
 
 export type Translate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -64,7 +77,18 @@ export interface ControllerDeps {
   pane?: { isOpen: () => boolean; close: () => void };
   /** The pane's subtask list: rows are the subtasks of this task. */
   rootTaskId?: string;
+  /** A smart view (02 §10): the view and the sections on screen, read live. */
+  view?: () => ViewModel | null;
 }
+
+/** What the controller needs of a smart view: drafts inherit their section's date. */
+export interface ViewModel {
+  view: SmartView;
+  sections: readonly ViewSection[];
+}
+
+/** A parsed title plus the `>Group` it names (smart views). */
+type ParsedLine = ParsedTitle & { groupId?: string };
 
 export interface CommitResult {
   /** The input should show this text again (an emptied existing title). */
@@ -133,6 +157,78 @@ export class ListController {
 
   task(id: string): Task | undefined {
     return this.state()?.tasks[id];
+  }
+
+  // -------------------------------------------------------------------------------------
+  // Smart views (02 §10): read-only groupings whose drafts inherit the section's date
+  // -------------------------------------------------------------------------------------
+
+  /** The smart view this list shows, or null for My tasks and the pane's subtasks. */
+  viewModel(): ViewModel | null {
+    return this.deps.view?.() ?? null;
+  }
+
+  isView(): boolean {
+    return this.viewModel() !== null;
+  }
+
+  /** The section to add to: `preferred` when it takes adds, else the first that does. */
+  private addSection(preferred?: string): ViewSection | undefined {
+    const sections = this.viewModel()?.sections ?? [];
+    const wanted = sections.find((s) => s.id === preferred);
+    return wanted && sectionTakesAdds(wanted) ? wanted : sections.find(sectionTakesAdds);
+  }
+
+  /**
+   * A draft in a smart-view section (02 §3.4): it lands in the Inbox with the section's date.
+   * Subtask drafts (S) may sit under a parent in any section.
+   */
+  newSectionDraft(sectionId: string, afterId: string | null, parentId?: string): string | null {
+    const sections = this.viewModel()?.sections ?? [];
+    const section = parentId
+      ? sections.find((s) => s.id === sectionId)
+      : this.addSection(sectionId);
+    const state = this.state();
+    if (!section || !state) return null;
+    const draft: Draft = {
+      id: uuidv7(),
+      groupId: inboxOf(state)?.id ?? '',
+      afterId: section.id === sectionId ? afterId : null,
+      sectionId: section.id,
+      ...(parentId ? { parentId } : {}),
+      ...(section.date ? { due: { dueDate: section.date, dueTime: null, dueTz: null } } : {}),
+    };
+    this.store().addDraft(draft);
+    this.store().edit(draft.id, 'end');
+    return draft.id;
+  }
+
+  /** The row directly above `rowId` within its section (task or draft), or null at the top. */
+  private rowAboveInSection(rowId: string): string | null {
+    const rows = this.rows();
+    const index = rows.findIndex((r) => r.id === rowId);
+    const above = rows[index - 1];
+    const row = rows[index];
+    return above?.kind === 'task' && row?.kind === 'task' && above.sectionId === row.sectionId
+      ? above.id
+      : null;
+  }
+
+  /** `>Group` in a smart-view draft's title (02 §3.4), against the org's groups. */
+  private groupToken(raw: string, ignored: readonly Span[]): GroupTokenHit | null {
+    const state = this.state();
+    return state ? resolveGroupToken(raw, Object.values(state.groups), ignored) : null;
+  }
+
+  /** Parses a title; in a smart-view draft a `>Group` token picks the group and is removed. */
+  private parseLine(raw: string, ignored: readonly Span[], groupTokens: boolean): ParsedLine {
+    const ctx = this.deps.dateContext();
+    const hit = groupTokens ? this.groupToken(raw, ignored) : null;
+    if (hit) {
+      const parsed = parseTitle(blankSpan(raw, hit), ctx, ignored, this.parseTitles());
+      if (parsed.title !== '') return { ...parsed, groupId: hit.groupId };
+    }
+    return parseTitle(raw, ctx, ignored, this.parseTitles());
   }
 
   // -------------------------------------------------------------------------------------
@@ -291,13 +387,14 @@ export class ListController {
   selectAll(): void {
     const rows = this.rows().filter(isTaskRow);
     const cursorRow = this.cursorRow();
+    // A smart view's sections stand in for groups.
     const groupId =
       cursorRow?.kind === 'task'
-        ? cursorRow.groupId
+        ? (cursorRow.sectionId ?? cursorRow.groupId)
         : cursorRow?.kind === 'group'
           ? cursorRow.group.id
           : undefined;
-    const inGroup = rows.filter((r) => r.groupId === groupId).map((r) => r.id);
+    const inGroup = rows.filter((r) => (r.sectionId ?? r.groupId) === groupId).map((r) => r.id);
     const selected = selectedIds(this.store());
     const all = rows.map((r) => r.id);
     const groupDone = inGroup.length > 0 && inGroup.every((id) => selected.includes(id));
@@ -424,6 +521,12 @@ export class ListController {
   /** N / Enter: new row below the cursor (a sibling subtask under a subtask). */
   newBelow(rowId?: string | null): void {
     const row = rowId ? this.rows().find((r) => r.id === rowId) : this.cursorRow();
+    if (this.isView()) {
+      if (row?.kind === 'task' && row.sectionId) this.newSectionDraft(row.sectionId, row.id);
+      else if (row?.kind === 'section') this.newSectionDraft(row.sectionId, null);
+      else this.quickAdd();
+      return;
+    }
     if (row?.kind === 'task') this.newDraft(row.groupId, row.id, row.parentId);
     else if (row?.kind === 'group') this.newDraft(row.group.id, null);
     else this.quickAdd();
@@ -432,6 +535,13 @@ export class ListController {
   /** Shift+N / Shift+Enter: new row above. */
   newAbove(rowId?: string | null): void {
     const row = rowId ? this.rows().find((r) => r.id === rowId) : this.cursorRow();
+    if (this.isView()) {
+      if (row?.kind === 'task' && row.sectionId) {
+        this.newSectionDraft(row.sectionId, this.rowAboveInSection(row.id));
+      } else if (row?.kind === 'section') this.newSectionDraft(row.sectionId, null);
+      else this.quickAdd();
+      return;
+    }
     if (row?.kind === 'task') {
       this.newDraft(row.groupId, this.rowAboveInGroup(row.id), row.parentId);
     } else if (row?.kind === 'group') this.newDraft(row.group.id, null);
@@ -440,6 +550,11 @@ export class ListController {
 
   /** The accessory bar's group picker (02 §13.3): the draft moves to the top of `groupId`. */
   moveDraftToGroup(draftId: string, groupId: string): void {
+    // A smart view's draft keeps its row; only the group it will land in changes.
+    if (this.store().drafts.find((d) => d.id === draftId)?.sectionId) {
+      this.store().updateDraft(draftId, { groupId });
+      return;
+    }
     const state = this.state();
     const group = state?.groups[groupId];
     if (group?.collapsed) this.run('', [listOps.patchGroup(groupId, { collapsed: false })]);
@@ -451,18 +566,36 @@ export class ListController {
     this.store().updateDraft(draftId, due ? { due } : { due: undefined });
   }
 
-  /** "+ Add task": a draft at the end of the group. */
-  addAtEnd(groupId: string): void {
+  /** "+ Add task": a draft at the end of the group (or of a smart view's section). */
+  addAtEnd(groupId: string, sectionId?: string): void {
+    if (sectionId) {
+      const last = this.rows()
+        .filter((r): r is TaskRow => r.kind === 'task' && r.sectionId === sectionId)
+        .at(-1);
+      this.newSectionDraft(sectionId, last?.id ?? null);
+      return;
+    }
     const last = this.rows()
       .filter((r): r is TaskRow => r.kind === 'task' && r.groupId === groupId)
       .at(-1);
     this.newDraft(groupId, last?.id ?? null);
   }
 
-  /** Q / Tab+Q: top of the first visible group, Inbox excluded (02 §3.4). */
+  /**
+   * Q / Tab+Q: top of the first visible group, Inbox excluded (02 §3.4); in a smart view, the
+   * top of the cursor's section (02 §13.3), or of the first one that takes adds.
+   */
   quickAdd(): void {
     const state = this.state();
     if (!state) return;
+    if (this.isView()) {
+      const cursor = this.cursorRow();
+      const sectionId =
+        cursor?.kind === 'task' || cursor?.kind === 'section' ? cursor.sectionId : undefined;
+      const section = this.addSection(sectionId);
+      if (section) this.newSectionDraft(section.id, null);
+      return;
+    }
     const root = this.deps.rootTaskId;
     if (root) {
       this.addSubtask(root);
@@ -479,8 +612,8 @@ export class ListController {
    * emptied existing title is restored.
    */
   commitTitle(rowId: string, raw: string, ignored: readonly Span[] = []): CommitResult {
-    const parsed = parseTitle(raw, this.deps.dateContext(), ignored, this.parseTitles());
     const draft = this.store().drafts.find((d) => d.id === rowId);
+    const parsed = this.parseLine(raw, ignored, Boolean(draft?.sectionId && !draft.parentId));
     if (draft) {
       if (parsed.title === '') return {};
       this.createFromDraft(draft, [parsed]);
@@ -549,10 +682,11 @@ export class ListController {
     return { afterId: find(draftId, 'before'), beforeId: find(draftId, 'after') };
   }
 
-  private createFromDraft(
-    draft: Draft,
-    parsed: readonly { title: string; due?: object; tags?: string[] }[],
-  ): void {
+  private createFromDraft(draft: Draft, parsed: readonly ParsedLine[]): void {
+    if (draft.sectionId) {
+      this.createFromSectionDraft(draft, parsed);
+      return;
+    }
     const neighbours = this.persistedNeighbours(draft.id);
     let afterId = neighbours.afterId;
     const beforeId = neighbours.beforeId;
@@ -585,6 +719,55 @@ export class ListController {
     );
   }
 
+  /**
+   * A smart-view draft becomes a task (02 §3.4): in the Inbox (or the `>Group` / accessory-bar
+   * group) with the section's date unless the title names one. It goes to the top of that
+   * group, or right after the draft's predecessor when that is in the same group, so a run of
+   * Enter keeps its order.
+   */
+  private createFromSectionDraft(draft: Draft, parsed: readonly ParsedLine[]): void {
+    const state = this.state();
+    if (!state) return;
+    const specs: ListOpSpec[] = [];
+    let previous = draft.afterId;
+    parsed.forEach((p, i) => {
+      const id = i === 0 ? draft.id : uuidv7();
+      createdHere.add(id);
+      const { ids: tagIds, newNames } = this.resolveTags(p.tags ?? []);
+      const groupId = p.groupId ?? draft.groupId;
+      let where: Partial<TaskCreateBody>;
+      if (draft.parentId) {
+        where = { parentId: draft.parentId };
+      } else {
+        const inGroup = tasksInGroup(state, groupId);
+        const anchor = inGroup.findIndex((t) => t.id === previous);
+        where = {
+          groupId,
+          afterId: anchor >= 0 ? (previous as string) : null,
+          beforeId: inGroup[anchor + 1]?.id ?? null,
+        };
+      }
+      specs.push(
+        listOps.createTask({
+          id,
+          title: p.title,
+          ...where,
+          ...(p.due ?? draft.due ?? {}),
+          ...(tagIds.length > 0 ? { tagIds } : {}),
+          ...(newNames.length > 0 ? { tagNames: newNames } : {}),
+        }),
+      );
+      previous = id;
+    });
+    this.store().removeDraft(draft.id);
+    this.run(
+      parsed.length === 1
+        ? this.t('undo.created')
+        : this.t('undo.createdMany', { count: parsed.length }),
+      specs,
+    );
+  }
+
   /** Enter / Shift+Enter in Edit. */
   enter(rowId: string, raw: string, ignored: readonly Span[], above: boolean): CommitResult {
     const isDraft = this.draftTask(rowId);
@@ -596,6 +779,19 @@ export class ListController {
     }
     const draft = this.store().drafts.find((d) => d.id === rowId);
     const row = this.rows().find((r) => r.id === rowId);
+    const sectionId = row?.kind === 'task' ? row.sectionId : draft?.sectionId;
+    if (sectionId) {
+      // Smart views: the next draft goes into the same section, if it takes adds.
+      const aboveSection = above ? this.rowAboveInSection(rowId) : null;
+      const result = this.commitTitle(rowId, raw, ignored);
+      const section = this.viewModel()?.sections.find((s) => s.id === sectionId);
+      if (section && sectionTakesAdds(section)) {
+        this.newSectionDraft(sectionId, above ? aboveSection : rowId);
+      } else {
+        this.store().navigate(rowId);
+      }
+      return result;
+    }
     const aboveId = above ? this.rowAboveInGroup(rowId) : null;
     const result = this.commitTitle(rowId, raw, ignored);
     const groupId = row?.kind === 'task' ? row.groupId : draft?.groupId;
@@ -698,14 +894,19 @@ export class ListController {
 
   /** "Create 5 tasks? ↵" (02 §3.4): one task per non-empty line, from the draft's slot. */
   createMany(rowId: string, lines: readonly string[]): void {
-    const ctx = this.deps.dateContext();
+    let draft = this.store().drafts.find((d) => d.id === rowId);
+    const row = this.rows().find((r) => r.id === rowId);
+    const inView = Boolean(draft?.sectionId ?? (row?.kind === 'task' && row.sectionId));
     const parsed = lines
-      .map((line) => parseTitle(line, ctx, [], this.parseTitles()))
+      .map((line) => this.parseLine(line, [], inView && !draft?.parentId))
       .filter((p) => p.title !== '');
     if (parsed.length === 0) return;
-    let draft = this.store().drafts.find((d) => d.id === rowId);
+    if (!draft && row?.kind === 'task' && row.sectionId) {
+      const id = this.newSectionDraft(row.sectionId, row.id);
+      draft = this.store().drafts.find((d) => d.id === id);
+      if (!draft) return;
+    }
     if (!draft) {
-      const row = this.rows().find((r) => r.id === rowId);
       if (row?.kind !== 'task') return;
       draft = {
         id: uuidv7(),
@@ -899,6 +1100,8 @@ export class ListController {
 
   /** Ctrl+↑/↓, Ctrl+Shift+↑/↓, Alt+Shift+↑/↓. On a header, Ctrl+↑/↓ moves the group. */
   keyboardMove(move: KeyboardMove): boolean {
+    // Smart views are derived orders (02 §10): nothing to move within them; D re-dates.
+    if (this.isView()) return false;
     const cursor = this.cursorRow();
     if (cursor?.kind === 'group') {
       if (move !== 'up' && move !== 'down') return false;
@@ -1028,6 +1231,34 @@ export class ListController {
   }
 
   /**
+   * "Make subtask of…" (palette, ADR 0008): re-parents the tasks under `parentId` as one undo
+   * step (`task.patch` with `parentId`). A task can't go under itself or its own descendant,
+   * and the result must stay within the depth limit (05 §4.3); those are skipped with a hint.
+   */
+  makeSubtaskOf(ids: readonly string[], parentId: string): boolean {
+    const state = this.state();
+    const parent = state?.tasks[parentId];
+    if (!state || !parent) return false;
+    const lineage = new Set([parentId, ...ancestorsOf(state, parentId).map((t) => t.id)]);
+    const candidates = ids.filter((id) => state.tasks[id] && state.tasks[id].parentId !== parentId);
+    const acyclic = candidates.filter((id) => !lineage.has(id));
+    const fits = acyclic.filter(
+      (id) => depthOf(state, parentId) + 1 + subtreeHeight(state, id) <= SUBTASK_DEPTH_MAX,
+    );
+    if (acyclic.length < candidates.length) toast({ message: this.t('hint.subtaskCycle') });
+    else if (fits.length < acyclic.length) {
+      toast({ message: this.t('hint.subtaskDepth', { max: SUBTASK_DEPTH_MAX }) });
+    }
+    if (fits.length === 0) return false;
+    this.run(
+      this.t('undo.madeSubtask', { count: fits.length, parent: parent.title }),
+      fits.map((id) => listOps.patchTask(id, { parentId })),
+      { toast: true },
+    );
+    return true;
+  }
+
+  /**
    * Tab+S / S and "+ Add subtask": expands the parent and opens a subtask draft at the end of
    * its subtasks. In the pane's subtask list the parent is the pane's task.
    */
@@ -1036,6 +1267,12 @@ export class ListController {
     const state = this.state();
     const parent = id ? state?.tasks[id] : undefined;
     if (!id || !parent || !this.canNestUnder(id)) return false;
+    if (this.isView()) {
+      // Flat rows: the subtask draft sits right under its parent, with the section's date.
+      const row = this.rows().find((r) => r.id === id);
+      if (row?.kind !== 'task' || !row.sectionId) return false;
+      return this.newSectionDraft(row.sectionId, id, id) !== null;
+    }
     if (!this.rootTaskId || this.rootTaskId !== id) this.setExpanded(id, true);
     const groupId = this.groupOfTask(id) ?? '';
     const siblings = this.rows().filter(
@@ -1167,7 +1404,8 @@ export class ListController {
   newGroupAtCursor(pendingTitle?: { rowId: string; raw: string; ignored: readonly Span[] }): void {
     if (pendingTitle) this.commitTitle(pendingTitle.rowId, pendingTitle.raw, pendingTitle.ignored);
     const state = this.state();
-    if (!state) return;
+    // Smart views have no groups to split.
+    if (!state || this.isView()) return;
     const row = this.cursorRow();
     const name = this.t('group.untitled');
     const id = uuidv7();

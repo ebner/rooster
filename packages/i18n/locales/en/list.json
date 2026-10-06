@@ -63,7 +63,8 @@
   "hint": {
     "emptyTitle": "Title can’t be empty",
     "useTabDelete": "Use Tab+Delete to delete tasks with content",
-    "subtaskDepth": "Subtasks can only be nested {max} levels deep"
+    "subtaskDepth": "Subtasks can only be nested {max} levels deep",
+    "subtaskCycle": "A task can’t become a subtask of itself or of its own subtasks"
   },
   "undo": {
     "action": "Undo",
@@ -88,7 +89,8 @@
     "renamed": "Group renamed",
     "duplicated": "{count, plural, one {Task duplicated} other {# tasks duplicated}}",
     "tagged": "Tag added",
-    "untagged": "Tag removed"
+    "untagged": "Tag removed",
+    "madeSubtask": "{count, plural, one {Made a subtask of “{parent}”} other {Made # tasks subtasks of “{parent}”}}"
   },
   "dnd": {
     "handleRole": "Drag handle",

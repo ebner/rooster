@@ -1,4 +1,5 @@
 import type { Task } from '@rooster/core/schemas';
+import { type SmartView, selectView } from '@rooster/core/views';
 import { useQueryClient } from '@tanstack/react-query';
 import { Keyboard, X } from 'lucide-react';
 import {
@@ -16,7 +17,12 @@ import { useMe } from '../../data/me';
 import { syncEngine } from '../../data/sync/engine';
 import { useTags } from '../../data/tags';
 import { cn } from '../../lib/cn';
-import { type Draft, persistShowCompleted, useListStore } from '../../state/list-store';
+import {
+  type Draft,
+  persistShowCompleted,
+  selectedIds,
+  useListStore,
+} from '../../state/list-store';
 import { useSyncStore } from '../../state/sync-store';
 import { setTags, useTagsStore } from '../../state/tags-store';
 import { iconStrokeWidth } from '../../ui/button';
@@ -32,21 +38,25 @@ import {
   useKeymapHandlers,
 } from '../../use-keymap';
 import { useViewerDateContext } from '../dates';
+import { type PaletteCommands, usePaletteCommands } from '../palette/commands';
 import type { PaneControls } from '../pane/pane-controls';
 import { toggleCheatSheet } from '../shell/cheat-sheet';
 import { TagPicker } from '../tags/tag-picker';
 import { AddGroupRowView, AddSubtaskRowView, AddTaskRow, FirstRunHint } from './add-row';
 import { announce, ListLiveRegion } from './announcer';
 import { BulkBar } from './bulk-bar';
-import { completionHoldMs, ListController, type Translate } from './controller';
+import { completionHoldMs, ListController, type Translate, type ViewModel } from './controller';
 import { GroupHeader } from './group-header';
 import { ListContext, type ListContextValue } from './list-context';
 import { MobileListChrome } from './mobile-list-chrome';
 import { buildRows, type Row, type RowCache } from './model/rows';
+import { buildViewRows } from './model/view-rows';
 import { MoveToPopover } from './move-to-popover';
 import { PullToRefresh } from './pull-to-refresh';
+import { SectionHeader } from './section-header';
 import { TaskRow } from './task-row';
 import { ListDnd } from './use-list-dnd';
+import { ViewEmptyState } from './view-empty';
 
 /** Rows map straight to their memoised components (no wrapper per row). */
 function rowElement(row: Row) {
@@ -63,6 +73,10 @@ function rowElement(row: Row) {
       return <AddGroupRowView key={row.id} row={row} />;
     case 'addSubtask':
       return <AddSubtaskRowView key={row.id} row={row} />;
+    case 'section':
+      return <SectionHeader key={row.id} row={row} />;
+    case 'empty':
+      return <ViewEmptyState key={row.id} row={row} />;
   }
 }
 
@@ -76,9 +90,9 @@ export function draftPlaceholder(orgId: string, userId: string, draft: Draft): T
     title: '',
     assigneeId: userId,
     createdBy: userId,
-    dueDate: null,
-    dueTime: null,
-    dueTz: null,
+    dueDate: draft.due?.dueDate ?? null,
+    dueTime: draft.due?.dueTime ?? null,
+    dueTz: draft.due?.dueTz ?? null,
     startDate: null,
     tagIds: [],
     completedAt: null,
@@ -89,17 +103,36 @@ export function draftPlaceholder(orgId: string, userId: string, draft: Draft): T
   };
 }
 
+/** What a smart view's selector needs besides the list: the viewer's clock and zone. */
+interface ViewClock {
+  today: string;
+  nowMs: number;
+  viewerTz: string;
+}
+
 interface ListRowsProps {
   orgId: string;
   userId: string;
   rowsRef: RefObject<readonly Row[]>;
+  /** A smart view (02 §10) and its clock; null for My tasks. */
+  view: SmartView | null;
+  clock: ViewClock | null;
+  /** Written with the sections on screen (the controller adds drafts to them). */
+  viewRef: RefObject<ViewModel | null>;
 }
 
 /**
  * The rows, subscribed to the list data and the UI store on their own: a keystroke re-renders
  * this component (and only the rows whose model changed), not the layers above (AC-2.12).
  */
-const ListRows = memo(function ListRows({ orgId, userId, rowsRef }: ListRowsProps) {
+const ListRows = memo(function ListRows({
+  orgId,
+  userId,
+  rowsRef,
+  view,
+  clock,
+  viewRef,
+}: ListRowsProps) {
   const list = useMyList(orgId);
   const drafts = useListStore((s) => s.drafts);
   const showCompleted = useListStore((s) => s.showCompleted);
@@ -110,34 +143,49 @@ const ListRows = memo(function ListRows({ orgId, userId, rowsRef }: ListRowsProp
   const rowCache = useRef<{ orgId: string; cache: RowCache }>({ orgId, cache: new Map() });
   if (rowCache.current.orgId !== orgId) rowCache.current = { orgId, cache: new Map() };
   const draftTasks = useRef(new Map<string, Task>());
+  // Rows still in their completion hold stay in place: completed tasks keep their section.
+  const holding = Object.keys(hiding).length > 0;
+  const sections = useMemo(() => {
+    if (!view || !clock || !list.data) return null;
+    return selectView(list.data, view, {
+      viewerId: userId,
+      showCompleted: showCompleted || holding,
+      ...clock,
+    });
+  }, [view, clock, list.data, userId, showCompleted, holding]);
+  viewRef.current = view && sections ? { view, sections } : null;
   const rows = useMemo(() => {
     if (!list.data) return [];
+    const draftTask = (draft: Draft) => {
+      let task = draftTasks.current.get(draft.id);
+      if (
+        !task ||
+        task.placement?.groupId !== (draft.parentId ? undefined : draft.groupId) ||
+        task.parentId !== (draft.parentId ?? null) ||
+        task.dueDate !== (draft.due?.dueDate ?? null)
+      ) {
+        task = draftPlaceholder(orgId, userId, draft);
+        draftTasks.current.set(draft.id, task);
+      }
+      return task;
+    };
+    if (view && sections) {
+      return buildViewRows(
+        list.data,
+        sections,
+        { view, drafts, showCompleted, hiding, tagFilter, draftTask },
+        rowCache.current.cache,
+      );
+    }
     return buildRows(
       list.data,
-      {
-        drafts,
-        showCompleted,
-        hiding,
-        dragCollapsed,
-        hoverExpanded,
-        tagFilter,
-        draftTask: (draft) => {
-          let task = draftTasks.current.get(draft.id);
-          if (
-            !task ||
-            task.placement?.groupId !== (draft.parentId ? undefined : draft.groupId) ||
-            task.parentId !== (draft.parentId ?? null)
-          ) {
-            task = draftPlaceholder(orgId, userId, draft);
-            draftTasks.current.set(draft.id, task);
-          }
-          return task;
-        },
-      },
+      { drafts, showCompleted, hiding, dragCollapsed, hoverExpanded, tagFilter, draftTask },
       rowCache.current.cache,
     );
   }, [
     list.data,
+    view,
+    sections,
     drafts,
     showCompleted,
     hiding,
@@ -229,6 +277,8 @@ export interface MyListViewProps {
   label: string;
   /** The detail pane this list drives (02 §9); absent in the kitchen sink. */
   pane?: PaneControls | undefined;
+  /** A smart view of the same list (02 §10); My tasks when absent. */
+  view?: SmartView | undefined;
 }
 
 /** Keys pressed with focus in the pane are the pane's (02 §9.1). */
@@ -257,7 +307,7 @@ function listOnly(handlers: ShortcutHandlers): ShortcutHandlers {
  * drafts, selection and the bulk bar, drag and drop, and every list key bound to the
  * controller. All writes go through the mutation pipeline.
  */
-export function MyListView({ orgId, userId, label, pane }: MyListViewProps) {
+export function MyListView({ orgId, userId, label, pane, view }: MyListViewProps) {
   const { t } = useTranslation('list');
   const status = useMyListStatus(orgId);
   const pipeline = useListPipeline();
@@ -273,6 +323,8 @@ export function MyListView({ orgId, userId, label, pane }: MyListViewProps) {
   const layer = useRef<HTMLDivElement>(null);
   /** Written by `ListRows` on every render: the controller always sees the current rows. */
   const rowsRef = useRef<readonly Row[]>([]);
+  /** Written by `ListRows`: the smart view's sections on screen. */
+  const viewRef = useRef<ViewModel | null>(null);
   const dateRef = useRef(dateCtx);
   dateRef.current = dateCtx;
   const prefs = useMe().data?.prefs;
@@ -305,6 +357,7 @@ export function MyListView({ orgId, userId, label, pane }: MyListViewProps) {
           isOpen: () => Boolean(paneRef.current?.taskId()),
           close: () => paneRef.current?.close(),
         },
+        view: () => viewRef.current,
       }),
     [orgId, userId, pipeline, t],
   );
@@ -314,11 +367,12 @@ export function MyListView({ orgId, userId, label, pane }: MyListViewProps) {
       controller,
       dateCtx,
       parseTitles: prefsRef.current.parseTitles,
-      dragEnabled: true,
+      dragEnabled: !view,
       onOpenTask: (id, focus) => paneRef.current?.open(id, focus ? 'title' : null),
       mobile,
+      view,
     }),
-    [controller, dateCtx, prefs?.parseTitleDates, mobile],
+    [controller, dateCtx, prefs?.parseTitleDates, mobile, view],
   );
 
   // Selection mode is a phone mode; it ends when the layout grows past it.
@@ -327,7 +381,12 @@ export function MyListView({ orgId, userId, label, pane }: MyListViewProps) {
   }, [mobile, controller]);
 
   const onLongPress = useMemo(
-    () => (mobile ? (rowId: string) => controller.enterSelectionMode(rowId) : undefined),
+    () =>
+      mobile
+        ? (rowId: string) => {
+            if (controller.task(rowId)) controller.enterSelectionMode(rowId);
+          }
+        : undefined,
     [mobile, controller],
   );
   const refresh = useMemo(
@@ -352,7 +411,7 @@ export function MyListView({ orgId, userId, label, pane }: MyListViewProps) {
     }
   }, [cursor, selectedCount, controller]);
 
-  // A different org starts with a clean slate (drafts and selection are per list).
+  // A different org or view starts with a clean slate (drafts and selection are per list).
   useEffect(() => {
     useListStore.getState().set({
       drafts: [],
@@ -363,8 +422,9 @@ export function MyListView({ orgId, userId, label, pane }: MyListViewProps) {
       mode: 'navigate',
       popover: null,
       hiding: {},
+      selectionMode: false,
     });
-  }, [orgId]);
+  }, [orgId, view]);
 
   useEffect(
     () =>
@@ -512,10 +572,43 @@ export function MyListView({ orgId, userId, label, pane }: MyListViewProps) {
     ready,
   );
 
+  // "Make subtask of…" in the palette acts on this list's selection (ADR 0008).
+  const selectionKey = useListStore((s) => `${selectedIds(s).sort().join(',')}|${s.cursor}`);
+  const paletteCommands = useMemo<PaletteCommands | null>(() => {
+    if (!pane) return null;
+    const store = useListStore.getState();
+    const picked = selectedIds(store).filter((id) => controller.task(id));
+    const ids =
+      picked.length > 0 ? picked : [store.cursor ?? ''].filter((id) => controller.task(id));
+    return {
+      orgId,
+      selectedTaskIds: ids,
+      makeSubtaskOf: (parentId) => {
+        controller.makeSubtaskOf(ids, parentId);
+      },
+    };
+  }, [pane, orgId, controller, selectionKey]);
+  usePaletteCommands(paletteCommands);
+
+  // The smart view's clock: today and the minute (timed overdue), in the viewer's zone.
+  const clock = useMemo<ViewClock | null>(
+    () =>
+      view ? { today: dateCtx.today, nowMs: dateCtx.nowMs, viewerTz: dateCtx.timezone } : null,
+    [view, dateCtx.today, dateCtx.nowMs, dateCtx.timezone],
+  );
   // Stable: data changes re-render only `ListRows`, never the DnD and context layers above it.
   const rowsElement = useMemo(
-    () => <ListRows orgId={orgId} userId={userId} rowsRef={rowsRef} />,
-    [orgId, userId],
+    () => (
+      <ListRows
+        orgId={orgId}
+        userId={userId}
+        rowsRef={rowsRef}
+        view={view ?? null}
+        clock={clock}
+        viewRef={viewRef}
+      />
+    ),
+    [orgId, userId, view, clock],
   );
   const ids = selectedCount > 1 && !mobile ? controller.selectedTaskIds() : [];
   const moveAnchor =
@@ -572,7 +665,7 @@ export function MyListView({ orgId, userId, label, pane }: MyListViewProps) {
           rowsRef={rowsRef}
           label={label}
           rootRef={root}
-          enabled={context.dragEnabled}
+          reorder={context.dragEnabled}
           onLongPress={onLongPress}
         >
           {rowsElement}
@@ -583,6 +676,7 @@ export function MyListView({ orgId, userId, label, pane }: MyListViewProps) {
           orgId={orgId}
           rootRef={root}
           layerRef={layer}
+          canAdd={view !== 'overdue'}
           swipePrefs={{
             swipeLeft: prefs?.swipeLeft ?? 'date',
             swipeRight: prefs?.swipeRight ?? 'complete',

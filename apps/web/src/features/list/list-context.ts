@@ -1,3 +1,4 @@
+import type { SmartView } from '@rooster/core/views';
 import { createContext, useContext } from 'react';
 import type { ViewerDateContext } from '../dates';
 import type { ListController } from './controller';
@@ -18,6 +19,8 @@ export interface ListContextValue {
    * pickers open as bottom sheets instead of anchored popovers.
    */
   mobile?: boolean | undefined;
+  /** A smart view (02 §10): drafts read `>Group`; there are no groups to make with a colon. */
+  view?: SmartView | undefined;
 }
 
 export const ListContext = createContext<ListContextValue | null>(null);

@@ -10,8 +10,9 @@ import { isMobileViewport } from '../../ui/use-media';
 import { ShowCompletedMenuItem, ShowCompletedToggle } from '../list/header-actions';
 import { MyListView } from '../list/my-list-view';
 import { ViewBody, ViewHeader } from '../shell/app-shell';
-import { paths } from '../shell/paths';
+import { type OrgViewId, paths } from '../shell/paths';
 import { TagFilterButton } from '../tags/tag-filter';
+import { useViewTabs } from '../views/view-tabs';
 import { DetailPane } from './detail-pane';
 import type { PaneControls } from './pane-controls';
 import { SplitView } from './split-view';
@@ -35,6 +36,8 @@ export function createPaneControls(deps: {
   setCurrent: (taskId: string | null) => void;
   go: (href: string, replace: boolean) => void;
   orgSlug: string;
+  /** The list view under the pane (02 §2): closing returns to it. */
+  view?: () => OrgViewId;
   focusList: () => void;
   /**
    * Phones (02 §13.4): the sheet is a history entry, so closing it steps back when this
@@ -56,7 +59,7 @@ export function createPaneControls(deps: {
       const hadFocus = focusInPane();
       deps.setCurrent(null);
       usePaneStore.getState().setFullScreen(false);
-      if (!deps.back?.()) deps.go(paths.orgView(deps.orgSlug, 'my'), true);
+      if (!deps.back?.()) deps.go(paths.orgView(deps.orgSlug, deps.view?.() ?? 'my'), true);
       if (hadFocus) deps.focusList();
     },
     toggleFullScreen: () => {
@@ -77,10 +80,13 @@ export function TasksScreen({
   org,
   orgSlug,
   userId,
+  view = 'my',
 }: {
   org: Org;
   orgSlug: string;
   userId: string;
+  /** My tasks or a smart view (02 §10); the pane opens over it. */
+  view?: OrgViewId;
 }) {
   const { t } = useTranslation('shell');
   const { t: tPane } = useTranslation('pane');
@@ -93,6 +99,10 @@ export function TasksScreen({
   const taskRef = useRef(taskId);
   taskRef.current = taskId;
   const fullScreen = usePaneStore((s) => s.fullScreen);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const tabs = useViewTabs(orgSlug, view);
+  const title = t(`view.${view}`);
 
   const focusList = focusListCursor;
 
@@ -114,6 +124,7 @@ export function TasksScreen({
           return true;
         },
         orgSlug,
+        view: () => viewRef.current,
         focusList,
       }),
     [navigate, router, orgSlug],
@@ -153,7 +164,7 @@ export function TasksScreen({
       list={
         <>
           <ViewHeader
-            title={t('view.my')}
+            title={title}
             context={org.name}
             actions={
               <>
@@ -165,18 +176,17 @@ export function TasksScreen({
               switcher: true,
               actions: <TagFilterButton orgId={org.id} />,
               menu: <ShowCompletedMenuItem />,
-              views: [
-                {
-                  id: 'my',
-                  label: t('view.my'),
-                  href: paths.orgView(orgSlug, 'my'),
-                  isActive: true,
-                },
-              ],
+              views: tabs,
             }}
           />
           <ViewBody>
-            <MyListView orgId={org.id} userId={userId} label={t('view.my')} pane={pane} />
+            <MyListView
+              orgId={org.id}
+              userId={userId}
+              label={title}
+              pane={pane}
+              view={view === 'my' ? undefined : view}
+            />
           </ViewBody>
         </>
       }

@@ -23,8 +23,10 @@ import {
 } from '../data';
 import { AppShell } from '../features/shell/app-shell';
 import { MobileNav } from '../features/shell/mobile-nav';
-import { orgUrlSlug, paths } from '../features/shell/paths';
+import { type OrgViewId, orgUrlSlug, paths } from '../features/shell/paths';
 import { Sidebar } from '../features/shell/sidebar';
+import { listViewOf, useLastListView } from '../features/views/last-view';
+import { LiveViewCounts } from '../features/views/view-counts';
 import { setLocale } from '../lib/i18n';
 import { safeRedirectPath } from '../lib/safe-redirect';
 import { toast } from '../ui/toast';
@@ -57,6 +59,7 @@ function AppLayout() {
   const createOrg = useCreateOrg();
   const changeLocale = useChangeLocale();
   const signOut = useSignOut();
+  const lastView = useLastListView((s) => s.view);
 
   // The session ended while the app was open (revoked elsewhere, signed out).
   const unauthenticated = errorCode(me.error) === 'unauthenticated';
@@ -74,13 +77,20 @@ function AppLayout() {
     if (isLocale(storedLocale) && storedLocale !== i18n.language) void setLocale(storedLocale);
   }, [storedLocale, i18n.language]);
 
+  /** G then M / T / W / O / N (02 §6): a view of the current org (or the first one). */
+  const goTo = (view: OrgViewId) => {
+    const org = (orgSlug && me.data ? findOrg(me.data.orgs, orgSlug) : null) ?? me.data?.orgs[0];
+    if (!org) return false;
+    void navigate({ href: paths.orgView(orgUrlSlug(org), view) });
+  };
+
   // G-sequences and Mod+1…9 (02 §6).
   useKeymapHandlers({
-    goMyTasks: () => {
-      const org = (orgSlug && me.data ? findOrg(me.data.orgs, orgSlug) : null) ?? me.data?.orgs[0];
-      if (!org) return false;
-      void navigate({ href: paths.orgView(orgUrlSlug(org), 'my') });
-    },
+    goMyTasks: () => goTo('my'),
+    goToday: () => goTo('today'),
+    goWeek: () => goTo('week'),
+    goOverdue: () => goTo('overdue'),
+    goNoDate: () => goTo('nodate'),
     goSettings: () => {
       void navigate({ to: '/settings' });
     },
@@ -96,9 +106,8 @@ function AppLayout() {
 
   const { user, orgs } = me.data;
   const activeOrg = orgSlug ? findOrg(orgs, orgSlug) : null;
-  // The pane (`/t/:taskId`) sits over My tasks (02 §2).
-  const activeView =
-    location.pathname.endsWith('/my') || location.pathname.includes('/t/') ? 'my' : null;
+  // The pane (`/t/:taskId`) sits over the last list view (02 §2).
+  const activeView = listViewOf(location.pathname, lastView);
   const failed = () => toast({ message: t('error.saveFailed'), tone: 'danger' });
   const homeOrg = activeOrg ?? orgs[0] ?? null;
   const createOrgAndGo = async (input: Parameters<typeof createOrg.mutateAsync>[0]) => {
@@ -116,48 +125,50 @@ function AppLayout() {
   };
 
   return (
-    <AppShell
-      navKey={location.pathname}
-      mobile={{
-        orgs,
-        activeOrg: activeOrg ?? null,
-        isAdmin: user.isAdmin,
-        onSelectOrg: (org) => void navigate({ href: paths.orgView(orgUrlSlug(org), 'my') }),
-        onCreateOrg: createOrgAndGo,
-        onSignOut: () => void signOutNow(),
-        nav: (
-          <MobileNav
-            myTasksHref={homeOrg ? paths.orgView(orgUrlSlug(homeOrg), 'my') : null}
-            active={
-              activeView === 'my'
-                ? 'my'
-                : location.pathname.startsWith('/settings')
-                  ? 'settings'
-                  : null
+    <LiveViewCounts>
+      <AppShell
+        navKey={location.pathname}
+        mobile={{
+          orgs,
+          activeOrg: activeOrg ?? null,
+          isAdmin: user.isAdmin,
+          onSelectOrg: (org) => void navigate({ href: paths.orgView(orgUrlSlug(org), 'my') }),
+          onCreateOrg: createOrgAndGo,
+          onSignOut: () => void signOutNow(),
+          nav: (
+            <MobileNav
+              myTasksHref={homeOrg ? paths.orgView(orgUrlSlug(homeOrg), 'my') : null}
+              active={
+                activeView !== null
+                  ? 'my'
+                  : location.pathname.startsWith('/settings')
+                    ? 'settings'
+                    : null
+              }
+            />
+          ),
+        }}
+        renderSidebar={({ collapsed, onToggleCollapsed, inDrawer }) => (
+          <Sidebar
+            user={user}
+            orgs={orgs}
+            active={activeOrg && activeView ? { orgId: activeOrg.id, view: activeView } : null}
+            locale={user.locale}
+            collapsed={collapsed}
+            onToggleCollapsed={onToggleCollapsed}
+            inDrawer={inDrawer}
+            onReorder={(intent) => reorder.mutateAsync(intent).catch(failed)}
+            onToggleOrgCollapsed={(orgId, value) =>
+              setCollapsed.mutateAsync({ orgId, collapsed: value }).catch(failed)
             }
+            onCreateOrg={createOrgAndGo}
+            onLocaleChange={(locale) => changeLocale.mutateAsync(locale).catch(failed)}
+            onSignOut={signOutNow}
           />
-        ),
-      }}
-      renderSidebar={({ collapsed, onToggleCollapsed, inDrawer }) => (
-        <Sidebar
-          user={user}
-          orgs={orgs}
-          active={activeOrg && activeView ? { orgId: activeOrg.id, view: activeView } : null}
-          locale={user.locale}
-          collapsed={collapsed}
-          onToggleCollapsed={onToggleCollapsed}
-          inDrawer={inDrawer}
-          onReorder={(intent) => reorder.mutateAsync(intent).catch(failed)}
-          onToggleOrgCollapsed={(orgId, value) =>
-            setCollapsed.mutateAsync({ orgId, collapsed: value }).catch(failed)
-          }
-          onCreateOrg={createOrgAndGo}
-          onLocaleChange={(locale) => changeLocale.mutateAsync(locale).catch(failed)}
-          onSignOut={signOutNow}
-        />
-      )}
-    >
-      <Outlet />
-    </AppShell>
+        )}
+      >
+        <Outlet />
+      </AppShell>
+    </LiveViewCounts>
   );
 }

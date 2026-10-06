@@ -18,7 +18,14 @@ import { TagDot } from '../tags/tag-dot';
 import { type TagOption, tagOptions } from '../tags/tag-picker';
 import type { CommitResult } from './controller';
 import { useListContext } from './list-context';
-import { findTagTokens, findTitleDate, type Span, tagTokenAt } from './title-tokens';
+import {
+  blankSpan,
+  findTagTokens,
+  findTitleDate,
+  resolveGroupToken,
+  type Span,
+  tagTokenAt,
+} from './title-tokens';
 
 /** 02 §8.1: parsing runs debounced on every keystroke. */
 const parseDebounceMs = 50;
@@ -65,6 +72,8 @@ interface Highlight {
   span: Span | null;
   /** `#tag` tokens (02 §3.4). */
   tags: Span[];
+  /** `>Group` in a smart-view draft (02 §3.4). */
+  group: Span | null;
 }
 
 interface Suggest {
@@ -123,7 +132,7 @@ export function TitleInput({
   className,
 }: TitleInputProps) {
   const { t } = useTranslation('list');
-  const { controller, dateCtx, parseTitles } = useListContext();
+  const { controller, dateCtx, parseTitles, view } = useListContext();
   const input = useRef<HTMLInputElement>(null);
   const mirror = useRef<HTMLDivElement>(null);
   const committed = useRef(false);
@@ -132,6 +141,7 @@ export function TitleInput({
     text: initialValue,
     span: null,
     tags: [],
+    group: null,
   });
   const [suggest, setSuggest] = useState<Suggest | null>(null);
   const tagsById = useTagsStore((s) => s.byId);
@@ -139,14 +149,25 @@ export function TitleInput({
   const [pasteLines, setPasteLines] = useState<string[] | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /** A new task in a smart view: `>Group` picks its group (02 §3.4). */
+  const groupTokens = () => {
+    const draft = controller.ui().drafts.find((d) => d.id === rowId);
+    return Boolean(view && draft?.sectionId && !draft.parentId);
+  };
+
   const reparse = () => {
     const text = input.current?.value ?? '';
     const skip = ignoredSpans(text, ignored.current);
-    const match = parseTitles ? findTitleDate(text, dateCtx, skip) : null;
+    const groups = Object.values(controller.state()?.groups ?? {});
+    const group = groupTokens() ? resolveGroupToken(text, groups, skip) : null;
+    // A group named like a date ("Today") is the group, not a date phrase.
+    const dateText = group ? blankSpan(text, group) : text;
+    const match = parseTitles ? findTitleDate(dateText, dateCtx, skip) : null;
     setHighlight({
       text,
       span: match ? { start: match.start, end: match.end } : null,
       tags: findTagTokens(text, skip),
+      group: group ? { start: group.start, end: group.end } : null,
     });
   };
 
@@ -308,7 +329,7 @@ export function TitleInput({
     if (matches(native, 'newBelow', platform) || matches(native, 'newAbove', platform)) {
       event.preventDefault();
       const trimmed = el.value.trim();
-      if (!event.shiftKey && trimmed.length > 1 && trimmed.endsWith(':')) {
+      if (!event.shiftKey && !view && trimmed.length > 1 && trimmed.endsWith(':')) {
         if (colonChip === 'shown') {
           committed.current = true;
           setColonChip('off');
@@ -345,9 +366,9 @@ export function TitleInput({
     if (matches(native, 'deleteEmpty', platform)) {
       const at = el.selectionStart ?? 0;
       const collapsed = at === el.selectionEnd;
-      const span = highlight.span;
-      if (collapsed && span && at === span.end && highlight.text === el.value) {
-        // 02 §8.1: Backspace right after the phrase cancels it instead of deleting a character.
+      const span = [highlight.span, highlight.group].find((s) => s && at === s.end);
+      if (collapsed && span && highlight.text === el.value) {
+        // 02 §8.1: Backspace right after a token cancels it instead of deleting a character.
         event.preventDefault();
         ignored.current = [...ignored.current, el.value.slice(span.start, span.end)];
         reparse();
@@ -385,8 +406,8 @@ export function TitleInput({
   const onClick = (event: MouseEvent<HTMLInputElement>) => {
     // Clicking the highlighted phrase cancels it for this edit (02 §8.1).
     const at = event.currentTarget.selectionStart ?? -1;
-    const span = highlight.span;
-    if (span && at > span.start && at < span.end && highlight.text === value()) {
+    const span = [highlight.span, highlight.group].find((s) => s && at > s.start && at < s.end);
+    if (span && highlight.text === value()) {
       ignored.current = [...ignored.current, value().slice(span.start, span.end)];
       reparse();
     }
@@ -404,8 +425,8 @@ export function TitleInput({
     if (mirror.current && input.current) mirror.current.scrollLeft = input.current.scrollLeft;
   };
 
-  const { text, span } = highlight;
-  const marks = span ? [span, ...highlight.tags] : highlight.tags;
+  const { text, span, group } = highlight;
+  const marks = [span, group, ...highlight.tags].filter((m): m is Span => m !== null);
   const listId = `tag-suggest-${rowId}`;
   return (
     <div className={cn('relative flex min-w-0 flex-1 items-center', className)}>

@@ -81,3 +81,25 @@ export function SubtaskCounter({ task, className }: { task: Task; className?: st
     </span>
   );
 }
+
+/**
+ * Today's group chip (02 §10): the row's group name, muted, so tasks from every group read in
+ * context. Not interactive (M moves the task).
+ */
+export function GroupChip({ name, className }: { name: string; className?: string }) {
+  const { t } = useTranslation('views');
+  return (
+    <span
+      data-testid="group-chip"
+      className={cn(
+        'inline-flex h-chip max-w-date-cell shrink-0 items-center rounded-xs border border-border px-1.5 text-xs text-text-muted',
+        className,
+      )}
+    >
+      <span className="sr-only">{t('row.group', { name })}</span>
+      <span aria-hidden className="truncate">
+        {name}
+      </span>
+    </span>
+  );
+}

@@ -1,1 +1,46 @@
-{}
+{
+  "section": {
+    "overdue": "Overdue",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "day": "{weekday}, {date}"
+  },
+  "weekday": {
+    "0": "Sunday",
+    "1": "Monday",
+    "2": "Tuesday",
+    "3": "Wednesday",
+    "4": "Thursday",
+    "5": "Friday",
+    "6": "Saturday"
+  },
+  "empty": {
+    "today": "Nothing due today 🎉",
+    "week": "Nothing due in the next 7 days",
+    "overdue": "Nothing overdue 🎉",
+    "nodate": "Every task has a date"
+  },
+  "row": {
+    "group": "Group: {name}"
+  },
+  "dev": {
+    "section": "Smart views",
+    "today": "Today (Overdue and Today sections, group chips)",
+    "week": "Next 7 days (day headers)",
+    "chip": "Group chip",
+    "empty": "Empty states",
+    "sidebar": "Sidebar entries and badges",
+    "groups": {
+      "inbox": "Inbox",
+      "prio": "Prio",
+      "work": "Work",
+      "long": "A very long group name that truncates"
+    },
+    "tasks": {
+      "passport": "Renew passport",
+      "bank": "Call the bank",
+      "slides": "Send the slides",
+      "offsite": "Plan the team offsite"
+    }
+  }
+}

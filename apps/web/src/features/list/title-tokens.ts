@@ -1,12 +1,11 @@
 import {
   type DateParseContext,
   findDateInTitle,
+  findGroupToken,
   stripBackticks,
   type TitleDateMatch,
 } from '@rooster/core/dates';
 import type { ViewerDateContext } from '../dates';
-
-export { findGroupToken } from '@rooster/core/dates';
 
 export interface Span {
   start: number;
@@ -50,6 +49,36 @@ export interface TagToken extends Span {
 const TAG_TOKEN_RE = /(?<=^|\s)#([\p{L}\p{N}_-]{1,40})(?=$|[\s.,;:!?)])/gu;
 
 const overlaps = (a: Span, b: Span) => a.start < b.end && b.start < a.end;
+
+export interface GroupTokenHit extends Span {
+  groupId: string;
+  /** The matched group's name. */
+  name: string;
+}
+
+/**
+ * `>Group` (02 §3.4, smart views only): the trailing token, matched against `groups` by exact
+ * name, then case-insensitively, then as a case-insensitive prefix. Unmatched tokens stay text.
+ */
+export function resolveGroupToken(
+  text: string,
+  groups: readonly { id: string; name: string }[],
+  ignored: readonly Span[] = [],
+): GroupTokenHit | null {
+  const token = findGroupToken(text);
+  if (!token || ignored.some((span) => overlaps(span, token))) return null;
+  const wanted = token.name.toLocaleLowerCase();
+  const group =
+    groups.find((g) => g.name === token.name) ??
+    groups.find((g) => g.name.toLocaleLowerCase() === wanted) ??
+    groups.find((g) => g.name.toLocaleLowerCase().startsWith(wanted));
+  return group ? { start: token.start, end: token.end, groupId: group.id, name: group.name } : null;
+}
+
+/** `text` with `span` blanked out; the other spans keep their offsets. */
+export function blankSpan(text: string, span: Span): string {
+  return `${text.slice(0, span.start)}${' '.repeat(span.end - span.start)}${text.slice(span.end)}`;
+}
 
 /** `#tag` tokens outside backtick escapes and ignored spans (02 §3.4). */
 export function findTagTokens(text: string, ignored: readonly Span[] = []): TagToken[] {

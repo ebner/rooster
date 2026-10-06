@@ -20,15 +20,17 @@ import { Avatar } from '../../ui/avatar';
 import { iconStrokeWidth } from '../../ui/button';
 import { IconButton } from '../../ui/icon-button';
 import { Menu, MenuItem, MenuPopover, MenuSeparator, MenuTrigger } from '../../ui/menu';
+import { type OrgCounts, useOrgCountsHook } from '../views/view-counts';
 import { type OrgViewId, orgUrlSlug, paths } from './paths';
 import { SidebarItem } from './sidebar-item';
-import { viewsFor } from './sidebar-views';
+import { type SidebarViewDefinition, viewsFor } from './sidebar-views';
 
-export type OrgCounts = Partial<Record<OrgViewId, number>>;
+export type { OrgCounts };
 
 export interface SidebarOrgSectionProps {
   org: Org;
   activeView: OrgViewId | null;
+  /** Fixed badges (kitchen sink, tests); otherwise live from the org's cached list. */
   counts?: OrgCounts | undefined;
   canMoveUp: boolean;
   canMoveDown: boolean;
@@ -70,6 +72,14 @@ export function SidebarOrgSection({
   if (isDragging) dragged.current = true;
   const views = viewsFor(org);
   const collapsed = org.collapsed && !rail;
+  const useLiveCounts = useOrgCountsHook();
+  const live = useLiveCounts(org.id);
+  const shown = counts ?? live;
+  /** 02 §2 / 03 §3.10: counts only where the view has a badge; Overdue in danger. */
+  const badge = (view: SidebarViewDefinition) => ({
+    count: view.badge ? shown?.[view.id] : undefined,
+    countTone: view.badge === 'danger' ? ('danger' as const) : ('default' as const),
+  });
 
   const style = { transform: CSS.Translate.toString(transform), transition };
 
@@ -100,7 +110,7 @@ export function SidebarOrgSection({
             railHint={org.name}
             href={paths.orgView(slug, view.id)}
             isActive={activeView === view.id}
-            count={counts?.[view.id]}
+            {...badge(view)}
           />
         ))}
       </section>
@@ -227,7 +237,7 @@ export function SidebarOrgSection({
               label={t(`view.${view.id}`)}
               href={paths.orgView(slug, view.id)}
               isActive={activeView === view.id}
-              count={counts?.[view.id]}
+              {...badge(view)}
             />
           </li>
         ))}

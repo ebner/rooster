@@ -10,7 +10,7 @@ import { DropLine } from './drop-line';
 import { GridCell, GridRow } from './grid';
 import { useListContext } from './list-context';
 import type { TaskRow as TaskRowModel } from './model/rows';
-import { RowTagChips, SubtaskCounter } from './task-meta';
+import { GroupChip, RowTagChips, SubtaskCounter } from './task-meta';
 import { TitleInput } from './title-input';
 import { useKeyboardDragHandle } from './use-list-dnd';
 
@@ -300,6 +300,7 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
         )}
         {!draft && (
           <span className="flex shrink-0 items-center gap-2 ps-2 no-underline empty:hidden">
+            {row.groupChip !== undefined && <GroupChip name={row.groupChip} />}
             <RowTagChips task={task} />
             <SubtaskCounter task={task} />
           </span>

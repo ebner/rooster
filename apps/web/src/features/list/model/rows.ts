@@ -1,6 +1,7 @@
 import { compareKeys } from '@rooster/core/ordering';
 import { childrenIndex, inboxOf, type ListState, normalGroups } from '@rooster/core/reducers';
 import type { Group, Task } from '@rooster/core/schemas';
+import type { SmartView, ViewSectionKind } from '@rooster/core/views';
 import {
   addGroupRowId,
   addRowId,
@@ -36,6 +37,10 @@ export interface TaskRow {
   expanded: boolean;
   /** FR-TASK-12: the parent's title, for an orphan subtask shown as its own row. */
   breadcrumb: string | null;
+  /** Smart views (02 §10): the section the row is in. */
+  sectionId?: string;
+  /** Today (02 §10): the task's group name, shown as a muted chip. */
+  groupChip?: string;
 }
 
 /** "+ Add subtask" after an expanded parent's subtasks. */
@@ -51,6 +56,30 @@ export interface AddRow {
   kind: 'add';
   id: string;
   groupId: string;
+  /** Smart views: "+ Add task" at the end of this section (the task inherits its date). */
+  sectionId?: string;
+}
+
+/** A smart-view section header (02 §10): like a group header, but derived and read-only. */
+export interface SectionRow {
+  kind: 'section';
+  id: string;
+  sectionId: string;
+  sectionKind: ViewSectionKind;
+  /** The day of a `day` section (its label), or the date a `today` section stands for. */
+  date: string | null;
+  /** Open tasks in the section. */
+  count: number;
+  first: boolean;
+}
+
+/** An empty smart view (02 §14): the illustration and the view's text. */
+export interface EmptyRow {
+  kind: 'empty';
+  id: string;
+  view: SmartView;
+  /** The view takes inline adds (all but Overdue). */
+  canAdd: boolean;
 }
 
 /** First run (02 §14): "Type a task and press Enter ↵". */
@@ -65,7 +94,15 @@ export interface AddGroupRow {
   id: string;
 }
 
-export type Row = GroupRow | TaskRow | AddRow | HintRow | AddGroupRow | AddSubtaskRow;
+export type Row =
+  | GroupRow
+  | TaskRow
+  | AddRow
+  | HintRow
+  | AddGroupRow
+  | AddSubtaskRow
+  | SectionRow
+  | EmptyRow;
 
 export interface RowOptions {
   drafts: readonly Draft[];
@@ -87,6 +124,16 @@ function shallowEqual(a: Row, b: Row): boolean {
   return ka.every((k) => a[k] === b[k]);
 }
 
+/** Returns rows equal to their cached version as that cached object (stable identity). */
+export function rowReuser(cache: RowCache | undefined): <T extends Row>(row: T) => T {
+  return <T extends Row>(row: T): T => {
+    const cached = cache?.get(row.id);
+    const result = cached && shallowEqual(cached, row) ? (cached as T) : row;
+    cache?.set(row.id, result);
+    return result;
+  };
+}
+
 /**
  * The flat row model (04 §5.4): group header, its visible tasks (with drafts spliced in),
  * its "+ Add task" row, and "+ Add group" at the end. Rows equal to the cached ones keep
@@ -94,12 +141,7 @@ function shallowEqual(a: Row, b: Row): boolean {
  */
 export function buildRows(state: ListState, options: RowOptions, cache?: RowCache): Row[] {
   const rows: Row[] = [];
-  const reuse = <T extends Row>(row: T): T => {
-    const cached = cache?.get(row.id);
-    const result = cached && shallowEqual(cached, row) ? (cached as T) : row;
-    cache?.set(row.id, result);
-    return result;
-  };
+  const reuse = rowReuser(cache);
   const draftsByGroup = new Map<string, Draft[]>();
   const draftsByParent = new Map<string, Draft[]>();
   for (const draft of options.drafts) {

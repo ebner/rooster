@@ -54,6 +54,8 @@ export interface MobileListChromeProps {
   /** The positioned wrapper the swipe reveal is drawn in. */
   layerRef: RefObject<HTMLElement | null>;
   swipePrefs: SwipePrefs;
+  /** Overdue takes no inline adds (02 §10): no FAB. */
+  canAdd?: boolean;
 }
 
 /**
@@ -61,7 +63,13 @@ export interface MobileListChromeProps {
  * bar above the keyboard, selection mode's header and bulk bar, and the bottom sheets that
  * replace the desktop popovers (date, move, tags). Rendered by `MyListView` below 768 px.
  */
-export function MobileListChrome({ orgId, rootRef, layerRef, swipePrefs }: MobileListChromeProps) {
+export function MobileListChrome({
+  orgId,
+  rootRef,
+  layerRef,
+  swipePrefs,
+  canAdd = true,
+}: MobileListChromeProps) {
   const { t } = useTranslation('mobile');
   const { t: tList } = useTranslation('list');
   const { controller, dateCtx } = useListContext();
@@ -140,11 +148,13 @@ export function MobileListChrome({ orgId, rootRef, layerRef, swipePrefs }: Mobil
         onCommit={onSwipe}
       />
 
-      <Fab
-        aria-label={t('fab.label')}
-        isHidden={editingFocus || selectionMode}
-        onPress={() => controller.quickAdd()}
-      />
+      {canAdd && (
+        <Fab
+          aria-label={t('fab.label')}
+          isHidden={editingFocus || selectionMode}
+          onPress={() => controller.quickAdd()}
+        />
+      )}
 
       {showAccessory && draftSheet === null && (
         <AccessoryBar

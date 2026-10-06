@@ -261,6 +261,8 @@ interface SurfaceProps {
   rootRef: RefObject<HTMLDivElement | null>;
   pressed: RefObject<string | null>;
   enabled: boolean;
+  /** Pointer (mouse) drags reorder; without it only touch long-presses start. */
+  reorder: boolean;
   children: ReactNode;
 }
 
@@ -269,14 +271,22 @@ interface SurfaceProps {
  * Per-row `useDraggable` would re-render all rows whenever any row mounts (dnd-kit rebuilds its
  * context), which breaks the 50 ms budget at 500 rows (AC-2.12).
  */
-function DragSurface({ label, compact, rootRef, pressed, enabled, children }: SurfaceProps) {
+function DragSurface({
+  label,
+  compact,
+  rootRef,
+  pressed,
+  enabled,
+  reorder,
+  children,
+}: SurfaceProps) {
   const { setNodeRef, listeners } = useDraggable({ id: 'list', disabled: !enabled });
   const dragging = useListUi(
     (s) => s.drop !== null || s.dragging !== null || s.keyboardDrag !== null,
   );
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     // Touch drags are the TouchSensor's long-press; a touch moving 4 px is a scroll or a swipe.
-    if (event.pointerType === 'touch') return;
+    if (event.pointerType === 'touch' || !reorder) return;
     pressed.current = pressedRow(event.target);
     if (pressed.current) listeners?.onPointerDown?.(event);
   };
@@ -314,6 +324,7 @@ export const ListDnd = memo(function ListDnd({
   label,
   rootRef,
   enabled = true,
+  reorder = true,
   compact = false,
   onLongPress,
   children,
@@ -322,6 +333,11 @@ export const ListDnd = memo(function ListDnd({
   label: string;
   rootRef: RefObject<HTMLDivElement | null>;
   enabled?: boolean;
+  /**
+   * Smart views (02 §10): no reordering, but a touch long-press still enters selection mode
+   * (02 §13.2), so the sensor stays on without a lift, preview or drop target.
+   */
+  reorder?: boolean;
   /** The pane's subtask list: no trailing space for the bulk bar. */
   compact?: boolean;
   /** A touch long-press released without moving (02 §13.2: enters selection mode). */
@@ -493,6 +509,7 @@ export const ListDnd = memo(function ListDnd({
       moved: 0,
     };
     if (touch) navigator.vibrate?.(10);
+    if (!reorder) return;
     const state = controller.state();
     const name =
       kind === 'group'
@@ -529,6 +546,7 @@ export const ListDnd = memo(function ListDnd({
     if (!s) return;
     s.pointer = { x: s.start.x + delta.x, y: s.start.y + delta.y };
     s.moved = Math.max(s.moved, Math.hypot(delta.x, delta.y));
+    if (!reorder) return;
     computeDrop(s);
     autoScroll(s);
   };
@@ -540,6 +558,10 @@ export const ListDnd = memo(function ListDnd({
       const id = pressed.current;
       finish();
       if (id) onLongPress(id);
+      return;
+    }
+    if (!reorder) {
+      finish();
       return;
     }
     const drop = controller.ui().drop;
@@ -611,6 +633,7 @@ export const ListDnd = memo(function ListDnd({
         rootRef={rootRef}
         pressed={pressed}
         enabled={enabled}
+        reorder={reorder}
       >
         {children}
       </DragSurface>

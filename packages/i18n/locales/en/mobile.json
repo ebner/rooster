@@ -49,7 +49,14 @@
     "hideCompleted": "Hide completed"
   },
   "views": {
-    "label": "Views"
+    "label": "Views",
+    "tab": {
+      "my": "My tasks",
+      "today": "Today",
+      "week": "7 days",
+      "overdue": "Overdue",
+      "nodate": "No date"
+    }
   },
   "nav": {
     "label": "Primary",

@@ -27,6 +27,11 @@ export interface Draft {
    * 02 §13.3). A date phrase in the title still wins.
    */
   due?: DraftDue | undefined;
+  /**
+   * Smart views (02 §10): the section the draft renders in. `groupId` is then where the task
+   * lands (the Inbox unless picked), and `afterId` the row above it within the section.
+   */
+  sectionId?: string | undefined;
 }
 
 /** The due fields a draft can carry (the shape of the date picker's value). */
@@ -60,6 +65,9 @@ export const groupRowId = (groupId: string) => `group:${groupId}`;
 export const addRowId = (groupId: string) => `add:${groupId}`;
 export const addGroupRowId = 'add-group';
 export const addSubtaskRowId = (parentId: string) => `addsub:${parentId}`;
+/** A smart-view section header and its "+ Add task" row (02 §10). */
+export const sectionRowId = (sectionId: string) => `section:${sectionId}`;
+export const addSectionRowId = (sectionId: string) => `add:section:${sectionId}`;
 export const isGroupRowId = (id: string) => id.startsWith('group:');
 export const groupIdOfRow = (id: string) => id.slice('group:'.length);
 

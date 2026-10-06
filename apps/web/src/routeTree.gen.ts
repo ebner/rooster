@@ -19,11 +19,16 @@ import { Route as Char91_devChar93UiRouteImport } from './routes/[_dev]/ui'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings.index'
 import { Route as AppSettingsBehaviourRouteImport } from './routes/_app/settings.behaviour'
+import { Route as AppSettingsDataRouteImport } from './routes/_app/settings.data'
 import { Route as AppSettingsProfileRouteImport } from './routes/_app/settings.profile'
 import { Route as AppSettingsSecurityRouteImport } from './routes/_app/settings.security'
 import { Route as AppOOrgSlugTasksRouteImport } from './routes/_app/o.$orgSlug._tasks'
 import { Route as AppOOrgSlugSettingsRouteImport } from './routes/_app/o.$orgSlug.settings'
 import { Route as AppOOrgSlugTasksMyRouteImport } from './routes/_app/o.$orgSlug._tasks.my'
+import { Route as AppOOrgSlugTasksNodateRouteImport } from './routes/_app/o.$orgSlug._tasks.nodate'
+import { Route as AppOOrgSlugTasksOverdueRouteImport } from './routes/_app/o.$orgSlug._tasks.overdue'
+import { Route as AppOOrgSlugTasksTodayRouteImport } from './routes/_app/o.$orgSlug._tasks.today'
+import { Route as AppOOrgSlugTasksWeekRouteImport } from './routes/_app/o.$orgSlug._tasks.week'
 import { Route as AppOOrgSlugTasksTTaskIdRouteImport } from './routes/_app/o.$orgSlug._tasks.t.$taskId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -75,6 +80,11 @@ const AppSettingsBehaviourRoute = AppSettingsBehaviourRouteImport.update({
   path: '/behaviour',
   getParentRoute: () => AppSettingsRoute,
 } as any)
+const AppSettingsDataRoute = AppSettingsDataRouteImport.update({
+  id: '/data',
+  path: '/data',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
 const AppSettingsProfileRoute = AppSettingsProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -100,6 +110,26 @@ const AppOOrgSlugTasksMyRoute = AppOOrgSlugTasksMyRouteImport.update({
   path: '/my',
   getParentRoute: () => AppOOrgSlugTasksRoute,
 } as any)
+const AppOOrgSlugTasksNodateRoute = AppOOrgSlugTasksNodateRouteImport.update({
+  id: '/nodate',
+  path: '/nodate',
+  getParentRoute: () => AppOOrgSlugTasksRoute,
+} as any)
+const AppOOrgSlugTasksOverdueRoute = AppOOrgSlugTasksOverdueRouteImport.update({
+  id: '/overdue',
+  path: '/overdue',
+  getParentRoute: () => AppOOrgSlugTasksRoute,
+} as any)
+const AppOOrgSlugTasksTodayRoute = AppOOrgSlugTasksTodayRouteImport.update({
+  id: '/today',
+  path: '/today',
+  getParentRoute: () => AppOOrgSlugTasksRoute,
+} as any)
+const AppOOrgSlugTasksWeekRoute = AppOOrgSlugTasksWeekRouteImport.update({
+  id: '/week',
+  path: '/week',
+  getParentRoute: () => AppOOrgSlugTasksRoute,
+} as any)
 const AppOOrgSlugTasksTTaskIdRoute = AppOOrgSlugTasksTTaskIdRouteImport.update({
   id: '/t/$taskId',
   path: '/t/$taskId',
@@ -115,12 +145,17 @@ export interface FileRoutesByFullPath {
   '/_dev/ui': typeof Char91_devChar93UiRoute
   '/invite/$token': typeof InviteTokenRoute
   '/settings/behaviour': typeof AppSettingsBehaviourRoute
+  '/settings/data': typeof AppSettingsDataRoute
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/security': typeof AppSettingsSecurityRoute
   '/settings/': typeof AppSettingsIndexRoute
   '/o/$orgSlug': typeof AppOOrgSlugTasksRouteWithChildren
   '/o/$orgSlug/settings': typeof AppOOrgSlugSettingsRoute
   '/o/$orgSlug/my': typeof AppOOrgSlugTasksMyRoute
+  '/o/$orgSlug/nodate': typeof AppOOrgSlugTasksNodateRoute
+  '/o/$orgSlug/overdue': typeof AppOOrgSlugTasksOverdueRoute
+  '/o/$orgSlug/today': typeof AppOOrgSlugTasksTodayRoute
+  '/o/$orgSlug/week': typeof AppOOrgSlugTasksWeekRoute
   '/o/$orgSlug/t/$taskId': typeof AppOOrgSlugTasksTTaskIdRoute
 }
 export interface FileRoutesByTo {
@@ -131,12 +166,17 @@ export interface FileRoutesByTo {
   '/_dev/ui': typeof Char91_devChar93UiRoute
   '/invite/$token': typeof InviteTokenRoute
   '/settings/behaviour': typeof AppSettingsBehaviourRoute
+  '/settings/data': typeof AppSettingsDataRoute
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/security': typeof AppSettingsSecurityRoute
   '/settings': typeof AppSettingsIndexRoute
   '/o/$orgSlug': typeof AppOOrgSlugTasksRouteWithChildren
   '/o/$orgSlug/settings': typeof AppOOrgSlugSettingsRoute
   '/o/$orgSlug/my': typeof AppOOrgSlugTasksMyRoute
+  '/o/$orgSlug/nodate': typeof AppOOrgSlugTasksNodateRoute
+  '/o/$orgSlug/overdue': typeof AppOOrgSlugTasksOverdueRoute
+  '/o/$orgSlug/today': typeof AppOOrgSlugTasksTodayRoute
+  '/o/$orgSlug/week': typeof AppOOrgSlugTasksWeekRoute
   '/o/$orgSlug/t/$taskId': typeof AppOOrgSlugTasksTTaskIdRoute
 }
 export interface FileRoutesById {
@@ -150,12 +190,17 @@ export interface FileRoutesById {
   '/_dev/ui': typeof Char91_devChar93UiRoute
   '/invite/$token': typeof InviteTokenRoute
   '/_app/settings/behaviour': typeof AppSettingsBehaviourRoute
+  '/_app/settings/data': typeof AppSettingsDataRoute
   '/_app/settings/profile': typeof AppSettingsProfileRoute
   '/_app/settings/security': typeof AppSettingsSecurityRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
   '/_app/o/$orgSlug/_tasks': typeof AppOOrgSlugTasksRouteWithChildren
   '/_app/o/$orgSlug/settings': typeof AppOOrgSlugSettingsRoute
   '/_app/o/$orgSlug/_tasks/my': typeof AppOOrgSlugTasksMyRoute
+  '/_app/o/$orgSlug/_tasks/nodate': typeof AppOOrgSlugTasksNodateRoute
+  '/_app/o/$orgSlug/_tasks/overdue': typeof AppOOrgSlugTasksOverdueRoute
+  '/_app/o/$orgSlug/_tasks/today': typeof AppOOrgSlugTasksTodayRoute
+  '/_app/o/$orgSlug/_tasks/week': typeof AppOOrgSlugTasksWeekRoute
   '/_app/o/$orgSlug/_tasks/t/$taskId': typeof AppOOrgSlugTasksTTaskIdRoute
 }
 export interface FileRouteTypes {
@@ -169,12 +214,17 @@ export interface FileRouteTypes {
     | '/_dev/ui'
     | '/invite/$token'
     | '/settings/behaviour'
+    | '/settings/data'
     | '/settings/profile'
     | '/settings/security'
     | '/settings/'
     | '/o/$orgSlug'
     | '/o/$orgSlug/settings'
     | '/o/$orgSlug/my'
+    | '/o/$orgSlug/nodate'
+    | '/o/$orgSlug/overdue'
+    | '/o/$orgSlug/today'
+    | '/o/$orgSlug/week'
     | '/o/$orgSlug/t/$taskId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -185,12 +235,17 @@ export interface FileRouteTypes {
     | '/_dev/ui'
     | '/invite/$token'
     | '/settings/behaviour'
+    | '/settings/data'
     | '/settings/profile'
     | '/settings/security'
     | '/settings'
     | '/o/$orgSlug'
     | '/o/$orgSlug/settings'
     | '/o/$orgSlug/my'
+    | '/o/$orgSlug/nodate'
+    | '/o/$orgSlug/overdue'
+    | '/o/$orgSlug/today'
+    | '/o/$orgSlug/week'
     | '/o/$orgSlug/t/$taskId'
   id:
     | '__root__'
@@ -203,12 +258,17 @@ export interface FileRouteTypes {
     | '/_dev/ui'
     | '/invite/$token'
     | '/_app/settings/behaviour'
+    | '/_app/settings/data'
     | '/_app/settings/profile'
     | '/_app/settings/security'
     | '/_app/settings/'
     | '/_app/o/$orgSlug/_tasks'
     | '/_app/o/$orgSlug/settings'
     | '/_app/o/$orgSlug/_tasks/my'
+    | '/_app/o/$orgSlug/_tasks/nodate'
+    | '/_app/o/$orgSlug/_tasks/overdue'
+    | '/_app/o/$orgSlug/_tasks/today'
+    | '/_app/o/$orgSlug/_tasks/week'
     | '/_app/o/$orgSlug/_tasks/t/$taskId'
   fileRoutesById: FileRoutesById
 }
@@ -293,6 +353,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsBehaviourRouteImport
       parentRoute: typeof AppSettingsRoute
     }
+    '/_app/settings/data': {
+      id: '/_app/settings/data'
+      path: '/data'
+      fullPath: '/settings/data'
+      preLoaderRoute: typeof AppSettingsDataRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
     '/_app/settings/profile': {
       id: '/_app/settings/profile'
       path: '/profile'
@@ -328,6 +395,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOOrgSlugTasksMyRouteImport
       parentRoute: typeof AppOOrgSlugTasksRoute
     }
+    '/_app/o/$orgSlug/_tasks/nodate': {
+      id: '/_app/o/$orgSlug/_tasks/nodate'
+      path: '/nodate'
+      fullPath: '/o/$orgSlug/nodate'
+      preLoaderRoute: typeof AppOOrgSlugTasksNodateRouteImport
+      parentRoute: typeof AppOOrgSlugTasksRoute
+    }
+    '/_app/o/$orgSlug/_tasks/overdue': {
+      id: '/_app/o/$orgSlug/_tasks/overdue'
+      path: '/overdue'
+      fullPath: '/o/$orgSlug/overdue'
+      preLoaderRoute: typeof AppOOrgSlugTasksOverdueRouteImport
+      parentRoute: typeof AppOOrgSlugTasksRoute
+    }
+    '/_app/o/$orgSlug/_tasks/today': {
+      id: '/_app/o/$orgSlug/_tasks/today'
+      path: '/today'
+      fullPath: '/o/$orgSlug/today'
+      preLoaderRoute: typeof AppOOrgSlugTasksTodayRouteImport
+      parentRoute: typeof AppOOrgSlugTasksRoute
+    }
+    '/_app/o/$orgSlug/_tasks/week': {
+      id: '/_app/o/$orgSlug/_tasks/week'
+      path: '/week'
+      fullPath: '/o/$orgSlug/week'
+      preLoaderRoute: typeof AppOOrgSlugTasksWeekRouteImport
+      parentRoute: typeof AppOOrgSlugTasksRoute
+    }
     '/_app/o/$orgSlug/_tasks/t/$taskId': {
       id: '/_app/o/$orgSlug/_tasks/t/$taskId'
       path: '/t/$taskId'
@@ -340,6 +435,7 @@ declare module '@tanstack/react-router' {
 
 interface AppSettingsRouteChildren {
   AppSettingsBehaviourRoute: typeof AppSettingsBehaviourRoute
+  AppSettingsDataRoute: typeof AppSettingsDataRoute
   AppSettingsProfileRoute: typeof AppSettingsProfileRoute
   AppSettingsSecurityRoute: typeof AppSettingsSecurityRoute
   AppSettingsIndexRoute: typeof AppSettingsIndexRoute
@@ -347,6 +443,7 @@ interface AppSettingsRouteChildren {
 
 const AppSettingsRouteChildren: AppSettingsRouteChildren = {
   AppSettingsBehaviourRoute: AppSettingsBehaviourRoute,
+  AppSettingsDataRoute: AppSettingsDataRoute,
   AppSettingsProfileRoute: AppSettingsProfileRoute,
   AppSettingsSecurityRoute: AppSettingsSecurityRoute,
   AppSettingsIndexRoute: AppSettingsIndexRoute,
@@ -358,11 +455,19 @@ const AppSettingsRouteWithChildren = AppSettingsRoute._addFileChildren(
 
 interface AppOOrgSlugTasksRouteChildren {
   AppOOrgSlugTasksMyRoute: typeof AppOOrgSlugTasksMyRoute
+  AppOOrgSlugTasksNodateRoute: typeof AppOOrgSlugTasksNodateRoute
+  AppOOrgSlugTasksOverdueRoute: typeof AppOOrgSlugTasksOverdueRoute
+  AppOOrgSlugTasksTodayRoute: typeof AppOOrgSlugTasksTodayRoute
+  AppOOrgSlugTasksWeekRoute: typeof AppOOrgSlugTasksWeekRoute
   AppOOrgSlugTasksTTaskIdRoute: typeof AppOOrgSlugTasksTTaskIdRoute
 }
 
 const AppOOrgSlugTasksRouteChildren: AppOOrgSlugTasksRouteChildren = {
   AppOOrgSlugTasksMyRoute: AppOOrgSlugTasksMyRoute,
+  AppOOrgSlugTasksNodateRoute: AppOOrgSlugTasksNodateRoute,
+  AppOOrgSlugTasksOverdueRoute: AppOOrgSlugTasksOverdueRoute,
+  AppOOrgSlugTasksTodayRoute: AppOOrgSlugTasksTodayRoute,
+  AppOOrgSlugTasksWeekRoute: AppOOrgSlugTasksWeekRoute,
   AppOOrgSlugTasksTTaskIdRoute: AppOOrgSlugTasksTTaskIdRoute,
 }
 
