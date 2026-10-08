@@ -139,6 +139,8 @@ test('the pane opens over a smart view and closes back to it', async ({ page }) 
     'aria-current',
     'page',
   );
+  // Esc must reach the mounted pane, not race its mount under load.
+  await expect(page.locator('[data-pane-root]')).toBeVisible();
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await expect(page).toHaveURL(/\/o\/personal\/today$/);
