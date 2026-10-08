@@ -41,3 +41,35 @@ test('FR-PWA-6 the phone header shows the "Update" chip; a tap reloads', async (
   expect(await reloaded(page)).toBe(true);
   await expect(updateChip(page)).toBeVisible({ timeout: 15_000 });
 });
+
+test('02 §13.1 the FAB stays above a long-lived toast, also after it remounts', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/events', (route) =>
+    route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store' },
+      body: `event: hello\ndata: ${JSON.stringify({ version: '99.0.0', gitSha: 'e2e', serverTime: 1 })}\n\n`,
+    }),
+  );
+  await signInAs(page, uniqueEmail('phone.fabtoast'));
+  const toast = updateToast(page);
+  await expect(toast).toBeVisible({ timeout: 15_000 });
+
+  const fabClearsToast = async () => {
+    const fab = page.locator('[data-fab]');
+    await expect(fab).toBeVisible();
+    await expect
+      .poll(async () => {
+        const f = await fab.boundingBox();
+        const t = await toast.boundingBox();
+        return f && t ? Math.round(t.y - (f.y + f.height)) : -1;
+      })
+      .toBeGreaterThanOrEqual(0);
+  };
+  await fabClearsToast();
+  // Switching views mounts a new FAB while the update toast stays (up to 24 h).
+  await page.getByRole('link', { name: 'Today' }).first().tap();
+  await expect(page).toHaveURL(/\/today$/);
+  await fabClearsToast();
+});

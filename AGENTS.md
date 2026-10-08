@@ -130,7 +130,7 @@ At least one sign-in provider must be configured, or the server exits with code 
   - radius and shadow: `rounded-sm`, `shadow-md`
   - motion and stacking: `duration-(--dur-fast)`, `z-(--z-toast)`
   - breakpoints: `tablet:`, `desktop:`, `wide:`, `max-tablet:` (phones only), `pointer-coarse:`
-  - safe areas and phone chrome: `pt-safe`, `pb-safe`, `px-safe-2`, `h-bottom-nav-safe`, `max-h-sheet`, `bottom-fab`; sticky list headers use `top-(--list-sticky-top)`
+  - safe areas and phone chrome: `pt-safe`, `pb-safe`, `px-safe-2`, `h-bottom-nav-safe`, `max-h-sheet`, `bottom-above-nav` (the FAB; not `bottom-fab`, which Tailwind resolves to the `--spacing-fab` size token); sticky list headers use `top-(--list-sticky-top)`
 
   Tailwind's default palette and scales are **removed**, so off-token classes silently do nothing. Use `cn()` from `src/lib/cn.ts` to merge classes.
 - Kitchen-sink states are forced with `data-force="hover|pressed|focus"`.

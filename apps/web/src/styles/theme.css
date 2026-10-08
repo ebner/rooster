@@ -43,7 +43,7 @@
  *                                 animate-fade-in  animate-fade-out  animate-toast-in
  *                                 animate-sheet-in  animate-sheet-out  skeleton-shimmer
  *   Safe areas (02 §13.5)         pt-safe  pb-safe  ps-safe  pe-safe; --safe-top/-bottom vars
- *   Mobile chrome                 max-h-sheet (70 % sheets), bottom-fab, h-bottom-nav-safe,
+ *   Mobile chrome                 max-h-sheet (70 % sheets), bottom-above-nav (FAB), h-bottom-nav-safe,
  *                                 top-(--list-sticky-top) for sticky list headers
  *   Breakpoints                   tablet: (≥768)  desktop: (≥1200)  wide: (≥1600),
  *                                 max-tablet: = mobile only; pointer-coarse: for touch
@@ -400,7 +400,7 @@
   max-height: calc(70dvh - var(--safe-top));
 }
 /* 02 §13.1: 16 px above the bottom nav, and above any stacked toasts. */
-@utility bottom-fab {
+@utility bottom-above-nav {
   bottom: calc(
     var(--h-bottom-nav) +
     var(--safe-bottom) +
