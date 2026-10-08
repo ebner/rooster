@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { addDays, todayIn } from '@rooster/core/dates';
+import { addDays } from '@rooster/core/dates';
 import type { MyList, Task, TaskDetail } from '@rooster/core/schemas';
 import { apiCall } from './support/auth';
 import { clickRowBody, mod, myList, waitForSync } from './support/p3';
@@ -13,6 +13,7 @@ import {
   paletteTask,
   seed,
 } from './support/p5-palette';
+import { viewerToday } from './support/p5-views';
 import { expect, test } from './support/test';
 
 /** Phase 5 command palette, Trash and export (WP 5.3, 5.4; AC-5.2, AC-5.3) on the desktop. */
@@ -55,11 +56,12 @@ test('AC-5.3 Ctrl+K → ">dark" shows no results gracefully; ">move" lists the m
 test('AC-5.2 "tand" finds "Boka tandläkare" (prefix); Enter opens it; it then shows under Recent', async ({
   page,
 }) => {
-  const tomorrow = addDays(todayIn('Europe/Stockholm', Date.now()), 1);
-  const { ids } = await seed(page, 'ac.fivetwo', [
-    { title: 'Boka tandläkare', dueDate: tomorrow },
-    'Handla mat',
-  ]);
+  const { ids } = await seed(page, 'ac.fivetwo', ['Boka tandläkare', 'Handla mat']);
+  // "Tomorrow" in the viewer's own zone (what the app shows), not the machine's.
+  const tomorrow = addDays(await viewerToday(page), 1);
+  await apiCall(page, 'PATCH', `/api/v1/tasks/${ids[0]}`, { dueDate: tomorrow });
+  await page.reload();
+  await expect(page.getByRole('treegrid')).toBeVisible();
   await openPalette(page);
   await paletteInput(page).fill('tand');
   const hit = paletteTask(page, 'Boka tandläkare');

@@ -197,6 +197,8 @@ test('a task is never offered directly before or after itself (pointer, selectio
 
   // A contiguous selection (Task 3 and 4) is not offered its own place either.
   await clickRowBody(page, 'Task 3');
+  // The range starts at the selected row: wait for it before extending.
+  await expect(row(page, 'Task 3')).toHaveAttribute('aria-selected', 'true');
   await row(page, 'Task 4').click({ modifiers: ['Shift'], position: { x: 200, y: 20 } });
   await expect(row(page, 'Task 4')).toHaveAttribute('aria-selected', 'true');
   await lift(page, row(page, 'Task 3'), { x: 100, y: 20 });
