@@ -41,6 +41,7 @@ import {
   taskReach,
 } from './event-audience.ts';
 import { createDefaultGroups, deleteMemberGroups } from './group-bootstrap.ts';
+import { forgetStoredResponses } from './idempotency-store.ts';
 import {
   consumeInvite,
   invalidReason,
@@ -344,6 +345,7 @@ export class OrgService {
         .set({ deletedAt: this.now() })
         .where(eq(organization.id, org.id))
         .run();
+      forgetStoredResponses(tx, memberIds(tx, org.id));
       this.emit(tx, 'org.deleted', {
         orgId: org.id,
         actorId: actor.userId,
@@ -434,6 +436,7 @@ export class OrgService {
       tx.delete(member)
         .where(and(eq(member.organizationId, org.id), eq(member.userId, userId)))
         .run();
+      forgetStoredResponses(tx, [userId]);
       // The removed user's tasks are unassigned: whoever can see them refreshes them.
       const tasks =
         unassigned.length === 0

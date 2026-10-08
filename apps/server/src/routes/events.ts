@@ -1,7 +1,7 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi';
 import { SSE_HEARTBEAT_MS, sseHelloSchema, sseInvalidateSchema } from '@rooster/core/schemas';
 import { streamSSE } from 'hono/streaming';
-import type { SseHub } from '../events/hub.ts';
+import { SSE_MAX_PER_SESSION, SSE_MAX_PER_USER, type SseHub } from '../events/hub.ts';
 import type { AppEnv } from '../lib/context.ts';
 import { AppError } from '../lib/errors.ts';
 import { named } from '../lib/openapi.ts';
@@ -20,10 +20,13 @@ const STREAM_DESCRIPTION = [
   '  for update detection and its clock.',
   '- `invalidate`: [`SseInvalidate`](#/components/schemas/SseInvalidate), query-key prefixes',
   '  to invalidate verbatim. Only the affected users receive it. `origin` is the',
-  '  `X-Rooster-Client-Id` of the request that caused it. Bursts within ~50 ms are coalesced.',
+  '  `X-Rooster-Client-Id` of the request that caused it, sent only to that user (null for',
+  '  everyone else). Bursts within ~50 ms are coalesced.',
   `- \`: ping\` comment every ${SSE_HEARTBEAT_MS / 1000} s.`,
   '',
-  'The stream ends on sign-out, session revoke, user deactivation and server shutdown.',
+  'The stream ends on sign-out, session revoke, user deactivation and server shutdown. A',
+  `session keeps at most ${SSE_MAX_PER_SESSION} streams and a user ${SSE_MAX_PER_USER}: opening one more`,
+  'closes the oldest.',
 ].join('\n');
 
 const eventsRoute = createRoute({

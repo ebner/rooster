@@ -59,6 +59,14 @@ export function immediate<T>(db: AppDb, fn: (tx: Tx) => T): T {
   return result;
 }
 
+/**
+ * Runs a read-only `fn` in a `BEGIN DEFERRED` transaction: one consistent snapshot without
+ * taking the write lock, so a long read never blocks writers in other connections.
+ */
+export function readOnly<T>(db: AppDb, fn: (tx: Tx) => T): T {
+  return db.orm.transaction(fn, { behavior: 'deferred' });
+}
+
 const commitQueues = new WeakMap<Tx, (() => void)[]>();
 
 /** Runs `callback` once the transaction `tx` (opened by `immediate`) has committed. */

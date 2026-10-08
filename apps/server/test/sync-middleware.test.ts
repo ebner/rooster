@@ -7,7 +7,7 @@ import {
   EDIT_TIME_MAX_PAST_MS,
   parseOpMeta,
 } from '../src/lib/request-meta.ts';
-import { createTask, inboxOf, listCtx, myList } from './list-helpers.ts';
+import { createTask, inboxOf, listCtx, myList, sharedOrg } from './list-helpers.ts';
 
 const key = (n: number) => `019a0000-0000-7000-8000-${String(n).padStart(12, '0')}`;
 
@@ -55,6 +55,48 @@ describe('AC-2.11 idempotency', () => {
     );
     expect(other.status).toBe(201);
     expect(other.headers.get('idempotent-replayed')).toBeNull();
+  });
+
+  it('a member removed from an org can no longer replay responses from it', async () => {
+    const ctx = listCtx();
+    const a = ctx.user('a@example.com');
+    const b = ctx.user('b@example.com');
+    const org = await sharedOrg(a, [b]);
+    const headers = { 'Idempotency-Key': key(20) };
+    const path = `/api/v1/orgs/${org.id}/tasks`;
+    const first = await b.call('POST', path, { title: 'Secret plan' }, headers);
+    expect(first.status).toBe(201);
+    expect(
+      (await b.call('POST', path, { title: 'Secret plan' }, headers)).headers.get(
+        'idempotent-replayed',
+      ),
+    ).toBe('true');
+
+    await a.ok('DELETE', `/api/v1/orgs/${org.id}/members/${b.userId}`, undefined, 204);
+    const replay = await b.call('POST', path, { title: 'Secret plan' }, headers);
+    expect(replay.headers.get('idempotent-replayed')).toBeNull();
+    expect(replay.status).toBe(404);
+    expect(await replay.text()).not.toContain('Secret plan');
+  });
+
+  it('deleting an org forgets every member’s stored responses', async () => {
+    const ctx = listCtx();
+    const a = ctx.user('a@example.com');
+    const b = ctx.user('b@example.com');
+    const org = await sharedOrg(a, [b], 'Doomed');
+    const path = `/api/v1/orgs/${org.id}/tasks`;
+    const [ka, kb] = [{ 'Idempotency-Key': key(21) }, { 'Idempotency-Key': key(22) }];
+    expect((await a.call('POST', path, { title: 'A' }, ka)).status).toBe(201);
+    expect((await b.call('POST', path, { title: 'B' }, kb)).status).toBe(201);
+    await a.ok('DELETE', `/api/v1/orgs/${org.id}`, { confirmName: 'Doomed' }, 204);
+    for (const [caller, k, title] of [
+      [a, ka, 'A'],
+      [b, kb, 'B'],
+    ] as const) {
+      const replay = await caller.call('POST', path, { title }, k);
+      expect(replay.headers.get('idempotent-replayed')).toBeNull();
+      expect(replay.status).toBe(404);
+    }
   });
 
   it('the same key on a different request is 422 idempotency_key_reuse', async () => {

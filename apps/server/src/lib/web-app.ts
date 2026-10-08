@@ -16,10 +16,26 @@ function isServerPath(path: string): boolean {
 }
 
 /**
+ * Build output that is not part of the app: source maps (they publish the source) and
+ * anything under a dot-name (`/.vite/manifest.json`). Checked on the decoded path, so
+ * `%2e` spellings are caught too.
+ */
+export function isPrivateBuildPath(path: string): boolean {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    return true;
+  }
+  return decoded.endsWith('.map') || decoded.split(/[/\\]/).some((s) => s.startsWith('.'));
+}
+
+/**
  * Serves the web build (Vite output) with an SPA fallback to `index.html`.
  * Hashed files under `/assets` are cached forever; everything else revalidates, so
  * `index.html` and `sw.js` always pick up a new deploy. A missing `/assets/*` file is a
- * 404 rather than the shell, so a stale chunk never gets cached as HTML.
+ * 404 rather than the shell, so a stale chunk never gets cached as HTML. Source maps and
+ * dot-directories are never served, not even as the shell.
  */
 export function webApp(webDir: string, logger: Logger): MiddlewareHandler<AppEnv> {
   const indexFile = join(webDir, 'index.html');
@@ -37,6 +53,7 @@ export function webApp(webDir: string, logger: Logger): MiddlewareHandler<AppEnv
   return async (c, next) => {
     const method = c.req.method;
     if ((method !== 'GET' && method !== 'HEAD') || isServerPath(c.req.path)) return next();
+    if (isPrivateBuildPath(c.req.path)) return next();
     const isAsset = c.req.path.startsWith('/assets/');
     c.header('Cache-Control', isAsset ? IMMUTABLE : REVALIDATE);
     const served = await files(c, async () => {});

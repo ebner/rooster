@@ -11,7 +11,8 @@ export type ServerTextKey =
   | 'org.personal'
   | 'signIn.notInvited'
   | 'signIn.disabled'
-  | 'signIn.unverifiedEmail';
+  | 'signIn.unverifiedEmail'
+  | 'signIn.accountLinkBlocked';
 
 type Catalog = typeof enServer;
 const catalogs: Record<Locale, Catalog> = { en: enServer, sv: svServer };

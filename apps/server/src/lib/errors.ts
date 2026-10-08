@@ -3,6 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { ZodError } from 'zod';
 import type { AppEnv } from './context.ts';
+import { logSafeError } from './log-safe-error.ts';
 import type { Logger } from './logger.ts';
 
 export interface FieldError {
@@ -145,7 +146,7 @@ export const createErrorHandler =
     }
     // The request logger may not be attached yet if an early middleware threw.
     const logger = c.get('logger') ?? baseLogger;
-    logger.error({ err, reqId: c.get('requestId') }, 'unhandled error');
+    logger.error({ err: logSafeError(err), reqId: c.get('requestId') }, 'unhandled error');
     return problemResponse(c, 500, 'internal_error', 'An unexpected error occurred.');
   };
 

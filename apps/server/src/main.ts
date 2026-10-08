@@ -11,6 +11,10 @@ import { VERSION } from './version.ts';
 
 const SHUTDOWN_GRACE_MS = 10_000;
 
+// Before anything touches the disk: the database, its WAL and backups hold every user's
+// data, so new files are 0600 and new directories 0700 whatever the inherited umask.
+process.umask(0o077);
+
 const config = loadConfig();
 const logger = createLogger(config.logLevel);
 

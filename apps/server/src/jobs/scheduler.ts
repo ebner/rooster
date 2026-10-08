@@ -1,4 +1,5 @@
 import { Cron } from 'croner';
+import { logSafeError } from '../lib/log-safe-error.ts';
 import type { Logger } from '../lib/logger.ts';
 
 export type JobFn = () => void | Promise<void>;
@@ -27,7 +28,7 @@ export function createScheduler(logger: Logger): Scheduler {
           await fn();
           log.debug({ ms: Math.round(performance.now() - start) }, 'job finished');
         } catch (err) {
-          log.error({ err }, 'job failed');
+          log.error({ err: logSafeError(err) }, 'job failed');
         }
       });
       jobs.set(name, job);

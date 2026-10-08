@@ -2,7 +2,7 @@ import { createRoute, z } from '@hono/zod-openapi';
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../src/db/client.ts';
 import { AppError } from '../src/lib/errors.ts';
-import { captureLogger, createTestApp, createUserWithSession } from './helpers.ts';
+import { BASE_URL, captureLogger, createTestApp, createUserWithSession } from './helpers.ts';
 
 describe('probes', () => {
   it('GET /healthz returns ok', async () => {
@@ -250,5 +250,98 @@ describe('security headers', () => {
     const { app } = createTestApp();
     const res = await app.request('/api/nope');
     expect(res.headers.get('content-security-policy')).toContain("default-src 'self'");
+  });
+});
+
+describe('request body limits', () => {
+  /** A chunked body (no Content-Length) of `total` bytes; `pulled()` counts what was read. */
+  function chunked(total: number, chunk = 16 * 1024) {
+    let sent = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent >= total) {
+          controller.close();
+          return;
+        }
+        const size = Math.min(chunk, total - sent);
+        sent += size;
+        controller.enqueue(new Uint8Array(size).fill(0x20));
+      },
+    });
+    return { stream, pulled: () => sent };
+  }
+
+  async function expectTooLarge(res: Response) {
+    expect(res.status).toBe(413);
+    expect(res.headers.get('content-type')).toBe('application/problem+json');
+    expect(await res.json()).toMatchObject({ status: 413, code: 'payload_too_large' });
+  }
+
+  it('/api/auth/* takes at most 64 KB, before better-auth buffers the body', async () => {
+    const { app } = createTestApp();
+    const big = JSON.stringify({ provider: 'google', callbackURL: '/', pad: 'x'.repeat(70_000) });
+    await expectTooLarge(
+      await app.request('/api/auth/sign-in/social', {
+        method: 'POST',
+        body: big,
+        headers: {
+          'content-type': 'application/json',
+          'content-length': String(big.length),
+          origin: BASE_URL,
+        },
+      }),
+    );
+    const body = chunked(10 * 1024 * 1024);
+    await expectTooLarge(
+      await app.request('/api/auth/sign-in/social', {
+        method: 'POST',
+        body: body.stream,
+        headers: { 'content-type': 'application/json', origin: BASE_URL },
+        duplex: 'half',
+      } as RequestInit),
+    );
+    // Reading stopped right after the limit.
+    expect(body.pulled()).toBeLessThanOrEqual(64 * 1024 + 2 * 16 * 1024);
+    const small = await app.request('/api/auth/sign-in/social', {
+      method: 'POST',
+      body: JSON.stringify({ provider: 'google', callbackURL: '/' }),
+      headers: { 'content-type': 'application/json', origin: BASE_URL },
+    });
+    expect(small.status).toBe(200);
+  });
+
+  it('/api/v1/* takes at most 1 MB, declared or chunked; a maximal description fits', async () => {
+    const { app, db } = createTestApp({ apiRateLimit: false });
+    const { jar } = createUserWithSession(app, db, { email: 'ann@example.com' });
+    const headers = {
+      cookie: jar.header(),
+      origin: BASE_URL,
+      'content-type': 'application/json',
+    };
+    const big = JSON.stringify({ title: 'x', description: 'x'.repeat(1024 * 1024) });
+    await expectTooLarge(
+      await app.request('/api/v1/orgs/personal/tasks', {
+        method: 'POST',
+        body: big,
+        headers: { ...headers, 'content-length': String(big.length) },
+      }),
+    );
+    const body = chunked(20 * 1024 * 1024, 64 * 1024);
+    await expectTooLarge(
+      await app.request('/api/v1/orgs/personal/tasks', {
+        method: 'POST',
+        body: body.stream,
+        headers,
+        duplex: 'half',
+      } as RequestInit),
+    );
+    expect(body.pulled()).toBeLessThanOrEqual(1024 * 1024 + 2 * 64 * 1024);
+    // 100,000 characters of three-byte UTF-8 is still well under the limit.
+    const ok = await app.request('/api/v1/orgs/personal/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Long', description: '€'.repeat(100_000) }),
+      headers,
+    });
+    expect(ok.status).toBe(201);
   });
 });

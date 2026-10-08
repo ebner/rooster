@@ -5,6 +5,14 @@ import type { Logger } from './logger.ts';
 
 const PROBE_PATHS = new Set(['/healthz', '/readyz']);
 
+/** Invite tokens are bearer secrets in the path: the API routes and the web page. */
+const INVITE_TOKEN_PATH = /^(\/api\/v1\/invites|\/invite)\/[^/]+/;
+
+/** The path as logged: secrets in it replaced by their route parameter name. */
+export function loggablePath(path: string): string {
+  return path.replace(INVITE_TOKEN_PATH, '$1/:token');
+}
+
 /**
  * Honours an incoming `X-Request-Id` when it is short and limited to `[A-Za-z0-9_=-]`
  * (hono's built-in check); otherwise a fresh UUID is generated. Echoed in the response.
@@ -13,7 +21,7 @@ export const requestIdMiddleware = (): MiddlewareHandler<AppEnv> => requestId({ 
 
 /**
  * Attaches a child logger with `reqId` and logs one line per request when it completes:
- * `{reqId, method, path, status, ms, userId?}` (04 §9).
+ * `{reqId, method, path, status, ms, userId?}` (04 §9). The query string is never logged.
  */
 export function requestLogger(logger: Logger): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
@@ -25,7 +33,7 @@ export function requestLogger(logger: Logger): MiddlewareHandler<AppEnv> {
     const fields = {
       reqId,
       method: c.req.method,
-      path: c.req.path,
+      path: loggablePath(c.req.path),
       status,
       ms: Math.round((performance.now() - start) * 10) / 10,
       ...(c.var.actor === undefined ? {} : { userId: c.var.actor.userId }),

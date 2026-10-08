@@ -13,6 +13,10 @@ beforeAll(() => {
   writeFileSync(join(web.path, 'index.html'), '<!doctype html><title>rooster</title>');
   writeFileSync(join(web.path, 'sw.js'), 'self.addEventListener("fetch", () => {});');
   writeFileSync(join(web.path, 'assets', 'app-abc123.js'), 'console.log(1);');
+  writeFileSync(join(web.path, 'assets', 'app-abc123.js.map'), '{"sources":["src/app.ts"]}');
+  writeFileSync(join(web.path, 'sw.js.map'), '{"sources":["src/sw.ts"]}');
+  mkdirSync(join(web.path, '.vite'));
+  writeFileSync(join(web.path, '.vite', 'manifest.json'), '{"index.html":{}}');
   ({ app } = createTestApp({ env: { ROOSTER_WEB_DIR: web.path } }));
 });
 afterAll(() => web.cleanup());
@@ -49,6 +53,21 @@ describe('web app serving', () => {
   it('does not fall back for a missing hashed asset', async () => {
     const res = await app.request('/assets/missing-000.js');
     expect(res.status).toBe(404);
+    expect(res.headers.get('cache-control')).toBeNull();
+  });
+
+  it.each([
+    '/assets/app-abc123.js.map',
+    '/sw.js.map',
+    '/missing.js.map',
+    '/.vite/manifest.json',
+    '/%2evite/manifest.json',
+    '/.env',
+    '/assets/.hidden',
+  ])('never serves source maps or dot-paths, not even as the shell: %s', async (path) => {
+    const res = await app.request(path);
+    expect(res.status).toBe(404);
+    expect(res.headers.get('content-type')).toBe('application/problem+json');
     expect(res.headers.get('cache-control')).toBeNull();
   });
 

@@ -5,6 +5,12 @@ import { type AppDb, openDb } from './client.ts';
 import { ensureInstanceId } from './instance.ts';
 import { backupDatabase, hasPendingMigrations, MIGRATIONS_DIR, runMigrations } from './migrate.ts';
 
+/**
+ * Data, backup and attachment directories are private to the server's user: they hold the
+ * whole database. Files inside inherit the process umask (0o077, set in main.ts).
+ */
+export const PRIVATE_DIR_MODE = 0o700;
+
 export interface DataPaths {
   dataDir: string;
   dbFile: string;
@@ -36,7 +42,7 @@ export function prepareDatabase(
 ): { db: AppDb; instanceId: string } {
   const paths = dataPaths(dataDir);
   for (const dir of [paths.dataDir, paths.backupsDir, paths.attachmentsDir]) {
-    mkdirSync(dir, { recursive: true });
+    mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
   }
   const existed = existsSync(paths.dbFile) && statSync(paths.dbFile).size > 0;
   const db = openDb(paths.dbFile);

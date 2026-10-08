@@ -1,7 +1,7 @@
 import type { Task } from '@rooster/core/schemas';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { idempotency, placement, task, taskGroup } from '../src/db/schema/index.ts';
+import { idempotency, placement, task, taskGroup, verification } from '../src/db/schema/index.ts';
 import { registerJobs } from '../src/jobs/register.ts';
 import { createScheduler } from '../src/jobs/scheduler.ts';
 import { captureLogger, testConfig } from './helpers.ts';
@@ -64,6 +64,28 @@ describe('trash purge (05 §4.5)', () => {
     expect(await titlesIn(a, inbox.id)).toEqual(['keep 2', 'keep 1', 'inbox']);
     // Idempotent.
     expect(ctx.app.services.retention.purge()).toMatchObject({ tasks: 0, groups: 0 });
+  });
+
+  it('purges expired better-auth verification rows and keeps live ones', () => {
+    const now = Date.now();
+    const ctx = listCtx({ clock: () => now });
+    const row = (id: string, expiresAt: number) => ({
+      id,
+      identifier: `state-${id}`,
+      value: '{}',
+      expiresAt: new Date(expiresAt),
+      createdAt: new Date(now - DAY),
+      updatedAt: new Date(now - DAY),
+    });
+    ctx.db.orm
+      .insert(verification)
+      .values([row('old', now - 60_000), row('live', now + 60_000)])
+      .run();
+    expect(ctx.app.services.retention.purge().verifications).toBe(1);
+    expect(ctx.db.orm.select({ id: verification.id }).from(verification).all()).toEqual([
+      { id: 'live' },
+    ]);
+    expect(ctx.app.services.retention.purge().verifications).toBe(0);
   });
 
   it('purges idempotency rows older than 7 days', async () => {

@@ -1,9 +1,20 @@
 import { eq, sql } from 'drizzle-orm';
+import type { Context } from 'hono';
 import { describe, expect, it } from 'vitest';
+import { createApp } from '../src/app.ts';
 import { isPublicRoute } from '../src/auth/actor.ts';
-import { INVITE_COOKIE, inviteCookie, readInviteToken } from '../src/auth/cookies.ts';
+import {
+  INVITE_COOKIE,
+  inviteCookie,
+  inviteCookieName,
+  readInviteToken,
+  sessionCookieName,
+} from '../src/auth/cookies.ts';
 import { member, organization } from '../src/db/schema/index.ts';
+import { clientIp } from '../src/lib/client-ip.ts';
 import { localeFromAcceptLanguage, parseAcceptLanguage, serverText } from '../src/lib/i18n.ts';
+import { createLogger } from '../src/lib/logger.ts';
+import { loggablePath } from '../src/lib/request-log.ts';
 import {
   hashToken,
   randomToken,
@@ -13,7 +24,15 @@ import {
 } from '../src/lib/tokens.ts';
 import { emailInviteToken, parseInviteToken } from '../src/services/invite-tokens.ts';
 import { emailDomain, matchesAllowlist } from '../src/services/sign-in-policy.ts';
-import { BASE_URL, createTestApp, createUserWithSession, TEST_ENV } from './helpers.ts';
+import {
+  BASE_URL,
+  captureLogger,
+  createTestApp,
+  createTestDb,
+  createUserWithSession,
+  TEST_ENV,
+  testConfig,
+} from './helpers.ts';
 
 const SECRET = TEST_ENV.ROOSTER_AUTH_SECRET;
 
@@ -100,19 +119,34 @@ describe('signed values and tokens', () => {
   it('the invite cookie expires after 15 minutes and resists tampering', () => {
     const now = 1_800_000_000_000;
     const header = inviteCookie(SECRET, 'tok', now, true);
-    expect(header).toMatch(/^rooster\.invite=/);
+    expect(header).toMatch(/^__Host-rooster\.invite=/);
     expect(header).toContain('Max-Age=900');
     expect(header).toContain('HttpOnly');
     expect(header).toContain('SameSite=Lax');
     expect(header).toContain('Secure');
+    expect(header).toContain('Path=/');
+    expect(header).not.toMatch(/Domain=/i);
     const cookie = `${header.split(';')[0]}`;
-    expect(readInviteToken(cookie, SECRET, now)).toBe('tok');
-    expect(readInviteToken(cookie, SECRET, now + 15 * 60_000)).toBeNull();
-    expect(readInviteToken(cookie, 'another-secret-another-secret-0000', now)).toBeNull();
+    expect(readInviteToken(cookie, SECRET, now, true)).toBe('tok');
+    expect(readInviteToken(cookie, SECRET, now + 15 * 60_000, true)).toBeNull();
+    expect(readInviteToken(cookie, 'another-secret-another-secret-0000', now, true)).toBeNull();
     expect(
-      readInviteToken(`${INVITE_COOKIE}=${signCookieValue(SECRET, 'tok')}`, SECRET, now),
+      readInviteToken(`${INVITE_COOKIE}=${signCookieValue(SECRET, 'tok')}`, SECRET, now, false),
     ).toBeNull();
-    expect(readInviteToken('other=1', SECRET, now)).toBeNull();
+    expect(readInviteToken('other=1', SECRET, now, true)).toBeNull();
+  });
+
+  it('cookie names carry the __Host- prefix on https only', () => {
+    expect(sessionCookieName(true)).toBe('__Host-rooster.session');
+    expect(inviteCookieName(true)).toBe('__Host-rooster.invite');
+    expect(sessionCookieName(false)).toBe('rooster.session');
+    expect(inviteCookieName(false)).toBe('rooster.invite');
+    const plain = inviteCookie(SECRET, 'tok', 0, false);
+    expect(plain).toMatch(/^rooster\.invite=/);
+    expect(plain).not.toContain('Secure');
+    // A cookie under the other name is not read.
+    expect(readInviteToken(plain.split(';')[0], SECRET, 0, true)).toBeNull();
+    expect(readInviteToken(plain.split(';')[0], SECRET, 0, false)).toBe('tok');
   });
 });
 
@@ -160,7 +194,7 @@ describe('CSRF (04 §4.11)', () => {
     expect(form.status).toBe(415);
   });
 
-  it('does not apply to safe methods, and bearer requests are exempt (then need a session)', async () => {
+  it('does not apply to safe methods; an unauthenticated bearer request is 401', async () => {
     const { app, jar, post } = setup();
     expect(
       (
@@ -176,6 +210,18 @@ describe('CSRF (04 §4.11)', () => {
     });
     expect(bearer.status).toBe(401);
     expect((await post({ origin: BASE_URL })).status).toBe(201);
+  });
+
+  it('an Authorization header does not exempt a cookie-authenticated request', async () => {
+    const { post } = setup();
+    for (const headers of [
+      { authorization: 'Bearer abc' },
+      { authorization: 'Bearer abc', origin: 'https://evil.example' },
+    ]) {
+      const res = await post(headers);
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ code: 'csrf_origin' });
+    }
   });
 
   it('guards the public claim route too', async () => {
@@ -211,5 +257,94 @@ describe('invariants', () => {
     const again = app.services.orgs.bootstrapPersonalOrg(userId, 'sv');
     expect(again.name).toBe('Personal');
     expect(db.orm.select().from(organization).all()).toHaveLength(1);
+  });
+});
+
+describe('client IP behind trusted proxies (04 §4.11)', () => {
+  function ctxWith(forwarded: string | undefined): Context {
+    return {
+      req: { header: (name: string) => (name === 'x-forwarded-for' ? forwarded : undefined) },
+      env: { incoming: { socket: { remoteAddress: '10.0.0.9' } } },
+    } as unknown as Context;
+  }
+
+  it('takes the entry the outermost trusted proxy appended, not the client-supplied first', () => {
+    const one = { trustProxy: true, trustedProxyHops: 1 };
+    expect(clientIp(ctxWith('1.1.1.1'), one)).toBe('1.1.1.1');
+    expect(clientIp(ctxWith('6.6.6.6, 1.1.1.1'), one)).toBe('1.1.1.1');
+    expect(clientIp(ctxWith(' 6.6.6.6 ,1.1.1.1 , '), one)).toBe('1.1.1.1');
+    const two = { trustProxy: true, trustedProxyHops: 2 };
+    expect(clientIp(ctxWith('6.6.6.6, 1.1.1.1, 172.16.0.2'), two)).toBe('1.1.1.1');
+  });
+
+  it('falls back to the socket peer with too few entries, no header, or no trust', () => {
+    expect(clientIp(ctxWith('1.1.1.1'), { trustProxy: true, trustedProxyHops: 2 })).toBe(
+      '10.0.0.9',
+    );
+    expect(clientIp(ctxWith(undefined), { trustProxy: true, trustedProxyHops: 1 })).toBe(
+      '10.0.0.9',
+    );
+    expect(clientIp(ctxWith(''), { trustProxy: true, trustedProxyHops: 1 })).toBe('10.0.0.9');
+    expect(clientIp(ctxWith('1.1.1.1'), { trustProxy: false, trustedProxyHops: 1 })).toBe(
+      '10.0.0.9',
+    );
+  });
+});
+
+describe('better-auth rate limit keys on the proxy-added address', () => {
+  it('a client cannot dodge the sign-in limit by prepending X-Forwarded-For entries', async () => {
+    const app = createApp({
+      config: testConfig({ ROOSTER_TRUST_PROXY: 'true', ROOSTER_WEB_DIR: '/nonexistent' }),
+      db: createTestDb(),
+      logger: createLogger('silent'),
+      version: '0.0.0-test',
+      authRateLimit: true,
+    });
+    const signIn = (forwarded: string) =>
+      app.request('/api/auth/sign-in/social', {
+        method: 'POST',
+        body: JSON.stringify({ provider: 'google', callbackURL: '/' }),
+        headers: {
+          'content-type': 'application/json',
+          origin: BASE_URL,
+          'x-forwarded-for': forwarded,
+        },
+      });
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i += 1) statuses.push((await signIn(`10.0.0.${i}, 9.9.9.9`)).status);
+    expect(statuses.slice(0, 3)).toEqual([200, 200, 200]);
+    expect(statuses.slice(3)).toEqual([429, 429, 429]);
+    // Another client behind the same proxy is counted separately.
+    expect((await signIn('9.9.9.9, 8.8.8.8')).status).toBe(200);
+  });
+});
+
+describe('request log redaction', () => {
+  it.each([
+    ['/api/v1/invites/abc123', '/api/v1/invites/:token'],
+    ['/api/v1/invites/abc123/claim', '/api/v1/invites/:token/claim'],
+    ['/api/v1/invites/abc123/accept', '/api/v1/invites/:token/accept'],
+    ['/invite/abc123', '/invite/:token'],
+    ['/api/v1/orgs/x/invites', '/api/v1/orgs/x/invites'],
+    ['/api/v1/me', '/api/v1/me'],
+  ])('%s is logged as %s', (path, logged) => {
+    expect(loggablePath(path)).toBe(logged);
+  });
+
+  it('request lines never contain an invite token', async () => {
+    const { logger, lines } = captureLogger();
+    const { app } = createTestApp({ logger });
+    const token = 'secret-invite-token-0123456789';
+    await app.request(`/api/v1/invites/${token}`);
+    await app.request(`/api/v1/invites/${token}/claim`, {
+      method: 'POST',
+      headers: { origin: BASE_URL },
+    });
+    const requests = lines.filter((l) => l.msg === 'request');
+    expect(requests.map((l) => l.path)).toEqual([
+      '/api/v1/invites/:token',
+      '/api/v1/invites/:token/claim',
+    ]);
+    expect(JSON.stringify(lines)).not.toContain(token);
   });
 });

@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -158,6 +158,15 @@ describe('prepareDatabase', () => {
     expect(second.instanceId).toBe(first.instanceId);
     expect(first.instanceId).toMatch(/^[0-9a-f-]{36}$/);
     expect(readdirSync(join(dir.path, 'backups'))).toEqual([]);
+  });
+
+  it('creates the data, backup and attachment directories private (0700)', () => {
+    const root = join(dir.path, 'fresh');
+    const { db } = prepareDatabase(root, silent);
+    db.close();
+    for (const sub of ['', 'backups', 'attachments']) {
+      expect(statSync(join(root, sub)).mode & 0o777).toBe(0o700);
+    }
   });
 
   it('backs up an existing database before applying pending migrations', () => {

@@ -18,7 +18,7 @@ import {
 import { and, asc, desc, eq, inArray, isNotNull, isNull, type SQL, sql } from 'drizzle-orm';
 import { member, tag as tagTable, task, user } from '../db/schema/index.ts';
 import { AppError } from '../lib/errors.ts';
-import { type Actor, immediate, type ServiceDeps, type Tx } from './context.ts';
+import { type Actor, immediate, readOnly, type ServiceDeps, type Tx } from './context.ts';
 import { chunked, liveTasksById, taskDtos } from './list-access.ts';
 import { listMemberships, requireMembership } from './org-access.ts';
 import { indexIsStale, rebuildIndex } from './search-index.ts';
@@ -30,6 +30,11 @@ const BM25 = sql.raw('bm25(task_fts, 0.0, 0.0, 10.0, 1.0, 1.0)');
 const SNIPPET_TOKENS = 12;
 /** Candidates are filtered in batches of this many (filters need the full TaskDTO). */
 const FILTER_BATCH = 200;
+/**
+ * A query with filters loads its candidates in rank order and filters them in memory; at
+ * most this many are examined, so a rarely matching filter cannot load a whole instance.
+ */
+export const SEARCH_SCAN_CAP = 5000;
 
 /**
  * A parsed query bound to one actor and a set of orgs: the FTS5 expression for the terms
@@ -71,10 +76,11 @@ export class SearchService {
    * `GET /search` (06 §2.8). Terms are prefix matches over title, description and comments;
    * filters narrow the result. Ranked open before completed, then by bm25 (title weighted
    * 10:1). A filter-only query ranks open first, then by due date (none last), then the most
-   * recently updated. `orgId` limits the search to one org (404 for non-members).
+   * recently updated. `orgId` limits the search to one org (404 for non-members). With
+   * filters, only the best `SEARCH_SCAN_CAP` candidates are examined.
    */
   search(actor: Actor, input: SearchQuery): SearchResult {
-    return immediate(this.deps.db, (tx) => {
+    return readOnly(this.deps.db, (tx) => {
       const orgIds =
         input.orgId === undefined
           ? listMemberships(tx, actor.userId).map((m) => m.org.id)
@@ -83,7 +89,12 @@ export class SearchService {
       const matcher = this.matcher(tx, actor, orgIds, input.q);
       if (matcher === null) return [];
       const limit = input.limit ?? SEARCH_LIMIT_DEFAULT;
-      const ids = this.candidates(tx, orgIds, matcher, matcher.hasFilters ? null : limit);
+      const ids = this.candidates(
+        tx,
+        orgIds,
+        matcher,
+        matcher.hasFilters ? SEARCH_SCAN_CAP : limit,
+      );
       const hits: Task[] = [];
       for (const batch of chunked(ids, FILTER_BATCH)) {
         const order = new Map(batch.map((id, i) => [id, i]));
@@ -233,7 +244,9 @@ export class SearchService {
         .map((r) => r.id);
     } catch (err) {
       if (isFtsSyntaxError(err)) {
-        this.deps.logger.warn({ err, fts }, 'search: rejected FTS expression');
+        // The expression is the user's search text: log its shape, not its content.
+        const code = (err as { code?: unknown }).code;
+        this.deps.logger.warn({ code, ftsLength: fts.length }, 'search: rejected FTS expression');
         return [];
       }
       throw err;

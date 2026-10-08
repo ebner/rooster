@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNotNull, lt } from 'drizzle-orm';
-import { placement, task, taskGroup } from '../db/schema/index.ts';
+import { placement, task, taskGroup, verification } from '../db/schema/index.ts';
 import { immediate, type ServiceDeps } from './context.ts';
 import type { IdempotencyStore } from './idempotency-store.ts';
 import type { PlacementService } from './placement-service.ts';
@@ -12,9 +12,14 @@ export interface PurgeReport {
   tasks: number;
   groups: number;
   idempotency: number;
+  verifications: number;
 }
 
-/** The daily purge job (04 §4.6): Trash older than 30 days and expired idempotency keys. */
+/**
+ * The daily purge job (04 §4.6): Trash older than 30 days, expired idempotency keys, and
+ * expired better-auth `verification` rows (OAuth state and PKCE verifiers that abandoned
+ * sign-ins leave behind).
+ */
 export class RetentionService {
   constructor(
     private readonly deps: ServiceDeps,
@@ -65,6 +70,10 @@ export class RetentionService {
       }
       return { tasks, groups: groups.length };
     });
-    return { ...report, idempotency: this.idempotency.purge(now) };
+    const verifications = this.deps.db.orm
+      .delete(verification)
+      .where(lt(verification.expiresAt, new Date(now)))
+      .run().changes;
+    return { ...report, idempotency: this.idempotency.purge(now), verifications };
   }
 }

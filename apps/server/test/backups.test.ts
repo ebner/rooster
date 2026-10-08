@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Backup } from '@rooster/core/schemas';
 import Database from 'better-sqlite3';
@@ -77,6 +77,13 @@ describe('WP 2.9 backups', () => {
     }
     expect((await user.call('GET', '/api/v1/admin/backups')).status).toBe(403);
     expect((await user.call('POST', '/api/v1/admin/backups')).status).toBe(403);
+  });
+
+  it('creates a missing backup directory private (0700)', () => {
+    const fresh = join(dir.path, 'fresh');
+    const ctx = listCtx({ env: { ROOSTER_DATA_DIR: fresh } });
+    expect(ctx.app.services.backups.runScheduled()?.kind).toBe('daily');
+    expect(statSync(join(fresh, 'backups')).mode & 0o777).toBe(0o700);
   });
 
   it('takes one scheduled snapshot per day, even after a restart', async () => {

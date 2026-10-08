@@ -1,11 +1,13 @@
-import { spawnSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { emailAuthorities } from '../src/auth/auth.ts';
 import { EXIT_CONFIG, parseConfig } from '../src/config.ts';
 import { TEST_ENV, tempDir } from './helpers.ts';
 
 const serverRoot = join(import.meta.dirname, '..');
+const FILE_SECRET = 'Zq8pW3xL0vN6tR2bY9mK4cH7jF1dS5gA';
 
 function errorsOf(env: Record<string, string | undefined>): string[] {
   const result = parseConfig(env);
@@ -149,18 +151,77 @@ describe('parseConfig', () => {
     ).toEqual(['ROOSTER_OIDC_PROVIDERS: provider id "google" is used twice']);
   });
 
+  it('rejects the change-me placeholder and repeated-pattern secrets', () => {
+    for (const secret of [
+      'change-me-change-me-change-me-change-me',
+      'xK2pL9vQ7mR3tW8yZ1aB5cD6eF4gH0jCHANGE-ME',
+    ]) {
+      expect(errorsOf({ ...TEST_ENV, ROOSTER_AUTH_SECRET: secret })).toEqual([
+        expect.stringMatching(/^ROOSTER_AUTH_SECRET: .*change-me.*openssl rand -base64 48/),
+      ]);
+    }
+    expect(
+      errorsOf({ ...TEST_ENV, ROOSTER_AUTH_SECRET: 'e2e-secret-e2e-secret-e2e-secret-e2e' }),
+    ).toEqual([expect.stringMatching(/^ROOSTER_AUTH_SECRET: is too weak.*openssl rand/)]);
+    // Random hex (16 symbols) and base64 secrets pass.
+    for (const secret of [
+      '3f9c0a7e1b5d2468ace013579bdf2468',
+      'q1V9zK3m0Rj8fT2wXy7Lb5Nc4Hd6Gs0P+Ae/Uo==',
+    ]) {
+      expect(parseConfig({ ...TEST_ENV, ROOSTER_AUTH_SECRET: secret }).ok).toBe(true);
+    }
+  });
+
+  it('parses ROOSTER_TRUSTED_PROXY_HOPS (default 1, at least 1)', () => {
+    const parsed = (hops: string | undefined) => {
+      const result = parseConfig({ ...TEST_ENV, ROOSTER_TRUSTED_PROXY_HOPS: hops });
+      return result.ok ? result.config.trustedProxyHops : null;
+    };
+    expect(parsed(undefined)).toBe(1);
+    expect(parsed('2')).toBe(2);
+    expect(parsed('0')).toBeNull();
+    expect(parsed('two')).toBeNull();
+  });
+
+  it('OIDC providers do not vouch for emails unless trustEmail is set', () => {
+    const sso = {
+      id: 'sso',
+      name: 'SSO',
+      discoveryUrl: 'https://sso.example.com/.well-known/openid-configuration',
+      clientId: 'c',
+      clientSecret: 's',
+    };
+    const result = parseConfig({
+      ...TEST_ENV,
+      ROOSTER_OIDC_PROVIDERS: JSON.stringify([sso, { ...sso, id: 'corp', trustEmail: true }]),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.config.oidcProviders.map((p) => [p.id, p.trustEmail])).toEqual([
+      ['sso', false],
+      ['corp', true],
+    ]);
+    expect([...emailAuthorities(result.config)].sort()).toEqual(['corp', 'google']);
+    expect(
+      errorsOf({
+        ...TEST_ENV,
+        ROOSTER_OIDC_PROVIDERS: JSON.stringify([{ ...sso, trustEmail: 'yes' }]),
+      }),
+    ).toEqual([expect.stringMatching(/^ROOSTER_OIDC_PROVIDERS: /)]);
+  });
+
   it('reads <NAME>_FILE values, which win over the plain variable', () => {
     const dir = tempDir();
     try {
       const secretFile = join(dir.path, 'secret');
-      writeFileSync(secretFile, `${'s'.repeat(40)}\n`);
+      writeFileSync(secretFile, `${FILE_SECRET}\n`);
       const result = parseConfig({
         ...TEST_ENV,
         ROOSTER_AUTH_SECRET: 'ignored-because-file-wins-xxxxxxxxxxxxxxx',
         ROOSTER_AUTH_SECRET_FILE: secretFile,
       });
       expect(result.ok).toBe(true);
-      if (result.ok) expect(result.config.authSecret).toBe('s'.repeat(40));
+      if (result.ok) expect(result.config.authSecret).toBe(FILE_SECRET);
     } finally {
       dir.cleanup();
     }
@@ -194,6 +255,56 @@ describe('process boot', () => {
     expect(result.stderr).toContain('invalid configuration');
     expect(result.stderr).toContain('ROOSTER_BASE_URL: is required');
   });
+
+  it('exits with code 78 and the openssl hint when the secret is the placeholder', () => {
+    const result = boot({
+      ROOSTER_BASE_URL: TEST_ENV.ROOSTER_BASE_URL,
+      ROOSTER_AUTH_SECRET: 'change-me-change-me-change-me-change-me',
+      ROOSTER_ADMIN_EMAILS: 'a@b.test',
+      ROOSTER_GOOGLE_CLIENT_ID: 'id',
+      ROOSTER_GOOGLE_CLIENT_SECRET: 'secret',
+    });
+    expect(result.status).toBe(EXIT_CONFIG);
+    expect(result.stderr).toContain('ROOSTER_AUTH_SECRET');
+    expect(result.stderr).toContain('openssl rand -base64 48');
+  });
+
+  it('boots with umask 0077: the database and its directories are private', async () => {
+    const data = tempDir();
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(([k]) => !k.startsWith('ROOSTER_') && k !== 'PORT'),
+    );
+    const child = spawn(process.execPath, ['--import', 'tsx', 'src/main.ts'], {
+      cwd: serverRoot,
+      env: {
+        ...env,
+        ...TEST_ENV,
+        ROOSTER_DATA_DIR: data.path,
+        ROOSTER_WEB_DIR: join(data.path, 'no-web'),
+        ROOSTER_LOG_LEVEL: 'info',
+        PORT: String(41_000 + Math.floor(Math.random() * 2_000)),
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('server did not start')), 30_000);
+        child.stdout.on('data', (chunk: Buffer) => {
+          if (chunk.toString().includes('rooster listening')) {
+            clearTimeout(timer);
+            resolve();
+          }
+        });
+        child.once('exit', (code) => reject(new Error(`server exited with ${code}`)));
+      });
+      expect(statSync(join(data.path, 'rooster.db')).mode & 0o777).toBe(0o600);
+      expect(statSync(join(data.path, 'backups')).mode & 0o777).toBe(0o700);
+    } finally {
+      child.kill('SIGTERM');
+      await new Promise((resolve) => child.once('close', resolve));
+      data.cleanup();
+    }
+  }, 40_000);
 
   it('exits with code 78 when no sign-in provider is configured', () => {
     const result = boot({

@@ -10,6 +10,7 @@ import type { Config } from './config.ts';
 import type { AppDb } from './db/client.ts';
 import { EventBus } from './events/bus.ts';
 import { SseHub } from './events/hub.ts';
+import { API_BODY_LIMIT, AUTH_BODY_LIMIT, bodyLimitFor } from './lib/body-limit.ts';
 import type { AppEnv } from './lib/context.ts';
 import { csrfProtection } from './lib/csrf.ts';
 import { createErrorHandler, notFoundHandler, validationHook } from './lib/errors.ts';
@@ -112,6 +113,9 @@ export function createApp(deps: AppDeps): App {
   app.use(requestIdMiddleware());
   app.use(requestLogger(logger));
   app.use(securityHeaders(providerOrigins(config)));
+  // Before the auth mount, which buffers the whole body (auth/mount.ts).
+  app.use('/api/auth/*', bodyLimitFor(AUTH_BODY_LIMIT));
+  app.use('/api/v1/*', bodyLimitFor(API_BODY_LIMIT));
   app.use('/api/v1/*', actorMiddleware({ auth, services }));
   app.use('/api/v1/*', csrfProtection(config.baseUrl));
   const rateLimit = deps.apiRateLimit ?? API_RATE_LIMIT;

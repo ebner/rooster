@@ -49,6 +49,12 @@ const oidcProviderSchema = z.object({
   clientId: z.string().min(1),
   clientSecret: z.string().min(1),
   scopes: z.array(z.string().min(1)).optional(),
+  /**
+   * The provider is authoritative for the email addresses it asserts, so a first sign-in
+   * through it may join an existing account with the same verified email (FR-AUTH-5).
+   * Off by default: an untrusted provider could assert anyone's address.
+   */
+  trustEmail: z.boolean().default(false),
 });
 
 export type OidcProviderConfig = z.infer<typeof oidcProviderSchema>;
@@ -70,6 +76,32 @@ const oidcProviders = z
   })
   .pipe(z.array(oidcProviderSchema));
 
+/**
+ * Below this many distinct characters a secret is a short pattern repeated to length
+ * (`test-secret-test-secret-…`). Not 16: a 32-character hex secret has fewer than 16 distinct
+ * characters most of the time, and fewer than 10 about once in 10,000.
+ */
+const MIN_SECRET_DISTINCT_CHARS = 10;
+
+/** At least 32 characters, not the `.env.example` placeholder, and not a repeated pattern. */
+const authSecret = z
+  .string()
+  .min(32, 'must be at least 32 characters')
+  .superRefine((v, ctx) => {
+    const hint = 'generate a secret with: openssl rand -base64 48';
+    if (/change-me/i.test(v)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `still contains the "change-me" placeholder; ${hint}`,
+      });
+    } else if (new Set(v).size < MIN_SECRET_DISTINCT_CHARS) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `is too weak (fewer than ${MIN_SECRET_DISTINCT_CHARS} distinct characters); ${hint}`,
+      });
+    }
+  });
+
 const backupCron = z
   .string()
   .optional()
@@ -89,7 +121,7 @@ const envSchema = z.object({
   ROOSTER_BASE_URL: z
     .url({ protocol: /^https?$/, error: 'must be an absolute http(s) URL' })
     .transform((u) => u.replace(/\/+$/, '')),
-  ROOSTER_AUTH_SECRET: z.string().min(32, 'must be at least 32 characters'),
+  ROOSTER_AUTH_SECRET: authSecret,
   ROOSTER_ADMIN_EMAILS: emailList.refine((l) => l.length > 0, 'must list at least one email'),
   ROOSTER_ALLOWED_EMAILS: emailList,
   ROOSTER_ALLOWED_DOMAINS: csvList.transform((l) => l.map((d) => d.toLowerCase())),
@@ -100,6 +132,7 @@ const envSchema = z.object({
   ROOSTER_WEB_DIR: z.string().optional(),
   PORT: intInRange(3000, 1, 65535),
   ROOSTER_TRUST_PROXY: booleanFlag(false),
+  ROOSTER_TRUSTED_PROXY_HOPS: intInRange(1, 1, 16),
   ROOSTER_LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
   ROOSTER_SMTP_URL: z
     .url({ protocol: /^smtps?$/, error: 'must be an smtp:// or smtps:// URL' })
@@ -173,6 +206,7 @@ function toConfig(env: Env) {
     webDir: resolve(env.ROOSTER_WEB_DIR ?? DEFAULT_WEB_DIR),
     port: env.PORT,
     trustProxy: env.ROOSTER_TRUST_PROXY,
+    trustedProxyHops: env.ROOSTER_TRUSTED_PROXY_HOPS,
     logLevel: env.ROOSTER_LOG_LEVEL,
     smtp:
       env.ROOSTER_SMTP_URL !== undefined && env.ROOSTER_MAIL_FROM !== undefined

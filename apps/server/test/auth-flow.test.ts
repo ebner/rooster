@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { App } from '../src/app.ts';
 import { INVITE_COOKIE, SESSION_COOKIE } from '../src/auth/cookies.ts';
 import type { AppDb } from '../src/db/client.ts';
@@ -30,6 +30,15 @@ function appWith(env: Record<string, string> = {}): { app: App; db: AppDb } {
 
 function users(db: AppDb) {
   return db.orm.select().from(user).all();
+}
+
+function providerIds(db: AppDb): string[] {
+  return db.orm
+    .select({ providerId: account.providerId })
+    .from(account)
+    .all()
+    .map((a) => a.providerId)
+    .sort();
 }
 
 function groupNames(db: AppDb, userId: string, orgId: string): string[] {
@@ -164,40 +173,67 @@ describe('sign-in through the mock IdP', () => {
     expect(body.locale).toBe('sv');
   });
 
-  it('links a second identity with the same verified email to the same account (FR-AUTH-5)', async () => {
+  it('links a second identity with the same verified email when its provider is trusted for email (FR-AUTH-5)', async () => {
     const second = await startMockIdp();
     try {
-      const providers = [idp.provider('dev'), second.provider('corp', 'Corp SSO')];
+      const providers = [
+        idp.provider('dev'),
+        { ...second.provider('corp', 'Corp SSO'), trustEmail: true },
+      ];
       const { app, db } = createTestApp({
         env: { ROOSTER_OIDC_PROVIDERS: JSON.stringify(providers) },
       });
       await signInAs(app, 'admin@example.com');
-      const jar = new CookieJar();
-      const start = await app.request('/api/auth/sign-in/social', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', origin: BASE_URL },
-        body: JSON.stringify({
-          provider: 'corp',
-          callbackURL: '/',
-          loginHint: 'admin@example.com',
-        }),
-      });
-      jar.update(start);
-      const { url } = (await start.json()) as { url: string };
-      const cb = new URL((await fetch(url, { redirect: 'manual' })).headers.get('location') ?? '');
-      const done = await app.request(`${cb.pathname}${cb.search}`, {
-        headers: { cookie: jar.header() },
-      });
-      expect(done.headers.get('location')).toBe('/');
+      const { jar, location } = await signInAs(app, 'admin@example.com', { provider: 'corp' });
+      expect(location).toBe('/');
+      expect(jar.get(SESSION_COOKIE)).toBeDefined();
       expect(users(db)).toHaveLength(1);
-      expect(
-        db.orm
-          .select({ providerId: account.providerId })
-          .from(account)
-          .all()
-          .map((a) => a.providerId)
-          .sort(),
-      ).toEqual(['corp', 'dev']);
+      expect(providerIds(db)).toEqual(['corp', 'dev']);
+    } finally {
+      await second.stop();
+    }
+  });
+
+  it('an untrusted provider asserting an existing verified email cannot sign in as that user', async () => {
+    const second = await startMockIdp();
+    try {
+      const providers = [idp.provider('dev'), second.provider('rogue', 'Rogue SSO')];
+      const { app, db } = createTestApp({
+        env: { ROOSTER_OIDC_PROVIDERS: JSON.stringify(providers) },
+      });
+      const { jar: owner } = await signInAs(app, 'admin@example.com');
+      const { jar, location } = await signInAs(app, 'admin@example.com', { provider: 'rogue' });
+      expect(location).toBe(`${BASE_URL}/not-invited?reason=account_link_blocked`);
+      expect(jar.get(SESSION_COOKIE)).toBeUndefined();
+      expect(users(db)).toHaveLength(1);
+      expect(providerIds(db)).toEqual(['dev']);
+      expect(db.orm.select().from(session).all()).toHaveLength(1);
+      // The owner's own provider still works, and so does their session.
+      expect((await signInAs(app, 'admin@example.com')).location).toBe('/');
+      expect((await app.request('/api/v1/me', asJar(owner))).status).toBe(200);
+    } finally {
+      await second.stop();
+    }
+  });
+
+  it('an untrusted provider still signs in new users and its own returning users', async () => {
+    const second = await startMockIdp();
+    try {
+      const providers = [idp.provider('dev'), second.provider('rogue', 'Rogue SSO')];
+      const { app, db } = createTestApp({
+        env: {
+          ROOSTER_OIDC_PROVIDERS: JSON.stringify(providers),
+          ROOSTER_ALLOWED_DOMAINS: 'example.org',
+        },
+      });
+      expect((await signInAs(app, 'new@example.org', { provider: 'rogue' })).location).toBe('/');
+      expect((await signInAs(app, 'new@example.org', { provider: 'rogue' })).location).toBe('/');
+      expect(users(db)).toHaveLength(1);
+      expect(providerIds(db)).toEqual(['rogue']);
+      // ...but the other untrusted provider cannot join that account either.
+      expect((await signInAs(app, 'new@example.org')).location).toBe(
+        `${BASE_URL}/not-invited?reason=account_link_blocked`,
+      );
     } finally {
       await second.stop();
     }
@@ -394,5 +430,147 @@ describe('AC-1.3 link invites carry sign-in', () => {
     );
     expect((await signInAs(app, 'dave@mail.test')).location).toBe('/');
     expect((await signInAs(app, 'eve@mail.test')).location).toContain('/not-invited');
+  });
+});
+
+describe('a single-use link and concurrent sign-ins', () => {
+  async function linkInvite(app: App, owner: CookieJar): Promise<{ orgId: string; token: string }> {
+    const org = (await (
+      await app.request(
+        '/api/v1/orgs',
+        asJar(owner, { method: 'POST', body: JSON.stringify({ name: 'Race' }) }),
+      )
+    ).json()) as { id: string };
+    const { url } = (await (
+      await app.request(
+        `/api/v1/orgs/${org.id}/invites`,
+        asJar(owner, { method: 'POST', body: JSON.stringify({ role: 'member' }) }),
+      )
+    ).json()) as { url: string };
+    return { orgId: org.id, token: url.split('/invite/')[1] ?? '' };
+  }
+
+  it('admits only the sign-in that consumes the invite; the other gets no session', async () => {
+    const { app, db } = appWith();
+    const { jar: a } = await signInAs(app, 'admin@example.com');
+    const { orgId, token } = await linkInvite(app, a);
+    const claim = await app.request(`/api/v1/invites/${token}/claim`, {
+      method: 'POST',
+      headers: { origin: BASE_URL },
+    });
+    const b = new CookieJar().update(claim);
+    const c = new CookieJar().update(claim);
+    expect((await signInAs(app, 'b@else.test', { jar: b })).location).toBe('/');
+    // C's admission check ran before B's sign-in consumed the link, as when both callbacks
+    // interleave: the check passes, accepting at session creation does not.
+    const admits = vi.spyOn(app.services.orgs, 'inviteAdmits').mockReturnValue(true);
+    const late = await signInAs(app, 'c@else.test', { jar: c });
+    admits.mockRestore();
+    expect(late.location).toBe(`${BASE_URL}/not-invited?reason=not_invited`);
+    expect(c.get(SESSION_COOKIE)).toBeUndefined();
+    const carl = users(db).find((u) => u.email === 'c@else.test');
+    expect(
+      db.orm
+        .select()
+        .from(session)
+        .where(eq(session.userId, carl?.id ?? ''))
+        .all(),
+    ).toEqual([]);
+    const members = (await (
+      await app.request(`/api/v1/orgs/${orgId}/members`, asJar(a))
+    ).json()) as {
+      email: string;
+    }[];
+    expect(members.map((m) => m.email).sort()).toEqual(['admin@example.com', 'b@else.test']);
+  });
+
+  it('a stale invite cookie does not stop someone who is admitted anyway', async () => {
+    const { app } = appWith({ ROOSTER_ALLOWED_DOMAINS: 'else.test' });
+    const { jar: a } = await signInAs(app, 'admin@example.com');
+    const { token } = await linkInvite(app, a);
+    const claim = await app.request(`/api/v1/invites/${token}/claim`, {
+      method: 'POST',
+      headers: { origin: BASE_URL },
+    });
+    const b = new CookieJar().update(claim);
+    const c = new CookieJar().update(claim);
+    expect((await signInAs(app, 'b@else.test', { jar: b })).location).toBe('/');
+    const late = await signInAs(app, 'c@else.test', { jar: c });
+    expect(late.location).toBe('/');
+    expect(c.get(SESSION_COOKIE)).toBeDefined();
+  });
+});
+
+describe('cookies on https', () => {
+  const HTTPS = 'https://rooster.example.com';
+
+  it('the session and invite cookies are __Host- prefixed: Secure, Path=/, no Domain', async () => {
+    const { app } = appWith({ ROOSTER_BASE_URL: HTTPS });
+    const { jar: a } = await signInAs(app, 'admin@example.com', { origin: HTTPS });
+    const session = a.get(`__Host-${SESSION_COOKIE}`);
+    expect(session).toBeDefined();
+    expect(a.get(SESSION_COOKIE)).toBeUndefined();
+    const me = await app.request('/api/v1/me', { headers: { cookie: a.header() } });
+    expect(me.status).toBe(200);
+    // The plain name is not accepted on https.
+    const plain = await app.request('/api/v1/me', {
+      headers: { cookie: `${SESSION_COOKIE}=${session}` },
+    });
+    expect(plain.status).toBe(401);
+
+    const org = (await (
+      await app.request('/api/v1/orgs', {
+        method: 'POST',
+        body: JSON.stringify({ name: 'Secure' }),
+        headers: { cookie: a.header(), origin: HTTPS, 'content-type': 'application/json' },
+      })
+    ).json()) as { id: string };
+    const { url } = (await (
+      await app.request(`/api/v1/orgs/${org.id}/invites`, {
+        method: 'POST',
+        body: JSON.stringify({ role: 'member' }),
+        headers: { cookie: a.header(), origin: HTTPS, 'content-type': 'application/json' },
+      })
+    ).json()) as { url: string };
+    const claim = await app.request(`/api/v1/invites/${url.split('/invite/')[1]}/claim`, {
+      method: 'POST',
+      headers: { origin: HTTPS },
+    });
+    const [invite] = claim.headers.getSetCookie();
+    expect(invite).toMatch(new RegExp(`^__Host-${INVITE_COOKIE}=`));
+    for (const attr of ['Secure', 'Path=/', 'HttpOnly']) expect(invite).toContain(attr);
+    expect(invite).not.toMatch(/Domain=/i);
+
+    // The prefixed invite cookie carries a stranger through sign-in.
+    const b = new CookieJar().update(claim);
+    const signedIn = await signInAs(app, 'bob@elsewhere.test', { jar: b, origin: HTTPS });
+    expect(signedIn.location).toBe('/');
+    expect(b.get(`__Host-${INVITE_COOKIE}`)).toBeUndefined();
+    const setCookies = await signInAs(app, 'admin@example.com', { origin: HTTPS });
+    expect(setCookies.jar.get(`__Host-${SESSION_COOKIE}`)).toBeDefined();
+  });
+
+  it('better-auth sets the session cookie with the __Host- attributes', async () => {
+    const { app } = appWith({ ROOSTER_BASE_URL: HTTPS });
+    const start = await app.request('/api/auth/sign-in/social', {
+      ...jsonBody('POST', { provider: 'dev', callbackURL: '/', loginHint: 'admin@example.com' }),
+      headers: { 'content-type': 'application/json', origin: HTTPS },
+    });
+    const jar = new CookieJar().update(start);
+    const { url } = (await start.json()) as { url: string };
+    const callback = new URL(
+      (await fetch(url, { redirect: 'manual' })).headers.get('location') ?? '',
+    );
+    const done = await app.request(`${callback.pathname}${callback.search}`, {
+      headers: { cookie: jar.header() },
+    });
+    const cookie = done.headers
+      .getSetCookie()
+      .find((c) => c.startsWith(`__Host-${SESSION_COOKIE}=`));
+    expect(cookie).toBeDefined();
+    for (const attr of ['Secure', 'Path=/', 'HttpOnly', 'SameSite=Lax']) {
+      expect(cookie).toContain(attr);
+    }
+    expect(cookie).not.toMatch(/Domain=/i);
   });
 });

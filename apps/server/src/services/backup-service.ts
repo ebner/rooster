@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { BACKUP_NAME_REGEX, type Backup, type BackupKind } from '@rooster/core/schemas';
-import { dataPaths } from '../db/boot.ts';
+import { dataPaths, PRIVATE_DIR_MODE } from '../db/boot.ts';
 import { backupDatabase } from '../db/migrate.ts';
 import { AppError } from '../lib/errors.ts';
 import type { Actor, ServiceDeps } from './context.ts';
@@ -119,7 +119,7 @@ export class BackupService {
   }
 
   private snapshot(prefix: 'rooster' | 'manual', now: number): Backup {
-    mkdirSync(this.dir, { recursive: true });
+    mkdirSync(this.dir, { recursive: true, mode: PRIVATE_DIR_MODE });
     let at = now;
     let name = `${prefix}-${backupTimestamp(at)}.db`;
     while (existsSync(join(this.dir, name))) {

@@ -17,7 +17,7 @@ export const BASE_URL = 'http://localhost:3000';
 
 export const TEST_ENV = {
   ROOSTER_BASE_URL: BASE_URL,
-  ROOSTER_AUTH_SECRET: 'test-secret-test-secret-test-secret-42',
+  ROOSTER_AUTH_SECRET: 'test-secret-0123456789-abcdefghijklmnop-QRSTUV',
   ROOSTER_ADMIN_EMAILS: 'admin@example.com',
   // Phase 1 requires a sign-in provider; Google needs no network at boot.
   ROOSTER_GOOGLE_CLIENT_ID: 'test-google-client',
@@ -134,6 +134,10 @@ export async function signInAs(
     acceptLanguage?: string;
     emailVerified?: boolean;
     idp?: MockIdp;
+    /** The configured provider id to sign in with; default `dev`. */
+    provider?: string;
+    /** The app's origin, when it is not `BASE_URL`. */
+    origin?: string;
   } = {},
 ): Promise<SignInResult> {
   const jar = options.jar ?? new CookieJar();
@@ -143,9 +147,13 @@ export async function signInAs(
   }
   const start = await app.request('/api/auth/sign-in/social', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', origin: BASE_URL, cookie: jar.header() },
+    headers: {
+      'content-type': 'application/json',
+      origin: options.origin ?? BASE_URL,
+      cookie: jar.header(),
+    },
     body: JSON.stringify({
-      provider: 'dev',
+      provider: options.provider ?? 'dev',
       callbackURL: '/',
       errorCallbackURL: '/login',
       // Without a hint the mock IdP uses its "next user".

@@ -1,3 +1,4 @@
+import { uuidv7 } from '@rooster/core/ids';
 import {
   type ReindexResult,
   type SearchResult,
@@ -12,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import type { AppDb } from '../src/db/client.ts';
 import { runMigrations } from '../src/db/migrate.ts';
 import { task } from '../src/db/schema/index.ts';
+import { SEARCH_SCAN_CAP } from '../src/services/search-service.ts';
 import { type Caller, createTask, groupNamed, listCtx, meta, sharedOrg } from './list-helpers.ts';
 
 const DAY = 86_400_000;
@@ -349,6 +351,30 @@ describe('AC-5.2 search', () => {
       const res = await a.call('GET', `/api/v1/orgs/personal/tasks?q=${encodeURIComponent(q)}`);
       expect(res.status, q).toBe(200);
     }
+  });
+});
+
+describe('search scan cap', () => {
+  it(`a filtered search examines at most SEARCH_SCAN_CAP candidates`, async () => {
+    const ctx = listCtx();
+    const a = ctx.user('a@example.com');
+    const dated = await createTask(a, { title: 'Dated', dueDate: '2026-10-07' });
+    await createTask(a, { title: 'Undated' });
+    // Candidates rank due dates first, so the undated task is the last one examined.
+    expect(titles(await search(a, 'due:none'))).toEqual(['Undated']);
+
+    const insert = ctx.db.sqlite.prepare(
+      `INSERT INTO task (id, org_id, title, description, created_by, due_date, field_clock,
+         created_at, updated_at)
+       SELECT ?, org_id, 'Clone', '', created_by, due_date, field_clock, created_at, updated_at
+       FROM task WHERE id = ?`,
+    );
+    ctx.db.sqlite.transaction(() => {
+      for (let i = 0; i < SEARCH_SCAN_CAP; i += 1) insert.run(uuidv7(), dated.id);
+    })();
+    expect(await search(a, 'due:none')).toEqual([]);
+    // Term searches are not affected: they rank by relevance and stop at the limit.
+    expect(titles(await search(a, 'undated'))).toEqual(['Undated']);
   });
 });
 

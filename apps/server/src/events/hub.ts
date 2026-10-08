@@ -6,6 +6,13 @@ import type { DomainEvent, EventBus, QueryKey } from './bus.ts';
 export const SSE_COALESCE_MS = 50;
 /** Above this many keys in one event, keys sharing a first segment collapse to it. */
 export const SSE_MAX_KEYS = 64;
+/**
+ * Open streams allowed per session and per user. One more closes the oldest instead of
+ * refusing the new one: the newest is the tab the person is looking at, and a reload's old
+ * stream may not have been noticed as gone yet.
+ */
+export const SSE_MAX_PER_SESSION = 4;
+export const SSE_MAX_PER_USER = 12;
 
 /** The transport under one stream: raw `text/event-stream` text, written in call order. */
 export interface SseSink {
@@ -122,9 +129,13 @@ export class SseHub {
     return this.seq;
   }
 
-  /** Registers a stream and sends `hello`; `null` during shutdown. */
+  /**
+   * Registers a stream and sends `hello`; `null` during shutdown. Closes the session's or
+   * user's oldest streams first when the new one would exceed their cap.
+   */
   open(input: SseOpen): SseHandle | null {
     if (this.stopped) return null;
+    this.makeRoom(input.userId, input.sessionId);
     const conn: Connection = {
       ...input,
       closed: false,
@@ -148,6 +159,21 @@ export class SseHub {
     return { close: () => this.close(conn) };
   }
 
+  /** Sets iterate in insertion order, so the first entries are the oldest streams. */
+  private makeRoom(userId: string, sessionId: string): void {
+    const oldest = <T>(list: T[], cap: number) => list.slice(0, Math.max(0, list.length - cap + 1));
+    const existing = [...(this.byUser.get(userId) ?? [])];
+    const evicted = new Set(
+      oldest(
+        existing.filter((c) => c.sessionId === sessionId),
+        SSE_MAX_PER_SESSION,
+      ),
+    );
+    const remaining = existing.filter((c) => !evicted.has(c));
+    for (const conn of oldest(remaining, SSE_MAX_PER_USER)) evicted.add(conn);
+    for (const conn of evicted) this.close(conn);
+  }
+
   private beat(conn: Connection): void {
     let valid: boolean;
     try {
@@ -163,8 +189,11 @@ export class SseHub {
   private dispatch(event: DomainEvent): void {
     for (const audience of event.audiences) {
       for (const userId of new Set(audience.userIds)) {
+        // The origin is the actor's client id: only the actor's own tabs need it (to skip a
+        // refetch), and nobody else learns it.
+        const origin = userId === event.actorId ? event.origin : null;
         for (const conn of this.byUser.get(userId) ?? []) {
-          this.enqueue(conn, audience.org, event.origin, audience.keys);
+          this.enqueue(conn, audience.org, origin, audience.keys);
         }
       }
     }

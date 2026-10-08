@@ -835,10 +835,13 @@ export interface paths {
          *       for update detection and its clock.
          *     - `invalidate`: [`SseInvalidate`](#/components/schemas/SseInvalidate), query-key prefixes
          *       to invalidate verbatim. Only the affected users receive it. `origin` is the
-         *       `X-Rooster-Client-Id` of the request that caused it. Bursts within ~50 ms are coalesced.
+         *       `X-Rooster-Client-Id` of the request that caused it, sent only to that user (null for
+         *       everyone else). Bursts within ~50 ms are coalesced.
          *     - `: ping` comment every 25 s.
          *
-         *     The stream ends on sign-out, session revoke, user deactivation and server shutdown.
+         *     The stream ends on sign-out, session revoke, user deactivation and server shutdown. A
+         *     session keeps at most 4 streams and a user 12: opening one more
+         *     closes the oldest.
          */
         get: operations["streamEvents"];
         put?: never;

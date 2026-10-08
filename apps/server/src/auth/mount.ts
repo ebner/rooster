@@ -10,6 +10,7 @@ const REJECTIONS: ReadonlySet<string> = new Set<SignInRejection>([
   'not_invited',
   'account_disabled',
   'unverified_email',
+  'account_link_blocked',
 ]);
 
 /**
@@ -40,7 +41,7 @@ export function registerAuthRoutes(
     const raw = c.req.raw;
     const headers = new Headers(raw.headers);
     headers.delete(CLIENT_IP_HEADER);
-    const ip = clientIp(c, config.trustProxy);
+    const ip = clientIp(c, config);
     if (ip !== null) headers.set(CLIENT_IP_HEADER, ip);
     const init: RequestInit = { method: raw.method, headers };
     if (raw.method !== 'GET') init.body = await raw.arrayBuffer();

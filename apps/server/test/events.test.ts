@@ -8,10 +8,10 @@ import { eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../src/db/schema/index.ts';
 import type { DomainEvent } from '../src/events/bus.ts';
-import { compactKeys } from '../src/events/hub.ts';
+import { compactKeys, SSE_MAX_PER_SESSION, SSE_MAX_PER_USER } from '../src/events/hub.ts';
 import { trackConnections } from '../src/lib/graceful-close.ts';
 import { afterCommit, immediate } from '../src/services/context.ts';
-import { addSession, BASE_URL, CookieJar } from './helpers.ts';
+import { addSession, BASE_URL, CookieJar, TEST_ENV } from './helpers.ts';
 import { type Caller, createTask, listCtx, sharedOrg } from './list-helpers.ts';
 import { SseClient, until } from './sse-client.ts';
 
@@ -149,9 +149,13 @@ describe('GET /api/v1/events', () => {
     await sa.waitFor(2);
     await sb.waitFor(2);
     await settle();
-    for (const s of [sa, sb]) {
+    // The origin (B's client id) goes to B only: other people never learn it.
+    for (const [s, origin] of [
+      [sa, null],
+      [sb, 'b-tab'],
+    ] as const) {
       const last = s.invalidations.at(-1);
-      expect(last?.origin).toBe('b-tab');
+      expect(last?.origin).toBe(origin);
       expect(last?.keys).toEqual(
         expect.arrayContaining([
           ['my-list', org.id],
@@ -293,7 +297,7 @@ describe('GET /api/v1/events', () => {
   it('closes the streams of a revoked session, and only those', async () => {
     const { app, db, b } = await trio();
     const other = new CookieJar();
-    const otherSession = addSession(db, b.userId, other, 'test-secret-test-secret-test-secret-42');
+    const otherSession = addSession(db, b.userId, other, TEST_ENV.ROOSTER_AUTH_SECRET);
     const mine = await listen(b);
     const res = await app.request('/api/v1/events', {
       headers: { cookie: other.header(), origin: BASE_URL },
@@ -329,6 +333,46 @@ describe('GET /api/v1/events', () => {
     await s2.waitClosed();
     expect(sAdmin.closed).toBe(false);
     expect((await u.call('GET', '/api/v1/events')).status).toBe(401);
+  });
+
+  it(`keeps at most ${SSE_MAX_PER_SESSION} streams per session and ${SSE_MAX_PER_USER} per user, closing the oldest`, async () => {
+    const t = ctx();
+    const u = t.user('u@example.com');
+    const v = t.user('v@example.com');
+    const other = await listen(v);
+    const first: SseClient[] = [];
+    for (let i = 0; i < SSE_MAX_PER_SESSION; i += 1) first.push(await listen(u));
+    expect(t.app.hub.size).toBe(SSE_MAX_PER_SESSION + 1);
+
+    // One more in the same session (a reload): the oldest of that session goes.
+    const fifth = await listen(u);
+    await first[0]?.waitClosed();
+    expect(first.slice(1).every((s) => !s.closed)).toBe(true);
+    expect(fifth.closed).toBe(false);
+    expect(t.app.hub.size).toBe(SSE_MAX_PER_SESSION + 1);
+
+    // Other sessions of the same user fill the per-user cap; one more closes the user's
+    // oldest stream, wherever it is, and never another user's.
+    const streamOf = async (jar: CookieJar) => {
+      const res = await t.app.request('/api/v1/events', {
+        headers: { cookie: jar.header(), origin: BASE_URL },
+      });
+      const client = new SseClient(res);
+      open.push(client);
+      await until(() => client.hello !== undefined);
+      return client;
+    };
+    const jars = [new CookieJar(), new CookieJar(), new CookieJar()];
+    for (const jar of jars) addSession(t.db, u.userId, jar, TEST_ENV.ROOSTER_AUTH_SECRET);
+    for (const jar of jars.slice(0, 2)) {
+      for (let i = 0; i < SSE_MAX_PER_SESSION; i += 1) await streamOf(jar);
+    }
+    expect(t.app.hub.size).toBe(SSE_MAX_PER_USER + 1);
+    const thirteenth = await streamOf(jars[2] as CookieJar);
+    await first[1]?.waitClosed();
+    expect(thirteenth.closed).toBe(false);
+    expect(other.closed).toBe(false);
+    expect(t.app.hub.size).toBe(SSE_MAX_PER_USER + 1);
   });
 
   it('shutdown ends every stream at once and refuses new ones', async () => {

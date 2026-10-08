@@ -1,6 +1,6 @@
-import { and, eq, gte, lt } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt } from 'drizzle-orm';
 import { idempotency } from '../db/schema/index.ts';
-import type { ServiceDeps } from './context.ts';
+import type { ServiceDeps, Tx } from './context.ts';
 
 /** Stored responses are replayed for 7 days (04 §6.2, 05 §4.5). */
 export const IDEMPOTENCY_TTL_MS = 7 * 86_400_000;
@@ -33,6 +33,19 @@ function parseEnvelope(text: string): Envelope | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Drops every stored response of `userIds`, in the caller's transaction. Called when people
+ * lose access to an org: a replay would otherwise hand them a response body (a task, a
+ * member list) from it after the access is gone. Rows are not org-scoped, so all of the
+ * user's go; a retry that arrives later runs for real.
+ */
+export function forgetStoredResponses(tx: Tx, userIds: readonly string[]): void {
+  if (userIds.length === 0) return;
+  tx.delete(idempotency)
+    .where(inArray(idempotency.userId, [...userIds]))
+    .run();
 }
 
 /**

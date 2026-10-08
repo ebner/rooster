@@ -3,7 +3,12 @@ import { allowlistEntry, invitation, member, organization, user } from '../db/sc
 import { isAdminEmail, type ServiceDeps } from './context.ts';
 import type { OrgService } from './org-service.ts';
 
-export type SignInRejection = 'not_invited' | 'account_disabled' | 'unverified_email';
+export type SignInRejection =
+  | 'not_invited'
+  | 'account_disabled'
+  | 'unverified_email'
+  /** A provider that is not an email authority tried to join an existing account. */
+  | 'account_link_blocked';
 
 export type SignInDecision = { ok: true } | { ok: false; reason: SignInRejection };
 
@@ -72,6 +77,20 @@ export class SignInPolicy {
     }
     if (attempt.userId !== undefined && this.inSharedOrg(attempt.userId)) return { ok: true };
     return { ok: false, reason: 'not_invited' };
+  }
+
+  /**
+   * Whether an existing user is admitted on their own, without an invite token: the check
+   * behind a sign-in whose carried invite could not be accepted after all.
+   */
+  admitsExisting(userId: string): boolean {
+    const row = this.deps.db.orm
+      .select({ email: user.email, emailVerified: user.emailVerified })
+      .from(user)
+      .where(eq(user.id, userId))
+      .get();
+    if (row === undefined) return false;
+    return this.check({ email: row.email, emailVerified: row.emailVerified, userId }).ok;
   }
 
   isDisabled(userId: string): boolean {

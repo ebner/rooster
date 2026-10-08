@@ -12,6 +12,7 @@ import {
   CookieJar,
   createTestApp,
   createUserWithSession,
+  TEST_ENV,
   tempDir,
 } from './helpers.ts';
 
@@ -427,7 +428,7 @@ function fixture(): Fixture {
     db,
     disabled.userId,
     disabledJar,
-    'test-secret-test-secret-test-secret-42',
+    TEST_ENV.ROOSTER_AUTH_SECRET,
   );
 
   return {
