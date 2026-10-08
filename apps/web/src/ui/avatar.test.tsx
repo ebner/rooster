@@ -54,6 +54,6 @@ describe('avatar fallback', () => {
     render(<Avatar id="org" name="Northwind" shape="square" size={16} />);
     const avatar = screen.getByRole('img', { name: 'Northwind' });
     expect(avatar.className).toContain('rounded-xs');
-    expect(avatar.textContent).toBe('M');
+    expect(avatar.textContent).toBe('N');
   });
 });
