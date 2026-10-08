@@ -1,6 +1,6 @@
 import type { TaskMove } from '@rooster/core/schemas';
 import { type DropIndicator, groupRowId } from '../../../state/list-store';
-import { intentAtIndex } from './moves';
+import { intentAtIndex, isNoopIntent } from './moves';
 import type { GroupOrder } from './rows';
 
 /** One insertion point for moving tasks: index `index` among `group`'s remaining tasks. */
@@ -86,4 +86,18 @@ export function indicatorSlot(
     if (at >= 0) return { groupIndex, index: indicator.edge === 'after' ? at + 1 : at };
   }
   return null;
+}
+
+/**
+ * True when dropping `ids` at `slot` would leave them where they are: directly before or after
+ * themselves (02 §5). No drop line is drawn there and dropping sends nothing.
+ */
+export function isNoopSlot(
+  order: readonly GroupOrder[],
+  ids: readonly string[],
+  slot: DropSlot,
+): boolean {
+  const group = order[slot.groupIndex];
+  if (!group) return false;
+  return isNoopIntent(group.taskIds, ids, intentAtIndex(group, new Set(ids), slot.index));
 }

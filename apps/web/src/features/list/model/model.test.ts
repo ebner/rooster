@@ -2,13 +2,14 @@ import { normalizeMyList } from '@rooster/core/reducers';
 import type { Group, Task } from '@rooster/core/schemas';
 import { describe, expect, test } from 'vitest';
 import type { Draft } from '../../../state/list-store';
-import { groupStepTarget, keyboardMoveTarget } from './moves';
+import { groupStepTarget, isNoopIntent, keyboardMoveTarget } from './moves';
 import { buildRows, type GroupOrder, type RowCache, type RowOptions, visibleOrder } from './rows';
 import {
   currentSlot,
   dropSlots,
   groupJump,
   indicatorSlot,
+  isNoopSlot,
   slotIndicator,
   slotIntent,
 } from './slots';
@@ -282,6 +283,42 @@ describe('drop slots (keyboard drag)', () => {
       index: 2,
     });
     expect(indicatorSlot(order, moving, { rowId: 'unknown', edge: 'before' })).toBeNull();
+  });
+});
+
+describe('no-op moves (02 §5: never offered, never sent)', () => {
+  test('a block directly before or after itself is a no-op', () => {
+    const seq = ['a', 'b', 'c', 'd'];
+    expect(isNoopIntent(seq, ['b'], { afterId: 'a', beforeId: 'c' })).toBe(true);
+    expect(isNoopIntent(seq, ['a'], { afterId: null, beforeId: 'b' })).toBe(true);
+    expect(isNoopIntent(seq, ['d'], { afterId: 'c', beforeId: null })).toBe(true);
+    expect(isNoopIntent(seq, ['b', 'c'], { afterId: 'a', beforeId: 'd' })).toBe(true);
+    expect(isNoopIntent(seq, ['b'], { afterId: 'c', beforeId: 'd' })).toBe(false);
+    expect(isNoopIntent(seq, ['b'], { afterId: null, beforeId: 'a' })).toBe(false);
+    // Half an intent is not the same place: the server may resolve it elsewhere.
+    expect(isNoopIntent(seq, ['b'], { afterId: 'a' })).toBe(false);
+  });
+
+  test('scattered, reordered or foreign tasks always move', () => {
+    const seq = ['a', 'b', 'c', 'd'];
+    expect(isNoopIntent(seq, ['a', 'c'], { afterId: null, beforeId: 'b' })).toBe(false);
+    expect(isNoopIntent(seq, ['c', 'b'], { afterId: 'a', beforeId: 'd' })).toBe(false);
+    expect(isNoopIntent(seq, ['x'], { afterId: null, beforeId: 'a' })).toBe(false);
+    expect(isNoopIntent(seq, [], { afterId: null, beforeId: 'a' })).toBe(false);
+  });
+
+  test('drop slots equivalent to the current position', () => {
+    // b sits at index 1 of g1's remaining tasks [a, c].
+    expect(isNoopSlot(order, ['b'], { groupIndex: 0, index: 1 })).toBe(true);
+    expect(isNoopSlot(order, ['b'], { groupIndex: 0, index: 0 })).toBe(false);
+    expect(isNoopSlot(order, ['b'], { groupIndex: 0, index: 2 })).toBe(false);
+    expect(isNoopSlot(order, ['b'], { groupIndex: 2, index: 0 })).toBe(false);
+    expect(isNoopSlot(order, ['b'], { groupIndex: 1, index: 0 })).toBe(false);
+    expect(isNoopSlot(order, ['b'], { groupIndex: 9, index: 0 })).toBe(false);
+    expect(isNoopSlot(order, ['a', 'b'], { groupIndex: 0, index: 0 })).toBe(true);
+    expect(isNoopSlot(order, ['a', 'c'], { groupIndex: 0, index: 0 })).toBe(false);
+    const slot = indicatorSlot(order, new Set(['b']), { rowId: 'a', edge: 'after' });
+    expect(slot && isNoopSlot(order, ['b'], slot)).toBe(true);
   });
 });
 

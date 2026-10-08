@@ -2,8 +2,6 @@ import {
   type Announcements,
   DndContext,
   type DragEndEvent,
-  type DragMoveEvent,
-  DragOverlay,
   type DragStartEvent,
   PointerSensor,
   TouchSensor,
@@ -25,6 +23,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
 import {
@@ -40,6 +39,7 @@ import { announce } from './announcer';
 import type { ListController } from './controller';
 import { longPressSlopPx, suppressNextClick } from './gestures';
 import { useListContext } from './list-context';
+import { isNoopIntent } from './model/moves';
 import { type GroupOrder, type Row, visibleOrder } from './model/rows';
 import {
   currentSlot,
@@ -47,6 +47,7 @@ import {
   dropSlots,
   groupJump,
   indicatorSlot,
+  isNoopSlot,
   slotIndicator,
   slotIntent,
 } from './model/slots';
@@ -87,14 +88,63 @@ function dragOrder(rows: readonly Row[], ids: readonly string[]): GroupOrder[] {
   return [{ id: parentId, collapsed: false, taskIds }];
 }
 
-/** Applies a drop: a placement move, or a sibling reorder for a subtask. */
-function commitDrop(controller: ListController, ids: string[], intent: TaskMove, subtask: boolean) {
+/** Applies a drop: a placement move, or a sibling reorder for a subtask. False: nothing moved. */
+function commitDrop(
+  controller: ListController,
+  ids: string[],
+  intent: TaskMove,
+  subtask: boolean,
+): boolean {
   if (subtask) {
-    controller.reorderSubtask(ids[0] as string, {
+    return controller.reorderSubtask(ids[0] as string, {
       afterId: intent.afterId ?? null,
       beforeId: intent.beforeId ?? null,
     });
-  } else controller.moveTasks(ids, intent);
+  }
+  return controller.moveTasks(ids, intent);
+}
+
+/**
+ * The slot a pointer indicator stands for in a task or subtask drag. A subtask's pseudo-group
+ * ends at its "+ Add subtask" row.
+ */
+function indicatorTarget(rows: readonly Row[], ids: readonly string[], drop: DropIndicator) {
+  const order = dragOrder(rows, ids);
+  const moving = new Set(ids);
+  const parentId = subtaskParent(rows, ids[0] as string);
+  const target =
+    parentId !== null && drop.rowId === addSubtaskRowId(parentId)
+      ? { rowId: addRowId(parentId), edge: drop.edge }
+      : drop;
+  return { order, moving, slot: indicatorSlot(order, moving, target) };
+}
+
+/**
+ * The reorder a group drop asks for, or null when there is none: no target, or the group's own
+ * place (directly before or after itself, 02 §5).
+ */
+function groupDropIntent(
+  controller: ListController,
+  groupId: string,
+  drop: DropIndicator,
+): OrderingIntent | null {
+  const state = controller.state();
+  if (!state || !isGroupRowId(drop.rowId)) return null;
+  const target = groupIdOfRow(drop.rowId);
+  const order = normalGroups(state).map((g) => g.id);
+  const normals = order.filter((id) => id !== groupId);
+  let intent: OrderingIntent | null;
+  if (state.groups[target]?.kind === 'inbox') {
+    intent = { afterId: null, beforeId: normals[0] ?? null };
+  } else {
+    const index = normals.indexOf(target);
+    if (index < 0) return null;
+    intent =
+      drop.edge === 'before'
+        ? { afterId: normals[index - 1] ?? null, beforeId: target }
+        : { afterId: target, beforeId: normals[index + 1] ?? null };
+  }
+  return isNoopIntent(order, [groupId], intent) ? null : intent;
 }
 
 /** The tasks a drag of `id` carries: the whole selection when `id` is part of it. */
@@ -143,7 +193,8 @@ export function useKeyboardDragHandle(id: string) {
     if (!target) return;
     controller.ui().set({
       keyboardDrag: { ids, slot },
-      drop: slotIndicator(order, moving, target),
+      // Their own place gets no line: dropping there changes nothing (02 §5).
+      drop: isNoopSlot(order, ids, target) ? null : slotIndicator(order, moving, target),
     });
     return target;
   };
@@ -187,10 +238,11 @@ export function useKeyboardDragHandle(id: string) {
     } else if (event.key === ' ' || event.key === 'Enter') {
       event.preventDefault();
       const target = slots[drag.slot];
-      const intent = target ? slotIntent(order, moving, target) : null;
+      const intent =
+        target && !isNoopSlot(order, ids, target) ? slotIntent(order, moving, target) : null;
       end();
-      if (intent)
-        commitDrop(controller, ids, intent, subtaskParent(controller.rows(), id) !== null);
+      const subtask = subtaskParent(controller.rows(), id) !== null;
+      if (!intent || !commitDrop(controller, ids, intent, subtask)) announce(t('dnd.cancelled'));
     } else if (event.key === 'Escape') {
       event.preventDefault();
       end();
@@ -224,8 +276,11 @@ interface DragSession {
   kind: 'task' | 'group' | 'subtask';
   /** Task ids, or the dragged group id. */
   ids: string[];
+  /** The pointer in viewport coordinates, from the input events themselves. */
   pointer: { x: number; y: number };
   start: { x: number; y: number };
+  /** Where the row was grabbed, relative to its top-left corner: it stays under the pointer. */
+  grab: { x: number; y: number };
   hover: { groupId: string; timer: ReturnType<typeof setTimeout> } | null;
   scroll: { frame: number; speed: number } | null;
   container: HTMLElement | null;
@@ -233,6 +288,8 @@ interface DragSession {
   touch: boolean;
   /** The farthest the pointer got from the start (a still long-press selects, 02 §13.2). */
   moved: number;
+  /** Removes the session's window listeners. */
+  detach: () => void;
 }
 
 function rowElementAt(x: number, y: number): HTMLElement | null {
@@ -348,13 +405,8 @@ export const ListDnd = memo(function ListDnd({
   const { t } = useTranslation('list');
   const { controller } = useListContext();
   const session = useRef<DragSession | null>(null);
-  const [overlay, setOverlay] = useState<{
-    kind: 'task' | 'group';
-    title: string;
-    count: number;
-    width: number;
-    touch: boolean;
-  } | null>(null);
+  const [overlay, setOverlay] = useState<PreviewProps | null>(null);
+  const layer = useRef<HTMLDivElement | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: dragDistancePx } }),
     useSensor(TouchSensor, { activationConstraint: { delay: touchDelayMs, tolerance: 5 } }),
@@ -380,13 +432,20 @@ export const ListDnd = memo(function ListDnd({
     const rect = el.getBoundingClientRect();
     const upper = s.pointer.y < rect.top + rect.height / 2;
     if (s.kind === 'group') {
+      let candidate: DropIndicator | null = null;
       if (row.kind === 'group') {
         // Nothing goes above the Inbox.
-        setDrop({ rowId: row.id, edge: upper && row.group.kind !== 'inbox' ? 'before' : 'after' });
+        candidate = {
+          rowId: row.id,
+          edge: upper && row.group.kind !== 'inbox' ? 'before' : 'after',
+        };
       } else if (row.kind === 'addGroup') {
         const last = [...rowsRef.current].reverse().find((r) => r.kind === 'group');
-        if (last) setDrop({ rowId: last.id, edge: 'after' });
-      }
+        if (last) candidate = { rowId: last.id, edge: 'after' };
+      } else return;
+      setDrop(
+        candidate && groupDropIntent(controller, s.ids[0] as string, candidate) ? candidate : null,
+      );
       return;
     }
     if (row.kind === 'group' && row.collapsed) {
@@ -405,25 +464,34 @@ export const ListDnd = memo(function ListDnd({
       return;
     }
     clearHover(s);
+    // Places equivalent to where the tasks already are (directly before or after themselves)
+    // are not drop targets (02 §5).
+    const offer = (candidate: DropIndicator | null) => {
+      if (candidate) {
+        const { order, slot } = indicatorTarget(rowsRef.current, s.ids, candidate);
+        if (slot && isNoopSlot(order, s.ids, slot)) candidate = null;
+      }
+      setDrop(candidate);
+    };
     if (s.kind === 'subtask') {
       const parentId = subtaskParent(rowsRef.current, s.ids[0] as string);
       if (row.kind === 'task' && !row.draft && row.parentId === parentId && row.id !== s.ids[0]) {
-        setDrop({ rowId: row.id, edge: upper ? 'before' : 'after' });
+        offer({ rowId: row.id, edge: upper ? 'before' : 'after' });
       } else if (row.kind === 'addSubtask' && row.parentId === parentId) {
-        setDrop({ rowId: row.id, edge: 'before' });
+        offer({ rowId: row.id, edge: 'before' });
       } else setDrop(null);
       return;
     }
-    if (row.kind === 'group') setDrop({ rowId: row.id, edge: 'after' });
+    if (row.kind === 'group') offer({ rowId: row.id, edge: 'after' });
     else if (row.kind === 'task') {
       if (s.ids.includes(row.id) || row.draft) setDrop(null);
-      else setDrop({ rowId: row.id, edge: upper ? 'before' : 'after' });
-    } else if (row.kind === 'add') setDrop({ rowId: row.id, edge: 'before' });
-    else if (row.kind === 'hint') setDrop({ rowId: groupRowId(row.groupId), edge: 'after' });
+      else offer({ rowId: row.id, edge: upper ? 'before' : 'after' });
+    } else if (row.kind === 'add') offer({ rowId: row.id, edge: 'before' });
+    else if (row.kind === 'hint') offer({ rowId: groupRowId(row.groupId), edge: 'after' });
     else {
       const lastGroup = [...rowsRef.current].reverse().find((r) => r.kind === 'group');
       if (lastGroup?.kind === 'group')
-        setDrop({ rowId: addRowId(lastGroup.group.id), edge: 'before' });
+        offer({ rowId: addRowId(lastGroup.group.id), edge: 'before' });
     }
   }, []);
 
@@ -468,6 +536,7 @@ export const ListDnd = memo(function ListDnd({
   const finish = () => {
     const s = session.current;
     if (s) {
+      s.detach();
       clearHover(s);
       stopScroll(s);
     }
@@ -496,17 +565,53 @@ export const ListDnd = memo(function ListDnd({
       : { x: (point as PointerEvent).clientX, y: (point as PointerEvent).clientY };
     const ids = kind === 'group' ? [groupIdOfRow(id)] : draggedIds(controller, id);
     const root = rootRef.current;
-    session.current = {
+    const rowRect = root
+      ?.querySelector(`[data-row-id="${CSS.escape(id)}"]`)
+      ?.getBoundingClientRect();
+    const rect = rowRect ?? active.rect.current.initial;
+    const s: DragSession = {
       kind,
       ids,
       start,
       pointer: start,
+      grab: rect ? { x: start.x - rect.left, y: start.y - rect.top } : { x: 0, y: 0 },
       hover: null,
       scroll: null,
       container: scrollParent(root),
-      width: active.rect.current.initial?.width ?? 0,
+      width: rect?.width ?? 0,
       touch,
       moved: 0,
+      detach: () => undefined,
+    };
+    session.current = s;
+    // The pointer comes from the input events, not from dnd-kit's delta: that delta also
+    // carries the scroll since the drag began, which put the drop target off the pointer.
+    const follow = (x: number, y: number) => {
+      if (session.current !== s) return;
+      s.pointer = { x, y };
+      s.moved = Math.max(s.moved, Math.hypot(x - s.start.x, y - s.start.y));
+      placeLayer(s);
+      if (!reorder) return;
+      computeDrop(s);
+      autoScroll(s);
+    };
+    const onPointerMove = (event: PointerEvent) => follow(event.clientX, event.clientY);
+    const onTouchMove = (event: TouchEvent) => {
+      const point = event.touches[0];
+      if (point) follow(point.clientX, point.clientY);
+    };
+    // Scrolling moves the rows under a still pointer.
+    const onScroll = () => {
+      if (session.current === s && reorder) computeDrop(s);
+    };
+    const options = { capture: true, passive: true };
+    if (touch) window.addEventListener('touchmove', onTouchMove, options);
+    else window.addEventListener('pointermove', onPointerMove, options);
+    window.addEventListener('scroll', onScroll, options);
+    s.detach = () => {
+      window.removeEventListener('touchmove', onTouchMove, options);
+      window.removeEventListener('pointermove', onPointerMove, options);
+      window.removeEventListener('scroll', onScroll, options);
     };
     if (touch) navigator.vibrate?.(10);
     if (!reorder) return;
@@ -519,7 +624,9 @@ export const ListDnd = memo(function ListDnd({
       kind: kind === 'group' ? 'group' : 'task',
       title: name,
       count: ids.length,
-      width: session.current.width,
+      width: s.width,
+      height: rect?.height ?? 0,
+      origin: s.grab,
       touch,
     });
     controller.ui().set({
@@ -539,16 +646,6 @@ export const ListDnd = memo(function ListDnd({
     } else {
       announce(t('dnd.pickedUpGroup', { group: name }));
     }
-  };
-
-  const onDragMove = ({ delta }: DragMoveEvent) => {
-    const s = session.current;
-    if (!s) return;
-    s.pointer = { x: s.start.x + delta.x, y: s.start.y + delta.y };
-    s.moved = Math.max(s.moved, Math.hypot(delta.x, delta.y));
-    if (!reorder) return;
-    computeDrop(s);
-    autoScroll(s);
   };
 
   const onDragEnd = (_event: DragEndEvent) => {
@@ -571,42 +668,28 @@ export const ListDnd = memo(function ListDnd({
       return;
     }
     if (s.kind === 'group') {
-      const intent = groupIntent(s.ids[0] as string, drop);
+      const groupId = s.ids[0] as string;
+      const intent = groupDropIntent(controller, groupId, drop);
       finish();
-      if (intent) controller.moveGroup(s.ids[0] as string, intent);
+      if (!intent || !controller.moveGroup(groupId, intent)) announce(t('dnd.cancelled'));
       return;
     }
-    const order = dragOrder(rowsRef.current, s.ids);
-    const moving = new Set(s.ids);
-    const parentId = s.kind === 'subtask' ? (order[0]?.id ?? '') : null;
-    // The pseudo-group's "+ Add subtask" row stands for the end of the siblings.
-    const target =
-      parentId !== null && drop.rowId === addSubtaskRowId(parentId)
-        ? { rowId: addRowId(parentId), edge: drop.edge }
-        : drop;
-    const slot = indicatorSlot(order, moving, target);
-    const intent = slot ? slotIntent(order, moving, slot) : null;
+    const { order, moving, slot } = indicatorTarget(rowsRef.current, s.ids, drop);
+    const intent = slot && !isNoopSlot(order, s.ids, slot) ? slotIntent(order, moving, slot) : null;
     // A group opened by hovering stays open once something lands in it.
     const opened = intent && controller.ui().hoverExpanded[intent.groupId];
     finish();
     if (intent && opened) controller.setCollapsed(intent.groupId, false);
-    if (intent) commitDrop(controller, s.ids, intent, s.kind === 'subtask');
-    else announce(t('dnd.cancelled'));
+    if (!intent || !commitDrop(controller, s.ids, intent, s.kind === 'subtask')) {
+      announce(t('dnd.cancelled'));
+    }
   };
 
-  const groupIntent = (groupId: string, drop: DropIndicator): OrderingIntent | null => {
-    const state = controller.state();
-    if (!state || !isGroupRowId(drop.rowId)) return null;
-    const target = groupIdOfRow(drop.rowId);
-    const normals = normalGroups(state).filter((g) => g.id !== groupId);
-    if (state.groups[target]?.kind === 'inbox') {
-      return { afterId: null, beforeId: normals[0]?.id ?? null };
-    }
-    const index = normals.findIndex((g) => g.id === target);
-    if (index < 0) return null;
-    return drop.edge === 'before'
-      ? { afterId: normals[index - 1]?.id ?? null, beforeId: target }
-      : { afterId: target, beforeId: normals[index + 1]?.id ?? null };
+  /** Puts the preview's grab point under the pointer (the layer is `fixed` at the origin). */
+  const placeLayer = (s: DragSession) => {
+    const el = layer.current;
+    if (!el) return;
+    el.style.transform = `translate3d(${s.pointer.x - s.grab.x}px, ${s.pointer.y - s.grab.y}px, 0)`;
   };
 
   useEffect(() => () => finish(), []);
@@ -616,7 +699,6 @@ export const ListDnd = memo(function ListDnd({
       sensors={sensors}
       autoScroll={false}
       onDragStart={onDragStart}
-      onDragMove={onDragMove}
       onDragEnd={onDragEnd}
       onDragCancel={() => {
         finish();
@@ -637,30 +719,49 @@ export const ListDnd = memo(function ListDnd({
       >
         {children}
       </DragSurface>
-      <DragOverlay dropAnimation={null} zIndex={70} className="pointer-events-none">
-        {overlay && <DragPreview {...overlay} />}
-      </DragOverlay>
+      {overlay &&
+        createPortal(
+          // Not dnd-kit's DragOverlay: it is placed and sized from the active node, which is the
+          // whole grid here, so the preview sat at the grid's top. Portalled to <body>, so
+          // `fixed` never resolves against a transformed or contained ancestor.
+          <div
+            ref={(node) => {
+              layer.current = node;
+              if (node && session.current) placeLayer(session.current);
+            }}
+            aria-hidden
+            data-testid="drag-layer"
+            className="pointer-events-none fixed top-0 left-0 z-(--z-drag)"
+          >
+            <DragPreview {...overlay} />
+          </div>,
+          document.body,
+        )}
     </DndContext>
   );
 });
 
-function DragPreview({
-  kind,
-  title,
-  count,
-  width,
-  touch,
-}: {
+interface PreviewProps {
   kind: 'task' | 'group';
   title: string;
   count: number;
+  /** The original row's size. */
   width: number;
+  height: number;
+  /** The grab point: the 2° tilt turns around it, so it stays under the pointer. */
+  origin: { x: number; y: number };
   touch: boolean;
-}) {
+}
+
+function DragPreview({ kind, title, count, width, height, origin, touch }: PreviewProps) {
   return (
     <div
+      data-testid="drag-preview"
       className={cn('relative opacity-95', !touch && 'rotate-2')}
-      style={{ width: width > 0 ? width : undefined }}
+      style={{
+        width: width > 0 ? width : undefined,
+        transformOrigin: `${origin.x}px ${origin.y}px`,
+      }}
     >
       {count > 1 && (
         <>
@@ -681,6 +782,7 @@ function DragPreview({
             ? 'h-group text-group max-tablet:h-group-mobile'
             : 'h-row text-base max-tablet:h-row-mobile max-tablet:text-md',
         )}
+        style={{ minHeight: height > 0 ? height : undefined }}
       >
         {kind === 'task' && (
           <span className="ms-6 size-checkbox shrink-0 rounded-full border-(length:--border-check) border-border-strong" />

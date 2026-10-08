@@ -103,3 +103,25 @@ export function groupStepTarget(
   const rest = normalIds.filter((id) => id !== groupId);
   return { afterId: rest[target - 1] ?? null, beforeId: rest[target] ?? null };
 }
+
+/**
+ * True when placing `ids` (in this order) by `intent` leaves `sequence` unchanged: they already
+ * sit there as one contiguous block between exactly `afterId` and `beforeId`. Such a move is
+ * not offered as a drop target and sends no op (02 §5).
+ */
+export function isNoopIntent(
+  sequence: readonly string[],
+  ids: readonly string[],
+  intent: { afterId?: string | null | undefined; beforeId?: string | null | undefined },
+): boolean {
+  const at = sequence.indexOf(ids[0] as string);
+  if (ids.length === 0 || at < 0) return false;
+  if (ids.some((id, i) => sequence[at + i] !== id)) return false;
+  const moving = new Set(ids);
+  const rest = sequence.filter((id) => !moving.has(id));
+  const index = sequence.slice(0, at).filter((id) => !moving.has(id)).length;
+  return (
+    (intent.afterId ?? null) === (rest[index - 1] ?? null) &&
+    (intent.beforeId ?? null) === (rest[index] ?? null)
+  );
+}

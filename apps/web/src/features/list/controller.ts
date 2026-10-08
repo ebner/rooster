@@ -34,7 +34,12 @@ import { type UndoEntry, useUndoStore } from '../../state/undo-store';
 import { toast } from '../../ui/toast';
 import type { ViewerDateContext } from '../dates';
 import { announce } from './announcer';
-import { groupStepTarget, type KeyboardMove, keyboardMoveTarget } from './model/moves';
+import {
+  groupStepTarget,
+  isNoopIntent,
+  type KeyboardMove,
+  keyboardMoveTarget,
+} from './model/moves';
 import { isNavigable, isTaskRow, type Row, type TaskRow, visibleOrder } from './model/rows';
 import { sectionTakesAdds } from './model/view-rows';
 import {
@@ -1056,10 +1061,24 @@ export class ListController {
   // Moving (02 §5)
   // -------------------------------------------------------------------------------------
 
-  /** Moves tasks to an intent; one op for one task, bulk for several. */
-  moveTasks(ids: readonly string[], target: TaskMove, announceMove = true): void {
+  /**
+   * Moves tasks to an intent; one op for one task, bulk for several. A move that leaves them
+   * where they are sends nothing and records no undo step (02 §5); returns whether it moved.
+   */
+  moveTasks(ids: readonly string[], target: TaskMove, announceMove = true): boolean {
     const live = ids.filter((id) => this.task(id));
-    if (live.length === 0) return;
+    if (live.length === 0) return false;
+    const state = this.state();
+    if (
+      state &&
+      isNoopIntent(
+        tasksInGroup(state, target.groupId).map((t) => t.id),
+        live,
+        target,
+      )
+    ) {
+      return false;
+    }
     const specs =
       live.length === 1
         ? [listOps.moveTask(live[0] as string, target)]
@@ -1073,6 +1092,7 @@ export class ListController {
           );
     this.run(this.t('undo.moved', { count: live.length }), specs);
     if (announceMove) this.announcePosition(live[0] as string);
+    return true;
   }
 
   /** "Moved to Prio, position 1 of 2." */
@@ -1138,19 +1158,23 @@ export class ListController {
     return true;
   }
 
-  moveGroup(groupId: string, intent: OrderingIntent): void {
+  /** Reorders a group; a move onto its own place sends nothing (02 §5). Returns whether it moved. */
+  moveGroup(groupId: string, intent: OrderingIntent): boolean {
     const state = this.state();
     const group = state?.groups[groupId];
-    if (!state || !group || group.kind === 'inbox') return;
+    if (!state || !group || group.kind === 'inbox') return false;
+    const order = normalGroups(state).map((g) => g.id);
+    if (isNoopIntent(order, [groupId], intent)) return false;
     this.run(this.t('undo.groupMoved'), [listOps.moveGroup(groupId, intent)]);
-    const order = normalGroups(this.state() as ListState);
+    const moved = normalGroups(this.state() as ListState);
     announce(
       this.t('dnd.groupMoved', {
         group: group.name,
-        position: order.findIndex((g) => g.id === groupId) + 1,
-        total: order.length,
+        position: moved.findIndex((g) => g.id === groupId) + 1,
+        total: moved.length,
       }),
     );
+    return true;
   }
 
   // -------------------------------------------------------------------------------------
@@ -1291,9 +1315,14 @@ export class ListController {
   }
 
   /** Subtask reorder among siblings (DnD, Ctrl+↑/↓), with undo. */
-  reorderSubtask(taskId: string, intent: OrderingIntent): void {
-    if (!this.task(taskId)?.parentId) return;
+  reorderSubtask(taskId: string, intent: OrderingIntent): boolean {
+    const state = this.state();
+    const parentId = this.task(taskId)?.parentId;
+    if (!state || !parentId) return false;
+    const siblings = childrenOf(state, parentId).map((t) => t.id);
+    if (isNoopIntent(siblings, [taskId], intent)) return false;
     this.run(this.t('undo.moved', { count: 1 }), [listOps.reorderSubtask(taskId, intent)]);
+    return true;
   }
 
   /** Ctrl+↑/↓ on a subtask: one step among its siblings. */
