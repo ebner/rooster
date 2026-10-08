@@ -75,7 +75,10 @@ export interface SyncEngine {
   syncNow(): void;
   /** Sign-out: forget every local copy (cache, outbox) in every tab. */
   clear(options?: { final?: boolean }): Promise<void>;
-  /** The SW update check behind the SSE `hello` handshake (set by the PWA module). */
+  /**
+   * What to do when the SSE `hello` reports a newer server (set by the PWA module); runs at
+   * once if one already did.
+   */
   setUpdateCheck(check: () => void): void;
   stop(): void;
 }
@@ -360,6 +363,8 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   const unsubscribeWatch = pipeline.subscribe(() => watchLeader(stallMs));
 
   let updateCheck: () => void = () => {};
+  // A `hello` may arrive before the PWA module has set the check: it runs once that happens.
+  let serverNewer = false;
   let firstOpen = true;
   const events = new EventStream({
     clientId,
@@ -374,7 +379,9 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
       pipeline.retryNow();
     },
     onHello: (hello) => {
-      if (serverIsNewer(hello, buildInfo)) updateCheck();
+      if (!serverIsNewer(hello, buildInfo)) return;
+      serverNewer = true;
+      updateCheck();
     },
     onState: (sseState) => useSyncStore.setState({ sseState }),
   });
@@ -566,6 +573,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     },
     setUpdateCheck: (check) => {
       updateCheck = check;
+      if (serverNewer) check();
     },
     stop: () => {
       saving = false;

@@ -7,6 +7,8 @@ import { safeRedirectPath } from '../../lib/safe-redirect';
 import { type SyncPillState, syncPillState, useSyncStore } from '../../state/sync-store';
 import { iconStrokeWidth } from '../../ui/button';
 import { SyncPill } from '../../ui/sync-pill';
+import { UpdateChip } from './update-chip';
+import { updateController, useUpdateStore } from './update-controller';
 
 /**
  * "Syncing…" only shows when sending takes a moment: a confirmation per keystroke must not
@@ -69,20 +71,25 @@ export function SessionExpired({ className }: { className?: string | undefined }
 /**
  * The header sync status (03 §3.15, 02 §14): "Offline", "Offline · 3 pending", "Syncing…",
  * amber "Sync problem · Retry", or "Session expired · Sign in". Nothing when all is saved.
- * Reads the sync store only, so any header (desktop, mobile) can place it.
+ * An "Update" chip joins it while a new version waits. Reads the sync and update stores only,
+ * so any header (desktop, mobile) can place it.
  */
 export function SyncStatus({ className }: { className?: string | undefined }) {
   const sessionExpired = useSyncStore((s) => s.sessionExpired);
   const pending = useSyncStore((s) => s.pending);
+  const update = useUpdateStore((s) => s.available);
+  const deferred = useUpdateStore((s) => s.deferred);
   const state = useShownState();
-  if (sessionExpired) return <SessionExpired className={className} />;
-  if (!state) return null;
+  const status = sessionExpired ? (
+    <SessionExpired />
+  ) : state ? (
+    <SyncPill state={state} pendingCount={pending} onRetry={() => syncEngine()?.syncNow()} />
+  ) : null;
+  if (!update && !status) return null;
   return (
-    <SyncPill
-      state={state}
-      pendingCount={pending}
-      onRetry={() => syncEngine()?.syncNow()}
-      className={className}
-    />
+    <div className={cn('flex shrink-0 items-center gap-1.5', className)}>
+      {update && <UpdateChip deferred={deferred} onPress={() => updateController()?.request()} />}
+      {status}
+    </div>
   );
 }

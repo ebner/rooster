@@ -2,7 +2,10 @@
   "update": {
     "available": "Ny version tillgänglig",
     "reload": "Ladda om",
-    "deferred": "Laddar om så snart dina ändringar har sparats"
+    "deferred": "Laddar om så snart dina ändringar har sparats",
+    "chip": "Uppdatera",
+    "chipLabel": "Uppdatera – en ny version finns",
+    "chipDeferred": "Laddar om när allt är sparat…"
   },
   "install": {
     "toast": "Installera rooster för snabb åtkomst, även offline",

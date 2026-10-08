@@ -2,7 +2,10 @@
   "update": {
     "available": "New version available",
     "reload": "Reload",
-    "deferred": "Reloading as soon as your changes are saved"
+    "deferred": "Reloading as soon as your changes are saved",
+    "chip": "Update",
+    "chipLabel": "Update – a new version is available",
+    "chipDeferred": "Reloading when saved…"
   },
   "install": {
     "toast": "Install rooster for quick access, even offline",

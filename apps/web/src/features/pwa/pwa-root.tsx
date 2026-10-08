@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { syncEngine } from '../../data/sync/engine';
 import { useSyncStore } from '../../state/sync-store';
-import { toast } from '../../ui/toast';
+import { dismissToast, toast } from '../../ui/toast';
 import {
   claimInstallToast,
   countVisit,
@@ -13,8 +13,9 @@ import {
   useInstallStore,
 } from './install';
 import { IosInstallSheet } from './ios-install-sheet';
-import { registerServiceWorker, unregisterRefreshListener } from './sw-registration';
-import { createUpdateGate, isEditingText, type UpdateGate } from './update-gate';
+import { registerServiceWorker, unregisterServiceWorkerHandlers } from './sw-registration';
+import { createUpdateController, setUpdateController } from './update-controller';
+import { isEditingText } from './update-gate';
 
 /** The update toast stays until acted on (the browser caps timers at ~24.8 days). */
 const updateToastMs = 24 * 60 * 60 * 1000;
@@ -26,8 +27,9 @@ export interface PwaRootProps {
 }
 
 /**
- * Mounted once next to the router: registers the service worker and shows the update prompt
- * (FR-PWA-6), the one-time install toasts and the iOS tip sheet (02 §13.5).
+ * Mounted once next to the router: registers the service worker and runs the update flow
+ * (FR-PWA-6: the toast here, the header chip in `SyncStatus`), the one-time install toasts and
+ * the iOS tip sheet (02 §13.5).
  */
 export function PwaRoot({ navigate }: PwaRootProps) {
   const { t: translate } = useTranslation('pwa');
@@ -36,44 +38,54 @@ export function PwaRoot({ navigate }: PwaRootProps) {
   tRef.current = translate;
 
   useEffect(() => {
-    let gate: UpdateGate | null = null;
-    let cancelled = false;
-    const onNeedRefresh = () =>
-      toast({
-        message: tRef.current('update.available'),
-        durationMs: updateToastMs,
-        action: {
-          label: tRef.current('update.reload'),
-          onAction: () => {
-            if (gate?.request() !== 'deferred') return;
-            toast({ message: tRef.current('update.deferred') });
-            syncEngine()?.syncNow();
-          },
-        },
-      });
-    void registerServiceWorker({ onNeedRefresh }).then((controls) => {
-      if (!controls || cancelled) return;
-      gate = createUpdateGate({
-        pending: () => useSyncStore.getState().pending,
-        editing: () => isEditingText(),
-        subscribe: (listener) => {
-          // Focus has not moved yet during `focusout`: look once it has.
-          const onFocusOut = () => setTimeout(listener, 0);
-          const unsubscribe = useSyncStore.subscribe(listener);
-          document.addEventListener('focusout', onFocusOut);
-          return () => {
-            unsubscribe();
-            document.removeEventListener('focusout', onFocusOut);
-          };
-        },
-        apply: controls.apply,
-      });
-      syncEngine()?.setUpdateCheck(controls.check);
+    let promptId: string | null = null;
+    const handlers = {
+      onNeedRefresh: () => controller.needRefresh(),
+      onControllerChange: () => controller.controllerChange(),
+    };
+    const controller = createUpdateController({
+      sw: registerServiceWorker(handlers),
+      pending: () => useSyncStore.getState().pending,
+      editing: () => isEditingText(),
+      subscribe: (listener) => {
+        // Focus has not moved yet during `focusout`: look once it has.
+        const onFocusOut = () => setTimeout(listener, 0);
+        const unsubscribe = useSyncStore.subscribe(listener);
+        document.addEventListener('focusout', onFocusOut);
+        return () => {
+          unsubscribe();
+          document.removeEventListener('focusout', onFocusOut);
+        };
+      },
+      reload: () => location.reload(),
+      prompt: () => {
+        if (promptId) dismissToast(promptId);
+        promptId = toast({
+          message: tRef.current('update.available'),
+          durationMs: updateToastMs,
+          action: { label: tRef.current('update.reload'), onAction: () => controller.request() },
+        });
+      },
+      deferredNotice: () => {
+        toast({ message: tRef.current('update.deferred') });
+        syncEngine()?.syncNow();
+      },
     });
+    setUpdateController(controller);
+    syncEngine()?.setUpdateCheck(() => void controller.serverNewer());
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') controller.foreground('visible');
+    };
+    const onOnline = () => controller.foreground('online');
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('online', onOnline);
     return () => {
-      cancelled = true;
-      gate?.cancel();
-      unregisterRefreshListener(onNeedRefresh);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('online', onOnline);
+      unregisterServiceWorkerHandlers(handlers);
+      syncEngine()?.setUpdateCheck(() => {});
+      setUpdateController(null);
+      controller.dispose();
     };
   }, []);
 

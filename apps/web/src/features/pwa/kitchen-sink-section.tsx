@@ -5,6 +5,7 @@ import { Group, Section } from '../dev-ui/layout';
 import { InstallAppSection } from './install-app-section';
 import { IosInstallSteps } from './ios-install-sheet';
 import { SessionExpired } from './sync-status';
+import { UpdateChip } from './update-chip';
 
 /** `/_dev/ui`: the Phase 4 PWA surfaces (the sync pill states are in the Sync pill section). */
 export function PwaKitchenSection() {
@@ -23,6 +24,12 @@ export function PwaKitchenSection() {
           onDismiss={() => {}}
         />
         <ToastView live={false} message={tp('update.deferred')} onDismiss={() => {}} />
+        <div className="flex flex-wrap items-center gap-2">
+          <UpdateChip onPress={() => {}} />
+          <UpdateChip onPress={() => {}} data-force="hover" />
+          <UpdateChip onPress={() => {}} data-force="focus" />
+          <UpdateChip deferred onPress={() => {}} />
+        </div>
       </Group>
       <Group title={t('group.iosSheet')}>
         <div className="w-full max-w-sm">

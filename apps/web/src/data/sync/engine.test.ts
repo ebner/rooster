@@ -552,3 +552,45 @@ describe('leader watch (a frozen leader must not block the tab in front)', () =>
     await vi.waitFor(() => expect(engine.pipeline.pending).toBe(0));
   });
 });
+
+describe('update check (FR-PWA-6, 04 §6.3)', () => {
+  test('a newer server in `hello` runs the check, also one set after the hello', async () => {
+    const hellos: ((event: MessageEvent<string>) => void)[] = [];
+    const source = (): EventSourceLike => ({
+      readyState: 0,
+      onopen: null,
+      onerror: null,
+      addEventListener: (type, listener) => {
+        if (type === 'hello') hellos.push(listener);
+      },
+      close: () => {},
+    });
+    const queryClient = new QueryClient();
+    const engine = await startSync({
+      queryClient,
+      transport: createFixtureTransport({ userId, tasks: { 1: ['A'] } }),
+      outbox: createMemoryOutbox(),
+      channel: nullChannel(),
+      persister: createCachePersister(() => undefined, memoryStorage().storage),
+      eventSource: source,
+      locks: null,
+      listen: false,
+    });
+    engines.push(engine);
+    await fetchMe(queryClient, me(userId));
+    await vi.waitFor(() => expect(hellos.length).toBe(1));
+    const hello = (version: string) =>
+      hellos[0]?.({ data: JSON.stringify({ version, gitSha: 'x', serverTime: 1 }) } as never);
+
+    const early = vi.fn();
+    engine.setUpdateCheck(early);
+    hello('0.0.0');
+    expect(early).not.toHaveBeenCalled();
+    hello('99.0.0');
+    expect(early).toHaveBeenCalledOnce();
+
+    const late = vi.fn();
+    engine.setUpdateCheck(late);
+    expect(late).toHaveBeenCalledOnce();
+  });
+});
