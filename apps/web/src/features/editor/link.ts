@@ -9,6 +9,35 @@ export interface LinkAttrs {
 /** Schemes a description link may use; everything else (javascript:, data:) is refused. */
 export const linkProtocols = ['http', 'https', 'mailto'] as const;
 
+/** What URL parsers skip inside a scheme (`java\tscript:`) or before it (`\u0001javascript:`). */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: the control characters are the point
+const ignoredInScheme = /[\u0000-\u0020\u00A0\u1680\u180E\u2000-\u2029\u205F\u3000]/g;
+
+/**
+ * Whether a link may keep its href: http, https and mailto, or a scheme-less (relative)
+ * address. The scheme is read the way a browser reads it: after dropping control and
+ * whitespace characters, and by the URL parser itself, so `java\tscript:`, ` JavaScript:`
+ * and entity-encoded schemes are refused too. Shared by the Markdown parser, the editor's
+ * Link mark and the toolbar's "Open link" button.
+ */
+export function isAllowedLinkHref(href: unknown): href is string {
+  if (typeof href !== 'string') return false;
+  const compact = href.replace(ignoredInScheme, '');
+  if (compact === '') return false;
+  // marked keeps entities in an href; a renderer that decodes them (CommonMark does) would read
+  // `java&#9;script:` or `javascript&#58;` as a scheme. Refused before the first / ? or #.
+  if (/^[^/?#]*&(#\d|#x[\da-f]|[a-z][a-z\d]*;)/i.test(compact)) return false;
+  const allowed = linkProtocols as readonly string[];
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(compact)?.[1]?.toLowerCase();
+  if (scheme !== undefined && !allowed.includes(scheme)) return false;
+  try {
+    const parsed = new URL(href, 'https://rooster.invalid/');
+    return allowed.includes(parsed.protocol.slice(0, -1));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The text GFM would turn into this link on its own (`https://…`, `www.…`, an email
  * address), or null when the link needs `[text](href)`.
@@ -46,8 +75,7 @@ export const linkOptions = {
   protocols: [...linkProtocols],
   isAllowedUri: (url: string, ctx: { defaultValidate: (url: string) => boolean }) => {
     if (!ctx.defaultValidate(url)) return false;
-    const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(url)?.[1]?.toLowerCase();
-    return scheme === undefined || (linkProtocols as readonly string[]).includes(scheme);
+    return isAllowedLinkHref(url);
   },
   HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank' },
 };
@@ -65,11 +93,13 @@ export const LinkMarkdown = Mark.create({
     return { href: { default: null }, title: { default: null } };
   },
   markdownTokenName: 'link',
-  parseMarkdown: (token, helpers) =>
-    helpers.applyMark('link', helpers.parseInline(token.tokens ?? []), {
-      href: token.href,
-      title: token.title || null,
-    }),
+  // A refused scheme (javascript:, data:, file:, search-ms: …) keeps its text but loses the
+  // link, so no stored description can put such an href in front of a click.
+  parseMarkdown: (token, helpers) => {
+    const content = helpers.parseInline(token.tokens ?? []);
+    if (!isAllowedLinkHref(token.href)) return content;
+    return helpers.applyMark('link', content, { href: token.href, title: token.title || null });
+  },
   renderMarkdown: (node, h, ctx) => {
     const attrs = (node.attrs ?? {}) as LinkAttrs;
     const href = attrs.href ?? '';

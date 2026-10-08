@@ -3,6 +3,7 @@ import {
   persistQueryClientRestore,
   persistQueryClientSave,
 } from '@tanstack/react-query-persist-client';
+import { sweepUserStorage } from '../../lib/user-storage';
 import { useSyncStore } from '../../state/sync-store';
 import { ApiError } from '../errors';
 import { getClientId, registerListPipeline } from '../list';
@@ -14,7 +15,13 @@ import { buildInfo, cacheBuster } from './build-info';
 import { createSyncChannel, type SyncChannel } from './channel';
 import { type EventSourceFactory, EventStream, serverIsNewer } from './events';
 import { electLeader, type Leadership } from './leader';
-import { createIdbOutbox, createMemoryOutbox, hasIndexedDb, type Outbox } from './outbox';
+import {
+  createIdbOutbox,
+  createMemoryOutbox,
+  hasIndexedDb,
+  type Outbox,
+  type OutboxRecord,
+} from './outbox';
 import {
   type CachePersister,
   cacheMaxAgeMs,
@@ -64,8 +71,12 @@ export function syncEngine(): SyncEngine | null {
   return current;
 }
 
-/** Signs out locally: clears cache and outbox here and in the other tabs (04 §6.1). */
+/**
+ * Signs out locally: clears cache, outbox and per-user localStorage here and in the other tabs
+ * (04 §6.1).
+ */
 export async function clearLocalData(): Promise<void> {
+  sweepUserStorage();
   await current?.clear({ final: true });
 }
 
@@ -84,6 +95,34 @@ function writeOwner(userId: string | null): void {
   } catch {
     // Storage blocked: the next start compares against nothing and keeps the cache.
   }
+}
+
+/** Records from before 1.0.1 carry no user: they belong to the owner of the restored cache. */
+function withOwner(records: readonly OutboxRecord[]): OutboxRecord[] {
+  const owner = readOwner();
+  return records.map((r) =>
+    r.userId !== undefined || owner === null ? r : { ...r, userId: owner },
+  );
+}
+
+/** Query roots keyed `[root, orgId, …]` (`search`: an org id or `all`), and task details. */
+const orgScopedRoots: ReadonlySet<unknown> = new Set([
+  'my-list',
+  'tags',
+  'task',
+  'trash',
+  'search',
+  'org-members',
+  'org-invites',
+]);
+
+/** Org-scoped query keys are `[root, orgId, …]`; task details carry their org in the data. */
+function orgOfQuery(queryKey: readonly unknown[], data: unknown): string | undefined {
+  if (queryKey[0] === 'task') {
+    const orgId = (data as { orgId?: unknown } | undefined)?.orgId;
+    return typeof orgId === 'string' ? orgId : undefined;
+  }
+  return typeof queryKey[1] === 'string' ? queryKey[1] : undefined;
 }
 
 function withTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
@@ -124,6 +163,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     canSend: () => userId !== null,
     isOnline: online,
     afterPaint,
+    user: () => userId ?? readOwner(),
   });
   registerListPipeline(queryClient, transport, pipeline);
 
@@ -132,7 +172,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   const persister = options.persister ?? createCachePersister((org) => pipeline.baseOf(org));
   const restoreOptions = { queryClient, persister, buster: cacheBuster, maxAge: cacheMaxAgeMs };
   await withTimeout(persistQueryClientRestore(restoreOptions), undefined);
-  const records = await withTimeout(outbox.load(), []);
+  const records = withOwner(await withTimeout(outbox.load(), []));
   pipeline.restore(restoredBases(queryClient), records);
   // Restored data renders now but is never trusted as fresh: every query refetches on mount
   // (when online), whatever its staleTime. This is also what notices a revoked session.
@@ -184,7 +224,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
       useSyncStore.setState({ leader: true });
       void outbox
         .load()
-        .then((stored) => pipeline.restore(new Map(), stored))
+        .then((stored) => pipeline.restore(new Map(), withOwner(stored)))
         .catch(() => {})
         .finally(() => pipeline.resume());
     },
@@ -223,9 +263,12 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
       // Another account on this browser: nothing of the previous one may leak or be sent.
       void wipe({ keepMe: true }).then(() => channel.post({ type: 'cleared' }));
     }
+    sweepUserStorage(me.user.id);
     writeOwner(me.user.id);
     userId = me.user.id;
     saving = true;
+    pipeline.retainUser();
+    pruneOrgs(me);
     pipeline.resume();
     if (started) return;
     started = true;
@@ -248,6 +291,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     events.stop();
     started = false;
     queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== 'me' });
+    sweepUserStorage();
     // The cached profile must not count as signed in either (the /login guard reads it); its
     // refetch answers 401 again, which the route guard turns into /login?redirect=….
     void queryClient.resetQueries({ queryKey: ['me'] }).catch(() => {});
@@ -263,14 +307,52 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     }
     // A restored `/me` may be another session's: wait for a fresh one.
     if (status !== 'success' || !data || dataUpdatedAt < startedAt) return;
-    if (userId === (data as Me).user.id) return;
-    onUser(data as Me);
+    const me = data as Me;
+    if (userId === me.user.id) pruneOrgs(me);
+    else onUser(me);
+    // Only a response from the server confirms the session, not an optimistic `setQueryData`
+    // (no action: the `/me` fetched while the cache was restoring).
+    const action = event.action as typeof event.action | undefined;
+    if (action === undefined || (action.type === 'success' && !action.manual)) {
+      persister.confirmed(dataUpdatedAt);
+    }
+  }
+
+  /**
+   * Membership revoked (04 §4.3): whatever is cached for an org no longer in `/me` (its list,
+   * tags, task details, trash, searches, queued ops) goes, in memory and with the next save on
+   * disk.
+   */
+  function pruneOrgs(me: Me) {
+    const allowed = new Set(me.orgs.map((org) => org.id));
+    const revoked = new Set<string>();
+    queryClient.removeQueries({
+      predicate: (query) => {
+        const [root] = query.queryKey;
+        if (root === 'me') return false;
+        if (root === 'search' && query.queryKey[1] === 'all') {
+          const hits = query.state.data as readonly { orgId?: unknown }[] | undefined;
+          return (
+            hits?.some((hit) => typeof hit.orgId === 'string' && !allowed.has(hit.orgId)) ?? false
+          );
+        }
+        if (!orgScopedRoots.has(root)) return false;
+        const orgId = orgOfQuery(query.queryKey, query.state.data);
+        if (orgId === undefined || allowed.has(orgId)) return false;
+        revoked.add(orgId);
+        return true;
+      },
+    });
+    for (const orgId of pipeline.orgIds()) if (!allowed.has(orgId)) revoked.add(orgId);
+    if (revoked.size > 0) pipeline.forgetOrgs(revoked);
   }
 
   /** FR-PWA-2: every org's My tasks and tags are readable offline, not only visited ones. */
   function prefetchOrgs(me: Me) {
     const run = () => {
-      for (const org of me.orgs) {
+      // The orgs of the `/me` current when this runs: a membership may have gone meanwhile.
+      const orgs = queryClient.getQueryData<Me>(['me'])?.orgs ?? me.orgs;
+      for (const org of orgs) {
         void queryClient.prefetchQuery({
           queryKey: myListKey(org.id),
           queryFn: () => pipeline.fetch(org.id),

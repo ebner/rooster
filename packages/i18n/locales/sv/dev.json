@@ -55,6 +55,7 @@
     "loginErrors": "Inloggningsfel",
     "invite": "Inbjudan",
     "notInvited": "Inte inbjuden",
+    "linkBlocked": "Inloggningsmetod blockerad",
     "ownerView": "Ägare av en delad organisation",
     "personalView": "Personlig organisation",
     "memberView": "Medlem (inte ägare)",

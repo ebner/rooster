@@ -51,9 +51,17 @@ export function useSearch({ q, orgId, enabled }: SearchParams): QueryResult<Sear
   };
 }
 
-/** Every cached `['my-list', orgId]` (the confirmed base plus queued ops), for offline search. */
-export function cachedListStates(queryClient: QueryClient): ListState[] {
+/**
+ * The cached `['my-list', orgId]` of the viewer's current orgs (the confirmed base plus queued
+ * ops), for offline search. Lists of orgs missing from `/me` (membership revoked) never show.
+ */
+export function cachedListStates(
+  queryClient: QueryClient,
+  orgIds: ReadonlySet<string>,
+): ListState[] {
   return queryClient
     .getQueriesData<ListState>({ queryKey: ['my-list'] })
-    .flatMap(([, state]) => (state ? [state] : []));
+    .flatMap(([key, state]) =>
+      state && typeof key[1] === 'string' && orgIds.has(key[1]) ? [state] : [],
+    );
 }

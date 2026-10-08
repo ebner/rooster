@@ -52,6 +52,13 @@ export interface PipelineOptions {
    * (AC-2.12), and still happen before the op is sent. Default: at once.
    */
   afterPaint?: () => Promise<void>;
+  /**
+   * The user ops are queued for: new records are stamped with it, and records of anyone else
+   * are dropped instead of replayed or sent (a shared browser, a stale outbox). The engine
+   * returns the user confirmed by `/me`, or before that the owner of the restored cache.
+   * Default: no stamping and no check.
+   */
+  user?: () => string | null;
 }
 
 /** How long an offline flusher sleeps before looking again (the `online` event wakes it). */
@@ -212,6 +219,12 @@ export class ListPipeline {
   private readonly afterPaint: () => Promise<void>;
   /** Outbox writes in order; a send waits for them (write-ahead, 04 §6.2). */
   private persisted: Promise<void> = Promise.resolve();
+  /**
+   * Bumped by `reset()`. A write queued before a reset (e.g. an op waiting for its paint) is
+   * skipped, so it cannot put records back after sign-out cleared the outbox.
+   */
+  private generation = 0;
+  private readonly user: (() => string | null) | undefined;
   private lastError: string | null = null;
 
   constructor(options: PipelineOptions) {
@@ -228,6 +241,13 @@ export class ListPipeline {
     this.canSend = options.canSend ?? (() => true);
     this.isOnline = options.isOnline ?? (() => globalThis.navigator?.onLine ?? true);
     this.afterPaint = options.afterPaint ?? (() => Promise.resolve());
+    this.user = options.user;
+  }
+
+  /** Whether a record belongs to someone other than the current user (never sent or shown). */
+  private foreign(item: Queued): boolean {
+    const owner = this.user?.() ?? null;
+    return owner !== null && item.userId !== owner;
   }
 
   /** The query function for `['my-list', orgId]`: fetch, rebase, replay pending ops. */
@@ -267,9 +287,12 @@ export class ListPipeline {
   restore(bases: ReadonlyMap<string, ListState>, records: readonly OutboxRecord[]): void {
     for (const [orgId, base] of bases) this.bases.set(orgId, base);
     const known = new Set(this.queue.map((item) => item.op.opId));
+    const foreign: string[] = [];
     for (const record of records) {
-      if (!known.has(record.op.opId)) this.queue.push(record);
+      if (this.foreign(record)) foreign.push(record.op.opId);
+      else if (!known.has(record.op.opId)) this.queue.push(record);
     }
+    if (foreign.length > 0) this.write(() => this.outbox?.remove(foreign));
     for (const orgId of new Set([...bases.keys(), ...records.map((r) => r.orgId)])) {
       this.render(orgId);
     }
@@ -279,6 +302,7 @@ export class ListPipeline {
 
   /** Forgets everything local (sign-out, another user): queue, confirmed states, status. */
   reset(): void {
+    this.generation += 1;
     this.queue = [];
     this.bases.clear();
     this.confirmed.length = 0;
@@ -289,6 +313,44 @@ export class ListPipeline {
     this.wake?.();
     this.publish();
     this.changed();
+  }
+
+  /**
+   * `/me` confirmed who is signed in: queued ops of anyone else leave the queue, the view
+   * and the outbox unsent.
+   */
+  retainUser(): void {
+    this.discard((item) => this.foreign(item));
+  }
+
+  /**
+   * Membership revoked (the org left `/me`): its queued ops and confirmed state go. The ops
+   * would be refused anyway; until then they must not render or sit in the outbox.
+   */
+  forgetOrgs(orgIds: ReadonlySet<string>): void {
+    for (const orgId of orgIds) {
+      this.bases.delete(orgId);
+      this.lazySyncs.delete(orgId);
+    }
+    this.discard((item) => orgIds.has(item.orgId));
+  }
+
+  /** Removes matching ops without telling the server or the drop listeners. */
+  private discard(match: (item: Queued) => boolean): void {
+    const gone = this.queue.filter(match);
+    if (gone.length === 0) return;
+    this.queue = this.queue.filter((item) => !match(item));
+    const ids = gone.map((item) => item.op.opId);
+    this.write(() => this.outbox?.remove(ids));
+    for (const orgId of new Set(gone.map((item) => item.orgId))) this.render(orgId);
+    this.publish();
+    this.changed();
+    this.settleIdle();
+  }
+
+  /** Every org with a confirmed state or queued ops. */
+  orgIds(): Set<string> {
+    return new Set([...this.bases.keys(), ...this.queue.map((item) => item.orgId)]);
   }
 
   get pending(): number {
@@ -320,28 +382,38 @@ export class ListPipeline {
     if (!view) throw new Error(`ListPipeline: no state for org ${orgId}`);
     const ops: ListOp[] = [];
     const items: Queued[] = [];
+    const userId = this.user?.() ?? null;
     for (const spec of specs) {
       const op = { ...spec, opId: uuidv7(), editTime: this.now(), clientId: this.clientId };
-      const item = { op, orgId, ctx };
+      const item: Queued = userId === null ? { op, orgId, ctx } : { op, orgId, ctx, userId };
       view = this.apply(view, item);
       this.queue.push(item);
       items.push(item);
       ops.push(op);
     }
     this.queryClient.setQueryData(myListKey(orgId), view);
+    const generation = this.generation;
     this.write(async () => {
       await this.afterPaint();
+      if (generation !== this.generation) return;
       await this.outbox?.put(items);
-    }).then(() => this.channel?.post({ type: 'enqueued', records: items }));
+    }).then(() => {
+      if (generation === this.generation) this.channel?.post({ type: 'enqueued', records: items });
+    });
     this.publish();
     this.changed();
     void this.flush();
     return ops;
   }
 
-  /** Chains an outbox write; failures (quota, private mode) leave the op in memory only. */
+  /**
+   * Chains an outbox write; failures (quota, private mode) leave the op in memory only. A write
+   * still waiting when `reset()` runs is skipped.
+   */
   private write(run: () => Promise<void> | undefined): Promise<void> {
-    this.persisted = this.persisted.then(run).catch((error: unknown) => {
+    const generation = this.generation;
+    const guarded = () => (generation === this.generation ? run() : undefined);
+    this.persisted = this.persisted.then(guarded).catch((error: unknown) => {
       console.warn('rooster: outbox write failed', error);
     });
     return this.persisted;
@@ -355,7 +427,7 @@ export class ListPipeline {
     switch (message.type) {
       case 'enqueued': {
         const known = new Set(this.queue.map((item) => item.op.opId));
-        const fresh = message.records.filter((r) => !known.has(r.op.opId));
+        const fresh = message.records.filter((r) => !known.has(r.op.opId) && !this.foreign(r));
         if (fresh.length === 0) return;
         this.queue.push(...fresh);
         for (const orgId of new Set(fresh.map((r) => r.orgId))) this.render(orgId);
@@ -479,6 +551,10 @@ export class ListPipeline {
         }
         const head = this.queue[0];
         if (!head) break;
+        if (this.foreign(head)) {
+          this.discard((item) => item === head);
+          continue;
+        }
         if (!useSyncStore.getState().syncing) this.publish(true);
         try {
           const response = await this.transport.send(head.op, head.orgId);

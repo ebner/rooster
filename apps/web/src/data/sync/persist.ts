@@ -8,6 +8,12 @@ export const cacheStorageKey = 'rooster-cache-v1';
 /** 04 §6.1: older caches are discarded. */
 export const cacheMaxAgeMs = 30 * 24 * 60 * 60 * 1000;
 /**
+ * A cache whose last server-confirmed `/me` is older than this is deleted instead of restored:
+ * the session lifetime (30 days), so an offline device stops showing data its session could no
+ * longer fetch.
+ */
+export const cacheConfirmMaxAgeMs = cacheMaxAgeMs;
+/**
  * Saves wait for a pause in editing (the list changes on every keypress) and then for an idle
  * moment, but never longer than the max wait. Serialising 600 tasks is a long task that would
  * otherwise land inside a keypress's frame (AC-2.12); `pagehide` and hiding the tab save at once.
@@ -97,12 +103,16 @@ export function keepPersistedQueries(queryClient: QueryClient): void {
 export interface CachePersister extends Persister {
   /** Stops writing (sign-out): a save still in flight is awaited, later ones are ignored. */
   suspend(): Promise<void>;
+  /** A fresh `/me` succeeded at `at` (ms epoch): stored with the next save. */
+  confirmed(at: number): void;
 }
 
 /** The stored shape: each query's data apart from its metadata (see `serialize`). */
 interface StoredClient {
   timestamp: number;
   buster: string;
+  /** The last server-confirmed `/me` (null: never; missing: written before 1.0.1). */
+  confirmedAt?: number | null;
   queries: {
     q: Omit<PersistedClient['clientState']['queries'][number], 'state'> & {
       state: Record<string, unknown>;
@@ -131,8 +141,10 @@ const idbStorage: KeyValueStorage = {
 export function createCachePersister(
   baseOf: (orgId: string) => ListState | undefined,
   storage: KeyValueStorage = idbStorage,
+  now: () => number = Date.now,
 ): CachePersister {
   let suspended = false;
+  let confirmedAt: number | null = null;
   let writing: Promise<void> = Promise.resolve();
   const chain = (run: () => Promise<void>) => {
     writing = writing
@@ -166,7 +178,7 @@ export function createCachePersister(
       const { data, ...rest } = state;
       return `{"q":${JSON.stringify({ ...query, state: rest })},"d":${json(data, 3)}}`;
     });
-    return `{"timestamp":${client.timestamp},"buster":${JSON.stringify(client.buster)},"queries":[${queries.join(',')}]}`;
+    return `{"timestamp":${client.timestamp},"buster":${JSON.stringify(client.buster)},"confirmedAt":${JSON.stringify(confirmedAt)},"queries":[${queries.join(',')}]}`;
   };
   return {
     persistClient: (client) => {
@@ -179,6 +191,12 @@ export function createCachePersister(
       if (!raw) return undefined;
       const stored = JSON.parse(raw) as StoredClient;
       if (!Array.isArray(stored.queries)) return undefined;
+      const at = lastConfirmed(stored);
+      if (at === null || now() - at > cacheConfirmMaxAgeMs) {
+        await chain(() => storage.del(cacheStorageKey));
+        return undefined;
+      }
+      confirmedAt = Math.max(confirmedAt ?? 0, at);
       const queries = stored.queries.map(({ q, d }) => ({ ...q, state: { ...q.state, data: d } }));
       return {
         timestamp: stored.timestamp,
@@ -186,10 +204,27 @@ export function createCachePersister(
         clientState: { mutations: [], queries },
       } as unknown as PersistedClient;
     },
-    removeClient: () => chain(() => storage.del(cacheStorageKey)),
+    removeClient: () => {
+      confirmedAt = null;
+      return chain(() => storage.del(cacheStorageKey));
+    },
     suspend: () => {
       suspended = true;
       return writing;
     },
+    confirmed: (at) => {
+      confirmedAt = Math.max(confirmedAt ?? 0, at);
+    },
   };
+}
+
+/**
+ * When the stored cache was last confirmed by the server. Caches written before 1.0.1 have no
+ * `confirmedAt`; for them the stored `/me` query's fetch time stands in.
+ */
+function lastConfirmed(stored: StoredClient): number | null {
+  if (stored.confirmedAt !== undefined) return stored.confirmedAt;
+  const me = stored.queries.find(({ q }) => q.queryKey[0] === 'me');
+  const at = me?.q.state.dataUpdatedAt;
+  return typeof at === 'number' && at > 0 ? at : null;
 }

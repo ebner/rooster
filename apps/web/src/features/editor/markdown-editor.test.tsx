@@ -269,6 +269,44 @@ describe('MarkdownEditor', () => {
   });
 });
 
+describe('the toolbar "Open link" button (security)', () => {
+  /** A document with one linked word, loaded as JSON (which skips the Markdown parser). */
+  function withLink(href: string) {
+    const { editor } = setup({ value: 'x', forceToolbar: 'buttons' });
+    act(() => {
+      editor.commands.setContent({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', text: 'docs', marks: [{ type: 'link', attrs: { href } }] }],
+          },
+        ],
+      });
+      editor.commands.focus();
+      editor.commands.setTextSelection({ from: 2, to: 3 });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Link' }));
+    return editor;
+  }
+
+  test('is offered for an https link', () => {
+    withLink('https://example.com');
+    expect(screen.getByRole('link', { name: 'Open link' }).getAttribute('href')).toBe(
+      'https://example.com',
+    );
+  });
+
+  test.each(['javascript:alert(1)', 'java\tscript:alert(1)', 'data:text/html,x', 'file:///x'])(
+    'is not offered for %j (the link can still be removed)',
+    (href) => {
+      withLink(href);
+      expect(screen.queryByRole('link', { name: 'Open link' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Remove link' })).toBeTruthy();
+    },
+  );
+});
+
 describe('Markdown helpers', () => {
   test('escaping is minimal but safe', () => {
     const plain = { atLineStart: true, before: undefined, after: undefined };

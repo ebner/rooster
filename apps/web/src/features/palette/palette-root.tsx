@@ -136,18 +136,23 @@ function PaletteSession({ me, currentOrg }: { me: Me; currentOrg: Org | null }) 
   });
   const fromCache = !online || search.error !== null;
 
-  // The cache is read once per render: cheap (a few maps), and always current.
-  const lists = cachedListStates(queryClient);
+  const orgById = useMemo(() => new Map(me.orgs.map((o) => [o.id, o])), [me.orgs]);
+  const orgIds = useMemo(() => new Set(orgById.keys()), [orgById]);
+
+  // The cache is read once per render: cheap (a few maps), and always current. Only orgs in
+  // the current `/me` count: a revoked membership's cached data never shows.
+  const lists = cachedListStates(queryClient, orgIds);
   const tagsById = cachedTags(
     lists,
     queryClient
       .getQueriesData<readonly Tag[]>({ queryKey: ['tags'] })
-      .flatMap(([, tags]) => (tags ? [tags] : [])),
+      .flatMap(([key, tags]) =>
+        tags && typeof key[1] === 'string' && orgIds.has(key[1]) ? [tags] : [],
+      ),
   );
   const listOf = (orgId: string) => lists.find((l) => l.orgId === orgId);
   const exclude = step?.exclude;
 
-  const orgById = useMemo(() => new Map(me.orgs.map((o) => [o.id, o])), [me.orgs]);
   const chipContext: ChipContext = {
     currentOrgId: currentOrg?.id ?? null,
     orgNames: new Map(me.orgs.map((o) => [o.id, o.name])),
@@ -226,7 +231,7 @@ function PaletteSession({ me, currentOrg }: { me: Me; currentOrg: Org | null }) 
       );
     } else {
       tasks = (search.data ?? [])
-        .filter((hit: SearchHit) => !exclude?.has(hit.task.id))
+        .filter((hit: SearchHit) => orgIds.has(hit.orgId) && !exclude?.has(hit.task.id))
         .map((hit) => taskItem('tasks', hit.task, hit.orgId, hit.snippet, searchParsed.terms));
     }
   }

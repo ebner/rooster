@@ -25,7 +25,7 @@ import { IconButton } from '../../ui/icon-button';
 import { Input } from '../../ui/input';
 import { popoverSurface } from '../../ui/popover';
 import { type HeadingLevel, headingLevels } from './extensions';
-import { linkOptions } from './link';
+import { isAllowedLinkHref, linkOptions } from './link';
 
 /** Toolbar shortcuts as Kbd strings; the editor binds the same keys (tiptap defaults + Mod+K). */
 export const formatShortcuts = {
@@ -285,16 +285,18 @@ function LinkField({ editor, href, onDone, isTooltipOpen, autoFocus }: LinkField
       />
       {href && (
         <>
-          <a
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer nofollow"
-            aria-label={t('link.open')}
-            title={t('link.open')}
-            className="inline-flex size-control-sm items-center justify-center rounded-sm text-text-secondary hover:bg-bg-subtle hover:text-text"
-          >
-            <ExternalLink className="size-4" strokeWidth={iconStrokeWidth} aria-hidden />
-          </a>
+          {isAllowedLinkHref(href) && (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer nofollow"
+              aria-label={t('link.open')}
+              title={t('link.open')}
+              className="inline-flex size-control-sm items-center justify-center rounded-sm text-text-secondary hover:bg-bg-subtle hover:text-text"
+            >
+              <ExternalLink className="size-4" strokeWidth={iconStrokeWidth} aria-hidden />
+            </a>
+          )}
           <IconButton
             size="sm"
             icon={Unlink}

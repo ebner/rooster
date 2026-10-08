@@ -2,6 +2,8 @@
  * A same-origin path to return to after sign-in, or undefined. Resolving against the
  * current origin and comparing origins rejects protocol-relative (`//evil.example`),
  * backslash (`/\evil.example`), absolute and `javascript:` targets (open redirects).
+ * The result is checked again: dot segments normalise (`/.//evil.example` → `//evil.example`), and a
+ * path starting with `//` or holding a backslash would leave the origin once navigated to.
  */
 export function safeRedirectPath(value: unknown): string | undefined {
   if (typeof value !== 'string' || value === '') return undefined;
@@ -14,5 +16,7 @@ export function safeRedirectPath(value: unknown): string | undefined {
     return undefined;
   }
   if (url.origin !== origin) return undefined;
-  return url.pathname + url.search + url.hash;
+  const path = url.pathname + url.search + url.hash;
+  if (path.startsWith('//') || path.includes('\\')) return undefined;
+  return path;
 }

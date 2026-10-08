@@ -55,6 +55,7 @@
     "loginErrors": "Login errors",
     "invite": "Invite",
     "notInvited": "Not invited",
+    "linkBlocked": "Sign-in method blocked",
     "ownerView": "Owner of a shared organisation",
     "personalView": "Personal organisation",
     "memberView": "Member (not owner)",

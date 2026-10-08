@@ -1,6 +1,7 @@
 import { useLocation } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { findOrg, useMe } from '../../data';
+import { userStorageKey } from '../../lib/user-storage';
 
 /** 02 §12: the palette's empty state lists the last 8 opened tasks. */
 export const recentTasksMax = 8;
@@ -14,9 +15,12 @@ export interface RecentTask {
   at: number;
 }
 
-const storageKey = (userId: string) => `rooster.palette.recent.${userId}`;
+const storageKey = (userId: string) => userStorageKey(userId, 'palette.recent');
 
-/** Per device and user (localStorage). Unavailable or corrupt storage reads as empty. */
+/**
+ * Per device and user (localStorage, swept on sign-out: `lib/user-storage`). Unavailable or
+ * corrupt storage reads as empty.
+ */
 export function readRecentTasks(userId: string): RecentTask[] {
   try {
     const raw = globalThis.localStorage?.getItem(storageKey(userId));

@@ -6,7 +6,7 @@ import { createFixtureTransport } from '../pipeline/fixture-transport';
 import { myListKey } from '../pipeline/pipeline';
 import type { Me } from '../types';
 import { nullChannel, type SyncChannel, type SyncMessage } from './channel';
-import { type SyncEngine, startSync } from './engine';
+import { clearLocalData, type SyncEngine, startSync } from './engine';
 import type { EventSourceLike } from './events';
 import { createMemoryOutbox } from './outbox';
 import { cacheStorageKey, createCachePersister, type KeyValueStorage } from './persist';
@@ -32,12 +32,21 @@ const quietSource = (): EventSourceLike => ({
   close: () => {},
 });
 
-function me(id: string): Me {
+const otherOrgId = '01900000-0000-7000-8000-0000000000bb';
+
+function me(id: string, orgIds: readonly string[] = [orgId]): Me {
   return {
     user: { id } as Me['user'],
-    orgs: [{ id: orgId, slug: 'personal' } as Me['orgs'][number]],
+    orgs: orgIds.map((org) => ({ id: org, slug: org }) as Me['orgs'][number]),
   };
 }
+
+/** A `/me` answered by the server (not an optimistic `setQueryData`). */
+function fetchMe(queryClient: QueryClient, value: Me) {
+  return queryClient.fetchQuery({ queryKey: ['me'], queryFn: async () => value, staleTime: 0 });
+}
+
+const recentsKey = (id: string) => `rooster.user.${id}.palette.recent`;
 
 const engines: SyncEngine[] = [];
 
@@ -50,18 +59,19 @@ async function boot(
   },
   queryClient = new QueryClient(),
 ) {
+  const persister = createCachePersister((org) => engine.pipeline.baseOf(org), deps.storage);
   const engine = await startSync({
     queryClient,
     transport: deps.transport,
     outbox: deps.outbox,
     channel: deps.channel ?? nullChannel(),
-    persister: createCachePersister((org) => engine.pipeline.baseOf(org), deps.storage),
+    persister,
     eventSource: quietSource,
     locks: null,
     listen: false,
   });
   engines.push(engine);
-  return { engine, queryClient };
+  return { engine, queryClient, persister };
 }
 
 afterEach(() => {
@@ -75,6 +85,10 @@ describe('sync engine (04 §6)', () => {
     const outbox = createMemoryOutbox();
     const transport = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
     const first = await boot({ storage, outbox, transport });
+    // As a `/me` of an earlier session did: the cache and the outbox belong to this user, and
+    // only a confirmed cache is restored.
+    localStorage.setItem('rooster.cacheOwner', userId);
+    first.persister.confirmed(Date.now());
     const state = await first.queryClient.fetchQuery({
       queryKey: myListKey(orgId),
       queryFn: () => first.engine.pipeline.fetch(orgId),
@@ -175,5 +189,156 @@ describe('sync engine (04 §6)', () => {
     expect(data.has(cacheStorageKey)).toBe(false);
     expect(posted).toContainEqual({ type: 'cleared' });
     expect(localStorage.getItem('rooster.cacheOwner')).toBeNull();
+  });
+
+  test('AC-1.0.1 sign-out sweeps per-user localStorage (palette recents)', async () => {
+    const { storage } = memoryStorage();
+    const transport = createFixtureTransport({ userId });
+    const { engine } = await boot({ storage, outbox: createMemoryOutbox(), transport });
+    localStorage.setItem(recentsKey(userId), '[{"title":"Secret"}]');
+    localStorage.setItem('rooster.palette.recent.old', '[{"title":"Old secret"}]');
+    localStorage.setItem('rooster.locale', 'sv');
+    await clearLocalData();
+    expect(engine.pipeline.pending).toBe(0);
+    expect(Object.keys(localStorage)).toEqual(['rooster.locale']);
+  });
+
+  test('AC-1.0.1 an online 401 on /me sweeps per-user localStorage', async () => {
+    const { storage } = memoryStorage();
+    const transport = createFixtureTransport({ userId });
+    const { queryClient } = await boot({ storage, outbox: createMemoryOutbox(), transport });
+    await fetchMe(queryClient, me(userId));
+    localStorage.setItem(recentsKey(userId), '[{"title":"Secret"}]');
+    await queryClient
+      .fetchQuery({
+        queryKey: ['me'],
+        queryFn: () => Promise.reject(new ApiError('unauthenticated', 401)),
+        staleTime: 0,
+        retry: false,
+      })
+      .catch(() => {});
+    expect(localStorage.getItem(recentsKey(userId))).toBeNull();
+  });
+
+  test('AC-1.0.1 another user signing in sweeps the previous user’s localStorage', async () => {
+    const { storage } = memoryStorage();
+    const transport = createFixtureTransport({ userId });
+    localStorage.setItem('rooster.cacheOwner', 'someone-else');
+    localStorage.setItem(recentsKey('someone-else'), '[{"title":"Secret"}]');
+    localStorage.setItem(recentsKey(userId), '[]');
+    const { queryClient } = await boot({ storage, outbox: createMemoryOutbox(), transport });
+    await fetchMe(queryClient, me(userId));
+    expect(localStorage.getItem(recentsKey('someone-else'))).toBeNull();
+    expect(localStorage.getItem(recentsKey(userId))).toBe('[]');
+  });
+
+  test('AC-1.0.1 a fresh /me without an org drops everything cached for that org', async () => {
+    const { data, storage } = memoryStorage();
+    const transport = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const { engine, queryClient } = await boot({
+      storage,
+      outbox: createMemoryOutbox(),
+      transport,
+    });
+    await fetchMe(queryClient, me(userId, [orgId, otherOrgId]));
+    for (const org of [orgId, otherOrgId]) {
+      await queryClient.fetchQuery({
+        queryKey: myListKey(org),
+        queryFn: () => engine.pipeline.fetch(org),
+      });
+      queryClient.setQueryData(['tags', org], [{ id: `tag-${org}`, orgId: org, name: org }]);
+      queryClient.setQueryData(['task', `task-${org}`], { id: `task-${org}`, orgId: org });
+      queryClient.setQueryData(['trash', org], { items: [] });
+      queryClient.setQueryData(['search', org, 'a'], []);
+    }
+    queryClient.setQueryData(['search', 'all', 'a'], [{ orgId: otherOrgId }]);
+    queryClient.setQueryData(['search', 'all', 'b'], [{ orgId }]);
+
+    await fetchMe(queryClient, me(userId, [orgId]));
+    const keys = queryClient
+      .getQueryCache()
+      .getAll()
+      .map((q) => JSON.stringify(q.queryKey));
+    expect(keys.filter((k) => k.includes(otherOrgId))).toEqual([]);
+    expect(keys).not.toContain('["search","all","a"]');
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        JSON.stringify(myListKey(orgId)),
+        JSON.stringify(['tags', orgId]),
+        JSON.stringify(['task', `task-${orgId}`]),
+        '["search","all","b"]',
+      ]),
+    );
+    expect(engine.pipeline.baseOf(otherOrgId)).toBeUndefined();
+    expect(engine.pipeline.baseOf(orgId)).toBeDefined();
+    // The next save leaves the revoked org out of IndexedDB too.
+    await vi.waitFor(() => expect(data.get(cacheStorageKey)).toContain(orgId), { timeout: 6000 });
+    expect(data.get(cacheStorageKey)).not.toContain(otherOrgId);
+  });
+
+  test('AC-1.0.1 queued ops of an org missing from the first fresh /me are discarded unsent', async () => {
+    const { storage } = memoryStorage();
+    const outbox = createMemoryOutbox();
+    const transport = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    localStorage.setItem('rooster.cacheOwner', userId);
+    const { engine, queryClient } = await boot({ storage, outbox, transport });
+    const state = await queryClient.fetchQuery({
+      queryKey: myListKey(otherOrgId),
+      queryFn: () => engine.pipeline.fetch(otherOrgId),
+    });
+    const today = Object.values(state.groups).find((g) => g.name === 'Today')?.id as string;
+    engine.pipeline.enqueue(
+      otherOrgId,
+      [listOps.createTask({ id: 'n1', title: 'Revoked', groupId: today })],
+      { userId },
+    );
+    await vi.waitFor(() => expect(outbox.records.size).toBe(1));
+    expect([...outbox.records.values()][0]?.userId).toBe(userId);
+
+    await fetchMe(queryClient, me(userId, [orgId]));
+    await engine.pipeline.idle();
+    expect(engine.pipeline.pending).toBe(0);
+    expect(transport.state(otherOrgId).tasks.n1).toBeUndefined();
+    await vi.waitFor(() => expect(outbox.records.size).toBe(0));
+  });
+
+  test('AC-1.0.1 outbox records of another user are dropped, never sent', async () => {
+    const { storage } = memoryStorage();
+    const outbox = createMemoryOutbox();
+    const transport = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    localStorage.setItem('rooster.cacheOwner', userId);
+    await outbox.put([
+      {
+        op: { ...listOps.deleteTask('x'), opId: 'op-1', editTime: 1, clientId: 'c' },
+        orgId,
+        ctx: { userId: 'intruder' },
+        userId: 'intruder',
+      },
+    ]);
+    const { engine, queryClient } = await boot({ storage, outbox, transport });
+    expect(engine.pipeline.pending).toBe(0);
+    await fetchMe(queryClient, me(userId));
+    await engine.pipeline.idle();
+    await vi.waitFor(() => expect(outbox.records.size).toBe(0));
+  });
+
+  test('AC-1.0.1 a cache last confirmed more than 30 days ago is deleted, not rendered', async () => {
+    const { data, storage } = memoryStorage();
+    const transport = createFixtureTransport({ userId, tasks: { 1: ['Secret'] } });
+    localStorage.setItem('rooster.cacheOwner', userId);
+    const first = await boot({ storage, outbox: createMemoryOutbox(), transport });
+    first.persister.confirmed(Date.now() - 31 * 24 * 60 * 60 * 1000);
+    await first.queryClient.fetchQuery({
+      queryKey: myListKey(orgId),
+      queryFn: () => first.engine.pipeline.fetch(orgId),
+    });
+    await vi.waitFor(() => expect(data.get(cacheStorageKey)).toContain('Secret'), {
+      timeout: 6000,
+    });
+    first.engine.stop();
+
+    const second = await boot({ storage, outbox: createMemoryOutbox(), transport });
+    expect(second.queryClient.getQueryData(myListKey(orgId))).toBeUndefined();
+    expect(data.has(cacheStorageKey)).toBe(false);
   });
 });

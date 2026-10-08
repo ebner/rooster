@@ -6,6 +6,11 @@ export interface OutboxRecord {
   op: ListOp;
   orgId: string;
   ctx: ReducerContext;
+  /**
+   * The signed-in user who queued the op. Only that user's confirmed session ever sends it;
+   * missing on records written before 1.0.1 (the engine assigns them to the cache owner).
+   */
+  userId?: string;
 }
 
 /**

@@ -426,6 +426,9 @@ function AuthSection() {
         <Specimen label={t('group.notInvited')} className="w-pane">
           <NotInvitedPage embedded email="sam@example.org" loginHref="/login" />
         </Specimen>
+        <Specimen label={t('group.linkBlocked')} className="w-pane">
+          <NotInvitedPage embedded reason="account_link_blocked" loginHref="/login" />
+        </Specimen>
       </Group>
     </Section>
   );

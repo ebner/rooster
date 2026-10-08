@@ -149,15 +149,35 @@ test('invite, not-invited and login pages are axe-clean', async ({ page, browser
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   await expectNoAxeViolations(page);
 
+  await page.goto('/not-invited?reason=account_link_blocked');
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Sign in the way you did before' }),
+  ).toBeVisible();
+  await expectNoAxeViolations(page);
+
+  await page.goto('/not-invited?reason=something_new');
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'You’re not on the list yet' }),
+  ).toBeVisible();
+
   await page.goto('/login?error=access_denied');
   await expect(page.getByRole('alert')).toContainText('Sign-in didn’t work');
   await expectNoAxeViolations(page);
 });
 
-test('signing out leads to the login page', async ({ page }) => {
+test('signing out leads to the login page and forgets per-user local state', async ({ page }) => {
   await signInAs(page, uniqueEmail('otto.out'));
+  // AC-1.0.1: palette recents (task titles) must not outlive the session on this browser.
+  await page.evaluate(() => {
+    localStorage.setItem('rooster.user.u1.palette.recent', '[{"title":"Secret"}]');
+    localStorage.setItem('rooster.palette.recent.u1', '[{"title":"Old secret"}]');
+  });
   await page.getByRole('button', { name: /Account menu/ }).click();
   await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in to rooster' })).toBeVisible();
   expect((await apiCall(page, 'GET', '/api/v1/me')).status()).toBe(401);
+  const left = await page.evaluate(() =>
+    Object.keys(localStorage).filter((k) => /^rooster\.(user|palette\.recent)\./.test(k)),
+  );
+  expect(left).toEqual([]);
 });

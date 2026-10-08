@@ -90,3 +90,17 @@ test('the service worker never answers the API and serves the shell for app path
   expect(fromSw.cached.some((p) => p.endsWith('.woff2'))).toBe(true);
   expect(fromSw.cached).toContain('/icons/icon-192.png');
 });
+
+test('AC-1.0.1 served scripts carry no source map reference', async ({ page, request }) => {
+  await page.goto('/login');
+  const scripts = await page
+    .locator('script[src], link[rel="modulepreload"]')
+    .evaluateAll((nodes) =>
+      nodes.map((n) => n.getAttribute('src') ?? n.getAttribute('href') ?? ''),
+    );
+  expect(scripts.length).toBeGreaterThan(0);
+  for (const src of [...scripts, '/sw.js']) {
+    const body = await (await request.get(src)).text();
+    expect(body, src).not.toMatch(/sourceMappingURL=/);
+  }
+});

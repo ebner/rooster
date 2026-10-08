@@ -75,7 +75,7 @@ export default defineConfig({
   },
   build: {
     target: 'es2023',
-    sourcemap: true,
+    sourcemap: 'hidden',
     // `scripts/bundle-budget.mjs` walks it (10 §4).
     manifest: true,
   },

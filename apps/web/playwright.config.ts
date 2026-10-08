@@ -19,7 +19,7 @@ process.env.ROOSTER_E2E_DATA_DIR ??= mkdtempSync(join(tmpdir(), 'rooster-e2e-'))
 
 const serverEnv = {
   ROOSTER_BASE_URL: baseURL,
-  ROOSTER_AUTH_SECRET: 'e2e-secret-e2e-secret-e2e-secret-e2e-secret',
+  ROOSTER_AUTH_SECRET: 'e2e-playwright-only-Secret-0123456789-abcdefghijkl',
   ROOSTER_ADMIN_EMAILS: e2eEnv.adminEmail,
   ROOSTER_ALLOWED_DOMAINS: e2eEnv.allowedDomain,
   ROOSTER_OIDC_PROVIDERS: JSON.stringify([

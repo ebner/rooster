@@ -46,9 +46,20 @@ interface TabOptions {
   leader?: () => boolean;
   online?: () => boolean;
   queryClient?: QueryClient;
+  user?: () => string | null;
+  afterPaint?: () => Promise<void>;
 }
 
-function tab({ transport, outbox, channel, leader, online, queryClient }: TabOptions) {
+function tab({
+  transport,
+  outbox,
+  channel,
+  leader,
+  online,
+  queryClient,
+  user,
+  afterPaint,
+}: TabOptions) {
   const client = queryClient ?? new QueryClient();
   const pipeline = new ListPipeline({
     transport,
@@ -59,6 +70,8 @@ function tab({ transport, outbox, channel, leader, online, queryClient }: TabOpt
     ...(channel ? { channel } : {}),
     ...(leader ? { isLeader: leader } : {}),
     ...(online ? { isOnline: online } : {}),
+    ...(user ? { user } : {}),
+    ...(afterPaint ? { afterPaint } : {}),
   });
   channel?.listen((m) => pipeline.receive(m));
   return { pipeline, queryClient: client };
@@ -335,5 +348,95 @@ describe('error classes (04 §6.2)', () => {
     expect(useSyncStore.getState()).toMatchObject({ failures: 3, lastError: 'http_503' });
     await vi.advanceTimersByTimeAsync(1_000);
     expect(useSyncStore.getState()).toMatchObject({ failures: 0, lastError: null, pending: 0 });
+  });
+});
+
+describe('AC-1.0.1 the outbox is bound to its user', () => {
+  test('records carry their user; a different confirmed user never sends them', async () => {
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const { transport, sent } = spy(server);
+    const outbox = createMemoryOutbox();
+    let online = false;
+    let current: string | null = userId;
+    const { pipeline, queryClient } = tab({
+      transport,
+      outbox,
+      online: () => online,
+      user: () => current,
+    });
+    const today = await load(pipeline, queryClient);
+    pipeline.enqueue(orgId, [listOps.createTask({ id: 'n1', title: 'Mine', groupId: today })], ctx);
+    await vi.waitFor(() => expect(outbox.records.size).toBe(1));
+    expect([...outbox.records.values()][0]?.userId).toBe(userId);
+
+    // Someone else is confirmed before the op could leave.
+    current = 'someone-else';
+    online = true;
+    pipeline.retryNow();
+    await pipeline.idle();
+    expect(sent).toEqual([]);
+    expect(pipeline.pending).toBe(0);
+    expect(titles(pipeline, today)).toEqual(['A']);
+    await vi.waitFor(() => expect(outbox.records.size).toBe(0));
+  });
+
+  test('a reload as another user neither replays nor keeps the records', async () => {
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const outbox = createMemoryOutbox();
+    const first = tab({ transport: server, outbox, online: () => false, user: () => userId });
+    const today = await load(first.pipeline, first.queryClient);
+    const base = first.pipeline.baseOf(orgId);
+    first.pipeline.enqueue(
+      orgId,
+      [listOps.createTask({ id: 'n1', title: 'Mine', groupId: today })],
+      ctx,
+    );
+    await vi.waitFor(() => expect(outbox.records.size).toBe(1));
+
+    const second = tab({ transport: server, outbox, user: () => 'someone-else' });
+    second.pipeline.restore(new Map([[orgId, base as never]]), await outbox.load());
+    expect(second.pipeline.pending).toBe(0);
+    expect(titles(second.pipeline, today)).toEqual(['A']);
+    await vi.waitFor(() => expect(outbox.records.size).toBe(0));
+  });
+
+  test('ops mirrored from a tab of another user are ignored', async () => {
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const { pipeline, queryClient } = tab({ transport: server, user: () => userId });
+    const today = await load(pipeline, queryClient);
+    const op = {
+      ...listOps.createTask({ id: 'n1', title: 'Theirs', groupId: today }),
+      opId: 'op-1',
+      editTime: 1,
+      clientId: 'c',
+    };
+    pipeline.receive({ type: 'enqueued', records: [{ op, orgId, ctx, userId: 'someone-else' }] });
+    expect(pipeline.pending).toBe(0);
+  });
+
+  test('an op still waiting for its paint is not written back after a reset', async () => {
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const outbox = createMemoryOutbox();
+    const { channel: makeChannel, sent: posted } = bus();
+    let paint: () => void = () => {};
+    const painted = new Promise<void>((resolve) => {
+      paint = resolve;
+    });
+    const { pipeline, queryClient } = tab({
+      transport: server,
+      outbox,
+      channel: makeChannel(),
+      online: () => false,
+      afterPaint: () => painted,
+    });
+    const today = await load(pipeline, queryClient);
+    pipeline.enqueue(orgId, [listOps.createTask({ id: 'n1', title: 'X', groupId: today })], ctx);
+    // Sign-out: the pipeline forgets, the outbox is cleared, and only then the frame paints.
+    pipeline.reset();
+    await outbox.clear();
+    paint();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(outbox.records.size).toBe(0);
+    expect(posted.filter((m) => m.type === 'enqueued')).toEqual([]);
   });
 });

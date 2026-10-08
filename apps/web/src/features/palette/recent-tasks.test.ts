@@ -36,9 +36,12 @@ describe('recent tasks (02 §12: the last 8 opened)', () => {
   });
 
   test('corrupt or unavailable storage reads as empty and never throws', () => {
-    localStorage.setItem('rooster.palette.recent.u1', '{not json');
+    localStorage.setItem('rooster.user.u1.palette.recent', '{not json');
     expect(readRecentTasks('u1')).toEqual([]);
-    localStorage.setItem('rooster.palette.recent.u1', JSON.stringify([{ id: 1 }, entry('ok')]));
+    localStorage.setItem(
+      'rooster.user.u1.palette.recent',
+      JSON.stringify([{ id: 1 }, entry('ok')]),
+    );
     expect(readRecentTasks('u1').map((e) => e.id)).toEqual(['ok']);
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('quota');
