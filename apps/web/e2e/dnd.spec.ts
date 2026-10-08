@@ -197,8 +197,17 @@ test('a task is never offered directly before or after itself (pointer, selectio
 
   // A contiguous selection (Task 3 and 4) is not offered its own place either.
   await clickRowBody(page, 'Task 3');
-  // The range starts at the selected row: wait for it before extending.
-  await expect(row(page, 'Task 3')).toHaveAttribute('aria-selected', 'true');
+  // A row click opens the detail pane (split): the list re-lays out while it slides in, so
+  // wait until the pane is there and the row has stopped moving before extending the range.
+  await expect(page.locator('[data-pane-root]')).toBeVisible();
+  await expect
+    .poll(async () => {
+      const a = await row(page, 'Task 4').boundingBox();
+      await page.waitForTimeout(100);
+      const b = await row(page, 'Task 4').boundingBox();
+      return a && b && a.x === b.x && a.y === b.y && a.width === b.width;
+    })
+    .toBe(true);
   await row(page, 'Task 4').click({ modifiers: ['Shift'], position: { x: 200, y: 20 } });
   await expect(row(page, 'Task 4')).toHaveAttribute('aria-selected', 'true');
   await lift(page, row(page, 'Task 3'), { x: 100, y: 20 });
