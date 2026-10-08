@@ -10,8 +10,11 @@ export interface WireError {
 
 /** What tabs tell each other on `BroadcastChannel('rooster')` (04 §6.2). */
 export type SyncMessage =
-  /** A tab queued ops (already in the outbox): every tab replays them optimistically. */
-  | { type: 'enqueued'; records: OutboxRecord[] }
+  /**
+   * A tab queued ops: every tab replays them optimistically. `stored: false` when the outbox
+   * write failed (the ops then live only in the tabs' memory).
+   */
+  | { type: 'enqueued'; records: OutboxRecord[]; stored?: boolean }
   /** The leader got a 2xx: every tab folds the op into its confirmed state. */
   | { type: 'applied'; opId: string; response: unknown }
   /** The leader dropped an op (403/404/409/410/422): every tab reverts it. */
@@ -20,6 +23,11 @@ export type SyncMessage =
   | { type: 'remap'; opId: string; from: string; to: string }
   /** A follower asks the leader to try the outbox now (retry, reconnect, foreground). */
   | { type: 'flush' }
+  /**
+   * A follower whose queue made no progress asks whether the leader is alive. The leader answers
+   * with `status` and re-reads the outbox; without an answer the follower takes the lock.
+   */
+  | { type: 'ping' }
   /** The leader's sender state, so every tab shows the same pill. */
   | {
       type: 'status';

@@ -48,6 +48,8 @@ interface TabOptions {
   queryClient?: QueryClient;
   user?: () => string | null;
   afterPaint?: () => Promise<void>;
+  canSend?: () => boolean;
+  sendTimeoutMs?: number;
 }
 
 function tab({
@@ -59,6 +61,8 @@ function tab({
   queryClient,
   user,
   afterPaint,
+  canSend,
+  sendTimeoutMs,
 }: TabOptions) {
   const client = queryClient ?? new QueryClient();
   const pipeline = new ListPipeline({
@@ -72,6 +76,8 @@ function tab({
     ...(online ? { isOnline: online } : {}),
     ...(user ? { user } : {}),
     ...(afterPaint ? { afterPaint } : {}),
+    ...(canSend ? { canSend } : {}),
+    ...(sendTimeoutMs ? { sendTimeoutMs } : {}),
   });
   channel?.listen((m) => pipeline.receive(m));
   return { pipeline, queryClient: client };
@@ -438,5 +444,111 @@ describe('AC-1.0.1 the outbox is bound to its user', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(outbox.records.size).toBe(0);
     expect(posted.filter((m) => m.type === 'enqueued')).toEqual([]);
+  });
+
+  test('a request that is never answered times out and is retried with the same key', async () => {
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const keys: string[] = [];
+    let signal: AbortSignal | undefined;
+    const transport: ListTransport = {
+      ...server,
+      send: (op, org, abort) => {
+        keys.push(op.opId);
+        // The server got the first one, but its answer never arrives (a dead connection).
+        if (keys.length === 1) {
+          signal = abort;
+          void server.send(op, org);
+          return new Promise(() => {});
+        }
+        return server.send(op, org);
+      },
+    };
+    const { pipeline, queryClient } = tab({ transport, sendTimeoutMs: 20 });
+    const today = await load(pipeline, queryClient);
+    pipeline.enqueue(orgId, [listOps.createTask({ id: 'n1', title: 'X', groupId: today })], ctx);
+    await pipeline.idle();
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).toBe(keys[0]);
+    expect(signal?.aborted).toBe(true);
+    expect(pipeline.pending).toBe(0);
+    expect(useSyncStore.getState().pending).toBe(0);
+  });
+
+  test('a late copy of an op another tab already confirmed is not queued again', async () => {
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const { pipeline, queryClient } = tab({ transport: server, leader: () => false });
+    const today = await load(pipeline, queryClient);
+    const op = {
+      ...listOps.createTask({ id: 'n1', title: 'Late', groupId: today }),
+      opId: 'op-1',
+      editTime: 1,
+      clientId: 'c',
+    };
+    pipeline.receive({ type: 'applied', opId: 'op-1', response: undefined });
+    pipeline.receive({ type: 'enqueued', records: [{ op, orgId, ctx }] });
+    pipeline.restore(new Map(), [{ op, orgId, ctx }]);
+    expect(pipeline.pending).toBe(0);
+  });
+
+  test('a leader answers a ping only when it can send', async () => {
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const { channel, sent } = bus();
+    let canSend = false;
+    const leader = tab({
+      transport: server,
+      channel: channel(),
+      leader: () => true,
+      canSend: () => canSend,
+    });
+    const follower = channel();
+    follower.post({ type: 'ping' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sent.filter((m) => m.type === 'status')).toEqual([]);
+    canSend = true;
+    follower.post({ type: 'ping' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sent.filter((m) => m.type === 'status')).toHaveLength(1);
+    expect(leader.pipeline.pending).toBe(0);
+  });
+
+  test('the shared outbox corrects a mirror: missed ops join, ops settled elsewhere leave', async () => {
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const outbox = createMemoryOutbox();
+    const { channel } = bus();
+    const leader = tab({ transport: server, outbox, channel: channel(), leader: () => true });
+    const follower = tab({ transport: server, outbox, channel: channel(), leader: () => false });
+    const today = await load(leader.pipeline, leader.queryClient);
+    await load(follower.pipeline, follower.queryClient);
+
+    // An op the follower never heard of (its `enqueued` was lost) is picked up from the outbox.
+    const missed = {
+      ...listOps.createTask({ id: 'm1', title: 'Missed', groupId: today }),
+      opId: 'op-missed',
+      editTime: 1,
+      clientId: 'c',
+    };
+    await outbox.put([{ op: missed, orgId, ctx }]);
+    await follower.pipeline.syncWithOutbox(() => outbox.load());
+    expect(follower.pipeline.pending).toBe(1);
+    expect(titles(follower.pipeline, today)).toContain('Missed');
+
+    // Settled elsewhere and its confirmation lost: it leaves the queue.
+    await outbox.remove(['op-missed']);
+    await follower.pipeline.syncWithOutbox(() => outbox.load());
+    expect(follower.pipeline.pending).toBe(0);
+
+    // An op that never reached the outbox (the write failed) stays: the leader has it in memory.
+    const failing: Outbox = { ...outbox, put: () => Promise.reject(new Error('quota')) };
+    const local = tab({ transport: server, outbox: failing, leader: () => false });
+    const localToday = await load(local.pipeline, local.queryClient);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    local.pipeline.enqueue(
+      orgId,
+      [listOps.createTask({ id: 'l1', title: 'Memory only', groupId: localToday })],
+      ctx,
+    );
+    await local.pipeline.syncWithOutbox(() => outbox.load());
+    expect(local.pipeline.pending).toBe(1);
+    warn.mockRestore();
   });
 });

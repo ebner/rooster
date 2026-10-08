@@ -1,13 +1,17 @@
-import { listOps, tasksInGroup } from '@rooster/core/reducers';
+import { type ListState, listOps, tasksInGroup } from '@rooster/core/reducers';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { useSyncStore } from '../../state/sync-store';
 import { ApiError } from '../errors';
 import { createFixtureTransport } from '../pipeline/fixture-transport';
 import { myListKey } from '../pipeline/pipeline';
+import type { ListTransport } from '../pipeline/transport';
 import type { Me } from '../types';
 import { nullChannel, type SyncChannel, type SyncMessage } from './channel';
 import { clearLocalData, type SyncEngine, startSync } from './engine';
 import type { EventSourceLike } from './events';
+import { fakeLocks } from './fake-locks';
+import { electLeader } from './leader';
 import { createMemoryOutbox } from './outbox';
 import { cacheStorageKey, createCachePersister, type KeyValueStorage } from './persist';
 
@@ -340,5 +344,211 @@ describe('sync engine (04 §6)', () => {
     const second = await boot({ storage, outbox: createMemoryOutbox(), transport });
     expect(second.queryClient.getQueryData(myListKey(orgId))).toBeUndefined();
     expect(data.has(cacheStorageKey)).toBe(false);
+  });
+});
+
+/** BroadcastChannel stand-in: delivers to every other member; a member can freeze or drop. */
+function bus() {
+  interface Member {
+    handler: ((m: SyncMessage) => void) | null;
+    frozen: SyncMessage[] | null;
+    drop: (m: SyncMessage) => boolean;
+  }
+  const members: Member[] = [];
+  const deliver = (member: Member, m: SyncMessage) => {
+    if (member.drop(m)) return;
+    if (member.frozen) member.frozen.push(m);
+    else member.handler?.(structuredClone(m));
+  };
+  const join = () => {
+    const self: Member = { handler: null, frozen: null, drop: () => false };
+    members.push(self);
+    const channel: SyncChannel = {
+      post: (m) => {
+        if (self.frozen) return;
+        for (const member of members) {
+          if (member !== self) queueMicrotask(() => deliver(member, m));
+        }
+      },
+      listen: (h) => {
+        self.handler = h;
+        return () => {
+          self.handler = null;
+        };
+      },
+      close: () => {},
+    };
+    return {
+      channel,
+      /** Like a frozen page: receives nothing now, everything once thawed. */
+      freeze: () => {
+        self.frozen = [];
+      },
+      thaw: () => {
+        const queued = self.frozen ?? [];
+        self.frozen = null;
+        for (const m of queued) self.handler?.(structuredClone(m));
+      },
+      dropWhen: (drop: (m: SyncMessage) => boolean) => {
+        self.drop = drop;
+      },
+    };
+  };
+  return { join };
+}
+
+describe('leader watch (a frozen leader must not block the tab in front)', () => {
+  const watch = { stallMs: 30, answerMs: 30, recheckMs: 30 };
+
+  async function bootTab(
+    deps: {
+      outbox: ReturnType<typeof createMemoryOutbox>;
+      transport: ListTransport;
+      channel: SyncChannel;
+      locks: ReturnType<typeof fakeLocks>;
+    },
+    queryClient = new QueryClient(),
+  ) {
+    const engine = await startSync({
+      queryClient,
+      transport: deps.transport,
+      outbox: deps.outbox,
+      channel: deps.channel,
+      persister: createCachePersister(() => undefined, memoryStorage().storage),
+      eventSource: quietSource,
+      locks: deps.locks,
+      listen: false,
+      leaderWatch: watch,
+    });
+    engines.push(engine);
+    await fetchMe(queryClient, me(userId));
+    await queryClient.fetchQuery({
+      queryKey: myListKey(orgId),
+      queryFn: () => engine.pipeline.fetch(orgId),
+    });
+    return { engine, queryClient };
+  }
+
+  function counting(inner: ReturnType<typeof createFixtureTransport>) {
+    const sent: string[] = [];
+    const transport: ListTransport = {
+      ...inner,
+      send: (op, org, signal) => {
+        sent.push(op.opId);
+        return inner.send(op, org, signal);
+      },
+    };
+    return { transport, sent };
+  }
+
+  function todayOf(engine: SyncEngine) {
+    const state = engine.pipeline.view(orgId);
+    return Object.values(state?.groups ?? {}).find((g) => g.name === 'Today')?.id as string;
+  }
+
+  test('a follower whose leader does not answer takes the lock and sends its ops', async () => {
+    localStorage.setItem('rooster.cacheOwner', userId);
+    const outbox = createMemoryOutbox();
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const { transport, sent } = counting(server);
+    const locks = fakeLocks();
+    const net = bus();
+    const pwa = net.join();
+    const tab = net.join();
+    const a = await bootTab({ outbox, transport, channel: pwa.channel, locks });
+    await vi.waitFor(() => expect(useSyncStore.getState().leader).toBe(true));
+    const b = await bootTab({ outbox, transport, channel: tab.channel, locks });
+
+    // The leader goes to the background and is frozen: it holds the lock, hears nothing.
+    pwa.freeze();
+    const [op] = b.engine.pipeline.enqueue(
+      orgId,
+      [listOps.createTask({ id: 'n1', title: 'From the front', groupId: todayOf(b.engine) })],
+      { userId },
+    );
+    await vi.waitFor(() => expect(b.engine.pipeline.pending).toBe(0));
+    expect(server.state(orgId).tasks.n1?.title).toBe('From the front');
+    expect(sent).toEqual([op?.opId]);
+    expect(locks.holders()).toBe(1);
+    await vi.waitFor(() => expect(outbox.records.size).toBe(0));
+
+    // Thawed, the old leader hears it lost the lock, catches up and does not send again.
+    pwa.thaw();
+    await vi.waitFor(() => expect(a.engine.pipeline.pending).toBe(0));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(sent).toEqual([op?.opId]);
+  });
+
+  test('a follower whose leader answers keeps following, and drops ops settled meanwhile', async () => {
+    localStorage.setItem('rooster.cacheOwner', userId);
+    const outbox = createMemoryOutbox();
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const { transport, sent } = counting(server);
+    const locks = fakeLocks();
+    const net = bus();
+    const pwa = net.join();
+    const tab = net.join();
+    const a = await bootTab({ outbox, transport, channel: pwa.channel, locks });
+    await vi.waitFor(() => expect(useSyncStore.getState().leader).toBe(true));
+    const b = await bootTab({ outbox, transport, channel: tab.channel, locks });
+    // The confirmation never reaches the follower (it was starting, or frozen and discarded).
+    tab.dropWhen((m) => m.type === 'applied');
+
+    b.engine.pipeline.enqueue(
+      orgId,
+      [listOps.createTask({ id: 'n1', title: 'Confirmed unseen', groupId: todayOf(b.engine) })],
+      { userId },
+    );
+    await vi.waitFor(() => expect(server.state(orgId).tasks.n1).toBeDefined());
+    await vi.waitFor(() => expect(outbox.records.size).toBe(0));
+    // The stale mirror is corrected against the outbox, without a takeover or a resend.
+    await vi.waitFor(() => expect(b.engine.pipeline.pending).toBe(0));
+    expect(sent).toHaveLength(1);
+    expect(a.engine.pipeline.pending).toBe(0);
+    await vi.waitFor(() =>
+      expect(
+        tasksInGroup(b.engine.pipeline.view(orgId) as ListState, todayOf(b.engine)).map(
+          (t) => t.title,
+        ),
+      ).toContain('Confirmed unseen'),
+    );
+  });
+
+  test('a confirmation posted while a tab is still starting is not lost', async () => {
+    localStorage.setItem('rooster.cacheOwner', userId);
+    const outbox = createMemoryOutbox();
+    const net = bus();
+    const leader = net.join();
+    const tab = net.join();
+    const locks = fakeLocks();
+    electLeader(() => {}, locks);
+    const op = { ...listOps.deleteTask('x'), opId: 'op-1', editTime: 1, clientId: 'c' };
+    await outbox.put([{ op, orgId, ctx: { userId }, userId }]);
+    // The leader confirms the op right after this tab read the outbox, before it listens.
+    const load = outbox.load.bind(outbox);
+    let first = true;
+    outbox.load = async () => {
+      const records = await load();
+      if (first) {
+        first = false;
+        await outbox.remove(['op-1']);
+        leader.channel.post({ type: 'applied', opId: 'op-1', response: undefined });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      return records;
+    };
+    const engine = await startSync({
+      queryClient: new QueryClient(),
+      transport: createFixtureTransport({ userId }),
+      outbox,
+      channel: tab.channel,
+      persister: createCachePersister(() => undefined, memoryStorage().storage),
+      eventSource: quietSource,
+      locks,
+      listen: false,
+      leaderWatch: { stallMs: 60_000, answerMs: 60_000 },
+    });
+    engines.push(engine);
+    await vi.waitFor(() => expect(engine.pipeline.pending).toBe(0));
   });
 });

@@ -12,7 +12,7 @@ import { ListPipeline, myListKey, tagsKey } from '../pipeline/pipeline';
 import type { ListTransport } from '../pipeline/transport';
 import type { Me } from '../types';
 import { buildInfo, cacheBuster } from './build-info';
-import { createSyncChannel, type SyncChannel } from './channel';
+import { createSyncChannel, type SyncChannel, type SyncMessage } from './channel';
 import { type EventSourceFactory, EventStream, serverIsNewer } from './events';
 import { electLeader, type Leadership } from './leader';
 import {
@@ -35,6 +35,15 @@ import {
 
 /** 04 §6.2: the outbox is retried at least this often while ops are queued. */
 export const flushIntervalMs = 30_000;
+/**
+ * A visible follower whose queue saw no sign of the leader for this long asks it whether it is
+ * alive (`ping`)...
+ */
+export const leaderStallMs = 2_000;
+/** ...and takes the lock when no answer came within this long (a frozen or hung leader). */
+export const leaderAnswerMs = 2_000;
+/** After the leader answered, the follower looks again this much later. */
+const leaderRecheckMs = 15_000;
 /** Cold start waits at most this long for IndexedDB before rendering without the cache. */
 const restoreTimeoutMs = 3_000;
 /** The signed-in user the persisted cache and outbox belong to. */
@@ -51,6 +60,13 @@ export interface SyncEngineOptions {
   locks?: Parameters<typeof electLeader>[1] | null;
   /** Test seam: skip `window`/`document` listeners. */
   listen?: boolean;
+  /**
+   * Whether every tab reads and writes this same outbox (IndexedDB), so a tab can correct its
+   * mirrored queue against it. Default: true for IndexedDB and for an injected outbox.
+   */
+  sharedOutbox?: boolean;
+  /** Test seam: the leader watch's timings (default `leaderStallMs`, `leaderAnswerMs`). */
+  leaderWatch?: { stallMs?: number; answerMs?: number; recheckMs?: number };
 }
 
 export interface SyncEngine {
@@ -125,6 +141,10 @@ function orgOfQuery(queryKey: readonly unknown[], data: unknown): string | undef
   return typeof queryKey[1] === 'string' ? queryKey[1] : undefined;
 }
 
+function pageVisible(): boolean {
+  return typeof document === 'undefined' || document.visibilityState !== 'hidden';
+}
+
 function withTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
   return Promise.race([
     promise.catch(() => fallback),
@@ -146,8 +166,20 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   onlineManager.setOnline(online());
   useSyncStore.setState({ online: online() });
 
+  const stallMs = options.leaderWatch?.stallMs ?? leaderStallMs;
+  const answerMs = options.leaderWatch?.answerMs ?? leaderAnswerMs;
+  const recheckMs = options.leaderWatch?.recheckMs ?? leaderRecheckMs;
+  const sharedOutbox = options.sharedOutbox ?? (options.outbox !== undefined || hasIndexedDb());
   const outbox = options.outbox ?? (hasIndexedDb() ? createIdbOutbox() : createMemoryOutbox());
   const channel = options.channel ?? createSyncChannel();
+  // Listen before the restore below: a confirmation posted meanwhile would otherwise be lost,
+  // leaving its op queued (and "Syncing…" up) here for good.
+  const early: SyncMessage[] = [];
+  let onMessage: ((message: SyncMessage) => void) | null = null;
+  const unlistenChannel = channel.listen((message) => {
+    if (onMessage) onMessage(message);
+    else early.push(message);
+  });
   const clientId = getClientId();
   /** Set once a fresh `/me` confirmed who is signed in: only then may ops be sent. */
   let userId: string | null = null;
@@ -217,24 +249,115 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   // A confirmation can change the stored base without changing the rendered view.
   const unsubscribePipeline = pipeline.subscribe(scheduleSave);
 
+  /** The outbox is the truth every tab shares: catch up with it (missed messages). */
+  const readOutbox = (): Promise<void> => {
+    const load = () => outbox.load().then(withOwner);
+    if (sharedOutbox) return pipeline.syncWithOutbox(load).catch(() => {});
+    return load()
+      .then((stored) => pipeline.restore(new Map(), stored))
+      .catch(() => {});
+  };
+
+  /** When this follower last heard from the leader (its messages, or an answer to `ping`). */
+  let leaderSeenAt = 0;
+  /*
+   * The leader watch (ADR 0010 amendment): the lock holder may be frozen. Android freezes a
+   * backgrounded tab or installed PWA without releasing its Web Locks, so the instance in front
+   * would mirror its ops forever ("Syncing…") and never send them. A visible follower with
+   * queued ops that hears nothing from the leader pings it, and takes the lock when no answer
+   * comes. Hidden tabs never take over: they may be frozen next.
+   */
+  let watchTimer: ReturnType<typeof setTimeout> | null = null;
+  /** A ping is out: its answer decides, nothing reschedules the watch meanwhile. */
+  let pinging = false;
+  const mayTakeOver = () =>
+    leadership !== null &&
+    !leadership.isLeader() &&
+    userId !== null &&
+    pipeline.pending > 0 &&
+    online() &&
+    pageVisible();
+  function stopWatching() {
+    if (watchTimer) clearTimeout(watchTimer);
+    watchTimer = null;
+    pinging = false;
+  }
+  /**
+   * Looks at the leader after `delay`, unless a look is already planned. With 0 (foreground,
+   * "Retry") it asks at once, replacing a later look.
+   */
+  function watchLeader(delay: number) {
+    if (pinging || !mayTakeOver()) return;
+    if (watchTimer !== null) {
+      if (delay > 0) return;
+      clearTimeout(watchTimer);
+    }
+    const since = Date.now();
+    watchTimer = setTimeout(() => {
+      watchTimer = null;
+      if (!mayTakeOver()) return;
+      // The leader is getting on with it: look again later.
+      if (delay > 0 && leaderSeenAt >= since) watchLeader(stallMs);
+      else pingLeader();
+    }, delay);
+  }
+  function pingLeader() {
+    const askedAt = Date.now();
+    pinging = true;
+    channel.post({ type: 'ping' });
+    watchTimer = setTimeout(() => {
+      watchTimer = null;
+      pinging = false;
+      if (!mayTakeOver()) return;
+      if (leaderSeenAt >= askedAt) {
+        // Alive. What is stale may be this tab's mirror (a confirmation it missed).
+        watchLeader(recheckMs);
+        void readOutbox();
+        return;
+      }
+      leadership?.steal();
+    }, answerMs);
+  }
   // Leader election (04 §6.2). A new leader re-reads the outbox: the previous one may have
-  // closed with ops it had not announced yet.
+  // closed with ops it had not announced yet, or confirmed some this tab never heard of.
   leadership = electLeader(
-    () => {
-      useSyncStore.setState({ leader: true });
-      void outbox
-        .load()
-        .then((stored) => pipeline.restore(new Map(), withOwner(stored)))
-        .catch(() => {})
-        .finally(() => pipeline.resume());
+    {
+      onLeader: () => {
+        stopWatching();
+        useSyncStore.setState({ leader: true });
+        void readOutbox().finally(() => pipeline.resume());
+      },
+      onLost: () => {
+        useSyncStore.setState({ leader: false, syncing: false });
+        watchLeader(stallMs);
+      },
     },
     options.locks === null ? undefined : (options.locks ?? undefined),
   );
 
-  const unlistenChannel = channel.listen((message) => {
-    if (message.type === 'cleared') void onClearedElsewhere();
-    else pipeline.receive(message);
-  });
+  onMessage = (message) => {
+    switch (message.type) {
+      case 'cleared':
+        void onClearedElsewhere();
+        return;
+      case 'status':
+      case 'applied':
+      case 'dropped':
+      case 'remap':
+        leaderSeenAt = Date.now();
+        break;
+      case 'ping':
+        // The asking tab may know ops this one missed; reading the outbox picks them up.
+        if (leadership?.isLeader()) void readOutbox().finally(() => pipeline.resume());
+        break;
+      default:
+        break;
+    }
+    pipeline.receive(message);
+  };
+  for (const message of early.splice(0)) onMessage(message);
+
+  const unsubscribeWatch = pipeline.subscribe(() => watchLeader(stallMs));
 
   let updateCheck: () => void = () => {};
   let firstOpen = true;
@@ -270,6 +393,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     pipeline.retainUser();
     pruneOrgs(me);
     pipeline.resume();
+    watchLeader(stallMs);
     if (started) return;
     started = true;
     void requestPersistentStorage();
@@ -394,17 +518,23 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     useSyncStore.setState({ online: true });
     pipeline.retryNow();
     events.reconnectNow();
+    watchLeader(stallMs);
   };
   const onOffline = () => useSyncStore.setState({ online: false });
   const onVisibility = () => {
     const hidden = document.visibilityState === 'hidden';
     events.visibilityChanged(hidden);
     if (hidden) void save();
-    else pipeline.retryNow();
+    else {
+      pipeline.retryNow();
+      watchLeader(0);
+    }
   };
   const onPageHide = () => void save();
   const interval = setInterval(() => {
-    if (pipeline.pending > 0) pipeline.resume();
+    if (pipeline.pending === 0) return;
+    pipeline.resume();
+    watchLeader(stallMs);
   }, flushIntervalMs);
   if (listen) {
     window.addEventListener('online', onOnline);
@@ -422,6 +552,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     syncNow: () => {
       pipeline.retryNow();
       events.reconnectNow();
+      watchLeader(0);
     },
     clear: async ({ final = false } = {}) => {
       if (final) {
@@ -440,9 +571,11 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
       saving = false;
       if (saveTimer) clearTimeout(saveTimer);
       clearInterval(interval);
+      stopWatching();
       events.stop();
       unsubscribeCache();
       unsubscribePipeline();
+      unsubscribeWatch();
       unlistenChannel();
       leadership?.release();
       if (listen) {

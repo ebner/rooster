@@ -13,8 +13,11 @@ export interface ListTransport {
   fetchTask: (taskId: string) => Promise<TaskDetail>;
   /** GET /orgs/:orgId/tags (P3). */
   fetchTags: (orgId: string) => Promise<Tag[]>;
-  /** Sends one op; resolves with the response body (undefined for 204), throws `ApiError`. */
-  send: (op: ListOp, orgId: string) => Promise<unknown>;
+  /**
+   * Sends one op; resolves with the response body (undefined for 204), throws `ApiError`.
+   * The pipeline aborts `signal` when the request takes too long.
+   */
+  send: (op: ListOp, orgId: string, signal?: AbortSignal) => Promise<unknown>;
 }
 
 /** An `ApiError` for 429, carrying `Retry-After`. */

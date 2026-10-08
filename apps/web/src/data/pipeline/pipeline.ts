@@ -59,10 +59,27 @@ export interface PipelineOptions {
    * Default: no stamping and no check.
    */
   user?: () => string | null;
+  /** A request still unanswered after this long is aborted and retried. Default 20 s. */
+  sendTimeoutMs?: number;
 }
 
 /** How long an offline flusher sleeps before looking again (the `online` event wakes it). */
 const offlineRecheckMs = 30_000;
+/**
+ * 04 §6.2 retries need a failure to retry: a request whose answer never comes (a connection
+ * that died while the phone slept or switched networks) would hold the queue forever.
+ */
+export const sendTimeoutMs = 20_000;
+/** A request the server did not answer in time (`sendTimeoutMs`): retried like a network error. */
+export class SendTimeoutError extends Error {
+  constructor(ms: number) {
+    super(`no answer within ${ms} ms`);
+    this.name = 'SendTimeoutError';
+  }
+}
+
+/** How many settled op ids a tab remembers, so a late copy of a settled op is not queued again. */
+const settledMemory = 1_000;
 
 /** The op that created a client tag, and what the server says it really is. */
 interface TagRemap {
@@ -226,6 +243,11 @@ export class ListPipeline {
   private generation = 0;
   private readonly user: (() => string | null) | undefined;
   private lastError: string | null = null;
+  private readonly sendTimeout: number;
+  /** Queued ops known to be in the shared outbox (see `syncWithOutbox`). */
+  private readonly stored = new Set<string>();
+  /** Recently confirmed, dropped or discarded ops: never queued again. */
+  private readonly settled = new Set<string>();
 
   constructor(options: PipelineOptions) {
     this.transport = options.transport;
@@ -242,6 +264,7 @@ export class ListPipeline {
     this.isOnline = options.isOnline ?? (() => globalThis.navigator?.onLine ?? true);
     this.afterPaint = options.afterPaint ?? (() => Promise.resolve());
     this.user = options.user;
+    this.sendTimeout = options.sendTimeoutMs ?? sendTimeoutMs;
   }
 
   /** Whether a record belongs to someone other than the current user (never sent or shown). */
@@ -289,8 +312,15 @@ export class ListPipeline {
     const known = new Set(this.queue.map((item) => item.op.opId));
     const foreign: string[] = [];
     for (const record of records) {
-      if (this.foreign(record)) foreign.push(record.op.opId);
-      else if (!known.has(record.op.opId)) this.queue.push(record);
+      const id = record.op.opId;
+      if (this.foreign(record)) {
+        foreign.push(id);
+        continue;
+      }
+      // A copy of an op settled since (the outbox removal may still be on its way).
+      if (this.settled.has(id)) continue;
+      if (!known.has(id)) this.queue.push(record);
+      this.stored.add(id);
     }
     if (foreign.length > 0) this.write(() => this.outbox?.remove(foreign));
     for (const orgId of new Set([...bases.keys(), ...records.map((r) => r.orgId)])) {
@@ -306,6 +336,8 @@ export class ListPipeline {
     this.queue = [];
     this.bases.clear();
     this.confirmed.length = 0;
+    this.stored.clear();
+    this.settled.clear();
     this.failures = 0;
     this.paused = false;
     this.lastError = null;
@@ -341,6 +373,7 @@ export class ListPipeline {
     if (gone.length === 0) return;
     this.queue = this.queue.filter((item) => !match(item));
     const ids = gone.map((item) => item.op.opId);
+    for (const id of ids) this.markSettled(id);
     this.write(() => this.outbox?.remove(ids));
     for (const orgId of new Set(gone.map((item) => item.orgId))) this.render(orgId);
     this.publish();
@@ -393,12 +426,16 @@ export class ListPipeline {
     }
     this.queryClient.setQueryData(myListKey(orgId), view);
     const generation = this.generation;
+    let stored = false;
     this.write(async () => {
       await this.afterPaint();
-      if (generation !== this.generation) return;
-      await this.outbox?.put(items);
+      if (generation !== this.generation || !this.outbox) return;
+      await this.outbox.put(items);
+      stored = true;
+      for (const item of items) if (this.find(item.op.opId)) this.stored.add(item.op.opId);
     }).then(() => {
-      if (generation === this.generation) this.channel?.post({ type: 'enqueued', records: items });
+      if (generation !== this.generation) return;
+      this.channel?.post({ type: 'enqueued', records: items, stored });
     });
     this.publish();
     this.changed();
@@ -427,9 +464,12 @@ export class ListPipeline {
     switch (message.type) {
       case 'enqueued': {
         const known = new Set(this.queue.map((item) => item.op.opId));
-        const fresh = message.records.filter((r) => !known.has(r.op.opId) && !this.foreign(r));
+        const fresh = message.records.filter(
+          (r) => !known.has(r.op.opId) && !this.settled.has(r.op.opId) && !this.foreign(r),
+        );
         if (fresh.length === 0) return;
         this.queue.push(...fresh);
+        if (message.stored !== false) for (const r of fresh) this.stored.add(r.op.opId);
         for (const orgId of new Set(fresh.map((r) => r.orgId))) this.render(orgId);
         this.publish();
         this.changed();
@@ -438,7 +478,11 @@ export class ListPipeline {
       }
       case 'applied': {
         const item = this.take(message.opId);
-        if (!item) return;
+        if (!item) {
+          // Not queued here (yet): a late `enqueued` for it must not queue it.
+          this.markSettled(message.opId);
+          return;
+        }
         this.confirm(item, message.response);
         this.publish();
         this.changed();
@@ -463,6 +507,13 @@ export class ListPipeline {
       case 'flush':
         if (this.isLeader()) this.retryNow();
         return;
+      case 'ping':
+        // Only a leader that can send answers: otherwise the asking tab should take over.
+        if (this.isLeader() && this.canSend()) {
+          this.announce();
+          this.resume();
+        }
+        return;
       case 'status':
         if (!this.isLeader()) useSyncStore.setState(message.status);
         return;
@@ -480,7 +531,43 @@ export class ListPipeline {
     const index = this.queue.findIndex((item) => item.op.opId === opId);
     if (index < 0) return undefined;
     const [item] = this.queue.splice(index, 1);
+    this.markSettled(opId);
     return item;
+  }
+
+  private markSettled(opId: string): void {
+    this.stored.delete(opId);
+    this.settled.delete(opId);
+    this.settled.add(opId);
+    if (this.settled.size > settledMemory) {
+      const oldest = this.settled.values().next().value;
+      if (oldest !== undefined) this.settled.delete(oldest);
+    }
+  }
+
+  /**
+   * Brings this tab's queue in line with the shared outbox (04 §6.2), which is the truth all
+   * tabs write to: ops another tab settled while this one missed the message (it was starting,
+   * frozen, or its channel dropped it) leave the queue, and ops it never heard of join it.
+   * Without this a stale mirrored op keeps "Syncing…" up, and blocks app updates, for good.
+   * Only for an outbox shared by every tab (IndexedDB).
+   */
+  async syncWithOutbox(load: () => Promise<readonly OutboxRecord[]>): Promise<void> {
+    await this.persisted;
+    const generation = this.generation;
+    const before = new Set(this.stored);
+    const records = await load();
+    if (generation !== this.generation) return;
+    const present = new Set(records.map((record) => record.op.opId));
+    const gone = this.queue.filter(
+      (item) => before.has(item.op.opId) && !present.has(item.op.opId),
+    );
+    for (const item of gone) this.take(item.op.opId);
+    // Confirmed or dropped elsewhere: which one, and the server state, a refetch tells.
+    for (const orgId of new Set(gone.map((item) => item.orgId))) void this.refetch(orgId);
+    if (gone.length > 0) void this.queryClient.invalidateQueries({ queryKey: ['task'] });
+    this.restore(new Map(), records);
+    this.settleIdle();
   }
 
   /** Writes base + pending ops of an org to the cache (nothing before its first load). */
@@ -556,18 +643,28 @@ export class ListPipeline {
           continue;
         }
         if (!useSyncStore.getState().syncing) this.publish(true);
+        let response: unknown;
         try {
-          const response = await this.transport.send(head.op, head.orgId);
-          // The head may have left meanwhile (reset, another tab's drop); confirm by id.
-          if (this.take(head.op.opId)) {
-            this.failures = 0;
-            this.lastError = null;
-            this.confirm(head, response);
-            this.write(() => this.outbox?.remove([head.op.opId]));
-            this.channel?.post({ type: 'applied', opId: head.op.opId, response });
-          }
+          response = await this.send(head);
         } catch (error) {
           await this.fail(head, error);
+          this.publish();
+          this.changed();
+          continue;
+        }
+        // The head may have left meanwhile (reset, another tab's drop); confirm by id.
+        if (this.take(head.op.opId)) {
+          this.failures = 0;
+          this.lastError = null;
+          this.write(() => this.outbox?.remove([head.op.opId]));
+          this.channel?.post({ type: 'applied', opId: head.op.opId, response });
+          try {
+            this.confirm(head, response);
+          } catch (error) {
+            // The server has the op: a merge bug must not resend it. The refetch shows its state.
+            console.error('rooster: could not merge a confirmation', error);
+            void this.refetch(head.orgId);
+          }
         }
         this.publish();
         this.changed();
@@ -577,6 +674,24 @@ export class ListPipeline {
       this.publish();
       this.settleIdle();
     }
+  }
+
+  /**
+   * One request. Unanswered after `sendTimeout` it is aborted and fails as a transient error,
+   * so the head is retried with the same Idempotency-Key instead of waiting forever.
+   */
+  private send(item: Queued): Promise<unknown> {
+    const controller = new AbortController();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        controller.abort();
+        reject(new SendTimeoutError(this.sendTimeout));
+      }, this.sendTimeout);
+      this.transport
+        .send(item.op, item.orgId, controller.signal)
+        .then(resolve, reject)
+        .finally(() => clearTimeout(timer));
+    });
   }
 
   private settleIdle(): void {
@@ -764,6 +879,15 @@ export class ListPipeline {
         resolve();
       }
       this.wake = done;
+    });
+  }
+
+  /** The leader's answer to a `ping`: its sender state, whether or not it changed. */
+  private announce(): void {
+    const { syncing, failures, lastError, sessionExpired } = useSyncStore.getState();
+    this.channel?.post({
+      type: 'status',
+      status: { syncing, failures, lastError, sessionExpired },
     });
   }
 
