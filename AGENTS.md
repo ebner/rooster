@@ -16,10 +16,11 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - `src/main.ts`: boot (config → db → pre-migration backup → migrate → app → listen → scheduler).
   - `src/app.ts`: the pure `createApp(deps)`, used by tests.
   - `src/config.ts`: zod env schema. **Every env var lives here and in `.env.example`.**
-  - `src/lib/`: errors (problem+json), logger, request id/log, security headers, SPA serving, graceful close.
+  - `src/lib/`: errors (problem+json), logger, request id/log (invite tokens redacted), security headers, SPA serving (never `*.map` or dot-paths), graceful close, `body-limit.ts` (64 KB `/api/auth`, 1 MB `/api/v1`), `client-ip.ts` (right-most `ROOSTER_TRUSTED_PROXY_HOPS` entry), `log-safe-error.ts` (**log errors through `logSafeError`**: SQL parameters are user content).
   - `src/routes/`: one file per resource. Route zod schemas come from `@rooster/core/schemas`, registered in `routes/schemas.ts` with `.openapi('Name')`.
-  - `src/auth/`: the better-auth instance (`auth.ts`), mounting under `/api/auth/*`, actor resolution (`actor.ts`), and signed cookies. better-auth handles **authentication only**; orgs are ours (ADR 0002).
+  - `src/auth/`: the better-auth instance (`auth.ts`), mounting under `/api/auth/*`, actor resolution (`actor.ts`), and signed cookies (`__Host-` prefixed on https). better-auth handles **authentication only**; orgs are ours (ADR 0002). Account linking by email only from email-authority providers (Google, `trustEmail`; ADR 0017).
   - `src/services/`: `OrgService`, `UserService`, `AdminService`, `GroupService`, `TaskService` (incl. subtasks and duplicate), `TagService`, `PlacementService` (the 05 §4.1 invariant), `OrderingService` (all fractional keys are computed server-side), `BackupService`, `SearchService` (FTS5 queries), `ExportService` (JSON/Markdown) and `sign-in-policy.ts` (the allowlist rules). **All authorisation lives here.**
+  - `services/context.ts`: `immediate()` for writes, `readOnly()` (DEFERRED) for read-only service methods.
   - `services/search-index.ts`: `indexTasks(tx, ids)` keeps `task_fts` in step. **Call it in the same transaction from any new write that changes a task's title, description or `deleted_at`** (ADR 0013). Boot rebuilds the index when its row count is off; `POST /admin/search/reindex` rebuilds it on demand.
   - Request middleware covers idempotency (`Idempotency-Key`), edit time (`X-Rooster-Edit-Time`, clamped), client id/name, and the per-user rate limit. ADR 0005 has the list semantics.
   - `src/db/`: client and pragmas, `migrate.ts`, `schema/`, `migrations/` (generated, append-only). Hand-written migrations (FTS, triggers, pragmas only) are created with `pnpm --filter @rooster/server exec drizzle-kit generate --custom --name <name>`, statements separated by `--> statement-breakpoint`; `0004_task_fts.sql` is the example.
@@ -43,9 +44,9 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - **Bundle budget (10 §4, ADR 0016):** UI that appears only on interaction (popovers, the editor, the palette, the better-auth client) is loaded with `lazyWithPreload` (`src/lib/lazy.ts`) and warmed by `InteractionPrefetch`. On the initial route, import constants from `@rooster/core/limits` and i18n helpers from `@rooster/i18n/core`; value imports from `@rooster/core/schemas` or `@rooster/i18n` pull in zod or every catalog. `pnpm bundle:check` fails CI above 450 KB gzip.
   - `src/data/`: **the only place that talks to the API.** TanStack Query hooks over `createRoosterClient()`, query keys in `query-keys.ts`, problem+json mapped to `ApiError` in `errors.ts`, and better-auth client calls in `auth.ts` / `auth-client.ts`. Components take props; route components call `src/data` hooks.
   - `src/routes/_app.tsx`: the signed-in layout. Its `beforeLoad` guard redirects to `/login?redirect=…`.
-  - `src/lib/`: `cn`, i18n (loads only the active locale via `@rooster/i18n/lazy`; `main.tsx` awaits `i18nReady`), `lazy.ts`, platform, and `safe-redirect.ts`. **Every redirect target must go through `safeRedirectPath()`.**
+  - `src/lib/`: `cn`, i18n (loads only the active locale via `@rooster/i18n/lazy`; `main.tsx` awaits `i18nReady`), `lazy.ts`, platform, `safe-redirect.ts`, and `user-storage.ts` (**per-user localStorage keys go through `userStorageKey()`**, swept on sign-out, 401 and user switch). **Every redirect target must go through `safeRedirectPath()`.**
   - `src/data/pipeline/`: the **mutation pipeline**. Every list op goes `enqueue → core reducer on the cache → send (Idempotency-Key, edit time, client id) → merge`. Undo pushes inverse ops through it. Ops are written to the IndexedDB outbox before they are sent; only the leader tab sends.
-  - `src/data/sync/`: offline and realtime (04 §6, P4). `engine.ts` (`startSync`, awaited in `main.tsx` before the first render) restores the persisted query cache (`persist.ts`, idb-keyval key `rooster-cache-v1`; `my-list` is stored as the confirmed base, never the optimistic view) and the outbox (`outbox.ts`), elects the flushing tab (`leader.ts`, Web Locks `rooster-outbox`), mirrors queue/confirmations across tabs (`channel.ts`, `BroadcastChannel('rooster')`) and runs the SSE client (`events.ts`). Sign-out calls `clearLocalData()`. Persisted query roots need `gcTime: Infinity` (a 30-day timer overflows).
+  - `src/data/sync/`: offline and realtime (04 §6, P4). `engine.ts` (`startSync`, awaited in `main.tsx` before the first render) restores the persisted query cache (`persist.ts`, idb-keyval key `rooster-cache-v1`; `my-list` is stored as the confirmed base, never the optimistic view) and the outbox (`outbox.ts`), elects the flushing tab (`leader.ts`, Web Locks `rooster-outbox`), mirrors queue/confirmations across tabs (`channel.ts`, `BroadcastChannel('rooster')`) and runs the SSE client (`events.ts`). Sign-out calls `clearLocalData()`. Persisted query roots need `gcTime: Infinity` (a 30-day timer overflows). Outbox records carry their `userId`; the persisted cache is dropped when its last confirmed `/me` is older than 30 days; every fresh `/me` prunes orgs the user left (ADR 0017).
   - `src/sw.ts`: the service worker (vite-plugin-pwa `injectManifest`, own `tsconfig.sw.json`). Off in `vite` dev unless `VITE_PWA_DEV=1`. `src/features/pwa/`: registration and the update gate (FR-PWA-6), install prompts, the iOS tip sheet, and `SyncStatus` (the header sync pill; every header uses it).
   - `src/state/`: Zustand stores for list, undo and sync.
   - `src/keymap.ts`: **the single keymap registry** (02 §6). `useKeymap()` is mounted once at the root. The `?` cheat sheet is generated from it.
@@ -97,7 +98,7 @@ pnpm ci                        # full pipeline (scripts/ci.sh); add --with-docke
 node apps/web/scripts/render-icons.mjs   # regenerate PNG icons from the SVG mark
 ```
 **Local dev:**
-1. Copy `apps/server/.env.example` to `apps/server/.env` and uncomment the "Local development with the mock IdP" block.
+1. Copy `apps/server/.env.example` to `apps/server/.env`, set `ROOSTER_AUTH_SECRET` (`openssl rand -base64 48`; weak secrets exit 78) and uncomment the "Local development with the mock IdP" block.
 2. Run `pnpm dev:idp`, then `pnpm dev`, then open http://localhost:5173 and use "Dev login".
 3. To switch the identity for the next sign-in, call `curl -XPOST localhost:9400/__next-user -d '{"email":"bob@example.com"}'`.
 
@@ -150,6 +151,7 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
 
 ## Status
 - **Current phase:** Phase 6 (collaboration) is next. P8 (CLI, PATs) may start in parallel (09).
+- **Latest release:** 1.0.1 (security hardening, ADR 0017).
 - **Last completed phase:** Phase 5, smart views, search, palette, export and Trash (2026-10-06), released as **v1.0.0** (local tag `v1.0.0`). AC-5.1 to AC-5.3 pass on desktop and the phone projects. ADRs 0012 to 0016 record the decisions; ADR 0016 relaxed the initial-bundle budget to 450 KB.
 - **Backlog:** `docs/spec/09-phases.md` §Backlog. Do not build an item unless it is scheduled.
 - **E2E:** never run two Playwright suites at once; they share ports 9400, 3181, 5181 and 3182.

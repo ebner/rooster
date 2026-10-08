@@ -6,6 +6,29 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-08
+
+A security-hardening release after an audit of 1.0.0. No cross-org or cross-user data path was found; the changes below close weaker spots (ADR 0017).
+
+### Upgrade notes
+- **Everyone signs in once more** on https: the session cookie is now `__Host-rooster.session`.
+- **Generic OIDC providers no longer link to existing accounts by email** unless they have `"trustEmail": true` in `ROOSTER_OIDC_PROVIDERS` (Google is always trusted). Only set it for providers where users cannot change their own email. See `docs/oidc-setup.md`.
+- **New:** `ROOSTER_TRUSTED_PROXY_HOPS` (default 1). Your reverse proxy must not pass a client-supplied `X-Forwarded-For` on: Apache `RequestHeader unset X-Forwarded-For early`, nginx `$remote_addr` (08 §5, `docker/proxy/apache.conf`).
+- The server refuses weak `ROOSTER_AUTH_SECRET` values (containing `change-me`, or fewer than 10 distinct characters) with exit code 78.
+- Existing data files keep their permissions: run `chmod 700 data data/backups` and `chmod 600 data/*.db*` once on the host.
+
+### Security
+- Sign-in: account linking only from email-authority providers; single-use invites accepted atomically; `__Host-` cookies; weak secrets rejected.
+- Requests: client IP from the right-most trusted proxy hop (the sign-in rate limit can no longer be dodged); body limits of 64 KB on `/api/auth` and 1 MB on `/api/v1`; the CSRF check is skipped only for token-authenticated clients.
+- Realtime: at most 4 live-sync streams per session and 12 per user; a member's client id is no longer sent to other members.
+- Data: stored request replays are forgotten when someone loses access to an org; filtered search is capped; expired sign-in state is purged; data files are created private (umask 0077).
+- Logs: no invite tokens, search text or SQL parameter values.
+- Web: sign-out also clears per-user local storage (palette recents); orgs you were removed from disappear from the cache, offline search and the outbox; queued edits are bound to their user; caches unconfirmed for 30 days are not restored; description links allow only http, https, mailto and relative URLs; source maps and the build manifest are no longer served.
+- Supply chain: CI actions pinned to commit SHAs, base images pinned by digest, Dependabot for both.
+
+### Migrations
+- None.
+
 ## [1.0.0] - 2026-10-06
 
 The first switch-over release: rooster is ready for daily use (D-18).
@@ -29,5 +52,6 @@ The first switch-over release: rooster is ready for daily use (D-18).
 ### Not included
 - Move tasks over from another tool by pasting a multi-line list into a group.
 
-[Unreleased]: https://github.com/201works/rooster/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/201works/rooster/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/201works/rooster/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/201works/rooster/releases/tag/v1.0.0
