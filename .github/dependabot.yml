@@ -1,11 +1,18 @@
 # Keeps the SHA-pinned actions and digest-pinned base images current (ADR 0017).
+# Minor and patch only: major upgrades (e.g. a non-LTS Node line) are a deliberate decision.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directory: /docker
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
