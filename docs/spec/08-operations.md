@@ -49,10 +49,11 @@ On boot, the server:
 | `ROOSTER_ALLOWED_EMAILS` | | — | Comma-separated extra allowed emails (in addition to the admin UI allowlist). |
 | `ROOSTER_ALLOWED_DOMAINS` | | — | e.g. `northwind.example`. |
 | `ROOSTER_GOOGLE_CLIENT_ID` / `_SECRET` | one provider required | — | Google OAuth client. |
-| `ROOSTER_OIDC_PROVIDERS` | | `[]` | JSON array: `[{"id":"authentik","name":"Company SSO","discoveryUrl":"https://sso.example.com/application/o/rooster/.well-known/openid-configuration","clientId":"…","clientSecret":"…","scopes":["openid","email","profile"]}]` |
+| `ROOSTER_OIDC_PROVIDERS` | | `[]` | JSON array: `[{"id":"authentik","name":"Company SSO","discoveryUrl":"https://sso.example.com/application/o/rooster/.well-known/openid-configuration","clientId":"…","clientSecret":"…","scopes":["openid","email","profile"],"trustEmail":false}]`. `trustEmail` (default false) allows linking to an existing account by verified email; see `docs/oidc-setup.md`. |
 | `ROOSTER_DATA_DIR` | | `/data` | |
 | `PORT` | | `3000` | |
 | `ROOSTER_TRUST_PROXY` | | `false` | Honour `X-Forwarded-For` and `X-Forwarded-Proto`. Set this behind a reverse proxy. |
+| `ROOSTER_TRUSTED_PROXY_HOPS` | | `1` | With `ROOSTER_TRUST_PROXY`: the client IP is this many entries from the right of `X-Forwarded-For` (one per trusted proxy). |
 | `ROOSTER_LOG_LEVEL` | | `info` | |
 | `ROOSTER_SMTP_URL` | | — | e.g. `smtps://user:pass@smtp.example.com:465`. Enables email features. |
 | `ROOSTER_MAIL_FROM` | with SMTP | — | `Rooster <rooster@example.com>` |
@@ -90,6 +91,10 @@ An optional overlay, `compose.litestream.yaml`, adds a Litestream 0.5 sidecar th
 
 **SSE must not be buffered**, and its idle timeout must be ≥ 60 s.
 
+**Client IP:** the proxy must not pass on a client-supplied `X-Forwarded-For` chain. rooster takes the right-most `ROOSTER_TRUSTED_PROXY_HOPS` entry (default 1) as the client address for rate limits and the session list (ADR 0017). nginx: `$remote_addr`, not `$proxy_add_x_forwarded_for`. Apache: `RequestHeader unset X-Forwarded-For early`. Caddy ignores the incoming header unless `trusted_proxies` is set.
+
+**Request bodies:** rooster enforces its own limits (64 KB for `/api/auth`, 1 MB for `/api/v1`), so the proxy limit only needs to fit future uploads.
+
 **Caddy**
 ```
 rooster.example.com {
@@ -103,7 +108,7 @@ Caddy streams `text/event-stream` correctly by default.
 location / {
   proxy_pass http://127.0.0.1:3000;
   proxy_set_header Host $host;
-  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-For $remote_addr;
   proxy_set_header X-Forwarded-Proto $scheme;
   client_max_body_size 30m;
 }
@@ -117,6 +122,8 @@ location /api/v1/events {
 }
 ```
 The server also sends the `X-Accel-Buffering: no` header on the SSE route.
+
+**Apache httpd**: see `docker/proxy/apache.conf` (`flushpackets=on` and `no-gzip` for `/api/v1/events`).
 
 **Traefik**: labels for a router and service on port 3000. No special SSE config is needed. Raise `respondingTimeouts` if they have been customised.
 

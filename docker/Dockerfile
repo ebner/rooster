@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1.7
 # rooster: single-container image (see docs/spec/08-operations.md §1)
 
-FROM node:24-bookworm-slim AS base
+# Base images are pinned by digest (Dependabot bumps them; ADR 0017).
+FROM node:24-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS base
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0
@@ -40,7 +41,7 @@ RUN mkdir -p /out /out-data \
  && rm -rf /out/node_modules/better-sqlite3/deps /out/node_modules/better-sqlite3/src
 
 # ---- runtime ----
-FROM gcr.io/distroless/nodejs24-debian12:nonroot AS runtime
+FROM gcr.io/distroless/nodejs24-debian12:nonroot@sha256:14d42e2511532589a7c7e01a753667a74fcc96266e137e8125006b87b0c32d0a AS runtime
 ARG ROOSTER_VERSION=1.0.0
 ARG ROOSTER_GIT_SHA=dev
 LABEL org.opencontainers.image.title="rooster" \

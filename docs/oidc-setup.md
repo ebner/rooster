@@ -8,6 +8,7 @@ Who may sign in is decided by rooster, not by the provider:
 - `ROOSTER_ALLOWED_EMAILS` and `ROOSTER_ALLOWED_DOMAINS` add more people, as does the allowlist in Admin → Sign-in.
 - Anyone with a valid org invite may sign in.
 - The provider must report `email_verified: true`. Unverified emails are rejected.
+- **Linking by email is restricted.** When someone signs in with a provider identity that rooster has not seen, but whose email belongs to an existing account, the identity is attached to that account *only* if the provider is trusted for email: Google always is, a generic provider only with `"trustEmail": true`. Otherwise the sign-in is refused (`account_link_blocked`). Set `trustEmail` only for providers where users **cannot change their own email address** and every `email_verified: true` is real; anyone who can set an arbitrary verified email there could otherwise sign in as that person here.
 
 The redirect (callback) URI always has the form:
 
@@ -44,6 +45,7 @@ ROOSTER_GOOGLE_CLIENT_SECRET=GOCSPX-…
 | `discoveryUrl` | The provider's `/.well-known/openid-configuration` URL. |
 | `clientId`, `clientSecret` | From the provider (a confidential client). |
 | `scopes` | Optional. Default `["openid","email","profile"]`. |
+| `trustEmail` | Optional, default `false`. Lets an identity from this provider attach to an existing rooster account with the same verified email (see above). |
 
 PKCE is always used, and ID tokens are verified. The discovery document is fetched at boot, so the provider must be reachable when rooster starts.
 
@@ -57,7 +59,7 @@ To keep the secret out of the environment, write the JSON to a file and set `ROO
 
 1. **Applications → Providers → Create → OAuth2/OpenID Provider.** Client type *Confidential*.
 2. Redirect URI (strict): `https://rooster.example.com/api/auth/callback/authentik`.
-3. Scopes: the default `openid`, `email` and `profile` mappings. Make sure the email is marked verified (Authentik's default `email` mapping sends `email_verified: true` only if you configure it; otherwise add a scope mapping that returns `{"email": request.user.email, "email_verified": True}`).
+3. Scopes: the default `openid`, `email` and `profile` mappings. rooster requires `email_verified: true`. **Do not** add a mapping that returns `email_verified: True` unconditionally: Authentik users can usually edit their own email, so such a mapping lets anyone claim any address. Assert it only for addresses Authentik has actually verified (an enrollment or email-verification stage), and disable self-service email changes (user settings flow) if you set `trustEmail`.
 4. Create an **Application** using the provider, with the slug `rooster`.
 5. Discovery URL: `https://sso.example.com/application/o/rooster/.well-known/openid-configuration`.
 
