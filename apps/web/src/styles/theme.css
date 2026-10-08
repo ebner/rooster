@@ -349,6 +349,24 @@
 }
 
 /*
+ * The phone frame (02 §13.1) is pinned to the viewport and only its scrollers move: the
+ * document can never scroll or overscroll, so nothing outside the frame (a portal, a layer
+ * below the fold, a `dvh` that disagrees with the standalone window) can push or scroll the
+ * header and the bottom nav, and no gesture reaches the browser's own pull to refresh or
+ * stretch. The list does not bounce either: its sticky header would bounce with it, and pull
+ * to refresh is ours.
+ */
+[data-frame="mobile"],
+[data-frame="mobile"] body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+[data-frame="mobile"] [data-list-column] {
+  overscroll-behavior-y: none;
+}
+
+/*
  * Toasts sit above the phone's bottom nav (02 §14), which only the mobile frame renders (it
  * marks <html>; a `:has()` here would be re-checked on every list mutation, AC-2.12).
  */

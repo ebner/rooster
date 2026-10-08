@@ -112,8 +112,15 @@ export function AppShell({ renderSidebar, children, navKey, mobile }: AppShellPr
   if (phoneFrame && mobile) {
     return (
       <ShellContext.Provider value={context}>
-        <div className="flex h-dvh flex-col overflow-hidden bg-bg-app" data-shell="mobile">
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">{children}</main>
+        {/*
+         * Fixed to the layout viewport rather than `h-dvh` in the flow: the nav stays flush with
+         * the bottom even when `dvh` and the standalone window disagree, and a document scroll
+         * cannot move the frame (the document itself is locked, theme.css).
+         */}
+        <div className="fixed inset-0 flex flex-col overflow-hidden bg-bg-app" data-shell="mobile">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-y-none">
+            {children}
+          </main>
           {/* The keyboard and selection mode's bulk bar take the nav's place (02 §13). */}
           {!editingFocus && !selectionMode && mobile.nav}
           <OrgSwitcherSheet

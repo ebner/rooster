@@ -3,7 +3,9 @@ import { e2eEnv } from './env';
 import { randomClientIp } from './test';
 
 let counter = 0;
-const run = Date.now().toString(36);
+// Workers of different projects start in the same millisecond: the random part keeps their
+// users apart.
+const run = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
 /**
  * A fresh, unique address per call, so tests never share users and every sign-in is
