@@ -6,6 +6,19 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-09
+
+### Fixed
+- **"Syncing…" never cleared on phones** when the installed app and a Chrome tab were open at the same time: Android froze the background tab while it held the outbox, so edits in the app were never sent. A visible app now takes over sending after about 4 s; requests that get no answer time out after 20 s and are retried safely (ADR 0019).
+- **Drag and drop:** the dragged row now stays exactly under the pointer or finger (it was drawn up to several hundred pixels too high, more when scrolled), the drop line follows auto-scroll, and dropping an item right before or after itself is no longer offered (ADR 0018).
+- **Phone layout:** the bottom navigation and header stay put; the page itself can no longer scroll or bounce, including after pull-to-refresh (ADR 0020). The add button (FAB) no longer overlaps the bottom navigation and sits above toasts.
+
+### Added
+- **Update prompt:** besides the "New version available · Reload" toast, every header shows an "Update" chip until you reload; the app also checks for a new version when it comes back to the foreground, works without a service worker, and never reloads another tab while you're typing (ADR 0021).
+
+### Migrations
+- None.
+
 ## [1.0.1] - 2026-10-08
 
 A security-hardening release after an audit of 1.0.0. No cross-org or cross-user data path was found; the changes below close weaker spots (ADR 0017).
@@ -52,6 +65,7 @@ The first switch-over release: rooster is ready for daily use (D-18).
 ### Not included
 - Move tasks over from another tool by pasting a multi-line list into a group.
 
-[Unreleased]: https://github.com/201works/rooster/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/201works/rooster/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/201works/rooster/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/201works/rooster/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/201works/rooster/releases/tag/v1.0.0
