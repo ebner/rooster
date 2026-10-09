@@ -359,6 +359,7 @@
       "verbTasks": "lägga till och ändra uppgifter",
       "verbChanges": "göra ändringar",
       "groupPath": "{org} › {group}",
+      "noGroupsYet": "de grupper du väljer i {org} (inga än)",
       "groupsIn": "{count, plural, one {# grupp} other {# grupper}} i {org}",
       "unknownOrg": "en organisation du har lämnat",
       "removedGroup": "en borttagen grupp"

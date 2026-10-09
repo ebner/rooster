@@ -359,6 +359,7 @@
       "verbTasks": "add and change tasks",
       "verbChanges": "make changes",
       "groupPath": "{org} › {group}",
+      "noGroupsYet": "the groups you choose in {org} (none yet)",
       "groupsIn": "{count, plural, one {# group} other {# groups}} in {org}",
       "unknownOrg": "an organisation you left",
       "removedGroup": "a deleted group"

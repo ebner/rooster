@@ -59,7 +59,10 @@ function groupName(
   return group.isInbox ? t('access.inbox') : group.name;
 }
 
-/** "Acme › Prio", or "2 groups in Acme" while the groups are still loading. */
+/**
+ * "Acme › Prio", "2 groups in Acme" while the groups are still loading, or "the groups you
+ * choose in Acme (none yet)" while the editor's list is still empty.
+ */
 function groupPhrases(
   orgs: readonly GrantOrgOption[],
   orgId: string,
@@ -68,6 +71,7 @@ function groupPhrases(
 ): string[] {
   const org = orgs.find((o) => o.id === orgId);
   const name = orgName(orgs, orgId, t);
+  if (ids.length === 0) return [t('access.summary.noGroupsYet', { org: name })];
   const names = ids.map((id) => groupName(org, id, t));
   if (names.some((n) => n === undefined)) {
     return [t('access.summary.groupsIn', { count: ids.length, org: name })];
