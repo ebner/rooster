@@ -13,6 +13,7 @@ import { QuickDateSheet } from '../dates/quick-date-sheet';
 import { Group, Section, Specimen } from '../dev-ui/layout';
 import { GroupSheet } from '../list/group-sheet';
 import { SheetHeader } from '../pane/sheet-header';
+import { SettingsIndex } from '../settings/settings-index';
 import { TagSheet } from '../tags/tag-sheet';
 import { fixtureMe } from './fixtures';
 import { MobileHeader, OrgSwitcherSheet } from './mobile-header';
@@ -77,6 +78,7 @@ function SwipeSpecimen({
 export function MobileKitchenSection() {
   const { t, i18n } = useTranslation('mobile');
   const { t: tList } = useTranslation('list');
+  const { t: tSettings } = useTranslation('settings');
   const ctx = sampleDateContext(i18n.language === 'sv' ? 'sv' : 'en');
   const orgs = fixtureMe.orgs;
   const personal = orgs[0] ?? null;
@@ -136,6 +138,23 @@ export function MobileKitchenSection() {
             org={personal}
             onOpenOrgs={noop}
             syncPill={<SyncPill state="syncing" />}
+            menu={<MenuItem onAction={noop}>{t('nav.settings')}</MenuItem>}
+          />
+        </Phone>
+      </Group>
+      <Group title={t('dev.settings')}>
+        <Phone>
+          <MobileHeader isStatic title={tSettings('title')} syncPill={null} />
+          <div className="px-3 pb-4">
+            <SettingsIndex />
+          </div>
+        </Phone>
+        <Phone>
+          <MobileHeader
+            isStatic
+            title={tSettings('nav.notifications')}
+            back={{ href: '#mobile', label: tSettings('title') }}
+            syncPill={null}
             menu={<MenuItem onAction={noop}>{t('nav.settings')}</MenuItem>}
           />
         </Phone>

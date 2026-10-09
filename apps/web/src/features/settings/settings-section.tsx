@@ -8,6 +8,11 @@ export interface SettingsSectionProps {
   /** Right-aligned header content, e.g. a primary action. */
   actions?: ReactNode;
   tone?: 'default' | 'danger';
+  /**
+   * The title names the whole page (Profile, Notifications): phones show it in the header
+   * already, so here it is only for screen readers there.
+   */
+  isPageTitle?: boolean;
   children: ReactNode;
   className?: string | undefined;
 }
@@ -19,6 +24,7 @@ export function SettingsSection({
   description,
   actions,
   tone = 'default',
+  isPageTitle = false,
   children,
   className,
 }: SettingsSectionProps) {
@@ -31,7 +37,14 @@ export function SettingsSection({
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-1">
-          <h2 id={titleId} className={cn('text-lg', tone === 'danger' && 'text-text-danger')}>
+          <h2
+            id={titleId}
+            className={cn(
+              'text-lg',
+              tone === 'danger' && 'text-text-danger',
+              isPageTitle && 'max-tablet:sr-only',
+            )}
+          >
             {title}
           </h2>
           {description && <div className="text-sm text-text-secondary">{description}</div>}

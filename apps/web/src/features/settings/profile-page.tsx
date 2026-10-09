@@ -34,7 +34,7 @@ export function ProfilePage({ user, onChange, onLocaleChange }: ProfilePageProps
 
   return (
     <div className="flex flex-col gap-12">
-      <SettingsSection title={t('profile.title')}>
+      <SettingsSection title={t('profile.title')} isPageTitle>
         <div className="flex items-center gap-4">
           <Avatar
             id={user.id}

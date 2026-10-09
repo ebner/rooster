@@ -46,6 +46,7 @@
   },
   "header": {
     "more": "More",
+    "backTo": "Back to {title}",
     "hideCompleted": "Hide completed"
   },
   "views": {
@@ -74,6 +75,7 @@
     "fab": "Floating action button",
     "swipe": "Swipe reveals",
     "accessory": "Accessory bar",
+    "settings": "Settings: index and a section",
     "sheetHeader": "Detail sheet header",
     "sheets": "Bottom sheets"
   }

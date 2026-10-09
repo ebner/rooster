@@ -208,6 +208,10 @@ export interface ViewHeaderProps {
         actions?: ReactNode;
         menu?: ReactNode;
         views?: readonly ViewTab[];
+        /** A drilled-in screen: "‹ label" back to `href` (Settings → a section). */
+        back?: { href: string; label: string };
+        /** The phone title when it differs from `title`, e.g. the section drilled into. */
+        title?: string;
       }
     | undefined;
 }
@@ -219,12 +223,13 @@ export function ViewHeader({ title, context, actions, mobile }: ViewHeaderProps)
   if (isMobile && shell?.mobile) {
     return (
       <MobileHeader
-        title={title}
+        title={mobile?.title ?? title}
         context={context}
         org={mobile?.switcher ? shell.mobile.activeOrg : null}
         onOpenOrgs={shell.openOrgs}
         actions={mobile?.actions}
         views={mobile?.views}
+        back={mobile?.back}
         menu={<ShellMenuItems shell={shell.mobile} extra={mobile?.menu} />}
       />
     );

@@ -46,6 +46,7 @@
   },
   "header": {
     "more": "Mer",
+    "backTo": "Tillbaka till {title}",
     "hideCompleted": "Dölj klara"
   },
   "views": {
@@ -74,6 +75,7 @@
     "fab": "Flytande knapp",
     "swipe": "Svepgester",
     "accessory": "Tangentbordsrad",
+    "settings": "Inställningar: index och ett avsnitt",
     "sheetHeader": "Detaljvyns sidhuvud",
     "sheets": "Bottenark"
   }

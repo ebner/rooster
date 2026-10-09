@@ -6,7 +6,14 @@
     "behaviour": "Behaviour",
     "notifications": "Notifications",
     "security": "Security",
-    "data": "Data"
+    "data": "Data",
+    "hint": {
+      "profile": "Name, language, timezone and date format",
+      "behaviour": "Swipe actions on phones",
+      "notifications": "In app, push, email and the daily digest",
+      "security": "Signed-in devices, sign-in and connected apps",
+      "data": "Export and the trash"
+    }
   },
   "profile": {
     "title": "Profile",

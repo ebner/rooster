@@ -6,7 +6,14 @@
     "behaviour": "Beteende",
     "notifications": "Aviseringar",
     "security": "Säkerhet",
-    "data": "Data"
+    "data": "Data",
+    "hint": {
+      "profile": "Namn, språk, tidszon och datumformat",
+      "behaviour": "Svepgester på mobilen",
+      "notifications": "I appen, push, e-post och den dagliga sammanfattningen",
+      "security": "Inloggade enheter, inloggning och anslutna appar",
+      "data": "Export och papperskorgen"
+    }
   },
   "profile": {
     "title": "Profil",

@@ -166,23 +166,3 @@ test('Connected apps on a phone: choosing "Only these groups" keeps the screen i
   expect(state.docScrollTop).toBe(0);
   await expect(page.getByTestId('mobile-header')).toBeInViewport();
 });
-
-test('Settings on a phone: the section strip scrolls inside itself, never the page', async ({
-  page,
-}) => {
-  await signInAs(page, uniqueEmail('settings.strip'));
-  for (const name of ['Profile', 'Data']) {
-    const strip = page.getByRole('navigation', { name: 'Settings sections' });
-    const active = strip.getByRole('link', { name, exact: true });
-    await expect(async () => {
-      await page.goto(`/settings/${name.toLowerCase()}`);
-      await expect(active).toHaveAttribute('aria-current', 'page', { timeout: 2_000 });
-    }).toPass();
-    await expect(active).toBeInViewport({ ratio: 1 });
-    const main = await page.evaluate(() => {
-      const el = document.querySelector('main') as HTMLElement;
-      return el.scrollWidth - el.clientWidth;
-    });
-    expect(main, name).toBe(0);
-  }
-});

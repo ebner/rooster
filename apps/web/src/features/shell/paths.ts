@@ -18,6 +18,8 @@ export const paths = {
   task: (slug: string, taskId: string) => `/o/${slug}/t/${taskId}`,
   orgSettings: (slug: string) => `/o/${slug}/settings`,
   orgInvites: (slug: string) => `/o/${slug}/settings#invites`,
+  /** Phones: the settings index; tablet and up redirect to the first section. */
+  settingsIndex: '/settings',
   settings: (section: SettingsSection) => `/settings/${section}`,
   admin: '/admin',
   /** The notification inbox (P6, FR-NOT-1): one list across every org. */

@@ -238,7 +238,11 @@ export function NotificationsPage({
 
   return (
     <div className="flex flex-col gap-12">
-      <SettingsSection title={t('notifications.title')} description={t('notifications.body')}>
+      <SettingsSection
+        title={t('notifications.title')}
+        description={t('notifications.body')}
+        isPageTitle
+      >
         {matrix}
       </SettingsSection>
       {delivery && (pushOn || email) && (

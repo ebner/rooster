@@ -1,5 +1,5 @@
-import { ChevronDown, MoreHorizontal, Plus } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { ChevronDown, ChevronLeft, MoreHorizontal, Plus } from 'lucide-react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Button as AriaButton, Link as AriaLink } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import type { CreateOrgInput, Org } from '../../data/types';
@@ -39,6 +39,11 @@ export interface MobileHeaderProps {
   isStatic?: boolean;
   /** Kitchen sink: a fixed sync state instead of the live pill. */
   syncPill?: ReactNode;
+  /**
+   * A drilled-in screen (Settings → a section): "‹ {label}" back to `href` replaces the mark,
+   * the title is centred, and it takes focus when the screen opens.
+   */
+  back?: { href: string; label: string } | undefined;
 }
 
 /**
@@ -56,61 +61,98 @@ export function MobileHeader({
   views,
   isStatic = false,
   syncPill,
+  back,
 }: MobileHeaderProps) {
   const { t } = useTranslation('mobile');
+  const heading = useRef<HTMLHeadingElement>(null);
+  // Drilling in moves focus to the screen's title, as a page load would (02 §15).
+  const backHref = back?.href;
+  useEffect(() => {
+    if (backHref && !isStatic) heading.current?.focus({ preventScroll: true });
+  }, [backHref, isStatic, title]);
+  const trailing = (
+    <>
+      {syncPill ?? <SyncStatus />}
+      {actions}
+      {menu && (
+        <MenuTrigger>
+          <IconButton icon={MoreHorizontal} aria-label={t('header.more')} size="lg" />
+          <MenuPopover placement="bottom end" className="min-w-48">
+            <Menu aria-label={t('header.more')}>{menu}</Menu>
+          </MenuPopover>
+        </MenuTrigger>
+      )}
+    </>
+  );
   return (
     <header
       data-testid="mobile-header"
       className={cn('z-(--z-sticky) bg-bg-app pt-safe', !isStatic && 'sticky top-0')}
     >
-      <div className="flex h-sheet-header items-center gap-1 ps-2 pe-1">
-        {/* 03 §2.10: the mark heads every phone screen; the title or org switcher names it. */}
-        <LogoMark className="mx-1" />
-        {org ? (
-          <>
-            <h1 className="sr-only">{context ? `${title} · ${context}` : title}</h1>
-            <AriaButton
-              {...(onOpenOrgs ? { onPress: onOpenOrgs } : {})}
-              aria-label={t('org.switch', { name: org.name })}
-              data-testid="org-switcher"
+      {back ? (
+        // Equal-width sides keep the title centred on the screen.
+        <div className="flex h-sheet-header items-center gap-1 ps-1 pe-1">
+          <div className="flex min-w-0 flex-1 basis-0">
+            <AriaLink
+              href={back.href}
+              aria-label={t('header.backTo', { title: back.label })}
+              data-testid="header-back"
               className={cn(
-                'flex h-hit-touch min-w-0 cursor-default items-center gap-2 rounded-sm px-2',
+                'flex h-hit-touch min-w-0 cursor-default items-center gap-0.5 rounded-sm pe-2 text-base text-text-secondary',
                 'transition-colors duration-(--dur-fast) pressed:bg-bg-muted',
                 'outline-none focus-ring:outline-2 focus-ring:outline-border-focus',
               )}
             >
-              <Avatar
-                id={org.id}
-                name={org.name}
-                emoji={org.avatarEmoji}
-                color={org.color}
-                shape="square"
-                size={24}
-                decorative
-              />
-              <span className="min-w-0 truncate text-group text-text">{org.name}</span>
-              <ChevronDown
-                className="size-4 shrink-0 text-text-secondary"
-                strokeWidth={iconStrokeWidth}
-                aria-hidden
-              />
-            </AriaButton>
-          </>
-        ) : (
-          <h1 className="min-w-0 truncate px-2 text-lg">{title}</h1>
-        )}
-        <span className="flex-1" />
-        {syncPill ?? <SyncStatus />}
-        {actions}
-        {menu && (
-          <MenuTrigger>
-            <IconButton icon={MoreHorizontal} aria-label={t('header.more')} size="lg" />
-            <MenuPopover placement="bottom end" className="min-w-48">
-              <Menu aria-label={t('header.more')}>{menu}</Menu>
-            </MenuPopover>
-          </MenuTrigger>
-        )}
-      </div>
+              <ChevronLeft className="size-6 shrink-0" strokeWidth={iconStrokeWidth} aria-hidden />
+              <span className="truncate">{back.label}</span>
+            </AriaLink>
+          </div>
+          <h1 ref={heading} tabIndex={-1} className="min-w-0 truncate text-lg outline-none">
+            {title}
+          </h1>
+          <div className="flex flex-1 basis-0 items-center justify-end gap-1">{trailing}</div>
+        </div>
+      ) : (
+        <div className="flex h-sheet-header items-center gap-1 ps-2 pe-1">
+          {/* 03 §2.10: the mark heads every phone screen; the title or org switcher names it. */}
+          <LogoMark className="mx-1" />
+          {org ? (
+            <>
+              <h1 className="sr-only">{context ? `${title} · ${context}` : title}</h1>
+              <AriaButton
+                {...(onOpenOrgs ? { onPress: onOpenOrgs } : {})}
+                aria-label={t('org.switch', { name: org.name })}
+                data-testid="org-switcher"
+                className={cn(
+                  'flex h-hit-touch min-w-0 cursor-default items-center gap-2 rounded-sm px-2',
+                  'transition-colors duration-(--dur-fast) pressed:bg-bg-muted',
+                  'outline-none focus-ring:outline-2 focus-ring:outline-border-focus',
+                )}
+              >
+                <Avatar
+                  id={org.id}
+                  name={org.name}
+                  emoji={org.avatarEmoji}
+                  color={org.color}
+                  shape="square"
+                  size={24}
+                  decorative
+                />
+                <span className="min-w-0 truncate text-group text-text">{org.name}</span>
+                <ChevronDown
+                  className="size-4 shrink-0 text-text-secondary"
+                  strokeWidth={iconStrokeWidth}
+                  aria-hidden
+                />
+              </AriaButton>
+            </>
+          ) : (
+            <h1 className="min-w-0 truncate px-2 text-lg">{title}</h1>
+          )}
+          <span className="flex-1" />
+          {trailing}
+        </div>
+      )}
       {views && views.length > 0 && <ViewSwitcher views={views} />}
     </header>
   );

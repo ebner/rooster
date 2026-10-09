@@ -51,7 +51,7 @@ export function MobileNav({ myTasksHref, active }: MobileNavProps) {
       id: 'settings',
       label: t('nav.settings'),
       icon: Settings,
-      href: '/settings',
+      href: paths.settingsIndex,
       isActive: current === 'settings' && !searching,
     },
   ];
