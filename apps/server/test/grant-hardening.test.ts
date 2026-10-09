@@ -951,13 +951,16 @@ describe('review round 6 (focused review)', () => {
       run(targetA.id);
       return Math.min(run(targetB.id), run(targetA.id), run(targetB.id));
     };
+    // Shared CI runners are about twice as slow as a workstation; a quadratic regression still
+    // lands far above these budgets there.
+    const budget = (ms: number) => (process.env.CI ? ms * 2.5 : ms);
     // A stream of a grant reading only Prio: the prior-group snapshot and the per-key filter
     // both run over the 2,000 subtasks.
-    expect(best(timed)).toBeLessThan(50);
+    expect(best(timed)).toBeLessThan(budget(50));
     stream.close();
     // No such stream: the acting grant's own checks only, and the browser.
-    expect(best(timed)).toBeLessThan(20);
-    expect(best(browserTimed)).toBeLessThan(20);
+    expect(best(timed)).toBeLessThan(budget(20));
+    expect(best(browserTimed)).toBeLessThan(budget(20));
   });
 });
 
