@@ -64,6 +64,41 @@ Press `?` in the app for every keyboard shortcut.
 - Nightly snapshots land in the volume's `backups/` directory (7 daily, 4 weekly), and admins can download them under Admin → Backups. Copy `/data/backups` off the host with restic, borg or rclone. The restore steps are in [operations §7](docs/spec/08-operations.md#7-backups--restore).
 - Every configuration variable is listed in [operations §3](docs/spec/08-operations.md#3-configuration-env).
 
+## Command line
+
+`rooster` works with your tasks from a terminal, scripts and CI. It talks to any rooster server over the public API.
+
+
+**Sign in**
+```sh
+rooster login --server https://rooster.example.com   # opens /device; approve in any browser, even on your phone
+rooster login --no-browser --server …                 # headless: open the printed URL elsewhere
+echo "$ROOSTER_PAT" | rooster login --with-token --server …   # CI, with a personal access token
+rooster whoami                                         # who you are and what this login may do
+```
+On the approval page you choose which organisations and groups the CLI may read and write. `rooster logout` revokes the login.
+- Credentials go to the OS keychain, or to `~/.config/rooster/credentials` (mode 0600) where there is none (`ROOSTER_KEYRING=off` forces the file).
+- Profiles live in `~/.config/rooster/config.toml` (`--profile work`).
+- `ROOSTER_SERVER`, `ROOSTER_TOKEN`, `ROOSTER_ORG` and `ROOSTER_PROFILE` override the file, and `NO_COLOR` turns colour off.
+
+**Everyday use**
+```sh
+rooster                       # My tasks (same as rooster ls)
+rooster today | rooster week | rooster ls overdue
+rooster add "Pay invoice tom #finance >Prio"   # quote it: dates, #tags, >Group and @person are understood
+rooster done 42 57            # tasks by number; also personal#42, an ID prefix, or @last
+rooster mv 42 --group Prio --bottom
+rooster show 42 | rooster edit 42 --editor | rooster tag 42 +urgent -later
+rooster ls --json | jq -r '.tasks[].seq' | rooster done -
+```
+Every command takes `--json` (API fields) and `--quiet` (refs only).
+
+**Tokens for scripts:** `rooster token create ci --scope tasks:write --org personal --write-group personal/Prio --expires 30d` prints the token once. It can't have more access than the login that creates it. `rooster apps ls` lists everything connected to your account; Settings → Security → Connected apps does the same in the browser.
+
+**Shell completion:** `rooster completion bash >> ~/.bashrc` (also `zsh`, `fish`, `powershell`). Group and tag names complete too.
+
+**Exit codes:** 0 ok · 1 unexpected · 2 usage · 3 auth or permission · 4 not found or ambiguous · 5 conflict or validation · 6 network.
+
 ## Development
 
 Node 24 and pnpm (via corepack):

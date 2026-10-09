@@ -38,8 +38,8 @@
 | PUT `/me/avatar` · DELETE `/me/avatar` | multipart `file` (image, ≤ 2 MB). It is resized to 256 px WebP, stored at BlobStore key `avatars/<userId>`, and sets `user.image` to `/api/v1/avatars/<userId>?v=<ts>`. DELETE reverts to the OIDC picture. | 10 |
 | GET `/avatars/:userId` | Serves an avatar to any user sharing an org with that user. | 10 |
 | GET `/me/sessions` · DELETE `/me/sessions/:id` | List and revoke sessions. | 1 |
-| GET `/me/grants` · PATCH `/me/grants/:id` · DELETE `/me/grants/:id` | Connected apps (11 §3.2): every PAT, CLI device and OAuth client grant. PATCH edits `{label?, scopes?, constraints?, expiresAt?}` (narrowing an OAuth client's scopes is allowed, widening is not). DELETE revokes. Browser session only. | 8/9 |
-| POST `/me/tokens` | A PAT `{name, scopes, constraints, expiresInDays?}` → `{token, grant}` (the token is shown once). | 8 |
+| GET `/me/grants` · PATCH `/me/grants/:id` · DELETE `/me/grants/:id` | Connected apps (11 §3.2): every PAT, CLI device and OAuth client grant. PATCH edits `{label?, scopes?, constraints?, expiresAt?}` (narrowing an OAuth client's scopes is allowed, widening is not). DELETE revokes. PATCH needs the browser session. A PAT or device may list grants and revoke **its own** (`rooster logout`, `apps ls`). | 8/9 |
+| POST `/me/tokens` | A PAT `{name, scopes, constraints, expiresInDays?}` → `{token, grant}` (the token is shown once). From the browser, or from a CLI device session for a subset of its own grant (`422 widening_not_allowed` otherwise); never from a PAT. | 8 |
 | `/api/auth/*` | better-auth: sign-in/social, oauth2 callbacks, sign-out, and the device flow's `/device/code` and `/device/token`. **Browser cookie only**: any `Authorization` or API-key credential gets `403`, except on the two device endpoints, which the CLI calls before it has a session (ADR 0037). Device review, approve and deny are rooster routes: `GET /device/:userCode`, `POST /device/:userCode/approve`, `POST /device/:userCode/deny`. | 1/8 |
 
 ### 2.2 Orgs, members, invites

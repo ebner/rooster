@@ -64,7 +64,16 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
     - Agents running Playwright in parallel serialise on a lock: `flock /tmp/rooster-e2e.lock pnpm --filter @rooster/web exec playwright test …` (the suites share ports).
     - Phone specs (`*.mobile.spec.ts`) run in the `mobile` (iPhone 15, WebKit) and `mobile-android` (Pixel 8) projects; `e2e/support/touch.ts` has `swipe`, `longPress` and `showKeyboard` (visualViewport emulation).
     - `e2e/support/` has `signInAs`, `newClient` and `apiCall`. The sign-in identity is chosen with `login_hint`, and each browser sends its own `X-Forwarded-For` so the per-IP auth rate limit isn't shared.
-- *(planned, P8)* `apps/cli`: CLI, TUI (Ink) and MCP server.
+- `apps/cli`: the `rooster` CLI (P8; TUI and MCP arrive in P9). It uses only the public API, through `@rooster/api-client` (`src/api.ts`).
+  - Source:
+    - Entry: `src/main.ts` → `run.ts` → `cli.ts` (citty).
+    - Commands: `src/commands/*`.
+    - Output: `src/output/*` (token colours, truecolor → 256 → ANSI, `NO_COLOR`).
+    - Infrastructure: `refs.ts` (`@last`, stdin; everything else via `GET /tasks/resolve`), `config.ts` (TOML profiles), `secrets.ts` (keychain via a lazy `@napi-rs/keyring`, 0600 file fallback), `errors.ts` (exit codes 07 §4.2), `launch.ts`, `i18n.ts`, `completion.ts`.
+  - **`launch.ts` is the only way to open a browser or `$EDITOR`:** argv only, never a shell, and only https URLs on the profile's server origin (ADR 0039).
+  - Strip control and bidi characters from user content before printing (`output/format.ts`).
+  - Tests: `apps/cli/test`. Integration tests run against an in-process server (`test/support/rooster-server.ts`). AC-8.1 is the e2e `apps/web/e2e/cli.mobile.spec.ts`.
+  - The build bundles everything into `dist/rooster.mjs`, except the optional `@napi-rs/keyring` (`NATIVE_DEPS` in its `tsdown.config.ts`). `scripts/build-binaries.sh` (Bun) runs in the release workflow.
 - `packages/core`: **pure** TS (no IO, no `Date.now()` inside functions):
   - `ids` (uuidv7)
   - `ordering` (fractional keys)
@@ -99,6 +108,9 @@ pnpm lint / pnpm format / pnpm typecheck
 pnpm gen:api                   # emit apps/server/openapi.json, then regenerate packages/api-client
 pnpm i18n:check                # en/sv parity, ICU validity, unused keys
 pnpm bundle:check              # initial JS for /o/:slug/my ≤ 450 KB gzip (after pnpm build; ADR 0016)
+pnpm --filter @rooster/cli dev -- ls   # run the CLI from source (ROOSTER_SERVER / --server, ROOSTER_KEYRING=off for tests)
+pnpm --filter @rooster/cli smoke  # build output against an in-memory server: --version, login --with-token, whoami
+apps/cli/scripts/build-binaries.sh  # single-file binaries for 5 targets (needs Bun; run by the release workflow)
 pnpm db:generate               # drizzle-kit generate + STRICT post-processing
 pnpm ci                        # full pipeline (scripts/ci.sh); add --with-docker for image build + smoke
 node apps/web/scripts/render-icons.mjs   # regenerate favicon, logo SVGs and app icons from src/ui/brand.ts
@@ -157,19 +169,21 @@ This file is the entry point for every agent and must describe the repository **
 Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to them. A PR that changes any of the above without updating `AGENTS.md` is not done.
 
 ## Status
-- **Current phase:** Phase 8 (CLI, PATs, public API polish) is next (09).
+- **Current phase:** Phase 9 (TUI, MCP, OAuth and agent discovery; `docs/spec/11-agent-access.md`) is next (09).
 - **Latest release:** 1.1.0 (amber accent, new brand and app icon, larger desktop UI, description indicator, Ctrl+click links, pre-update backups on every version change; ADRs 0022–0027).
-- **Last completed phase:** Phase 7, notification delivery (2026-10-09; unreleased): Web Push per device, SMTP email (invites, immediate or batched notifications, the daily digest, confirm-then-POST unsubscribe), the due reminder, and the full preference matrix. AC-7.1 to AC-7.3 pass. ADRs 0033 to 0035. Migration `0006_delivery`.
-- **Before that:** Phase 6, collaboration (2026-10-09; unreleased): assignment, Everyone's tasks, comments and activity, followers, the in-app inbox. AC-6.1 to AC-6.4 pass at the API level and in the e2e suite. ADRs 0028 to 0032. Migration `0005_collab`.
+- **Last completed phase:** Phase 8, CLI, grants and API polish (2026-10-09; unreleased): one grant model for PATs and CLI devices (scopes plus user-chosen org and group constraints, enforced in services, `/api/auth` browser-only), the device flow with a consent page, Settings → Connected apps, the documented OpenAPI with contract tests and e2e response validation, and the `rooster` CLI with release binaries. AC-8.1 to AC-8.5 pass. ADRs 0036 to 0039. Migration `0007_agent_access`.
+- **Before that:** Phase 7, notification delivery (2026-10-09; unreleased): Web Push per device, SMTP email (invites, immediate or batched notifications, the daily digest, confirm-then-POST unsubscribe), the due reminder, and the full preference matrix. AC-7.1 to AC-7.3 pass. ADRs 0033 to 0035. Migration `0006_delivery`.
+- Phase 6, collaboration (2026-10-09; unreleased): assignment, Everyone's tasks, comments and activity, followers, the in-app inbox. AC-6.1 to AC-6.4 pass at the API level and in the e2e suite. ADRs 0028 to 0032. Migration `0005_collab`.
 - Phase 5, smart views, search, palette, export and Trash (2026-10-06), released as **v1.0.0**. AC-5.1 to AC-5.3 pass on desktop and the phone projects. ADRs 0012 to 0016 record the decisions; ADR 0016 relaxed the initial-bundle budget to 450 KB.
 - **Backlog:** `docs/spec/09-phases.md` §Backlog. Do not build an item unless it is scheduled.
 - **E2E:** never run two Playwright suites at once; they share ports 9400, 3181, 5181 and 3182.
 - **Git:** commit locally; **do not push to origin unless the maintainer explicitly asks.**
 - **Deferred to later phases** (from ADRs 0003–0011; pick them up in the phase named):
-  - **P8:**
-    - Linked identities, PATs and CLI devices (FR-SET-3).
-    - `rooster admin reindex` calls `POST /api/v1/admin/search/reindex` (ADR 0013).
-    - Server-side `parse: true` should also read `#tag` tokens (ADR 0007).
+  - **P9:**
+    - Linked sign-in identities in Settings → Security (FR-SET-3).
+    - The rest of 11-agent-access: OAuth AS, remote MCP, discovery, skill.
+    - Admin routes are browser-session only under the grant model, so a `rooster admin reindex` (ADR 0013) needs an admin capability first, or stays in the web.
+    - Publish `@rooster/cli` to npm (needs the npm scope; the package is ready, ADR 0039).
   - **P10:** avatar upload (needs sharp).
   - **Whenever touched:**
     - `UserService.reorderOrg` should move onto `OrderingService` (ADR 0005).

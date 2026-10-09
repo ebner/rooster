@@ -44,7 +44,7 @@ Capabilities are coarse **actions**. They are what a client requests, what `scop
 | `tasks:delete` | Soft-delete tasks and groups. Never granted to MCP clients; PATs and the CLI only. | `tasks:write` |
 | `notifications:read` | The inbox and the unread count | — |
 
-- Org administration, settings, admin, export, import, tokens and push are **never** reachable with a grant. They need the browser session.
+- Org administration, settings, admin, export, import and push are **never** reachable with a grant. They need the browser session. Tokens are the one exception: a CLI device session may create PATs that are a subset of its own grant; a PAT may not (ADR 0037).
 - `offline_access` is the standard OAuth scope for a refresh token. It is requested by the client and never advertised by the MCP resource (MCP spec).
 
 ### 2.2 Resource constraints (chosen by the user)

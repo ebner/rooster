@@ -1,1 +1,371 @@
-{}
+{
+  "cmd": {
+    "root": "rooster: dina uppgifter i terminalen",
+    "ls": "Lista uppgifter: Mina uppgifter eller en vy (my, today, week, overdue, nodate, everyone)",
+    "today": "Uppgifter med datum idag eller tidigare (samma som ls today)",
+    "week": "Uppgifter de kommande 7 dagarna (samma som ls week)",
+    "add": "Lägg till en uppgift; sätt titeln inom citattecken: rooster add \"Boka tandläkare fre #hälsa >Idag\"",
+    "show": "Visa en uppgift med beskrivning, deluppgifter, taggar och de senaste kommentarerna",
+    "edit": "Ändra en uppgifts titel, datum, beskrivning, ansvarig eller överordnad uppgift",
+    "done": "Markera uppgifter som klara",
+    "undone": "Öppna klara uppgifter igen",
+    "mv": "Flytta uppgifter till en grupp eller position",
+    "rm": "Ta bort uppgifter (de hamnar i papperskorgen)",
+    "restore": "Återställ borttagna uppgifter från papperskorgen",
+    "sub": "Lägg till en deluppgift: rooster sub 42 \"Ring banken\"",
+    "group": "Hantera dina grupper: ls, add, rename, mv, rm",
+    "tag": "Hantera taggar (ls, add, rm) eller tagga en uppgift: rooster tag 42 +brådskande -senare",
+    "comment": "Kommentera en uppgift",
+    "search": "Sök bland uppgifter",
+    "open": "Öppna en uppgift eller Mina uppgifter i webbläsaren",
+    "org": "Lista organisationer eller välj standardorganisation",
+    "token": "Personliga åtkomsttoken: create, ls, revoke",
+    "apps": "Anslutna appar (token, CLI-enheter, appar): ls, revoke",
+    "login": "Logga in på en rooster-server",
+    "logout": "Logga ut och glöm den sparade inloggningen",
+    "whoami": "Visa vem du är inloggad som och vad inloggningen får göra",
+    "config": "Läs eller ändra inställningar: get, set, path",
+    "completion": "Skriv ut skalkomplettering (bash, zsh, fish, powershell)"
+  },
+  "global": {
+    "title": "GEMENSAMMA FLAGGOR",
+    "org": "Organisation att arbeta i (slug)",
+    "profile": "Profil från konfigurationsfilen",
+    "json": "Skriv ut JSON (API:ets fält)",
+    "quiet": "Skriv bara ut id:n och referenser",
+    "noColor": "Inga färger",
+    "yes": "Fråga inte om bekräftelse",
+    "verbose": "Visa varje anrop på stderr",
+    "version": "Visa versionen av CLI:t och servern"
+  },
+  "help": {
+    "tagForms": "Tagga en uppgift: rooster tag REF +namn -namn (taggar som inte finns skapas)"
+  },
+  "arg": {
+    "ref": "Uppgift: 42, org#42, början av ett id, @last",
+    "refs": "Uppgifter: 42, org#42, början av ett id, @last, eller - för att läsa dem från stdin"
+  },
+  "ls": {
+    "arg": {
+      "view": "my (standard), today, week, overdue, nodate eller everyone",
+      "group": "Bara den här gruppen",
+      "tag": "Bara uppgifter med den här taggen (kan upprepas)",
+      "completed": "Ta med klara uppgifter",
+      "allOrgs": "Alla organisationer",
+      "subtasks": "Ta med deluppgifter"
+    },
+    "badView": "Okänd vy ”{view}”. Använd någon av: {views}",
+    "empty": "Inga uppgifter",
+    "unassigned": "Ingen ansvarig",
+    "groupNotEveryone": "--group fungerar bara med din egen lista, inte med everyone",
+    "everyonePersonal": "Allas uppgifter finns bara i delade organisationer; välj en med --org."
+  },
+  "view": {
+    "my": "Mina uppgifter",
+    "today": "Idag",
+    "week": "Kommande 7 dagar",
+    "overdue": "Försenade",
+    "nodate": "Utan datum",
+    "everyone": "Allas uppgifter"
+  },
+  "add": {
+    "arg": {
+      "title": "Titeln; datum, #taggar, >Grupp och @person i den tolkas",
+      "due": "Förfallodatum: ett datum eller en fras som fre eller \"imorgon 14:00\"",
+      "time": "Klockslag (HH:MM)",
+      "start": "Startdatum",
+      "tag": "Tagg (kan upprepas)",
+      "assign": "Ansvarig: me, ett namn eller en e-postadress",
+      "desc": "Beskrivning (Markdown)",
+      "descFile": "Läs beskrivningen från en fil (- för stdin)",
+      "noParse": "Använd titeln som den är",
+      "group": "Grupp (standard: Inkorg)",
+      "top": "Överst i gruppen (standard)",
+      "bottom": "Underst i gruppen",
+      "parent": "Gör den till deluppgift till den här uppgiften",
+      "parse": "Tolka datum, #taggar, >Grupp och @person i titeln (standard)"
+    }
+  },
+  "sub": {
+    "arg": {
+      "parent": "Den överordnade uppgiften"
+    }
+  },
+  "task": {
+    "titleMissing": "Ge uppgiften en titel, inom citattecken: rooster add \"Betala fakturan imorgon\"",
+    "descFileUnreadable": "Kan inte läsa {path}"
+  },
+  "show": {
+    "org": "Organisation",
+    "group": "Grupp",
+    "parent": "Överordnad",
+    "due": "Datum",
+    "assignee": "Ansvarig",
+    "you": "Du",
+    "tags": "Taggar",
+    "id": "Id",
+    "subtasks": "Deluppgifter",
+    "comments": "{count, plural, one {# kommentar} other {# kommentarer}}"
+  },
+  "edit": {
+    "arg": {
+      "title": "Ny titel",
+      "due": "Förfallodatum (ett datum, en fras eller none)",
+      "editor": "Redigera beskrivningen i $EDITOR",
+      "parent": "Överordnad uppgift, eller none för att göra den fristående"
+    },
+    "nothing": "Inget att ändra. Ange --title, --due, --desc, --editor eller en annan flagga.",
+    "unchanged": "Beskrivningen är oförändrad.",
+    "ignored": "En nyare ändring på servern vann för: {fields}",
+    "editorFailed": "Redigeraren avslutades med kod {code}; inget sparades."
+  },
+  "done": {
+    "next": "Nästa tillfälle:"
+  },
+  "mv": {
+    "arg": {
+      "group": "Målgrupp",
+      "top": "Överst (standard)",
+      "bottom": "Underst",
+      "after": "Direkt under den här uppgiften",
+      "before": "Direkt ovanför den här uppgiften"
+    },
+    "groupMissing": "Vart? Ange --group NAMN, eller --after/--before en uppgift."
+  },
+  "rm": {
+    "confirm": "Ta bort {count, plural, one {# uppgift} other {# uppgifter}}?",
+    "done": "{count, plural, one {Tog bort # uppgift (återställ den med rooster restore).} other {Tog bort # uppgifter (återställ dem med rooster restore).}}"
+  },
+  "comment": {
+    "arg": {
+      "text": "Kommentaren (Markdown)"
+    },
+    "empty": "Skriv något att kommentera.",
+    "done": "Kommenterade {ref}."
+  },
+  "search": {
+    "arg": {
+      "query": "Ord, #tagg, @person, due:today, is:done"
+    },
+    "empty": "Vad ska jag söka efter?",
+    "none": "Inga uppgifter matchar."
+  },
+  "open": {
+    "notOpened": "Öppna länken i din webbläsare.",
+    "failed": "Kunde inte öppna en webbläsare. Öppna länken ovan själv."
+  },
+  "group": {
+    "cmd": {
+      "ls": "Lista dina grupper",
+      "add": "Lägg till en grupp",
+      "rename": "Byt namn på en grupp",
+      "mv": "Flytta en grupp (--after eller --before en annan)",
+      "rm": "Ta bort en grupp (--move-to en annan eller --delete-tasks)"
+    },
+    "arg": {
+      "name": "Gruppens namn",
+      "newName": "Nytt namn",
+      "after": "Under den här gruppen",
+      "before": "Ovanför den här gruppen",
+      "moveTo": "Flytta gruppens uppgifter hit",
+      "deleteTasks": "Ta bort gruppens uppgifter också"
+    },
+    "nameMissing": "Ge gruppen ett namn.",
+    "notFound": "Det finns ingen grupp som heter ”{name}”.",
+    "ambiguous": "”{name}” matchar flera grupper: {matches}",
+    "mvNeedsTarget": "Ange --after GRUPP eller --before GRUPP.",
+    "rmBoth": "Välj antingen --move-to eller --delete-tasks.",
+    "notEmpty": "”{name}” har {count, plural, one {# uppgift} other {# uppgifter}}. Ange --move-to GRUPP eller --delete-tasks.",
+    "confirmDelete": "Ta bort ”{name}” och {count, plural, one {dess # uppgift} other {dess # uppgifter}}?",
+    "deleted": "Tog bort gruppen ”{name}”."
+  },
+  "tag": {
+    "cmd": {
+      "ls": "Lista organisationens taggar",
+      "add": "Lägg till en tagg",
+      "rm": "Ta bort en tagg (den tas bort från alla uppgifter)"
+    },
+    "arg": {
+      "action": "ls, add, rm, eller en uppgift följd av +tagg -tagg",
+      "name": "Taggens namn",
+      "color": "Färg"
+    },
+    "nameMissing": "Ge taggen ett namn.",
+    "notFound": "Det finns ingen tagg som heter ”{name}”.",
+    "deleted": "Tog bort taggen ”{name}”.",
+    "changesMissing": "Ange vad som ska ändras: rooster tag 42 +brådskande -senare",
+    "badChange": "”{change}” ska börja med + (lägg till) eller - (ta bort)."
+  },
+  "org": {
+    "cmd": {
+      "ls": "Lista dina organisationer",
+      "use": "Gör en organisation till profilens standard"
+    },
+    "arg": {
+      "slug": "Organisationens slug"
+    },
+    "notFound": "Du är inte medlem i någon organisation ”{org}” (eller så kan inloggningen inte se den).",
+    "personal": "personlig",
+    "owner": "ägare",
+    "using": "Arbetar nu i {org} ({slug})."
+  },
+  "token": {
+    "cmd": {
+      "create": "Skapa en personlig åtkomsttoken (visas en gång)",
+      "ls": "Lista dina personliga åtkomsttoken",
+      "revoke": "Återkalla en personlig åtkomsttoken"
+    },
+    "arg": {
+      "name": "Ett namn att känna igen den på",
+      "scope": "Behörigheter, kommaseparerade (standard tasks:read)",
+      "readOnly": "Samma som --scope tasks:read",
+      "org": "Bara den här organisationen (kan upprepas)",
+      "group": "Läs bara de här grupperna: org/Grupp (kan upprepas)",
+      "writeGroup": "Skriv bara i de här grupperna: org/Grupp (kan upprepas)",
+      "expires": "Giltighetstid: 7d, 30d, 90d (standard), 365d eller never"
+    },
+    "nameMissing": "Ge token ett namn: rooster token create ci",
+    "readOnlyAndScope": "Använd antingen --read-only eller --scope.",
+    "shownOnce": "Det här är enda gången token visas. Spara den på ett säkert ställe.",
+    "browserOnly": "En personlig åtkomsttoken kan inte skapa token. Använd en CLI-inloggning (rooster login) eller Inställningar → Anslutna appar → Ny token."
+  },
+  "apps": {
+    "cmd": {
+      "ls": "Lista allt som har åtkomst till ditt konto",
+      "revoke": "Återkalla en token, CLI-enhet eller app"
+    },
+    "arg": {
+      "id": "Id eller början av ett id (från ls)"
+    },
+    "none": "Inget är anslutet.",
+    "current": "(den här)",
+    "dates": "skapad {created} · senast använd {used} · går ut {expires}",
+    "notFound": "Inget anslutet med id ”{id}”.",
+    "ambiguous": "”{id}” matchar flera; ange fler tecken.",
+    "confirmCurrent": "Det här är inloggningen du använder nu. Vill du återkalla den?",
+    "revoked": "Återkallade ”{label}”.",
+    "browserOnly": "Andra anslutningar återkallas i webbläsaren (Inställningar → Anslutna appar); härifrån kan du bara återkalla inloggningen du använder."
+  },
+  "grant": {
+    "unknownScope": "Okänd behörighet ”{scope}”. Välj bland: {scopes}",
+    "badExpiry": "”{value}” är ingen giltighetstid. Ange ett antal dagar (90d) eller never.",
+    "badGroupSpec": "Skriv grupper som org/Grupp, till exempel personal/Prio (fick ”{spec}”).",
+    "allOrgs": "Alla organisationer, även framtida",
+    "everything": "allt",
+    "nothing": "inget",
+    "orgLine": "{org}: läsa {read}; skriva {write}",
+    "never": "aldrig",
+    "kind": {
+      "pat": "Personlig åtkomsttoken",
+      "device": "CLI-enhet",
+      "oauth": "App"
+    }
+  },
+  "denied": {
+    "scope": "Inloggningen saknar behörigheten ”{scope}”.",
+    "has": "Den har: {scopes}.",
+    "noWrite": "Inloggningen får inte ändra något i {org}.",
+    "orgWide": "Det här kräver skrivrätt i hela {org}, vilket inloggningen inte har.",
+    "groups": "Inloggningen får bara skriva i {count, plural, one {gruppen {groups}} other {grupperna {groups}}} ({org}).",
+    "widen": "Utöka den under Inställningar → Anslutna appar, eller logga in igen med rooster login."
+  },
+  "ref": {
+    "invalid": "”{ref}” är ingen uppgiftsreferens. Använd 42, org#42, början av ett id (minst 8 tecken) eller @last.",
+    "notFound": "Det finns ingen uppgift {ref}.",
+    "ambiguous": "{ref} matchar {count, plural, one {# uppgift} other {# uppgifter}}; ange fler tecken:",
+    "noLast": "Det finns ingen @last-uppgift än.",
+    "missing": "Vilken uppgift? Ange en referens som 42."
+  },
+  "member": {
+    "notFound": "Ingen medlem matchar ”{query}”.",
+    "ambiguous": "”{query}” matchar flera personer: {names}"
+  },
+  "date": {
+    "invalid": "{flag}: kan inte tolka ”{value}” som ett datum. Prova 2026-10-12, fre, imorgon eller \"nästa vecka\".",
+    "badTime": "--time: ”{value}” är inget klockslag. Använd HH:MM, till exempel 14:30.",
+    "startNeedsDue": "Ett startdatum kräver ett förfallodatum.",
+    "startAfterDue": "Startdatumet får inte vara efter förfallodatumet."
+  },
+  "confirm": {
+    "needYes": "Det här måste bekräftas; ange --yes för att fortsätta.",
+    "aborted": "Avbrutet."
+  },
+  "auth": {
+    "notLoggedIn": "Du är inte inloggad. Kör rooster login --server URL (eller sätt ROOSTER_TOKEN).",
+    "sessionInvalid": "Den sparade inloggningen godtogs inte (den har gått ut eller återkallats). Kör rooster login.",
+    "notRooster": "{server} ser inte ut att vara en rooster-server.",
+    "keychainFallback": "Ingen nyckelring finns tillgänglig; inloggningen sparas i {path} (bara läsbar för dig).",
+    "storedInFile": "Inloggningen sparades i credentials-filen."
+  },
+  "login": {
+    "arg": {
+      "server": "Serverns adress, t.ex. https://rooster.example.com",
+      "withToken": "Läs en personlig åtkomsttoken från stdin (för CI)",
+      "noBrowser": "Öppna ingen webbläsare",
+      "scope": "Be om färre behörigheter, t.ex. tasks:read",
+      "org": "Standardorganisation för profilen"
+    },
+    "serverMissing": "Vilken server? Ange --server https://rooster.example.com",
+    "tokenMissing": "Ingen token på stdin. Exempel: echo $TOKEN | rooster login --with-token --server URL",
+    "tokenRejected": "Servern godtog inte inloggningen.",
+    "instructions": "Logga in genom att öppna {url} och ange koden nedan.",
+    "codeLabel": "Kod:",
+    "waiting": "Väntar på godkännande…",
+    "denied": "Inloggningen nekades.",
+    "expired": "Koden gick ut innan den godkändes. Kör rooster login igen.",
+    "failed": "Inloggningen misslyckades: {error}",
+    "done": "Inloggad som {name} <{email}> (profil {profile})."
+  },
+  "logout": {
+    "envToken": "ROOSTER_TOKEN är satt; ta bort den för att logga ut. Token återkallas med rooster token revoke.",
+    "notLoggedIn": "Profilen {profile} är inte inloggad.",
+    "patKept": "Den personliga åtkomsttoken {prefix}… gäller fortfarande; återkalla den med rooster token revoke.",
+    "revokeFailed": "Kunde inte avsluta sessionen på servern; den lokala inloggningen tas bort ändå.",
+    "done": "Utloggad från profilen {profile}."
+  },
+  "whoami": {
+    "server": "Server",
+    "profile": "Profil",
+    "org": "Organisation",
+    "access": "Åtkomst",
+    "scopes": "Får",
+    "where": "Var",
+    "expires": "Går ut",
+    "envToken": "token från ROOSTER_TOKEN"
+  },
+  "config": {
+    "cmd": {
+      "get": "Visa en inställning (eller alla)",
+      "set": "Ändra en inställning för aktuell profil",
+      "path": "Skriv ut sökvägen till konfigurationsfilen"
+    },
+    "arg": {
+      "key": "server, org, locale eller default_profile",
+      "value": "Det nya värdet (none för att rensa)"
+    },
+    "badKey": "Okänd inställning ”{key}”. Använd någon av: {keys}",
+    "badLocale": "”{value}” är inget språk som stöds; använd en eller sv.",
+    "unset": "{key} är inte satt.",
+    "saved": "Sparade {key} för profilen {profile}.",
+    "badServer": "”{value}” är ingen serveradress. Använd https://rooster.example.com."
+  },
+  "completion": {
+    "badShell": "Välj ett skal: {shells}"
+  },
+  "usage": {
+    "missingValue": "{flag} behöver ett värde.",
+    "unexpected": "Oväntat argument ”{arg}”.",
+    "seeHelp": "Se rooster --help."
+  },
+  "error": {
+    "network": "Når inte {server}. Kontrollera adressen och din anslutning.",
+    "unexpected": "Något gick fel: {message}"
+  },
+  "version": {
+    "server": "server {version}",
+    "mismatch": "CLI:t ({cli}) och servern ({server}) har olika huvudversioner; uppdatera den äldre."
+  },
+  "tui": {
+    "later": "Helskärmsvyn kommer i en senare version; här är rooster ls."
+  }
+}

@@ -16,23 +16,31 @@
     "build": "tsdown",
     "dev": "tsx src/main.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "smoke": "scripts/smoke.sh node dist/rooster.mjs",
+    "binaries": "scripts/build-binaries.sh"
   },
-  "dependencies": {
+  "devDependencies": {
     "@clack/prompts": "catalog:",
-    "@napi-rs/keyring": "catalog:",
     "@rooster/api-client": "workspace:*",
     "@rooster/core": "workspace:*",
     "@rooster/i18n": "workspace:*",
     "@rooster/tokens": "workspace:*",
-    "citty": "catalog:",
-    "smol-toml": "catalog:"
-  },
-  "devDependencies": {
     "@types/node": "catalog:",
+    "citty": "catalog:",
+    "smol-toml": "catalog:",
     "tsdown": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "keywords": [
+    "rooster",
+    "tasks",
+    "todo",
+    "cli"
+  ],
+  "optionalDependencies": {
+    "@napi-rs/keyring": "catalog:"
   }
 }

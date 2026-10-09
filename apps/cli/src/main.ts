@@ -1,4 +1,7 @@
 #!/usr/bin/env node
-/** The `rooster` CLI (docs/spec/07-cli.md). Phase 8 fills this in. */
-console.error('rooster: the CLI is not built yet (Phase 8).');
-process.exitCode = 1;
+/** The `rooster` command line (docs/spec/07-cli.md). */
+import { nodeIo } from './io.ts';
+import { runCli } from './run.ts';
+
+const code = await runCli(process.argv.slice(2), nodeIo());
+process.exitCode = code;

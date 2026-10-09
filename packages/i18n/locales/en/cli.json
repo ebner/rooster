@@ -1,1 +1,371 @@
-{}
+{
+  "cmd": {
+    "root": "rooster: your tasks from the terminal",
+    "ls": "List tasks: My tasks or a view (my, today, week, overdue, nodate, everyone)",
+    "today": "Tasks due today or earlier (same as ls today)",
+    "week": "Tasks due in the next 7 days (same as ls week)",
+    "add": "Add a task; quote the title: rooster add \"Book dentist fri #health >Today\"",
+    "show": "Show a task with its description, subtasks, tags and recent comments",
+    "edit": "Change a task’s title, dates, description, assignee or parent",
+    "done": "Complete tasks",
+    "undone": "Reopen completed tasks",
+    "mv": "Move tasks to a group or position",
+    "rm": "Delete tasks (they go to Trash)",
+    "restore": "Restore deleted tasks from Trash",
+    "sub": "Add a subtask: rooster sub 42 \"Call the bank\"",
+    "group": "Manage your groups: ls, add, rename, mv, rm",
+    "tag": "Manage tags (ls, add, rm) or tag a task: rooster tag 42 +urgent -later",
+    "comment": "Comment on a task",
+    "search": "Search tasks",
+    "open": "Open a task or My tasks in the browser",
+    "org": "List organisations or choose the default one",
+    "token": "Personal access tokens: create, ls, revoke",
+    "apps": "Connected apps (tokens, CLI devices, apps): ls, revoke",
+    "login": "Sign in to a rooster server",
+    "logout": "Sign out and forget the stored credential",
+    "whoami": "Show who you are signed in as, and what this credential may do",
+    "config": "Read or change settings: get, set, path",
+    "completion": "Print shell completions (bash, zsh, fish, powershell)"
+  },
+  "global": {
+    "title": "GLOBAL OPTIONS",
+    "org": "Organisation to work in (slug)",
+    "profile": "Profile from the config file",
+    "json": "Print JSON (the API’s fields)",
+    "quiet": "Print only IDs and refs",
+    "noColor": "No colours",
+    "yes": "Don’t ask for confirmation",
+    "verbose": "Show each request on stderr",
+    "version": "Show the CLI and server versions"
+  },
+  "help": {
+    "tagForms": "Tag a task: rooster tag REF +name -name (names that don’t exist yet are created)"
+  },
+  "arg": {
+    "ref": "Task: 42, org#42, an ID prefix, @last",
+    "refs": "Tasks: 42, org#42, an ID prefix, @last, or - to read them from stdin"
+  },
+  "ls": {
+    "arg": {
+      "view": "my (default), today, week, overdue, nodate or everyone",
+      "group": "Only this group",
+      "tag": "Only tasks with this tag (repeatable)",
+      "completed": "Include completed tasks",
+      "allOrgs": "Every organisation",
+      "subtasks": "Include subtasks"
+    },
+    "badView": "Unknown view “{view}”. Use one of: {views}",
+    "empty": "No tasks",
+    "unassigned": "Unassigned",
+    "groupNotEveryone": "--group works with your own list only, not with everyone",
+    "everyonePersonal": "Everyone’s tasks exists only in shared organisations; pick one with --org."
+  },
+  "view": {
+    "my": "My tasks",
+    "today": "Today",
+    "week": "Next 7 days",
+    "overdue": "Overdue",
+    "nodate": "No date",
+    "everyone": "Everyone’s tasks"
+  },
+  "add": {
+    "arg": {
+      "title": "The title; dates, #tags, >Group and @person in it are understood",
+      "due": "Due date: a date or a phrase such as fri or \"tomorrow 14:00\"",
+      "time": "Due time (HH:MM)",
+      "start": "Start date",
+      "tag": "Tag (repeatable)",
+      "assign": "Assignee: me, a name or an email",
+      "desc": "Description (Markdown)",
+      "descFile": "Read the description from a file (- for stdin)",
+      "noParse": "Take the title literally",
+      "group": "Group (default: Inbox)",
+      "top": "At the top of the group (default)",
+      "bottom": "At the bottom of the group",
+      "parent": "Make it a subtask of this task",
+      "parse": "Read dates, #tags, >Group and @person from the title (default)"
+    }
+  },
+  "sub": {
+    "arg": {
+      "parent": "The parent task"
+    }
+  },
+  "task": {
+    "titleMissing": "Give the task a title, in quotes: rooster add \"Pay invoice tom\"",
+    "descFileUnreadable": "Can’t read {path}"
+  },
+  "show": {
+    "org": "Organisation",
+    "group": "Group",
+    "parent": "Parent",
+    "due": "Due",
+    "assignee": "Assignee",
+    "you": "You",
+    "tags": "Tags",
+    "id": "ID",
+    "subtasks": "Subtasks",
+    "comments": "{count, plural, one {# comment} other {# comments}}"
+  },
+  "edit": {
+    "arg": {
+      "title": "New title",
+      "due": "Due date (a date, a phrase, or none)",
+      "editor": "Edit the description in $EDITOR",
+      "parent": "Parent task, or none to make it top-level"
+    },
+    "nothing": "Nothing to change. Pass --title, --due, --desc, --editor or another option.",
+    "unchanged": "Description unchanged.",
+    "ignored": "A newer change on the server won for: {fields}",
+    "editorFailed": "The editor exited with code {code}; nothing was saved."
+  },
+  "done": {
+    "next": "Next occurrence:"
+  },
+  "mv": {
+    "arg": {
+      "group": "Target group",
+      "top": "At the top (default)",
+      "bottom": "At the bottom",
+      "after": "Directly below this task",
+      "before": "Directly above this task"
+    },
+    "groupMissing": "Where to? Pass --group NAME, or --after/--before a task."
+  },
+  "rm": {
+    "confirm": "Delete {count, plural, one {# task} other {# tasks}}?",
+    "done": "{count, plural, one {Deleted # task (restore it with rooster restore).} other {Deleted # tasks (restore them with rooster restore).}}"
+  },
+  "comment": {
+    "arg": {
+      "text": "The comment (Markdown)"
+    },
+    "empty": "Write something to comment.",
+    "done": "Commented on {ref}."
+  },
+  "search": {
+    "arg": {
+      "query": "Words, #tag, @person, due:today, is:done"
+    },
+    "empty": "What should I search for?",
+    "none": "No matching tasks."
+  },
+  "open": {
+    "notOpened": "Open this link in your browser.",
+    "failed": "Couldn’t open a browser. Open the link above yourself."
+  },
+  "group": {
+    "cmd": {
+      "ls": "List your groups",
+      "add": "Add a group",
+      "rename": "Rename a group",
+      "mv": "Move a group (--after or --before another)",
+      "rm": "Delete a group (--move-to another or --delete-tasks)"
+    },
+    "arg": {
+      "name": "Group name",
+      "newName": "New name",
+      "after": "Below this group",
+      "before": "Above this group",
+      "moveTo": "Move its tasks to this group",
+      "deleteTasks": "Delete its tasks too"
+    },
+    "nameMissing": "Give the group a name.",
+    "notFound": "No group called “{name}”.",
+    "ambiguous": "“{name}” matches several groups: {matches}",
+    "mvNeedsTarget": "Pass --after GROUP or --before GROUP.",
+    "rmBoth": "Choose either --move-to or --delete-tasks.",
+    "notEmpty": "“{name}” has {count, plural, one {# task} other {# tasks}}. Pass --move-to GROUP or --delete-tasks.",
+    "confirmDelete": "Delete “{name}” and its {count, plural, one {# task} other {# tasks}}?",
+    "deleted": "Deleted the group “{name}”."
+  },
+  "tag": {
+    "cmd": {
+      "ls": "List the organisation’s tags",
+      "add": "Add a tag",
+      "rm": "Delete a tag (it is removed from every task)"
+    },
+    "arg": {
+      "action": "ls, add, rm, or a task followed by +tag -tag",
+      "name": "Tag name",
+      "color": "Colour"
+    },
+    "nameMissing": "Give the tag a name.",
+    "notFound": "No tag called “{name}”.",
+    "deleted": "Deleted the tag “{name}”.",
+    "changesMissing": "Say what to change: rooster tag 42 +urgent -later",
+    "badChange": "“{change}” should start with + (add) or - (remove)."
+  },
+  "org": {
+    "cmd": {
+      "ls": "List your organisations",
+      "use": "Make an organisation the profile’s default"
+    },
+    "arg": {
+      "slug": "Organisation slug"
+    },
+    "notFound": "You’re not a member of an organisation “{org}” (or this credential can’t see it).",
+    "personal": "personal",
+    "owner": "owner",
+    "using": "Now working in {org} ({slug})."
+  },
+  "token": {
+    "cmd": {
+      "create": "Create a personal access token (shown once)",
+      "ls": "List your personal access tokens",
+      "revoke": "Revoke a personal access token"
+    },
+    "arg": {
+      "name": "A name to recognise it by",
+      "scope": "Capabilities, comma-separated (default tasks:read)",
+      "readOnly": "Same as --scope tasks:read",
+      "org": "Only this organisation (repeatable)",
+      "group": "Read only these groups: org/Group (repeatable)",
+      "writeGroup": "Write only in these groups: org/Group (repeatable)",
+      "expires": "Lifetime: 7d, 30d, 90d (default), 365d or never"
+    },
+    "nameMissing": "Give the token a name: rooster token create ci",
+    "readOnlyAndScope": "Use either --read-only or --scope.",
+    "shownOnce": "This is the only time the token is shown. Store it somewhere safe.",
+    "browserOnly": "A personal access token can’t create tokens. Use a CLI login (rooster login) or Settings → Connected apps → New token."
+  },
+  "apps": {
+    "cmd": {
+      "ls": "List everything with access to your account",
+      "revoke": "Revoke a token, CLI device or app"
+    },
+    "arg": {
+      "id": "ID or ID prefix (from ls)"
+    },
+    "none": "Nothing is connected.",
+    "current": "(this one)",
+    "dates": "created {created} · last used {used} · expires {expires}",
+    "notFound": "Nothing connected with ID “{id}”.",
+    "ambiguous": "“{id}” matches several entries; give more characters.",
+    "confirmCurrent": "This is the credential you’re using now. Revoke it?",
+    "revoked": "Revoked “{label}”.",
+    "browserOnly": "Other connections are revoked in the browser (Settings → Connected apps); from here you can revoke only the credential in use."
+  },
+  "grant": {
+    "unknownScope": "Unknown capability “{scope}”. Choose from: {scopes}",
+    "badExpiry": "“{value}” isn’t a lifetime. Use a number of days (90d) or never.",
+    "badGroupSpec": "Write groups as org/Group, for example personal/Prio (got “{spec}”).",
+    "allOrgs": "Every organisation, including future ones",
+    "everything": "everything",
+    "nothing": "nothing",
+    "orgLine": "{org}: read {read}; write {write}",
+    "never": "never",
+    "kind": {
+      "pat": "Personal access token",
+      "device": "CLI device",
+      "oauth": "App"
+    }
+  },
+  "denied": {
+    "scope": "This credential lacks the “{scope}” capability.",
+    "has": "It has: {scopes}.",
+    "noWrite": "This credential may not change anything in {org}.",
+    "orgWide": "This needs write access to the whole of {org}, which this credential doesn’t have.",
+    "groups": "This credential may write only in {count, plural, one {the group {groups}} other {the groups {groups}}} ({org}).",
+    "widen": "Widen it in Settings → Connected apps, or sign in again with rooster login."
+  },
+  "ref": {
+    "invalid": "“{ref}” isn’t a task reference. Use 42, org#42, an ID prefix (8+ characters) or @last.",
+    "notFound": "No task {ref}.",
+    "ambiguous": "{ref} matches {count, plural, one {# task} other {# tasks}}; give more characters:",
+    "noLast": "There is no @last task yet.",
+    "missing": "Which task? Give a reference such as 42."
+  },
+  "member": {
+    "notFound": "No member matches “{query}”.",
+    "ambiguous": "“{query}” matches several people: {names}"
+  },
+  "date": {
+    "invalid": "{flag}: can’t read “{value}” as a date. Try 2026-10-12, fri, tomorrow or \"next week\".",
+    "badTime": "--time: “{value}” isn’t a time. Use HH:MM, for example 14:30.",
+    "startNeedsDue": "A start date needs a due date.",
+    "startAfterDue": "The start date must be on or before the due date."
+  },
+  "confirm": {
+    "needYes": "This needs confirmation; pass --yes to go ahead.",
+    "aborted": "Cancelled."
+  },
+  "auth": {
+    "notLoggedIn": "You’re not signed in. Run rooster login --server URL (or set ROOSTER_TOKEN).",
+    "sessionInvalid": "The stored credential was rejected (expired or revoked). Run rooster login.",
+    "notRooster": "{server} doesn’t look like a rooster server.",
+    "keychainFallback": "No system keychain available; the credential is stored in {path} (readable only by you).",
+    "storedInFile": "Credential stored in the credentials file."
+  },
+  "login": {
+    "arg": {
+      "server": "Server URL, e.g. https://rooster.example.com",
+      "withToken": "Read a personal access token from stdin (for CI)",
+      "noBrowser": "Don’t open a browser",
+      "scope": "Ask for fewer capabilities, e.g. tasks:read",
+      "org": "Default organisation for this profile"
+    },
+    "serverMissing": "Which server? Pass --server https://rooster.example.com",
+    "tokenMissing": "No token on stdin. Example: echo $TOKEN | rooster login --with-token --server URL",
+    "tokenRejected": "The server rejected this credential.",
+    "instructions": "To sign in, open {url} and enter the code below.",
+    "codeLabel": "Code:",
+    "waiting": "Waiting for approval…",
+    "denied": "Sign-in was denied.",
+    "expired": "The code expired before it was approved. Run rooster login again.",
+    "failed": "Sign-in failed: {error}",
+    "done": "Signed in as {name} <{email}> (profile {profile})."
+  },
+  "logout": {
+    "envToken": "ROOSTER_TOKEN is set; unset it to sign out. Tokens are revoked with rooster token revoke.",
+    "notLoggedIn": "Profile {profile} isn’t signed in.",
+    "patKept": "The personal access token {prefix}… stays valid; revoke it with rooster token revoke.",
+    "revokeFailed": "Couldn’t revoke the session on the server; the local credential is removed anyway.",
+    "done": "Signed out of profile {profile}."
+  },
+  "whoami": {
+    "server": "Server",
+    "profile": "Profile",
+    "org": "Organisation",
+    "access": "Access",
+    "scopes": "Can",
+    "where": "Where",
+    "expires": "Expires",
+    "envToken": "token from ROOSTER_TOKEN"
+  },
+  "config": {
+    "cmd": {
+      "get": "Show a setting (or all of them)",
+      "set": "Change a setting of the current profile",
+      "path": "Print the config file’s path"
+    },
+    "arg": {
+      "key": "server, org, locale or default_profile",
+      "value": "The new value (none to clear it)"
+    },
+    "badKey": "Unknown setting “{key}”. Use one of: {keys}",
+    "badLocale": "“{value}” isn’t a supported language; use en or sv.",
+    "unset": "{key} isn’t set.",
+    "saved": "Saved {key} for profile {profile}.",
+    "badServer": "“{value}” isn’t a server address. Use https://rooster.example.com."
+  },
+  "completion": {
+    "badShell": "Choose a shell: {shells}"
+  },
+  "usage": {
+    "missingValue": "{flag} needs a value.",
+    "unexpected": "Unexpected argument “{arg}”.",
+    "seeHelp": "See rooster --help."
+  },
+  "error": {
+    "network": "Can’t reach {server}. Check the address and your connection.",
+    "unexpected": "Something went wrong: {message}"
+  },
+  "version": {
+    "server": "server {version}",
+    "mismatch": "This CLI ({cli}) and the server ({server}) have different major versions; update the older one."
+  },
+  "tui": {
+    "later": "The full-screen view arrives in a later release; here is rooster ls."
+  }
+}

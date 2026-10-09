@@ -1,5 +1,6 @@
 name: release
-# Pushing a tag vX.Y.Z publishes the image to GHCR as X.Y.Z, X.Y, X and latest (08 §8).
+# Pushing a tag vX.Y.Z publishes the image to GHCR as X.Y.Z, X.Y, X and latest (08 §8), and
+# attaches the CLI's single-file binaries to the GitHub release (07 §1).
 on:
   push:
     tags: ['v[0-9]+.[0-9]+.[0-9]+']
@@ -49,3 +50,72 @@ jobs:
             docker tag rooster:release "$tag"
             docker push "$tag"
           done <<< "$TAGS"
+
+  cli-binaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - run: pnpm --filter @rooster/cli build
+      - run: apps/cli/scripts/build-binaries.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cli-binaries
+          path: apps/cli/dist/bin
+
+  cli-smoke:
+    needs: cli-binaries
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: linux-x64 }
+          - { os: ubuntu-24.04-arm, target: linux-arm64 }
+          - { os: macos-latest, target: darwin-arm64 }
+          - { os: macos-13, target: darwin-x64 }
+          - { os: windows-latest, target: windows-x64, ext: .exe }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      # The smoke script starts an in-memory server, which needs the server's dependencies.
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cli-binaries
+          path: bin
+      - name: smoke (--version, login --with-token, whoami)
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          bin="bin/rooster-${version}-${{ matrix.target }}${{ matrix.ext }}"
+          chmod +x "$bin"
+          apps/cli/scripts/smoke.sh "$PWD/$bin"
+
+  cli-release:
+    needs: [image, cli-smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cli-binaries
+          path: bin
+      - name: attach to the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md"
+          gh release upload "$GITHUB_REF_NAME" bin/* --clobber

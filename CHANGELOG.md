@@ -14,6 +14,10 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
   - **Followers:** the creator, the assignee, commenters and mentioned members follow a task automatically. You can follow or unfollow any task.
   - **Inbox:** notifications for tasks assigned to you, comments on tasks you follow, mentions, your tasks completed or re-dated by someone else, and accepted invites. The sidebar and the phone's new Inbox tab show the unread count live. Settings → Notifications turns each kind on or off (ADRs 0029, 0031).
   - None of this appears in your personal organisation.
+- **Command line and access tokens (Phase 8):**
+  - **The `rooster` CLI:** list and add tasks, complete, move, tag, comment and search from a terminal, with natural-language dates, `#tags` and `>Group` in titles, JSON output for scripts, shell completion, and binaries for Linux, macOS and Windows on each release. Sign in with `rooster login`, approving on any device (ADR 0039).
+  - **Choose exactly what a token or CLI login may do:** capabilities (read, add and change, comment, assign, manage groups, delete) and which organisations and groups it may read or change, plus an expiry. Everything connected to your account is listed under Settings → Security → Connected apps, where you can narrow or revoke it (ADRs 0036–0038).
+  - **API:** every route is documented with descriptions, error codes and examples at `/api/docs`; personal access tokens (`rooster_pat_…`) work as `Authorization: Bearer`; `GET /tasks/resolve` looks up tasks by number or ID prefix; `parse: true` also reads `#tags`.
 - **Notification delivery (Phase 7):**
   - **Push notifications:** turn push on per device in Settings → Notifications. You get the same events as the inbox, a test button, and an optional morning reminder of today's tasks at a time you choose. On an iPhone, add rooster to the Home Screen first (ADRs 0034, 0035).
   - **Email** (when the server has SMTP configured):
@@ -37,6 +41,7 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ### Migrations
 - `0005_collab`: adds the `comment`, `activity`, `follower`, `notification` and `notification_pref` tables.
+- `0007_agent_access`: adds `access_grant`, the API key and device code tables, and a grant link on sessions.
 - `0006_delivery`: adds the `push_subscription` and `job_run` tables and an index for pending notification emails.
 
 ## [1.1.0] - 2026-10-09

@@ -26,14 +26,14 @@ The `rooster` binary lives in `apps/cli`. It uses only the public REST API (`pac
   ```
 
 - **Secrets:** the OS keychain via `@napi-rs/keyring` (service `rooster`, account `<profile>`). The fallback is `~/.config/rooster/credentials` (mode 0600) when no keychain is available, for example in headless Linux or a container.
-- **Env overrides:** `ROOSTER_SERVER`, `ROOSTER_TOKEN` (a PAT, which takes precedence), `ROOSTER_ORG`, `ROOSTER_PROFILE`, `NO_COLOR`.
+- **Env overrides:** `ROOSTER_SERVER`, `ROOSTER_TOKEN` (a PAT, which takes precedence), `ROOSTER_ORG`, `ROOSTER_PROFILE`, `ROOSTER_KEYRING=off` (skip the keychain), `NO_COLOR`, `FORCE_COLOR`.
 - `rooster login [--server URL] [--profile NAME]`:
   1. `GET /api/v1/meta` (validates the server).
   2. A device authorisation request (client ID `rooster-cli`). Prints the verification URL and the user code, and opens the browser if possible (`--no-browser` to skip).
   3. Polls until it is approved, denied or expires.
   4. Stores the token and fetches `/me` to choose the default org.
 
-  The `/device` approval page is the consent screen of 11 §3.1. The user sees the CLI's requested capabilities and chooses orgs, groups and an expiry, so every CLI profile carries a **grant** (11 §2). The default for `rooster login` is full read and write on every org (it is the user's own terminal). `--scope`, `--org` and `--group` request less.
+  The `/device` approval page is the consent screen of 11 §3.1. The user sees the CLI's requested capabilities and chooses orgs, groups and an expiry, so every CLI profile carries a **grant** (11 §2). `rooster login` requests every capability (it is the user's own terminal), and `--scope` requests less. The device code request carries scopes only, so orgs and groups are chosen on the `/device` page. `--org` sets only the profile's default org.
 - `rooster login --with-token` reads a PAT from stdin (for CI).
 - `rooster logout` revokes the device session server-side and deletes the local secret.
 
@@ -67,7 +67,7 @@ Global flags: `--org <slug>`, `--profile <name>`, `--json`, `--quiet` (IDs only)
 | `rooster search <query…>` | `--all-orgs`. |
 | `rooster open [ref]` | Opens the web UI (task deep link, or My tasks). |
 | `rooster org ls` / `rooster org use <slug>` | List orgs or set the profile's default org. |
-| `rooster token create <name> [--scope tasks:read,…] [--org <slug>] [--group <org>/<name>]… [--write-group <org>/<name>]… [--expires 90d]` / `ls` / `revoke <id>` | PATs with a grant (11 §2). The default is `tasks:read` on every org. `--read-only` stays as an alias for `--scope tasks:read`. |
+| `rooster token create <name> [--scope tasks:read,…] [--org <slug>] [--group <org>/<name>]… [--write-group <org>/<name>]… [--expires 90d\|never]` / `ls` / `revoke <id>` | PATs with a grant (11 §2). The default is `tasks:read` for 90 days. `--read-only` is an alias for `--scope tasks:read`. `create` works from a device login only (not from a PAT), and the token must be a subset of that login's grant (ADR 0037). `revoke` revokes the current grant; others need the browser. |
 | `rooster apps ls` / `rooster apps revoke <id>` | Connected apps (every grant: PATs, devices, OAuth clients; 11 §3.2). |
 | `rooster mcp [--read-only] [--profile agent]` | Starts the MCP server on stdio (§6), using the profile's grant. |
 | `rooster mcp setup [--client claude-code\|claude-desktop\|cursor\|print] [--profile agent]` | Creates a dedicated agent profile through the device flow (its own, narrower grant; 11 §5.1) and writes or prints the MCP client config. |

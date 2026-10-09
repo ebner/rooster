@@ -13,6 +13,7 @@ step "unit+coverage"; pnpm test:coverage  # full run: coverage globs are repo-re
 step "api client";   pnpm gen:api && git diff --exit-code -- apps/server/openapi.json packages/api-client/src/schema.d.ts
 step "build";        pnpm build
 step "bundle budget"; pnpm bundle:check
+step "cli smoke";    pnpm --filter @rooster/cli smoke   # own in-memory server; no e2e ports
 step "e2e";          pnpm e2e
 
 if [[ "${1:-}" == "--with-docker" ]]; then
