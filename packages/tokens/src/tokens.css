@@ -19,25 +19,23 @@
   --n-800: #262a31;
   --n-900: #16191e;
 
-  /* Palette: coral (brand accent) */
-  --coral-50: #fff3f1;
-  --coral-100: #ffe3df;
-  --coral-200: #ffc9c2;
-  --coral-300: #ffa197;
-  --coral-400: #fa766a;
-  --coral-500: #ef4f45;
-  --coral-600: #d93a31;
-  --coral-700: #b42d26;
-  --coral-800: #8f251f;
-  --coral-900: #6e1f1a;
+  /* Palette: amber (brand accent; D-21). Also carries warning and offline states. */
+  --amber-50: #fffbeb;
+  --amber-100: #fef3c7;
+  --amber-200: #fde68a;
+  --amber-300: #fcd34d;
+  --amber-400: #fbbf24;
+  --amber-500: #f59e0b;
+  --amber-600: #d97706;
+  --amber-700: #b45309;
+  --amber-800: #92400e;
+  --amber-900: #78350f;
 
   /* Palette: functional hues */
   --green-50: #eefbf2;
   --green-600: #16a34a;
   --green-700: #15803d;
-  --amber-50: #fff8eb;
-  --amber-500: #f59e0b;
-  --amber-700: #b45309;
+  --orange-700: #c2410c;
   --violet-700: #6d28d9;
   --rose-50: #fff1f3;
   --rose-600: #e11d48;
@@ -51,11 +49,11 @@
   --color-bg-subtle: var(--n-50);
   --color-bg-muted: var(--n-100);
   --color-bg-elevated: var(--n-0);
-  --color-bg-selected: var(--coral-50);
-  --color-bg-accent: var(--coral-600);
-  --color-bg-accent-hover: var(--coral-700);
-  --color-bg-accent-subtle: var(--coral-100);
-  --color-bg-inbox: var(--coral-50);
+  --color-bg-selected: var(--amber-50);
+  --color-bg-accent: var(--amber-700);
+  --color-bg-accent-hover: var(--amber-800);
+  --color-bg-accent-subtle: var(--amber-100);
+  --color-bg-inbox: var(--amber-50);
   --color-bg-success-subtle: var(--green-50);
   --color-bg-warning-subtle: var(--amber-50);
   --color-bg-danger-subtle: var(--rose-50);
@@ -72,15 +70,15 @@
   --color-text-disabled: var(--n-400);
   --color-text-on-accent: var(--n-0);
   --color-text-on-danger: var(--n-0);
-  --color-text-accent: var(--coral-600);
-  --color-text-accent-hover: var(--coral-700);
+  --color-text-accent: var(--amber-700);
+  --color-text-accent-hover: var(--amber-800);
   --color-text-danger: var(--rose-700);
   --color-text-success: var(--green-700);
   --color-text-warning: var(--amber-700);
   --color-text-info: var(--blue-700);
   --color-text-inverse: var(--n-0);
   --color-text-inverse-muted: var(--n-300);
-  --color-text-inverse-accent: var(--coral-300);
+  --color-text-inverse-accent: var(--amber-300);
 
   /* Semantic: icons, borders and indicators */
   --color-icon-subtle: var(--n-400);
@@ -88,14 +86,14 @@
   --color-border: var(--n-200);
   --color-border-strong: var(--n-300);
   --color-border-hover: var(--n-500);
-  --color-border-focus: var(--coral-500);
+  --color-border-focus: var(--amber-700);
   --color-border-danger: var(--rose-600);
   --color-border-inverse: var(--n-600);
-  --color-selection-bar: var(--coral-500);
-  --color-drop-indicator: var(--coral-500);
-  --color-drop-target-outline: var(--coral-400);
+  --color-selection-bar: var(--amber-600);
+  --color-drop-indicator: var(--amber-600);
+  --color-drop-target-outline: var(--amber-400);
   --color-check-done: var(--green-600);
-  --color-brand: var(--coral-500);
+  --color-brand: var(--amber-500);
 
   /* Semantic: scrim */
   --color-overlay: rgb(22 25 30 / 0.32);
@@ -103,7 +101,7 @@
   /* Due-date label colours (03 §2.3) */
   --color-date-overdue: var(--rose-700);
   --color-date-today: var(--green-700);
-  --color-date-tomorrow: var(--amber-700);
+  --color-date-tomorrow: var(--orange-700);
   --color-date-this-week: var(--violet-700);
   --color-date-later: var(--n-600);
   --color-date-done: var(--n-500);

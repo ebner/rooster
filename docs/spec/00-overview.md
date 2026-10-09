@@ -95,7 +95,7 @@ These decisions come from the product requirements and from technical research. 
 | ID | Decision |
 |---|---|
 | D-20 | **Visual direction:** calm and airy. Generous 40 px rows, cool neutral greys and a single accent colour. |
-| D-21 | **Accent:** rooster coral-red. Because the accent is red, **overdue** dates use a distinct danger crimson **plus** a non-colour cue (see 03-design-system §Due-date semantics). |
+| D-21 | **Accent:** warm amber (honey), amended 2026-10-09 from the original coral-red, because a red accent read as "something is wrong". Red stays reserved for danger: **overdue** dates use a distinct crimson **plus** a non-colour cue (see 03-design-system §Due-date semantics), and the accent never appears in date labels. |
 | D-22 | **Light theme only** in v1. All colours are tokens, so dark can be added later. |
 | D-23 | **Languages:** English and Swedish from day one. No hard-coded UI strings. |
 | D-24 | **Dates:** per-user week start, date format, time format and timezone, with defaults taken from the browser locale. |

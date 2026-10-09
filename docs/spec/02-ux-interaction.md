@@ -404,7 +404,7 @@ A tiny status label sits in the toolbar's left area:
   - Right: the offline/sync pill (when relevant) and ⋯.
 - **View switcher:** a horizontally scrollable segmented control below the header: My tasks · Today · 7 days · Overdue · No date · Everyone. It sticks to the top while scrolling.
 - **Bottom nav (64 px + safe area):** My tasks · Search · Inbox (badge; added in P6) · Settings. Icons with labels; the active tab is shown in the accent colour.
-- **FAB:** a 56 px coral circle with "+", 16 px above the bottom nav at the right. It is hidden while the keyboard is open.
+- **FAB:** a 56 px accent (amber) circle with "+", 16 px above the bottom nav at the right. It is hidden while the keyboard is open.
 
 ### 13.2 Rows & gestures
 - Row height 52 px. The checkbox hit area is 44×44. Title on one line with an ellipsis. Date label on the right.

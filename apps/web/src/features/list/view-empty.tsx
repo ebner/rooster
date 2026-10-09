@@ -7,7 +7,7 @@ import { useListContext } from './list-context';
 import type { EmptyRow } from './model/rows';
 
 /**
- * The empty-state illustration (03 §2.10): n-300 line art of a rooster with one coral detail
+ * The empty-state illustration (03 §2.10): n-300 line art of a rooster with one amber detail
  * (the comb), at most 160 px.
  */
 export function RoosterIllustration({ className }: { className?: string }) {
@@ -38,7 +38,7 @@ export function RoosterIllustration({ className }: { className?: string }) {
       </g>
       {/* Eye */}
       <circle cx="68" cy="30" r="1.5" className="fill-border-strong" />
-      {/* The coral comb */}
+      {/* The amber comb */}
       <path d="M62 24c-2-6 2-10 6-8 0-6 6-8 9-4 3-4 9-2 8 4" className="stroke-brand" />
     </svg>
   );

@@ -92,8 +92,8 @@ describe('WCAG contrast of allowed pairs (03 §4 contrast rule)', () => {
     expect(contrast(pair.fg, pair.bg)).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
   });
 
-  test('coral-600 on white matches the spec (4.57:1)', () => {
-    expect(contrast(palette['coral-600'], palette['n-0'])).toBeCloseTo(4.57, 1);
+  test('amber-700 on white matches the spec (5.02:1)', () => {
+    expect(contrast(palette['amber-700'], palette['n-0'])).toBeCloseTo(5.02, 1);
   });
 
   test('focus ring and check fill reach the 3:1 non-text minimum on bg-app', () => {
@@ -103,6 +103,38 @@ describe('WCAG contrast of allowed pairs (03 §4 contrast rule)', () => {
     expect(contrast(resolveColor('check-done'), resolveColor('bg-app'))).toBeGreaterThanOrEqual(3);
     expect(
       contrast(resolveColor('text-inverse'), resolveColor('check-done')),
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  test('the focus ring reaches 3:1 on every surface it can sit on', () => {
+    const surfaces = [
+      'bg-app',
+      'bg-sidebar',
+      'bg-subtle',
+      'bg-muted',
+      'bg-selected',
+      'bg-accent-subtle',
+      'bg-inbox',
+    ] as const;
+    for (const bg of surfaces) {
+      expect(contrast(resolveColor('border-focus'), resolveColor(bg)), bg).toBeGreaterThanOrEqual(
+        3,
+      );
+    }
+  });
+
+  test.each(['selection-bar', 'drop-indicator'] as const)(
+    'accent indicator %s reaches 3:1 on bg-app, bg-selected and bg-inbox',
+    (indicator) => {
+      for (const bg of ['bg-app', 'bg-selected', 'bg-inbox'] as const) {
+        expect(contrast(resolveColor(indicator), resolveColor(bg)), bg).toBeGreaterThanOrEqual(3);
+      }
+    },
+  );
+
+  test('the selection checkbox glyph reaches 3:1 on selection-bar', () => {
+    expect(
+      contrast(resolveColor('text-on-accent'), resolveColor('selection-bar')),
     ).toBeGreaterThanOrEqual(3);
   });
 });

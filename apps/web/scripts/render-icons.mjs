@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 // Rasterises the app icons (03 §2.10) from public/icons/logo.svg with Playwright's
 // Chromium. Run after changing the mark: `node scripts/render-icons.mjs`.
-//   icon-192/512          coral rounded square, transparent corners, white mark at 60 %
-//   maskable-512          full-bleed coral, white mark at 60 % (inside the 80 % safe zone)
-//   apple-touch-icon-180  full-bleed coral (iOS applies its own mask), white mark at 60 %
+//   icon-192/512          amber rounded square, transparent corners, white mark at 60 %
+//   maskable-512          full-bleed amber, white mark at 60 % (inside the 80 % safe zone)
+//   apple-touch-icon-180  full-bleed amber (iOS applies its own mask), white mark at 60 %
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 
 const iconsDir = fileURLToPath(new URL('../public/icons/', import.meta.url));
-const coral500 = '#EF4F45';
+const amber500 = '#F59E0B';
 const white = '#FFFFFF';
 /** iOS-style corner radius as a share of the icon size. */
 const roundedRadius = 0.2237;
@@ -32,7 +32,7 @@ function iconSvg(size, rounded) {
   const offset = (size - mark) / 2;
   const scale = mark / 24;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-  <rect width="${size}" height="${size}" rx="${radius}" fill="${coral500}"/>
+  <rect width="${size}" height="${size}" rx="${radius}" fill="${amber500}"/>
   <path transform="translate(${offset} ${offset}) scale(${scale})" fill="${white}" d="${markPath}"/>
 </svg>`;
 }

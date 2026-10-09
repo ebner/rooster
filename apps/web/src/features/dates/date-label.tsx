@@ -13,7 +13,7 @@ import { Tooltip } from '../../ui/tooltip';
 import { toLocalDue, useDateText } from './date-text';
 import type { DueValue, ViewerDateContext } from './types';
 
-/** 03 §2.3: colour and weight per due state; coral never appears in date labels. */
+/** 03 §2.3: colour and weight per due state; the amber accent never appears in date labels. */
 export const dueStateClass: Record<DueState, string> = {
   overdue: 'font-medium text-date-overdue',
   today: 'font-medium text-date-today',

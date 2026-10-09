@@ -2,12 +2,12 @@
 
 > The rooster design system is called **Coop**. It is **binding** for every UI change. Components consume **semantic tokens only**; raw palette values may appear only in `packages/tokens`. A pull request that introduces a hard-coded colour, font size, spacing value, radius, shadow or duration in a component is non-compliant.
 
-Direction (D-20, D-21, D-28): **calm and airy**. Cool neutrals, generous whitespace, one warm coral accent used sparingly, and Geist typography. Content (task titles) is the loudest thing on screen; chrome is quiet.
+Direction (D-20, D-21, D-28): **calm and airy**. Cool neutrals, generous whitespace, one warm amber (honey) accent used sparingly, and Geist typography. Content (task titles) is the loudest thing on screen; chrome is quiet.
 
 ## 1. Design principles
 
 1. **Quiet chrome, loud content.** Borders are hairline or absent. Separation comes from whitespace and subtle backgrounds, not boxes.
-2. **Accent is scarce.** Coral marks the brand, the primary action, focus, the current selection and drop targets. It is never decoration. A screen typically shows the accent in at most 3 places.
+2. **Accent is scarce.** Amber marks the brand, the primary action, focus, the current selection and drop targets. It is never decoration. A screen typically shows the accent in at most 3 places.
 3. **Meaning is never colour-only.** Overdue has an icon and a heavier weight. Selection has a background and an edge bar. Sync state has text.
 4. **Stable geometry.** Hover never shifts layout. Hover affordances (drag handle, "+", "⋯") occupy reserved space and only change opacity.
 5. **Motion explains state change.** It is short (≤ 300 ms) and never decorative. Everything respects `prefers-reduced-motion`.
@@ -29,29 +29,31 @@ Tokens are defined in `packages/tokens/src/tokens.css` as CSS custom properties 
 | `--n-200` | #E2E5EA | `--n-800` | #262A31 |
 | `--n-300` | #CDD2DA | `--n-900` | #16191E |
 
-**Coral (brand accent)**
+**Amber (brand accent)**
+
+The accent is a warm honey amber, not red: red reads as "something is wrong", and that message is reserved for danger and overdue (D-21). The same scale also carries warning and offline states.
 
 | Token | Hex | Use |
 |---|---|---|
-| `--coral-50` | #FFF3F1 | selected row background, Inbox header |
-| `--coral-100` | #FFE3DF | NL highlight, drop-target tint |
-| `--coral-200` | #FFC9C2 | — |
-| `--coral-300` | #FFA197 | — |
-| `--coral-400` | #FA766A | drop indicator on hover |
-| `--coral-500` | #EF4F45 | brand, focus ring, selection bar, FAB |
-| `--coral-600` | #D93A31 | primary button background, accent text (4.57:1 on white) |
-| `--coral-700` | #B42D26 | primary hover/pressed, link hover |
-| `--coral-800` | #8F251F | — |
-| `--coral-900` | #6E1F1A | — |
+| `--amber-50` | #FFFBEB | selected row background, Inbox header, warning pill |
+| `--amber-100` | #FEF3C7 | NL highlight, drop-target tint |
+| `--amber-200` | #FDE68A | — |
+| `--amber-300` | #FCD34D | accent text on inverse surfaces (toast action) |
+| `--amber-400` | #FBBF24 | drop-target outline |
+| `--amber-500` | #F59E0B | brand (logo mark, app icon, empty-state detail) |
+| `--amber-600` | #D97706 | selection bar, drop indicator (3.19:1 on white) |
+| `--amber-700` | #B45309 | primary button and FAB background, accent text, focus ring, warning text (5.02:1 on white) |
+| `--amber-800` | #92400E | primary hover/pressed, link hover |
+| `--amber-900` | #78350F | — |
 
 **Functional hues**
 
 | Token | Hex | Notes |
 |---|---|---|
 | `--green-50` / `--green-600` / `--green-700` | #EEFBF2 / #16A34A / #15803D | success, completed checkbox, "today" |
-| `--amber-50` / `--amber-500` / `--amber-700` | #FFF8EB / #F59E0B / #B45309 | warning, offline pending, "tomorrow" |
+| `--orange-700` | #C2410C | "tomorrow" |
 | `--violet-700` | #6D28D9 | "this week" |
-| `--rose-50` / `--rose-600` / `--rose-700` | #FFF1F3 / #E11D48 / #BE123C | **danger and overdue** (crimson, clearly distinct from coral) |
+| `--rose-50` / `--rose-600` / `--rose-700` | #FFF1F3 / #E11D48 / #BE123C | **danger and overdue** (crimson, clearly distinct from the amber accent) |
 | `--blue-50` / `--blue-700` | #EFF6FF / #1D4ED8 | info, links in descriptions |
 
 ### 2.2 Semantic tokens (components use these)
@@ -63,27 +65,27 @@ Tokens are defined in `packages/tokens/src/tokens.css` as CSS custom properties 
 | `--color-bg-subtle` | n-50 | row hover, input background (rest), table zebra |
 | `--color-bg-muted` | n-100 | pressed, active nav item, skeleton |
 | `--color-bg-elevated` | n-0 | popovers, pane, sheets, palette |
-| `--color-bg-selected` | coral-50 | selected row(s) |
-| `--color-bg-accent` | coral-600 | primary buttons |
-| `--color-bg-accent-hover` | coral-700 | |
-| `--color-bg-accent-subtle` | coral-100 | NL token highlight, drop-target group header |
-| `--color-bg-inbox` | coral-50 | Inbox group header (softened from coral-100 after review on 2026-10-05, so that "Today" stays the visual anchor) |
+| `--color-bg-selected` | amber-50 | selected row(s) |
+| `--color-bg-accent` | amber-700 | primary buttons, FAB |
+| `--color-bg-accent-hover` | amber-800 | |
+| `--color-bg-accent-subtle` | amber-100 | NL token highlight, drop-target group header |
+| `--color-bg-inbox` | amber-50 | Inbox group header (softened from the -100 step after review on 2026-10-05, so that "Today" stays the visual anchor) |
 | `--color-bg-success-subtle` | green-50 | swipe-complete reveal (with green-600 icon) |
 | `--color-bg-warning-subtle` | amber-50 | offline pill |
 | `--color-bg-danger-subtle` | rose-50 | destructive confirm popover, error toast |
 | `--color-text` | n-900 | titles, body |
 | `--color-text-secondary` | n-600 | group header counts, property values |
-| `--color-text-muted` | n-500 | labels, placeholders, breadcrumbs, timestamps (5.4:1 on white, ≥ 4.9:1 on n-50 and coral-50). **On `--color-bg-accent-subtle` (coral-100) and `--color-bg-muted` use `--color-text-secondary` instead.** |
+| `--color-text-muted` | n-500 | labels, placeholders, breadcrumbs, timestamps (5.4:1 on white, ≥ 4.9:1 on n-50 and amber-50). **On `--color-bg-accent-subtle` (amber-100) and `--color-bg-muted` use `--color-text-secondary` instead.** |
 | `--color-text-disabled` | n-400 | disabled only (decorative contrast) |
-| `--color-text-on-accent` | n-0 | text on coral-600 |
-| `--color-text-accent` | coral-600 | links in chrome, active bottom-nav tab (on white only; 4.57:1). Never on n-100 or tinted backgrounds. |
+| `--color-text-on-accent` | n-0 | text on amber-700 (5.02:1) and amber-800 |
+| `--color-text-accent` | amber-700 | links in chrome, active bottom-nav tab (on white only; 5.02:1). Never on n-100 or tinted backgrounds. |
 | `--color-text-danger` | rose-700 | |
 | `--color-text-success` | green-700 | |
 | `--color-border` | n-200 | hairlines: pane edge, popover border, input border |
 | `--color-border-strong` | n-300 | checkbox outline, input hover |
-| `--color-border-focus` | coral-500 | focus ring |
-| `--color-selection-bar` | coral-500 | 2 px left bar on selected rows |
-| `--color-drop-indicator` | coral-500 | DnD insertion line |
+| `--color-border-focus` | amber-700 | focus ring (≥ 3:1 on every surface, including n-100 and amber-100) |
+| `--color-selection-bar` | amber-600 | 2 px left bar on selected rows |
+| `--color-drop-indicator` | amber-600 | DnD insertion line |
 | `--color-check-done` | green-600 | completed checkbox fill |
 | `--color-overlay` | rgb(22 25 30 / 0.32) | mobile sheet scrim, tablet pane scrim |
 
@@ -95,13 +97,13 @@ The date label colour is set by `dueState()` in `packages/core`. The same functi
 |---|---|---|---|---|
 | `overdue` | due < today, or due today with a time already past | rose-700 | 500 | `circle-alert` icon (12 px) before the label |
 | `today` | due = today | green-700 | 500 | — (the label "Today" itself) |
-| `tomorrow` | due = today + 1 | amber-700 | 400 | label "Tomorrow" |
+| `tomorrow` | due = today + 1 | orange-700 | 400 | label "Tomorrow" |
 | `thisWeek` | today + 2 … today + 6 | violet-700 | 400 | weekday label |
 | `later` | > today + 6 | n-600 | 400 | — |
 | `done` | task completed | n-500 (`--color-text-muted`) | 400 | strikethrough row (n-400 would fail 4.5:1) |
 | `start-range` | has a start date | per due state | — | "Oct 10 – 12" |
 
-Because the brand accent is red-ish (D-21), **overdue never uses coral**. It uses rose-700 plus the icon plus weight 500. Coral never appears in date labels.
+The brand accent is amber (D-21), so the accent never appears in date labels: "tomorrow" uses orange-700, not amber-700. **Overdue** uses rose-700 plus the icon plus weight 500, the one place where red says "something is wrong".
 
 ### 2.4 Tag palette (10 colours, chip = bg + fg)
 
@@ -198,10 +200,10 @@ Letter spacing: −0.011em at 20 px and above, 0 below. The description editor u
 ### 2.10 Brand
 
 - **Name:** "rooster", always lower-case in the wordmark. In running text, "Rooster" is acceptable at the start of a sentence.
-- **Logo mark:** a geometric rooster head in profile built from three overlapping circles (the comb, 3 lobes), a triangular beak and one dot eye. It is a single colour (coral-500) on light backgrounds and white on coral. The grid is 24 × 24 with a 2 px minimum stroke. It must stay legible at 16 px (favicon).
-- **App icon:** a coral-500 rounded square (iOS mask) with the white mark centred at 60 % size. A maskable variant has a 20 % safe zone.
+- **Logo mark:** a geometric rooster head in profile built from three overlapping circles (the comb, 3 lobes), a triangular beak and one dot eye. It is a single colour (amber-500) on light backgrounds and white on amber. The grid is 24 × 24 with a 2 px minimum stroke. It must stay legible at 16 px (favicon).
+- **App icon:** an amber-500 rounded square (iOS mask) with the white mark centred at 60 % size. A maskable variant has a 20 % safe zone.
 - **Assets** (Phase 0 deliverable): `apps/web/public/icons/{favicon.svg, icon-192.png, icon-512.png, maskable-512.png, apple-touch-icon-180.png}`, plus `logo.svg` and `wordmark.svg`.
-- **Illustrations:** n-300 line art with a single coral detail, used only in empty states. At most 160 px.
+- **Illustrations:** n-300 line art with a single amber (brand) detail, used only in empty states. At most 160 px.
 
 ## 3. Components
 
@@ -234,8 +236,8 @@ Height 44 px, top margin 24 px (except the first), `--text-group`.
   - Count in `--text-sm` `--color-text-muted`, tabular, 8 px after the name
   - On hover only, right-aligned: "+" and "⋯" icon buttons, 28 px each
 - No background at rest. On hover, a subtle background appears.
-- **Inbox variant:** `--color-bg-inbox` background, `--radius-md`, an `inbox` icon before the name, and the hint text in `--text-sm` `--color-text-secondary` (muted fails contrast on coral-100).
-- **Drop-target state** (dragging over a collapsed group): accent-subtle background plus a 1 px coral-400 inset outline.
+- **Inbox variant:** `--color-bg-inbox` background, `--radius-md`, an `inbox` icon before the name, and the hint text in `--text-sm` `--color-text-secondary` (muted fails contrast on amber-100).
+- **Drop-target state** (dragging over a collapsed group): accent-subtle background plus a 1 px amber-400 (`--color-drop-target-outline`) inset outline.
 - The header sticks to the top of the scroll container (`position: sticky`) while its group is in view, with a background equal to the app background.
 
 ### 3.3 AddRow ("+ Add task" / "+ Add group" / "+ Add subtask")
@@ -245,9 +247,9 @@ The same height and left alignment as the title text. `plus` icon plus text in `
 See 02 §7.
 - Popover: 320 px wide, `--radius-md`, `--shadow-md`, 12 px padding.
 - Calendar grid cells: 36 px square, `--radius-sm`.
-  - Today: a 1.5 px coral-500 ring.
-  - Selected: coral-600 fill with on-accent text.
-  - Range in-between: coral-50 fill.
+  - Today: a 1.5 px ring in `--color-border-focus` (amber-700).
+  - Selected: `--color-bg-accent` (amber-700) fill with on-accent text.
+  - Range in-between: `--color-bg-selected` (amber-50) fill.
   - Weekend columns: muted text.
 - Quick chips are buttons in `secondary` size `sm`, with the key hint in `Kbd`.
 
@@ -266,7 +268,7 @@ See 02 §7.
 
 ### 3.6 Inputs
 - Height 32 (desktop) or 44 (mobile), `--radius-sm`, 1 px `--color-border`, `--color-bg-app` background.
-- Hover: border-strong. Focus: focus ring with the border becoming coral-500.
+- Hover: border-strong. Focus: focus ring with the border becoming `--color-border-focus` (amber-700).
 - Placeholder: `--color-text-muted`.
 - Error: rose-600 border plus a 13 px message below.
 - **Inline title inputs are borderless** (they look like text).
@@ -280,7 +282,7 @@ Height 20 px, `--radius-xs`, 6 px horizontal padding, `--text-xs`, weight 500, t
 
 ### 3.9 Toast
 - Bottom-left (desktop) or above the bottom nav (mobile). Width 360 max. n-900 background, white text `--text-sm`, `--radius-md`, `--shadow-md`.
-- An optional single action button: text in coral-300, weight 600.
+- An optional single action button: text in `--color-text-inverse-accent` (amber-300), weight 600.
 - Danger variant: a rose `circle-alert` icon.
 - At most 3 stacked; new toasts appear at the bottom.
 - `role="status"` (polite) for info and `alert` for errors.
