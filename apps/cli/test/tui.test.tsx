@@ -774,4 +774,54 @@ describe('TUI: review round 1', () => {
     const { data } = await user.api<TaskJson>('GET', `/api/v1/tasks/${task?.id}`);
     expect(data.completedAt).toBeNull();
   });
+
+  it('r after a definitive rejection sends the rejected write with a new key, not the cached answer', async () => {
+    const { user, cli } = await setup();
+    const [task] = await addTasks(user, 'Alpha', 'Beta');
+    const t = await tui(cli);
+    await t.waitFor((f) => f.includes('Alpha'));
+    // No live stream: the TUI keeps showing Alpha after the web deletes it.
+    t.session.sse.stop();
+    await user.api('DELETE', `/api/v1/tasks/${task?.id}`);
+    await t.press('x');
+    await t.waitFor((f) => f.includes('Couldn’t save'));
+    // Restored on the web; the cached rejection must not be replayed.
+    await user.api('POST', `/api/v1/tasks/${task?.id}/restore`);
+    await t.press('r');
+    const completedAt = async () =>
+      (await user.api<TaskJson>('GET', `/api/v1/tasks/${task?.id}`)).data.completedAt;
+    expect(await eventually(completedAt, (v) => v !== null)).not.toBeNull();
+    expect(t.frame()).not.toContain('Couldn’t save');
+  });
+
+  it('a stale create finishing after an org switch keeps the newer draft’s typing', async () => {
+    const { user, cli } = await setup();
+    const slug = await sharedOrg(user);
+    const t = await tui(cli, {
+      io: {
+        fetch: controlledFetch({ delay: (r) => (isWrite(r, /\/orgs\/[^/]+\/tasks$/) ? 500 : 0) }),
+      },
+    });
+    await t.waitFor((f) => f.includes('synced'));
+    let quit = false;
+    t.session.controller.attach({ exit: () => (quit = true) });
+    await t.press('n');
+    await t.type('In personal');
+    await t.press(KEY.enter);
+    // As if a live update moved the session to another org while the save is on its way.
+    const acme = t.session.controller.getState().me.orgs.find((o) => o.slug === slug);
+    if (acme === undefined) throw new Error('no org');
+    await t.session.controller.switchOrg(acme);
+    await t.waitFor((f) => f.includes('rooster ─ Acme'));
+    await t.press('n');
+    await t.type('In acme');
+    await t.press(KEY.enter);
+    // The first save finishes while this is typed; the text must reach the next draft.
+    await t.type('quick note');
+    await t.press(KEY.esc);
+    await t.waitFor((f) => f.includes('○ In acme') && f.includes('○ quick note'), 4_000);
+    expect(quit).toBe(false);
+    const { data } = await user.api<{ tasks: TaskJson[] }>('GET', `/api/v1/orgs/${slug}/my-list`);
+    expect(data.tasks.map((x) => x.title).sort()).toEqual(['In acme', 'quick note']);
+  });
 });

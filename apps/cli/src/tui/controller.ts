@@ -192,6 +192,8 @@ export class TuiController {
   private searchInFlight = false;
   /** Keys typed while a draft is being saved; replayed once it is (or dropped if it fails). */
   private typeahead: { input: string; key: KeyInfo }[] | null = null;
+  /** Which create owns `typeahead`: a stale create's completion never touches a newer buffer. */
+  private typeaheadOwner = 0;
 
   constructor(private readonly deps: ControllerDeps) {
     this.setTimer =
@@ -1051,6 +1053,7 @@ export class TuiController {
     // A change that failed in the other org is not retried here.
     this.failed = null;
     this.typeahead = null;
+    this.typeaheadOwner += 1;
     const view = this.state.view === 'everyone' && org.isPersonal ? 'my' : this.state.listView;
     this.collapsed.clear();
     this.expanded.clear();
@@ -1215,9 +1218,10 @@ export class TuiController {
     }
     if (title === '') return;
     // Typing on while the task is saved goes into the next draft, never into shortcuts.
+    const owner = ++this.typeaheadOwner;
     this.typeahead = [];
     void this.create(mode.target, title, result.kind === 'submit').then((ok) =>
-      this.flushTypeahead(ok),
+      this.flushTypeahead(ok, owner),
     );
   }
 
@@ -1226,7 +1230,9 @@ export class TuiController {
    * commands after Esc. When the save failed they are dropped, since in Navigate mode a typed
    * title would run as shortcuts (`q` quits).
    */
-  private flushTypeahead(saved: boolean): void {
+  private flushTypeahead(saved: boolean, owner: number): void {
+    // An org switch (or a newer save) took over meanwhile: its buffer is not ours.
+    if (owner !== this.typeaheadOwner) return;
     const keys = this.typeahead ?? [];
     this.typeahead = null;
     if (!saved) return;
