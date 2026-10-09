@@ -19,8 +19,11 @@ export interface ActorGrant {
   updatedAt: number;
 }
 
-/** How the request authenticated: the browser cookie, a session token as bearer, or a PAT. */
-export type ActorVia = 'session' | 'bearer' | 'pat';
+/**
+ * How the request authenticated: the browser cookie, a session token as bearer, a PAT, or (P9)
+ * an OAuth access token, including the remote MCP endpoint's in-process calls.
+ */
+export type ActorVia = 'session' | 'bearer' | 'pat' | 'oauth';
 
 /** Who is making a request (04 §4.3). */
 export interface Actor {

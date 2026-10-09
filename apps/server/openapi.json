@@ -48,7 +48,8 @@
                 "tasks:assign",
                 "groups:write",
                 "tasks:delete",
-                "notifications:read"
+                "notifications:read",
+                "admin"
               ]
             }
           },
@@ -75,6 +76,55 @@
               "null"
             ],
             "minimum": 0
+          },
+          "idleTimeoutMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "exclusiveMinimum": 0
+          },
+          "client": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "domain": {
+                "type": "string"
+              },
+              "logoUri": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "clientUri": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "verified": {
+                "type": "boolean"
+              },
+              "dynamic": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "domain",
+              "logoUri",
+              "clientUri",
+              "verified",
+              "dynamic"
+            ]
           },
           "lastUsedAt": {
             "type": [
@@ -104,6 +154,8 @@
           "createdAt",
           "updatedAt",
           "expiresAt",
+          "idleTimeoutMs",
+          "client",
           "lastUsedAt",
           "lastUsedIp",
           "current"
@@ -134,6 +186,8 @@
           "createdAt": 1767225600000,
           "updatedAt": 1767225600000,
           "expiresAt": 1774998000000,
+          "idleTimeoutMs": null,
+          "client": null,
           "lastUsedAt": 1767312000000,
           "lastUsedIp": "203.0.113.7",
           "current": false
@@ -269,11 +323,12 @@
                 "tasks:assign",
                 "groups:write",
                 "tasks:delete",
-                "notifications:read"
+                "notifications:read",
+                "admin"
               ]
             },
             "minItems": 1,
-            "maxItems": 7
+            "maxItems": 8
           },
           "constraints": {
             "$ref": "#/components/schemas/GrantConstraints"
@@ -313,11 +368,12 @@
                 "tasks:assign",
                 "groups:write",
                 "tasks:delete",
-                "notifications:read"
+                "notifications:read",
+                "admin"
               ]
             },
             "minItems": 1,
-            "maxItems": 7,
+            "maxItems": 8,
             "description": "Capabilities: `tasks:read`, `tasks:write`, `comments:write`, `tasks:assign`, `groups:write`, `tasks:delete`, `notifications:read`."
           },
           "constraints": {
@@ -387,6 +443,8 @@
             "createdAt": 1767225600000,
             "updatedAt": 1767225600000,
             "expiresAt": 1774998000000,
+            "idleTimeoutMs": null,
+            "client": null,
             "lastUsedAt": 1767312000000,
             "lastUsedIp": "203.0.113.7",
             "current": false
@@ -416,7 +474,8 @@
                 "tasks:assign",
                 "groups:write",
                 "tasks:delete",
-                "notifications:read"
+                "notifications:read",
+                "admin"
               ]
             }
           },
@@ -460,11 +519,12 @@
                 "tasks:assign",
                 "groups:write",
                 "tasks:delete",
-                "notifications:read"
+                "notifications:read",
+                "admin"
               ]
             },
             "minItems": 1,
-            "maxItems": 7,
+            "maxItems": 8,
             "description": "No wider than the device requested (`422 widening_not_allowed`)."
           },
           "constraints": {

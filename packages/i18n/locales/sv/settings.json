@@ -283,6 +283,11 @@
         "label": "Läsa aviseringar",
         "description": "Din inkorg och antalet olästa.",
         "short": "läsa aviseringar"
+      },
+      "admin": {
+        "label": "Administrera servern",
+        "description": "Administrationssidorna: användare, tillåtna adresser, säkerhetskopior och sökindexet. Bara för administratörer, aldrig för appar eller agenter.",
+        "short": "administrera servern"
       }
     },
     "kind": {

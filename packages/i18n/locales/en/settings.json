@@ -283,6 +283,11 @@
         "label": "Read notifications",
         "description": "Your inbox and the unread count.",
         "short": "read notifications"
+      },
+      "admin": {
+        "label": "Administer the server",
+        "description": "Admin pages: users, the allowlist, backups and the search index. Only for administrators, never for apps or agents.",
+        "short": "administer the server"
       }
     },
     "kind": {

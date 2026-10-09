@@ -1,0 +1,27 @@
+{
+  "name": "@rooster/mcp",
+  "version": "1.2.0",
+  "description": "rooster's MCP tools, shared by the stdio server (rooster mcp) and the remote /mcp endpoint (docs/spec/11-agent-access.md §5).",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "catalog:",
+    "@rooster/api-client": "workspace:*",
+    "@rooster/core": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

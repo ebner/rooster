@@ -4,6 +4,7 @@ import type { Config } from '../config.ts';
 import { clientIp } from '../lib/client-ip.ts';
 import type { AppEnv } from '../lib/context.ts';
 import { problemResponse } from '../lib/errors.ts';
+import { inProcessActor } from '../lib/in-process.ts';
 import { PAT_PREFIX } from '../services/grant-service.ts';
 import type { Actor, Services } from '../services/index.ts';
 import type { Auth } from './auth.ts';
@@ -47,6 +48,12 @@ export function actorMiddleware(deps: {
 }): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     if (isPublicRoute(c.req.method, c.req.path)) return next();
+    // The remote MCP endpoint's in-process calls (ADR 0042); never reachable over HTTP.
+    const inProcess = inProcessActor(c.env);
+    if (inProcess !== null) {
+      c.set('actor', inProcess);
+      return next();
+    }
     const token = bearerToken(c.req.header('authorization'));
     const ip = clientIp(c, deps.config);
     let actor: Actor | null = null;

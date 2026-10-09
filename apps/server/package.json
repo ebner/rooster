@@ -14,11 +14,15 @@
   },
   "dependencies": {
     "@better-auth/api-key": "catalog:",
+    "@better-auth/cimd": "catalog:",
+    "@better-auth/oauth-provider": "catalog:",
     "@hono/node-server": "catalog:",
     "@hono/zod-openapi": "catalog:",
+    "@modelcontextprotocol/server": "catalog:",
     "@react-email/render": "catalog:",
     "@rooster/core": "workspace:*",
     "@rooster/i18n": "workspace:*",
+    "@rooster/mcp": "workspace:*",
     "@rooster/tokens": "workspace:*",
     "@scalar/hono-api-reference": "catalog:",
     "better-auth": "catalog:",
@@ -34,6 +38,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "catalog:",
     "@scalar/api-reference": "catalog:",
     "@types/better-sqlite3": "catalog:",
     "@types/node": "catalog:",

@@ -1452,6 +1452,8 @@ export interface components {
          *       "createdAt": 1767225600000,
          *       "updatedAt": 1767225600000,
          *       "expiresAt": 1774998000000,
+         *       "idleTimeoutMs": null,
+         *       "client": null,
          *       "lastUsedAt": 1767312000000,
          *       "lastUsedIp": "203.0.113.7",
          *       "current": false
@@ -1463,12 +1465,23 @@ export interface components {
             kind: "pat" | "device" | "oauth";
             clientId: string | null;
             label: string;
-            scopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read")[];
+            scopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read" | "admin")[];
             constraints: components["schemas"]["GrantConstraints"];
             tokenPrefix: string | null;
             createdAt: number;
             updatedAt: number;
             expiresAt: number | null;
+            idleTimeoutMs: number | null;
+            client: {
+                name: string;
+                domain: string;
+                /** Format: uri */
+                logoUri: string | null;
+                /** Format: uri */
+                clientUri: string | null;
+                verified: boolean;
+                dynamic: boolean;
+            } | null;
             lastUsedAt: number | null;
             lastUsedIp: string | null;
             current: boolean;
@@ -1510,7 +1523,7 @@ export interface components {
          */
         GrantPatch: {
             label?: string;
-            scopes?: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read")[];
+            scopes?: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read" | "admin")[];
             constraints?: components["schemas"]["GrantConstraints"];
             expiresAt?: number | null;
         };
@@ -1530,7 +1543,7 @@ export interface components {
             /** @description Shown in Connected apps. */
             name: string;
             /** @description Capabilities: `tasks:read`, `tasks:write`, `comments:write`, `tasks:assign`, `groups:write`, `tasks:delete`, `notifications:read`. */
-            scopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read")[];
+            scopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read" | "admin")[];
             constraints: components["schemas"]["GrantConstraints"];
             /** @description Omitted: the token never expires. */
             expiresInDays?: number;
@@ -1563,6 +1576,8 @@ export interface components {
          *         "createdAt": 1767225600000,
          *         "updatedAt": 1767225600000,
          *         "expiresAt": 1774998000000,
+         *         "idleTimeoutMs": null,
+         *         "client": null,
          *         "lastUsedAt": 1767312000000,
          *         "lastUsedIp": "203.0.113.7",
          *         "current": false
@@ -1592,7 +1607,7 @@ export interface components {
             userCode: string;
             clientId: string;
             clientName: string;
-            requestedScopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read")[];
+            requestedScopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read" | "admin")[];
             expiresAt: number;
         };
         /**
@@ -1618,7 +1633,7 @@ export interface components {
          */
         DeviceApprove: {
             /** @description No wider than the device requested (`422 widening_not_allowed`). */
-            scopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read")[];
+            scopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read" | "admin")[];
             constraints: components["schemas"]["GrantConstraints"];
             /** @description Default: "rooster CLI on <device>", from the CLI’s User-Agent. */
             label?: string;

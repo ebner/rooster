@@ -8,7 +8,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
  * How an actor authenticated when browsers never attach the credential on their own
  * (bearer and PAT tokens, P8). None exist yet; an `Authorization` header alone proves nothing.
  */
-const TOKEN_AUTH: ReadonlySet<string> = new Set(['bearer', 'pat']);
+const TOKEN_AUTH: ReadonlySet<string> = new Set(['bearer', 'pat', 'oauth']);
 
 /**
  * CSRF defence for cookie-authenticated requests (04 §4.11): unsafe methods must come from

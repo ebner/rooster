@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { GRANT_SCOPES } from '../grants.ts';
+import { ALL_GRANT_SCOPES } from '../grants.ts';
 import { idSchema, timestampSchema } from './common.ts';
 
 /**
@@ -7,8 +7,8 @@ import { idSchema, timestampSchema } from './common.ts';
  * device session or (P9) OAuth client authorization. DTOs are additive-only within API v1.
  */
 
-export const grantScopeSchema = z.enum(GRANT_SCOPES);
-export const grantScopesSchema = z.array(grantScopeSchema).min(1).max(GRANT_SCOPES.length);
+export const grantScopeSchema = z.enum(ALL_GRANT_SCOPES);
+export const grantScopesSchema = z.array(grantScopeSchema).min(1).max(ALL_GRANT_SCOPES.length);
 
 const groupListSchema = z.object({ groups: z.array(idSchema).min(1).max(100) });
 
@@ -25,6 +25,23 @@ export const grantConstraintsSchema = z.object({
 export const GRANT_KINDS = ['pat', 'device', 'oauth'] as const;
 export const grantKindSchema = z.enum(GRANT_KINDS);
 
+/**
+ * P9: how an OAuth client presents itself (11 §3.1), from its Client ID Metadata Document or
+ * its Dynamic Client Registration.
+ */
+export const oauthClientInfoSchema = z.object({
+  /** `client_name`, else the client id's host. */
+  name: z.string(),
+  /** The host users should recognise: the metadata URL's host (CIMD) or the redirect host. */
+  domain: z.string(),
+  logoUri: z.url().nullable(),
+  clientUri: z.url().nullable(),
+  /** CIMD whose metadata host matches the redirect host. */
+  verified: z.boolean(),
+  /** Registered through DCR: shown as "Unverified app". */
+  dynamic: z.boolean(),
+});
+
 /** One row of Settings → Connected apps (`GET /me/grants`). */
 export const grantSchema = z.object({
   id: idSchema,
@@ -39,6 +56,13 @@ export const grantSchema = z.object({
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
   expiresAt: timestampSchema.nullable(),
+  /**
+   * P9 "This session only" (11 §2.4): the grant ends once its refresh token has gone unused
+   * this long (24 h). Null otherwise.
+   */
+  idleTimeoutMs: z.int().positive().nullable(),
+  /** P9: the OAuth client's presentation; null for PATs and CLI devices. */
+  client: oauthClientInfoSchema.nullable(),
   lastUsedAt: timestampSchema.nullable(),
   lastUsedIp: z.string().nullable(),
   /** True for the grant behind the request (`GET /me/grants` from the CLI). */
@@ -98,6 +122,68 @@ export const deviceApproveSchema = z.object({
   expiresInDays: z.int().min(1).max(3650).optional(),
 });
 
+/** "This session only": the idle timeout of an OAuth grant (11 §2.4, ADR 0041). */
+export const SESSION_ONLY_IDLE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * GET /oauth/consent?oauth_query=… (P9, session only): what the consent screen (11 §3.1) shows
+ * for the authorization request that better-auth's provider redirected to `/oauth/consent`.
+ * `oauthQuery` is the provider's signed query, passed back unchanged on the decision.
+ */
+export const oauthConsentRequestSchema = z.object({
+  oauthQuery: z.string(),
+  clientId: z.string(),
+  client: oauthClientInfoSchema,
+  /** The exact redirect target, shown to the user. */
+  redirectUri: z.string(),
+  /** `http://127.0.0.1:<port>` or `localhost`: "an app on this computer". */
+  loopback: z.boolean(),
+  /** The protected resource (RFC 8707): `<base>/mcp` or `<base>/api/v1`. */
+  resource: z.string(),
+  /** What the client asked for, minus `OAUTH_EXCLUDED_SCOPES` and `offline_access`. */
+  requestedScopes: z.array(grantScopeSchema),
+  /** Step-up: the scopes not in the existing grant, highlighted as "new". */
+  newScopes: z.array(grantScopeSchema),
+  /** The live grant of this (user, client), to pre-fill constraints on step-up; else null. */
+  existing: grantSchema.nullable(),
+  /** RFC 9396 `authorization_details` of type `rooster_access`, if the client sent any. */
+  prefill: grantConstraintsSchema.nullable(),
+});
+
+/**
+ * POST /oauth/consent (P9, session only). Allow creates or updates the user's grant for the
+ * client and answers the provider; Deny answers `access_denied`. Either way the response is
+ * where the browser goes next (the client's redirect URI, with `iss`).
+ */
+export const oauthConsentDecisionSchema = z.discriminatedUnion('accept', [
+  z.object({
+    accept: z.literal(true),
+    oauthQuery: z.string(),
+    scopes: grantScopesSchema,
+    constraints: grantConstraintsSchema,
+    /** Omitted = never; ignored with `sessionOnly`. */
+    expiresInDays: z.int().min(1).max(3650).optional(),
+    /** "This session only" (`SESSION_ONLY_IDLE_MS`). */
+    sessionOnly: z.boolean().optional(),
+  }),
+  z.object({ accept: z.literal(false), oauthQuery: z.string() }),
+]);
+export const oauthConsentResultSchema = z.object({ redirectTo: z.string() });
+
+/** GET /me/identities (P9, FR-SET-3, session only): the user's linked sign-in identities. */
+export const linkedIdentitySchema = z.object({
+  /** better-auth account id; the DELETE path parameter. */
+  id: z.string(),
+  /** `google` or a configured OIDC provider id. */
+  providerId: z.string(),
+  /** The provider's display name from the server config. */
+  providerName: z.string(),
+  /** The email the provider vouched for at sign-in, when known. */
+  email: z.string().nullable(),
+  createdAt: timestampSchema,
+});
+export const linkedIdentityListSchema = z.array(linkedIdentitySchema);
+
 export type GrantScopeValue = z.infer<typeof grantScopeSchema>;
 export type OrgGrantValue = z.infer<typeof orgGrantSchema>;
 export type GrantConstraintsValue = z.infer<typeof grantConstraintsSchema>;
@@ -108,3 +194,8 @@ export type TokenCreate = z.infer<typeof tokenCreateSchema>;
 export type TokenCreated = z.infer<typeof tokenCreatedSchema>;
 export type DeviceRequest = z.infer<typeof deviceRequestSchema>;
 export type DeviceApprove = z.infer<typeof deviceApproveSchema>;
+export type OAuthClientInfo = z.infer<typeof oauthClientInfoSchema>;
+export type OAuthConsentRequest = z.infer<typeof oauthConsentRequestSchema>;
+export type OAuthConsentDecision = z.infer<typeof oauthConsentDecisionSchema>;
+export type OAuthConsentResult = z.infer<typeof oauthConsentResultSchema>;
+export type LinkedIdentity = z.infer<typeof linkedIdentitySchema>;

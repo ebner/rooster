@@ -44,7 +44,8 @@ describe('grant scopes (11 §2.1)', () => {
 
   it('recognises scope names', () => {
     expect(isGrantScope('tasks:read')).toBe(true);
-    expect(isGrantScope('admin')).toBe(false);
+    expect(isGrantScope('admin')).toBe(true);
+    expect(isGrantScope('root')).toBe(false);
   });
 });
 

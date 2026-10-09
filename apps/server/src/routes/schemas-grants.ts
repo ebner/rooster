@@ -33,6 +33,8 @@ const grantExample = {
   createdAt: 1767225600000,
   updatedAt: 1767225600000,
   expiresAt: 1774998000000,
+  idleTimeoutMs: null,
+  client: null,
   lastUsedAt: 1767312000000,
   lastUsedIp: '203.0.113.7',
   current: false,

@@ -27,16 +27,20 @@ import {
 } from './lib/response-contract.ts';
 import { DOCS_PATH, securityHeaders } from './lib/security-headers.ts';
 import { webApp } from './lib/web-app.ts';
+import { registerMcpRoutes } from './mcp/route.ts';
 import { registerAdminRoutes } from './routes/admin.ts';
 import { registerCollabRoutes } from './routes/collab.ts';
+import { registerDiscoveryRoutes } from './routes/discovery.ts';
 import { registerEventRoutes } from './routes/events.ts';
 import { registerExportRoutes } from './routes/export.ts';
 import { registerGrantRoutes } from './routes/grants.ts';
 import { registerGroupRoutes } from './routes/groups.ts';
 import { registerHealthRoutes } from './routes/health.ts';
+import { registerIdentityRoutes } from './routes/identities.ts';
 import { registerInviteRoutes } from './routes/invites.ts';
 import { registerMeRoutes } from './routes/me.ts';
 import { registerMetaRoutes } from './routes/meta.ts';
+import { registerOAuthRoutes } from './routes/oauth.ts';
 import { registerOrgRoutes } from './routes/orgs.ts';
 import { ProblemSchema } from './routes/problem.ts';
 import { registerPushRoutes } from './routes/push.ts';
@@ -170,6 +174,12 @@ export function createApp(deps: AppDeps): App {
   registerPushRoutes(app, services);
   registerUnsubscribeRoutes(app, { services, config, clock });
   registerEventRoutes(app, { hub, services });
+  // Phase 9: agent access (11). Before the web app, which never serves dot-paths.
+  const p9 = { auth, config, services, logger, clock, version };
+  registerOAuthRoutes(app, p9);
+  registerIdentityRoutes(app, p9);
+  registerMcpRoutes(app, p9);
+  registerDiscoveryRoutes(app, p9);
 
   app.openAPIRegistry.register('Problem', ProblemSchema);
   let openApiDocument: string | undefined;

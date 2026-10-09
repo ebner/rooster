@@ -35,6 +35,17 @@ const booleanFlag = (fallback: boolean) =>
     .optional()
     .transform((v) => (v === undefined ? fallback : v === 'true' || v === '1' || v === 'yes'));
 
+/** `on`/`off` switches (11 §4.2, §6.1); the boolean spellings are accepted too. */
+const onOffFlag = (fallback: boolean) =>
+  z
+    .enum(['on', 'off', 'true', 'false', '1', '0', 'yes', 'no'], {
+      error: 'must be on or off',
+    })
+    .optional()
+    .transform((v) =>
+      v === undefined ? fallback : v === 'on' || v === 'true' || v === '1' || v === 'yes',
+    );
+
 const intInRange = (fallback: number, min: number, max: number) =>
   z
     .string()
@@ -182,6 +193,10 @@ const envSchema = z.object({
   ROOSTER_BACKUP_CRON: backupCron,
   ROOSTER_BACKUP_KEEP_DAILY: intInRange(7, 0, 1000),
   ROOSTER_BACKUP_KEEP_WEEKLY: intInRange(4, 0, 1000),
+  /** P9: Dynamic Client Registration for older MCP clients (11 §4.2). Off by default. */
+  ROOSTER_OAUTH_DCR: onOffFlag(false),
+  /** P9: the best-effort discovery documents (11 §6.1). The OAuth metadata stays either way. */
+  ROOSTER_AGENT_DISCOVERY: onOffFlag(true),
   ROOSTER_METRICS_TOKEN: z.string().min(16, 'must be at least 16 characters').optional(),
   ROOSTER_GIT_SHA: z.string().default('dev'),
   /** Test-only (AC-8.4): check every /api/v1 response against the OpenAPI document. */
@@ -269,6 +284,8 @@ function toConfig(env: Env) {
       keepDaily: env.ROOSTER_BACKUP_KEEP_DAILY,
       keepWeekly: env.ROOSTER_BACKUP_KEEP_WEEKLY,
     },
+    oauthDcr: env.ROOSTER_OAUTH_DCR,
+    agentDiscovery: env.ROOSTER_AGENT_DISCOVERY,
     metricsToken: env.ROOSTER_METRICS_TOKEN ?? null,
     gitSha: env.ROOSTER_GIT_SHA,
     validateResponses: env.ROOSTER_VALIDATE_RESPONSES,

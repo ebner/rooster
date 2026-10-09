@@ -4,6 +4,7 @@
  * Pure and zod-free: the server enforces with it, the web previews it, the CLI explains it.
  */
 
+/** The capabilities any user may grant (11 §2.1). The CLI's default login requests these. */
 export const GRANT_SCOPES = [
   'tasks:read',
   'tasks:write',
@@ -13,7 +14,19 @@ export const GRANT_SCOPES = [
   'tasks:delete',
   'notifications:read',
 ] as const;
-export type GrantScope = (typeof GRANT_SCOPES)[number];
+
+/**
+ * The admin routes (11 §2.1, ADR 0041). Only instance admins may grant it, only to PATs and CLI
+ * logins, and it is checked against the user's current admin role on every request.
+ */
+export const ADMIN_SCOPE = 'admin';
+
+/** Every scope a grant may hold: `GRANT_SCOPES` plus `admin`. */
+export const ALL_GRANT_SCOPES = [...GRANT_SCOPES, ADMIN_SCOPE] as const;
+export type GrantScope = (typeof ALL_GRANT_SCOPES)[number];
+
+/** Scopes an OAuth or MCP client can never request or be granted (ADR 0041). */
+export const OAUTH_EXCLUDED_SCOPES: readonly GrantScope[] = [ADMIN_SCOPE];
 
 /** 11 §2.1: what each scope implies (transitively expanded by `expandScopes`). */
 const IMPLIES: Readonly<Record<GrantScope, readonly GrantScope[]>> = {
@@ -24,10 +37,11 @@ const IMPLIES: Readonly<Record<GrantScope, readonly GrantScope[]>> = {
   'groups:write': ['tasks:read'],
   'tasks:delete': ['tasks:write'],
   'notifications:read': [],
+  admin: [],
 };
 
 export function isGrantScope(value: string): value is GrantScope {
-  return (GRANT_SCOPES as readonly string[]).includes(value);
+  return (ALL_GRANT_SCOPES as readonly string[]).includes(value);
 }
 
 /** The scopes plus everything they imply. */
@@ -46,12 +60,12 @@ export function hasScope(granted: Iterable<GrantScope>, required: GrantScope): b
   return expandScopes(granted).has(required);
 }
 
-/** The smallest set with the same meaning (drops implied scopes), in `GRANT_SCOPES` order. */
+/** The smallest set with the same meaning (drops implied scopes), in `ALL_GRANT_SCOPES` order. */
 export function minimalScopes(scopes: Iterable<GrantScope>): GrantScope[] {
   const list = [...new Set(scopes)];
   const impliedByOthers = (scope: GrantScope) =>
     list.some((other) => other !== scope && expandScopes([other]).has(scope));
-  return GRANT_SCOPES.filter((scope) => list.includes(scope) && !impliedByOthers(scope));
+  return ALL_GRANT_SCOPES.filter((scope) => list.includes(scope) && !impliedByOthers(scope));
 }
 
 export type ReadAccess = 'all' | { groups: readonly string[] };

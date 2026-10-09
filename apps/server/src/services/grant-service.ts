@@ -345,6 +345,9 @@ export class GrantService {
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       expiresAt: row.expiresAt,
+      // P9 (WP 9.3) fills these for OAuth grants.
+      idleTimeoutMs: null,
+      client: null,
       lastUsedAt: row.lastUsedAt,
       lastUsedIp: row.lastUsedIp,
       current: actor.grant?.id === row.id,

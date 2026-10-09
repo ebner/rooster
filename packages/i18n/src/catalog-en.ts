@@ -17,6 +17,7 @@ import enPwa from '../locales/en/pwa.json' with { type: 'json' };
 import enSettings from '../locales/en/settings.json' with { type: 'json' };
 import enShell from '../locales/en/shell.json' with { type: 'json' };
 import enTags from '../locales/en/tags.json' with { type: 'json' };
+import enTui from '../locales/en/tui.json' with { type: 'json' };
 import enViews from '../locales/en/views.json' with { type: 'json' };
 
 /** Every en namespace, in one module so a client can load a single locale lazily. */
@@ -41,4 +42,5 @@ export const en = {
   inbox: enInbox,
   mail: enMail,
   cli: enCli,
+  tui: enTui,
 } as const;

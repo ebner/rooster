@@ -25,7 +25,10 @@
     "logout": "Logga ut och glöm den sparade inloggningen",
     "whoami": "Visa vem du är inloggad som och vad inloggningen får göra",
     "config": "Läs eller ändra inställningar: get, set, path",
-    "completion": "Skriv ut skalkomplettering (bash, zsh, fish, powershell)"
+    "completion": "Skriv ut skalkomplettering (bash, zsh, fish, powershell)",
+    "mcp": "Ge AI-agenter tillgång till rooster via MCP (stdio), eller konfigurera en agent",
+    "skill": "Skriv ut eller installera rooster-färdigheten för AI-agenter",
+    "admin": "Serveradministration (kräver administratörsbehörighet)"
   },
   "global": {
     "title": "GEMENSAMMA FLAGGOR",
@@ -373,8 +376,5 @@
   "version": {
     "server": "server {version}",
     "mismatch": "CLI:t ({cli}) och servern ({server}) har olika huvudversioner; uppdatera den äldre."
-  },
-  "tui": {
-    "later": "Helskärmsvyn kommer i en senare version; här är rooster ls."
   }
 }

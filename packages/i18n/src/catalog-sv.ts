@@ -17,6 +17,7 @@ import svPwa from '../locales/sv/pwa.json' with { type: 'json' };
 import svSettings from '../locales/sv/settings.json' with { type: 'json' };
 import svShell from '../locales/sv/shell.json' with { type: 'json' };
 import svTags from '../locales/sv/tags.json' with { type: 'json' };
+import svTui from '../locales/sv/tui.json' with { type: 'json' };
 import svViews from '../locales/sv/views.json' with { type: 'json' };
 
 /** Every sv namespace, in one module so a client can load a single locale lazily. */
@@ -41,4 +42,5 @@ export const sv = {
   inbox: svInbox,
   mail: svMail,
   cli: svCli,
+  tui: svTui,
 } as const;

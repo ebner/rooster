@@ -39,11 +39,17 @@ catalog:
   '@types/web-push': 3.6.4
   nodemailer: 10.0.16             # P7 email over SMTP, 04 §2 (ships its own types)
   '@better-auth/api-key': 1.7.7   # P8 PATs (04 §2), matches better-auth
+  '@better-auth/oauth-provider': 1.7.7   # P9 OAuth 2.1 AS (ADR 0041), pinned exactly with better-auth
+  '@better-auth/cimd': 1.7.7             # P9 Client ID Metadata Documents (ADR 0041)
+  '@modelcontextprotocol/server': 2.3.1  # P9 MCP SDK v2 (protocol 2026-07-28): packages/mcp, remote /mcp
+  '@modelcontextprotocol/client': 2.3.1  # P9 tests: MCP client for AC-9.2–9.4
   # cli (P8, 04 §2)
   citty: 0.2.2
   '@clack/prompts': 1.8.1
   '@napi-rs/keyring': 2.1.0       # native; the CLI loads it lazily and falls back to a 0600 file
   smol-toml: 1.9.0                # config.toml
+  ink: 8.0.0                      # P9 TUI (07 §5; Ink 8 is current, ADR 0042)
+  ink-testing-library: 4.0.0
   '@react-email/render': 2.1.0   # P7 email templates: React to HTML + plain text, 04 §2 (the components package is deprecated)
   # web
   react: 19.3.0

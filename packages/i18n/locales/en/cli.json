@@ -25,7 +25,10 @@
     "logout": "Sign out and forget the stored credential",
     "whoami": "Show who you are signed in as, and what this credential may do",
     "config": "Read or change settings: get, set, path",
-    "completion": "Print shell completions (bash, zsh, fish, powershell)"
+    "completion": "Print shell completions (bash, zsh, fish, powershell)",
+    "mcp": "Serve rooster to AI agents over MCP (stdio), or set an agent up",
+    "skill": "Print or install the rooster skill for AI agents",
+    "admin": "Server administration (needs the admin capability)"
   },
   "global": {
     "title": "GLOBAL OPTIONS",
@@ -373,8 +376,5 @@
   "version": {
     "server": "server {version}",
     "mismatch": "This CLI ({cli}) and the server ({server}) have different major versions; update the older one."
-  },
-  "tui": {
-    "later": "The full-screen view arrives in a later release; here is rooster ls."
   }
 }

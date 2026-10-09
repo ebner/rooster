@@ -487,7 +487,7 @@ describe('CLI device flow (AC-8.1 server side, 07 §2)', () => {
         })
       ).json() as Promise<{ error: string }>;
     expect((await bad({ client_id: 'other' })).error).toBe('invalid_client');
-    expect((await bad({ client_id: 'rooster-cli', scope: 'admin' })).error).toBe('invalid_scope');
+    expect((await bad({ client_id: 'rooster-cli', scope: 'root' })).error).toBe('invalid_scope');
     const code = await deviceCode(ctx);
     for (const path of ['/api/auth/device/approve', '/api/auth/device/deny']) {
       const res = await ctx.app.request(path, {

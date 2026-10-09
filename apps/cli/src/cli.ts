@@ -1,10 +1,13 @@
 import { type ArgsDef, type CommandDef, defineCommand, renderUsage, runCommand } from 'citty';
 import { appsCommand, tokenCommand } from './commands/access.ts';
+import { adminCommand } from './commands/admin.ts';
 import { loginCommand, logoutCommand, printVersion, whoamiCommand } from './commands/auth.ts';
 import { completeCommand, completionCommand } from './commands/completion.ts';
 import { groupCommand } from './commands/groups.ts';
 import { lsCommand, runList, todayCommand, weekCommand } from './commands/list.ts';
+import { mcpCommand } from './commands/mcp.ts';
 import { configCommand, orgCommand } from './commands/settings.ts';
+import { skillCommand } from './commands/skill.ts';
 import { tagCommand, tagSubCommands } from './commands/tags.ts';
 import {
   addCommand,
@@ -23,6 +26,7 @@ import {
 import { t } from './i18n.ts';
 import { stripAnsi } from './output/color.ts';
 import { rt } from './runtime.ts';
+import { runTui } from './tui/index.ts';
 import { CLI_VERSION } from './version.ts';
 
 export const rootCommand: CommandDef<ArgsDef> = defineCommand({
@@ -52,6 +56,9 @@ export const rootCommand: CommandDef<ArgsDef> = defineCommand({
     logout: logoutCommand,
     whoami: whoamiCommand,
     config: configCommand,
+    mcp: mcpCommand,
+    skill: skillCommand,
+    admin: adminCommand,
     completion: completionCommand(() => rootCommand),
     __complete: completeCommand,
   },
@@ -124,10 +131,10 @@ export async function dispatch(rest: readonly string[]): Promise<void> {
     return;
   }
   if (rest.length === 0) {
-    // 07 §4: on a terminal `rooster` will open the TUI (Phase 9); until then, and when piped,
-    // it is `rooster ls`.
+    // 07 §4: on a terminal `rooster` opens the TUI; piped, or where the TUI can't run, it is
+    // `rooster ls`.
     if (runtime.io.stdout.isTTY === true && !runtime.globals.json && !runtime.globals.quiet) {
-      runtime.out.notice(t('tui.later'));
+      if (await runTui(runtime)) return;
     }
     await runList(runtime, 'my', {
       tags: [],

@@ -16,6 +16,7 @@ export const scopeKeys = {
   'groups:write': 'groupsWrite',
   'tasks:delete': 'tasksDelete',
   'notifications:read': 'notificationsRead',
+  admin: 'admin',
 } as const satisfies Record<GrantScope, string>;
 
 function listOf(items: readonly string[], locale: string): string {
