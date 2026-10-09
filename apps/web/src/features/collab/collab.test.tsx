@@ -52,7 +52,7 @@ describe('CommentComposer (02 §9.2 item 8)', () => {
       </>
     );
   }
-  const field = () => screen.getByRole('combobox', { name: 'Comment' }) as HTMLTextAreaElement;
+  const field = () => screen.getByRole('textbox', { name: 'Comment' }) as HTMLTextAreaElement;
   const type = (value: string) =>
     fireEvent.change(field(), { target: { value, selectionStart: value.length } });
 

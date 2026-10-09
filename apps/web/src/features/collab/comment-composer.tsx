@@ -231,9 +231,9 @@ export function CommentComposer({
         maxLength={COMMENT_BODY_MAX}
         aria-label={t('composer.label')}
         placeholder={t('composer.placeholder')}
-        role="combobox"
+        // A multi-line textbox, not a combobox (ARIA allows that role only on <input>): the
+        // suggestions are announced through aria-autocomplete and the active descendant.
         aria-autocomplete="list"
-        aria-expanded={open}
         aria-controls={open ? listId : undefined}
         aria-activedescendant={open ? optionId(activeIndex) : undefined}
         data-comment-composer
