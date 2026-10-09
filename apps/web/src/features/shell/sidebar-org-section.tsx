@@ -41,8 +41,6 @@ export interface SidebarOrgSectionProps {
   'data-force'?: string;
 }
 
-type MenuAction = 'up' | 'down' | 'collapse';
-
 /**
  * One org in the sidebar (02 §2, 03 §3.10): a header (avatar, name, grip, "⋯") and
  * its views. The whole header is a pointer drag source; keyboard users lift the
@@ -201,10 +199,10 @@ export function SidebarOrgSection({
             <Menu
               aria-label={t('org.menu', { name: org.name })}
               disabledKeys={[...(canMoveUp ? [] : ['up']), ...(canMoveDown ? [] : ['down'])]}
+              // Link items (settings, invite) fire onAction too: match the keys explicitly.
               onAction={(key) => {
-                const action = key as MenuAction;
-                if (action === 'collapse') onToggleCollapsed();
-                else onMove(action);
+                if (key === 'collapse') onToggleCollapsed();
+                else if (key === 'up' || key === 'down') onMove(key);
               }}
             >
               <MenuItem id="settings" icon={Settings} href={paths.orgSettings(slug)}>

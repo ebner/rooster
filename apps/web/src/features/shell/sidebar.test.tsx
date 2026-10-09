@@ -108,6 +108,18 @@ describe('Sidebar org reordering', () => {
       beforeId: club.id,
     });
   });
+
+  test('"Settings" in the org menu opens settings without moving the org', async () => {
+    const { onReorder } = renderSidebar();
+    fireEvent.click(screen.getByRole('button', { name: `${personal.name} options` }));
+    const menu = await screen.findByRole('menu', { name: `${personal.name} options` });
+    const settings = within(menu).getByRole('menuitem', { name: 'Organisation settings' });
+    // jsdom does not navigate; only the menu's onAction matters here.
+    settings.addEventListener('click', (event) => event.preventDefault());
+    fireEvent.click(settings);
+    await nextTick();
+    expect(onReorder).not.toHaveBeenCalled();
+  });
 });
 
 describe('Sidebar rail', () => {
