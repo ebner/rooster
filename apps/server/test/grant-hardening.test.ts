@@ -2,11 +2,13 @@
 // SSE, the device flow and the collaboration fixes. Each `it` names the finding it covers.
 import { defaultKeyHasher } from '@better-auth/api-key';
 import type { Activity, Org, Task, TokenCreated } from '@rooster/core/schemas';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { runMigrations } from '../src/db/migrate.ts';
 import { deviceCode, follower, idempotency } from '../src/db/schema/index.ts';
 import type { DomainEvent } from '../src/events/bus.ts';
+import { readableTaskCondition } from '../src/services/grant-access.ts';
+import type { Actor } from '../src/services/index.ts';
 import { ALL, bearer, pat } from './grant-helpers.ts';
 import { groupNamed, type ListCtx, listCtx, meta, sharedOrg } from './list-helpers.ts';
 
@@ -59,6 +61,17 @@ async function actorOf(ctx: ListCtx, token: string) {
   const actor = ctx.app.services.grants.resolvePat(await defaultKeyHasher(token), null);
   if (actor === null) throw new Error('no actor');
   return actor;
+}
+
+/** An SSE stream of a grant actor on the hub, discarding what it receives. */
+function openStream(ctx: ListCtx, actor: Actor): { close(): void } {
+  const handle = ctx.app.hub.open({
+    userId: actor.userId,
+    ...ctx.app.services.grants.streamAccess(actor),
+    sink: { write: () => {}, close: () => {} },
+  });
+  if (handle === null) throw new Error('hub closed');
+  return handle;
 }
 
 function capture(ctx: ListCtx): DomainEvent[] {
@@ -429,9 +442,11 @@ describe('P6 server fixes', () => {
         createdAt: Date.now(),
       })
       .run();
+    // Roll back 0008 (and the later 0009) and let the migrator apply them again.
+    ctx.db.sqlite.exec('DROP INDEX task_parent_any');
     ctx.db.sqlite
       .prepare(
-        'DELETE FROM __drizzle_migrations WHERE created_at = (SELECT max(created_at) FROM __drizzle_migrations)',
+        'DELETE FROM __drizzle_migrations WHERE created_at IN (SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 2)',
       )
       .run();
     runMigrations(ctx.db);
@@ -579,6 +594,8 @@ describe('review round 3', () => {
     const { ctx, owner, org, prio, today, g, prioOnly } = await tree();
     const reader = await pat(owner, ['tasks:read'], prioOnly('prio'));
     const access = ctx.app.services.grants.streamAccess(await actorOf(ctx, reader.token));
+    // Prior groups are captured only while a grant stream reaching the org is open.
+    const stream = openStream(ctx, await actorOf(ctx, reader.token));
     const keysOf = (e: DomainEvent) =>
       access.filterKeys?.(
         org.id,
@@ -612,6 +629,7 @@ describe('review round 3', () => {
     const purged = events.find((e) => e.type === 'task.purged');
     expect(keysOf(purged as DomainEvent)).toContainEqual(['task']);
     expect(keysOf(purged as DomainEvent)).not.toContainEqual(['task', x.id]);
+    stream.close();
   });
 
   it('R3 another member unfollowing their own task outside the grant sends nothing', async () => {
@@ -699,4 +717,144 @@ describe('review round 3', () => {
       ctx.db.sqlite.prepare('SELECT count(*) AS n FROM notification WHERE read_at IS NULL').get(),
     ).toEqual({ n: 0 });
   });
+});
+
+describe('review round 5', () => {
+  it('R5 moving a task with 2,000 subtasks stays fast, with and without a grant stream', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const prio = await groupNamed(owner, 'Prio');
+    const today = await groupNamed(owner, 'Today');
+    const parent = await owner.ok<Task>(
+      'POST',
+      '/api/v1/orgs/personal/tasks',
+      { title: 'Big', groupId: prio.id },
+      201,
+    );
+    const insert = ctx.db.sqlite.prepare(
+      "INSERT INTO task (id, org_id, parent_id, subtask_position, title, assignee_id, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, 'sub', ?, ?, 0, 0)",
+    );
+    ctx.db.sqlite.transaction(() => {
+      for (let i = 0; i < 2_000; i++) {
+        insert.run(
+          `0199aaaa-0000-7000-8000-${i.toString(16).padStart(12, '0')}`,
+          parent.orgId,
+          parent.id,
+          `a${i.toString(36).padStart(4, '0')}`,
+          owner.userId,
+          owner.userId,
+        );
+      }
+    })();
+    const { tasks } = ctx.app.services;
+    let edit = Date.now();
+    const timedMove = (groupId: string) => {
+      edit += 1;
+      const started = performance.now();
+      tasks.move(owner.actor, parent.id, { groupId }, meta(edit));
+      return performance.now() - started;
+    };
+    timedMove(today.id);
+    expect(timedMove(prio.id)).toBeLessThan(20);
+    const reader = await pat(owner, ['tasks:read']);
+    const stream = openStream(ctx, await actorOf(ctx, reader.token));
+    expect(ctx.app.services.events.hasGrantStream(parent.orgId)).toBe(true);
+    timedMove(today.id);
+    expect(timedMove(prio.id)).toBeLessThan(20);
+    // A reorder inside the group takes no snapshot at all.
+    expect(timedMove(prio.id)).toBeLessThan(20);
+    stream.close();
+    expect(ctx.app.services.events.hasGrantStream(parent.orgId)).toBe(false);
+  });
+});
+
+describe('review round 5 (focused review)', () => {
+  it('F1 the readable-task CTE walks children through the full parent index', async () => {
+    const { ctx, owner, org, prioOnly } = await tree();
+    const actor = await actorOf(ctx, (await pat(owner, ['tasks:read'], prioOnly('prio'))).token);
+    const condition = readableTaskCondition(actor, [org.id]);
+    expect(condition).toBeDefined();
+    const plan = ctx.db.orm.all<{ detail: string }>(
+      sql`EXPLAIN QUERY PLAN SELECT id FROM task WHERE ${condition?.(sql.raw('task.id'), sql.raw('task.org_id'))}`,
+    );
+    const details = plan.map((p) => p.detail).join('\n');
+    expect(details).toContain('task_parent_any');
+    expect(details).not.toMatch(/SCAN c\b/);
+  });
+
+  it('F1 a rare search among 30,000 tasks with 1,000 readable placements stays under 50 ms', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const prio = await groupNamed(owner, 'Prio');
+    const needle = await owner.ok<Task>(
+      'POST',
+      '/api/v1/orgs/personal/tasks',
+      { title: 'needle', groupId: prio.id },
+      201,
+    );
+    const insert = ctx.db.sqlite.prepare(
+      "INSERT INTO task (id, org_id, title, assignee_id, created_by, created_at, updated_at) VALUES (?, ?, 'haystack', ?, ?, 0, 0)",
+    );
+    const place = ctx.db.sqlite.prepare(
+      'INSERT INTO placement (task_id, user_id, org_id, group_id, position, updated_at) VALUES (?, ?, ?, ?, ?, 0)',
+    );
+    ctx.db.sqlite.transaction(() => {
+      for (let i = 0; i < 30_000; i++) {
+        const id = `0199aaaa-0000-7000-8000-${i.toString(16).padStart(12, '0')}`;
+        const mine = i < 1_000;
+        insert.run(id, needle.orgId, mine ? owner.userId : null, owner.userId);
+        if (mine) place.run(id, owner.userId, needle.orgId, prio.id, `b${i.toString(36)}`);
+      }
+    })();
+    ctx.app.services.search.rebuild();
+    const actor = await actorOf(
+      ctx,
+      (
+        await pat(owner, ['tasks:read'], {
+          orgs: [{ orgId: needle.orgId, read: { groups: [prio.id] }, write: 'none' }],
+        })
+      ).token,
+    );
+    ctx.app.services.search.search(actor, { q: 'needle', limit: 1 });
+    const started = performance.now();
+    const hits = ctx.app.services.search.search(actor, { q: 'needle', limit: 1 });
+    const elapsed = performance.now() - started;
+    expect(hits.map((h) => h.task.id)).toEqual([needle.id]);
+    expect(elapsed).toBeLessThan(50);
+  });
+
+  it('F2 moving and deleting a task with 33,000 direct subtasks works (bounded IN lists)', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const prio = await groupNamed(owner, 'Prio');
+    const today = await groupNamed(owner, 'Today');
+    const parent = await owner.ok<Task>(
+      'POST',
+      '/api/v1/orgs/personal/tasks',
+      { title: 'Huge', groupId: prio.id },
+      201,
+    );
+    const insert = ctx.db.sqlite.prepare(
+      "INSERT INTO task (id, org_id, parent_id, subtask_position, title, assignee_id, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, 'sub', ?, ?, 0, 0)",
+    );
+    ctx.db.sqlite.transaction(() => {
+      for (let i = 0; i < 33_000; i++) {
+        insert.run(
+          `0199aaaa-0000-7000-8000-${i.toString(16).padStart(12, '0')}`,
+          parent.orgId,
+          parent.id,
+          `a${i.toString(36).padStart(4, '0')}`,
+          owner.userId,
+          owner.userId,
+        );
+      }
+    })();
+    // With a grant stream open, the move takes the prior-group snapshot over the subtree.
+    const stream = openStream(ctx, await actorOf(ctx, (await pat(owner, ['tasks:read'])).token));
+    await owner.ok('POST', `/api/v1/tasks/${parent.id}/move`, { groupId: today.id });
+    await owner.ok('DELETE', `/api/v1/tasks/${parent.id}`, undefined, 204);
+    await owner.ok('POST', `/api/v1/tasks/${parent.id}/restore`);
+    stream.close();
+    // Deleting and restoring 33k tasks reindexes them all: seconds, not a timeout.
+  }, 60_000);
 });

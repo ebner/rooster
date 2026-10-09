@@ -51,6 +51,9 @@ export const task = sqliteTable(
   (t) => [
     uniqueIndex('task_org_seq').on(t.orgId, t.seq),
     index('task_parent').on(t.parentId, t.subtaskPosition).where(sql`deleted_at IS NULL`),
+    // Subtree walks that include deleted rows (grant prior groups, the readable-task CTE of
+    // search) must not scan the table once per level.
+    index('task_parent_any').on(t.parentId),
     index('task_assignee').on(t.orgId, t.assigneeId, t.completedAt).where(sql`deleted_at IS NULL`),
     index('task_due')
       .on(t.orgId, t.dueDate)

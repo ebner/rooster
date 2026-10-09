@@ -38,6 +38,8 @@ export interface SseOpen {
    * ends no event reports, such as a session that simply expired.
    */
   isValid: () => boolean;
+  /** A grant's stream (P8): the orgs it reaches (absent for the browser). */
+  grantOrgs?: 'all' | readonly string[];
   /** A grant's stream (P8): the keys of an invalidation it may receive (possibly none). */
   filterKeys?: (
     org: string | null,
@@ -119,7 +121,23 @@ export class SseHub {
   ) {
     this.heartbeatMs = options.heartbeatMs ?? SSE_HEARTBEAT_MS;
     this.coalesceMs = options.coalesceMs ?? SSE_COALESCE_MS;
-    this.unsubscribe = bus.on((event) => this.dispatch(event));
+    const off = bus.on((event) => this.dispatch(event));
+    bus.setGrantStreamProbe((org) => this.hasGrantStream(org));
+    this.unsubscribe = () => {
+      off();
+      bus.setGrantStreamProbe(null);
+    };
+  }
+
+  /** Whether any open grant stream reaches `org` (cheap: streams are few). */
+  hasGrantStream(org: string): boolean {
+    for (const set of this.byUser.values()) {
+      for (const conn of set) {
+        const orgs = conn.grantOrgs;
+        if (orgs !== undefined && (orgs === 'all' || orgs.includes(org))) return true;
+      }
+    }
+    return false;
   }
 
   /** Open streams, for tests and `/metrics` (P10). */

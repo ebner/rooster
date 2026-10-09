@@ -141,6 +141,8 @@ export interface StreamAccess {
     keys: readonly (readonly string[])[],
     prior?: PriorGroups,
   ) => (readonly string[])[];
+  /** The orgs a grant's stream reaches (the hub's `hasGrantStream`); absent for the browser. */
+  grantOrgs?: 'all' | readonly string[];
   /** Rewrites or drops (`null`) a `notification` message; absent for the browser. */
   notification?: (data: unknown) => unknown | null;
 }
@@ -294,8 +296,10 @@ export class GrantService {
       return { sessionId, isValid: () => this.sessionActive(userId, sessionId) };
     }
     const reads = hasScope(grant.scopes, 'notifications:read');
+    const orgs = grant.constraints.orgs;
     return {
       sessionId,
+      grantOrgs: orgs === 'all' ? 'all' : orgs.map((o) => o.orgId),
       isValid: () =>
         this.grantActive(grant.id, userId) &&
         (actor.via === 'pat' || this.sessionActive(userId, sessionId)),

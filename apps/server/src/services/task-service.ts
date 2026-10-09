@@ -276,7 +276,7 @@ export class TaskService {
       /** Tasks whose activity feed changed (`['activity', id]`). */
       activity?: readonly string[];
       /** Grant groups before a change that can move tasks out of them (grant SSE, P8). */
-      priors?: PriorGroups;
+      priors?: PriorGroups | undefined;
     } = {},
   ): void {
     const after = taskReach(tx, taskIds);
@@ -299,6 +299,14 @@ export class TaskService {
       audiences,
       ...(options.priors === undefined ? {} : { priorGroups: options.priors }),
     });
+  }
+
+  /**
+   * The grant groups of `taskIds` before a change (grant SSE, P8), or nothing when no grant
+   * stream reaching the org is open: only those streams read it.
+   */
+  private priorsFor(tx: Tx, orgId: string, taskIds: readonly string[]): PriorGroups | undefined {
+    return this.deps.events.hasGrantStream(orgId) ? capturePriorGroups(tx, taskIds) : undefined;
   }
 
   /** A change only the actor sees: their own placements or expansions. */
@@ -763,7 +771,7 @@ export class TaskService {
     const structural =
       (input.parentId !== undefined && input.parentId !== row.parentId) || reassigning;
     const before = structural ? taskReach(tx, [row.id]) : undefined;
-    const priors = structural ? capturePriorGroups(tx, [row.id]) : undefined;
+    const priors = structural ? this.priorsFor(tx, row.orgId, [row.id]) : undefined;
     const apply = (key: string, fields: string[], set: () => void) => {
       if (clockAllows(clock, key, meta.editTime)) {
         set();
@@ -1028,12 +1036,14 @@ export class TaskService {
     clock.deleted = meta.editTime;
     const ids = [row.id, ...descendantsOf(tx, [row.id], { deletedAt: row.deletedAt })];
     this.authorizeSubtree(tx, actor, ids.slice(1), 'tasks:write');
-    const priors = capturePriorGroups(tx, [row.id]);
+    const priors = this.priorsFor(tx, row.orgId, [row.id]);
     const now = this.now();
-    tx.update(task)
-      .set({ deletedAt: null, deletedBy: null, updatedAt: now })
-      .where(inArray(task.id, ids))
-      .run();
+    for (const chunk of chunked(ids)) {
+      tx.update(task)
+        .set({ deletedAt: null, deletedBy: null, updatedAt: now })
+        .where(inArray(task.id, chunk))
+        .run();
+    }
     indexTasks(tx, ids);
     tx.update(task)
       .set({ fieldClock: JSON.stringify(clock) })
@@ -1050,12 +1060,14 @@ export class TaskService {
         .run();
       this.placements.reconcilePlacements(tx, [row.id]);
     }
-    const orphaned = tx
-      .select({ taskId: placement.taskId, userId: placement.userId, orgId: placement.orgId })
-      .from(placement)
-      .innerJoin(taskGroup, eq(taskGroup.id, placement.groupId))
-      .where(and(inArray(placement.taskId, ids), isNotNull(taskGroup.deletedAt)))
-      .all();
+    const orphaned = chunked(ids).flatMap((chunk) =>
+      tx
+        .select({ taskId: placement.taskId, userId: placement.userId, orgId: placement.orgId })
+        .from(placement)
+        .innerJoin(taskGroup, eq(taskGroup.id, placement.groupId))
+        .where(and(inArray(placement.taskId, chunk), isNotNull(taskGroup.deletedAt)))
+        .all(),
+    );
     for (const p of orphaned) this.placements.rehomeToInbox(tx, p.userId, p.orgId, [p.taskId]);
     // Where every restored task ends up (out from under a parent in Trash, re-homed from a
     // deleted group) must be writable too; otherwise the restore rolls back.
@@ -1099,7 +1111,7 @@ export class TaskService {
         throw new AppError('not_in_trash', 409, 'Only deleted tasks can be deleted permanently.');
       }
       const before = taskReach(tx, [row.id]);
-      const priors = capturePriorGroups(tx, [row.id]);
+      const priors = this.priorsFor(tx, row.orgId, [row.id]);
       const gone = [row.id, ...descendantsOf(tx, [row.id])];
       this.authorizeSubtree(tx, actor, gone.slice(1), 'tasks:delete');
       // Their notifications cascade away: the recipients' inboxes must refresh.
@@ -1146,10 +1158,14 @@ export class TaskService {
     const key = posClockKey(actor.userId);
     const movable = rows.filter((r) => clockAllows(parseClock(r.fieldClock), key, meta.editTime));
     if (movable.length === 0) return rows.map(() => null);
-    const priors = capturePriorGroups(
-      tx,
-      movable.map((r) => r.id),
-    );
+    // A reorder inside the same group changes no grant's view: no snapshot.
+    const priors = movable.every((r) => placementOf(tx, r.id)?.groupId === group.id)
+      ? undefined
+      : this.priorsFor(
+          tx,
+          group.orgId,
+          movable.map((r) => r.id),
+        );
     const target: OrderTarget = {
       ...(intent.afterId === undefined ? {} : { afterId: intent.afterId }),
       ...(intent.beforeId === undefined ? {} : { beforeId: intent.beforeId }),

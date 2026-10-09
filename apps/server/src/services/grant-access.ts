@@ -11,14 +11,7 @@ import { placement, task, taskGroup } from '../db/schema/index.ts';
 import type { PriorGroups } from '../events/bus.ts';
 import { AppError } from '../lib/errors.ts';
 import type { Actor, ActorGrant, Tx } from './context.ts';
-import {
-  ancestorsOf,
-  chunked,
-  descendantsOf,
-  groupNotFound,
-  type TaskRow,
-  taskNotFound,
-} from './list-access.ts';
+import { chunked, groupNotFound, type TaskRow, taskNotFound } from './list-access.ts';
 import { notFound } from './org-access.ts';
 
 /**
@@ -309,29 +302,73 @@ export function visibleKeys(
 /**
  * Before a change that can move tasks between groups, purge or re-home them: each task's
  * (with its descendants) grant group per user, as `GrantGroups` would compute it. Carried on
- * the domain event as `priorGroups`.
+ * the domain event as `priorGroups`. Batched: the subtree, the ancestors and their placements
+ * load in a few chunked queries, and the nearest placed ancestor is resolved in memory.
  */
 export function capturePriorGroups(tx: Tx, taskIds: readonly string[]): PriorGroups {
-  const out = new Map<string, Map<string, string | null>>();
-  const ids = [...new Set([...taskIds, ...descendantsOf(tx, taskIds)])];
-  for (const id of ids) {
-    const row = tx
-      .select({ id: task.id, parentId: task.parentId })
-      .from(task)
-      .where(eq(task.id, id))
-      .get();
-    if (row === undefined) continue;
-    const chain = [row.id, ...ancestorsOf(tx, row).map((a) => a.id)];
-    const placed = tx
+  const parentOf = new Map<string, string | null>();
+  const load = (ids: readonly string[]) => {
+    for (const chunk of chunked(ids)) {
+      for (const r of tx
+        .select({ id: task.id, parentId: task.parentId })
+        .from(task)
+        .where(inArray(task.id, chunk))
+        .all()) {
+        parentOf.set(r.id, r.parentId);
+      }
+    }
+  };
+  load(taskIds);
+  const subtree = new Set(taskIds.filter((id) => parentOf.has(id)));
+  // Descendants, one query per level and chunk.
+  let frontier = [...subtree];
+  while (frontier.length > 0) {
+    const next: string[] = [];
+    for (const chunk of chunked(frontier)) {
+      for (const r of tx
+        .select({ id: task.id, parentId: task.parentId })
+        .from(task)
+        .where(inArray(task.parentId, chunk))
+        .all()) {
+        if (subtree.has(r.id)) continue;
+        subtree.add(r.id);
+        parentOf.set(r.id, r.parentId);
+        next.push(r.id);
+      }
+    }
+    frontier = next;
+  }
+  // Ancestors above the roots.
+  let up = [...new Set([...parentOf.values()])].filter(
+    (id): id is string => id !== null && !parentOf.has(id),
+  );
+  while (up.length > 0) {
+    load(up);
+    up = up
+      .map((id) => parentOf.get(id) ?? null)
+      .filter((id): id is string => id !== null && !parentOf.has(id));
+  }
+  const placed = new Map<string, { userId: string; groupId: string }[]>();
+  for (const chunk of chunked([...parentOf.keys()])) {
+    for (const p of tx
       .select({ taskId: placement.taskId, userId: placement.userId, groupId: placement.groupId })
       .from(placement)
-      .where(inArray(placement.taskId, chain))
-      .all();
+      .where(inArray(placement.taskId, chunk))
+      .all()) {
+      const list = placed.get(p.taskId) ?? [];
+      list.push({ userId: p.userId, groupId: p.groupId });
+      placed.set(p.taskId, list);
+    }
+  }
+  const out = new Map<string, Map<string, string | null>>();
+  for (const id of subtree) {
     const groups = new Map<string, string | null>();
+    const seen = new Set<string>();
     // Nearest first: the task, then its parent, and so on.
-    for (const taskId of chain) {
-      for (const p of placed) {
-        if (p.taskId === taskId && !groups.has(p.userId)) groups.set(p.userId, p.groupId);
+    for (let at: string | null = id; at !== null && !seen.has(at); at = parentOf.get(at) ?? null) {
+      seen.add(at);
+      for (const p of placed.get(at) ?? []) {
+        if (!groups.has(p.userId)) groups.set(p.userId, p.groupId);
       }
     }
     out.set(id, groups);

@@ -97,8 +97,22 @@ export type DomainEventListener = (event: DomainEvent) => void;
  */
 export class EventBus {
   private readonly listeners = new Set<DomainEventListener>();
+  private grantStreamProbe: ((org: string) => boolean) | null = null;
 
   constructor(private readonly logger?: Logger) {}
+
+  /** Set by the SSE hub: whether a grant's stream reaching `org` is open (P8). */
+  setGrantStreamProbe(probe: ((org: string) => boolean) | null): void {
+    this.grantStreamProbe = probe;
+  }
+
+  /**
+   * Whether an open grant stream reaches `org`. Services capture `priorGroups` only then:
+   * nobody else reads them.
+   */
+  hasGrantStream(org: string): boolean {
+    return this.grantStreamProbe?.(org) ?? false;
+  }
 
   /** Subscribes; returns the unsubscribe function. */
   on(listener: DomainEventListener): () => void {

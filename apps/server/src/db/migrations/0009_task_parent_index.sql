@@ -1,0 +1,1 @@
+CREATE INDEX `task_parent_any` ON `task` (`parent_id`);

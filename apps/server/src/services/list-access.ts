@@ -446,11 +446,14 @@ export function descendantsOf(
   const out: string[] = [];
   let frontier = [...ids];
   while (frontier.length > 0) {
-    const children = tx
-      .select({ id: task.id, deletedAt: task.deletedAt })
-      .from(task)
-      .where(inArray(task.parentId, frontier))
-      .all();
+    // Chunked: a parent may have more children than SQLite takes bound parameters.
+    const children = chunked(frontier).flatMap((chunk) =>
+      tx
+        .select({ id: task.id, deletedAt: task.deletedAt })
+        .from(task)
+        .where(inArray(task.parentId, chunk))
+        .all(),
+    );
     const matching = children.filter(
       (c) => filter.deletedAt === undefined || c.deletedAt === filter.deletedAt,
     );
@@ -468,9 +471,11 @@ export function softDeleteTasks(
 ): void {
   if (ids.length === 0) return;
   const all = [...ids, ...descendantsOf(tx, ids, { deletedAt: null })];
-  tx.update(task)
-    .set({ deletedAt: input.now, deletedBy: input.userId, updatedAt: input.now })
-    .where(and(inArray(task.id, all), isNull(task.deletedAt)))
-    .run();
+  for (const chunk of chunked(all)) {
+    tx.update(task)
+      .set({ deletedAt: input.now, deletedBy: input.userId, updatedAt: input.now })
+      .where(and(inArray(task.id, chunk), isNull(task.deletedAt)))
+      .run();
+  }
   indexTasks(tx, all);
 }
