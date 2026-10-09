@@ -305,6 +305,10 @@ describe('worst cases stay linear (a comment must never freeze the task view)', 
     'alternating backticks': '`a'.repeat(n / 2),
     'an unclosed backtick before many runs': `\`${'``a'.repeat((n - 1) / 3)}`,
     'mention openers': '@['.repeat(n / 2),
+    'a tilde run followed by a backtick (fence)': `${'~'.repeat(n - 1)}\``,
+    'a backtick run followed by a backtick (fence)': `${'`'.repeat(n - 2)}a\``,
+    'a code span of spaced words': `\` ${'a '.repeat((n - 4) / 2)}a\``,
+    'a code span of leading-space words': `\` ${' a'.repeat((n - 4) / 2)}\``,
   };
   for (const [name, body] of Object.entries(payloads)) {
     it(`${name} parse in under 50 ms`, () => {
@@ -315,6 +319,28 @@ describe('worst cases stay linear (a comment must never freeze the task view)', 
       expect(blocks.length).toBeGreaterThan(0);
     });
   }
+
+  it('serialising a long spaced code span stays under 50 ms', () => {
+    const blocks = parseCommentMarkdown(`\` ${'a '.repeat((n - 4) / 2)}a\``);
+    commentToMarkdown(blocks);
+    const start = performance.now();
+    const markdown = commentToMarkdown(blocks);
+    expect(performance.now() - start).toBeLessThan(50);
+    expect(parseCommentMarkdown(markdown)).toEqual(blocks);
+  });
+
+  it('fences and code-span spaces keep their meaning', () => {
+    expect(parseCommentMarkdown('  ~~~~ js\ncode\n~~~~')).toEqual([
+      { type: 'code_block', text: 'code' },
+    ]);
+    // A backtick after a fence run: not a fence, for either fence character.
+    expect(parseCommentMarkdown('~~~ a`b')[0]?.type).toBe('paragraph');
+    expect(parseCommentMarkdown('    ~~~')[0]?.type).toBe('paragraph');
+    expect(parseCommentMarkdown('~~')[0]?.type).toBe('paragraph');
+    expect(parseInline('` a `')).toEqual([{ type: 'code', text: 'a' }]);
+    expect(parseInline('`   `')).toEqual([{ type: 'code', text: '   ' }]);
+    expect(parseInline('` a`')).toEqual([{ type: 'code', text: ' a' }]);
+  });
 
   it('trimming stays exact: unbalanced closing parens and trailing punctuation go', () => {
     const [block] = parseCommentMarkdown(`see https://a.example/x_(y))).),`);

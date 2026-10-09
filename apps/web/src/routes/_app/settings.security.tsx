@@ -1,8 +1,10 @@
+import type { Grant } from '@rooster/core/schemas';
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDisplayPrefs, useRevokeSession, useSessions } from '../../data';
 import {
+  useConfirmedGrantOrgs,
   useCreateToken,
   useGrantOrgs,
   useGrants,
@@ -58,6 +60,16 @@ function ConnectedApps({ now }: { now: number }) {
   const createToken = useCreateToken();
   const updateGrant = useUpdateGrant();
   const revokeGrant = useRevokeGrant();
+  // The grant being edited: its orgs and groups are confirmed against the server before any
+  // stale id is pruned (never the optimistic list cache).
+  const [editing, setEditing] = useState<Grant | null>(null);
+  const confirmIds =
+    editing === null
+      ? null
+      : editing.constraints.orgs === 'all'
+        ? []
+        : editing.constraints.orgs.map((org) => org.orgId);
+  const confirmedOrgs = useConfirmedGrantOrgs(confirmIds);
   const failed = (message: string) => (error: unknown) => {
     toast({ message, tone: 'danger' });
     throw error;
@@ -67,6 +79,8 @@ function ConnectedApps({ now }: { now: number }) {
       grants={grants.data}
       error={grants.error}
       orgs={orgs}
+      confirmedOrgs={editing ? confirmedOrgs : undefined}
+      onEditingChange={setEditing}
       prefs={prefs}
       now={now}
       onCreateToken={(input) =>

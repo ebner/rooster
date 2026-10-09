@@ -52,6 +52,13 @@ export interface ConnectedAppsSectionProps {
   initialMode?: ConnectedAppsMode | undefined;
   /** The section's anchor (`/settings/security#connected-apps`). */
   id?: string | undefined;
+  /**
+   * Server-confirmed orgs and groups (`useConfirmedGrantOrgs`) for the grant being edited:
+   * only ids missing there are pruned before a save. Undefined: nothing is pruned.
+   */
+  confirmedOrgs?: readonly GrantOrgOption[] | undefined;
+  /** The grant being edited (or null), so the caller can confirm its orgs and groups. */
+  onEditingChange?: ((grant: Grant | null) => void) | undefined;
 }
 
 const kindIcons = { pat: KeyRound, device: SquareTerminal, oauth: AppWindow } as const;
@@ -71,9 +78,16 @@ export function ConnectedAppsSection({
   onRevoke,
   initialMode,
   id = 'connected-apps',
+  confirmedOrgs,
+  onEditingChange,
 }: ConnectedAppsSectionProps) {
   const { t } = useTranslation('settings');
   const [mode, setMode] = useState<ConnectedAppsMode>(initialMode ?? { kind: 'idle' });
+  const editingId = mode.kind === 'editing' ? mode.id : null;
+  const editingGrant = grants?.find((g) => g.id === editingId) ?? null;
+  useEffect(() => {
+    onEditingChange?.(editingGrant);
+  }, [editingGrant, onEditingChange]);
   const idle = () => setMode({ kind: 'idle' });
   const ordered = [...(grants ?? [])].sort(
     (a, b) => Number(b.current) - Number(a.current) || b.createdAt - a.createdAt,
@@ -126,6 +140,7 @@ export function ConnectedAppsSection({
               setMode={setMode}
               onUpdate={onUpdate}
               onRevoke={onRevoke}
+              confirmedOrgs={confirmedOrgs}
             />
           ))}
         </ul>
@@ -143,9 +158,11 @@ function GrantRow({
   setMode,
   onUpdate,
   onRevoke,
+  confirmedOrgs,
 }: {
   grant: Grant;
   orgs: readonly GrantOrgOption[];
+  confirmedOrgs: readonly GrantOrgOption[] | undefined;
   prefs: DisplayPrefs;
   now: number;
   mode: ConnectedAppsMode;
@@ -271,6 +288,7 @@ function GrantRow({
         <EditGrant
           grant={grant}
           orgs={orgs}
+          confirmedOrgs={confirmedOrgs}
           prefs={prefs}
           now={now}
           onCancel={() => setMode({ kind: 'idle' })}
@@ -301,6 +319,7 @@ function InlinePanel({ children, onEscape }: { children: ReactNode; onEscape: ()
 function EditGrant({
   grant,
   orgs,
+  confirmedOrgs,
   prefs,
   now,
   onCancel,
@@ -308,15 +327,18 @@ function EditGrant({
 }: {
   grant: Grant;
   orgs: readonly GrantOrgOption[];
+  confirmedOrgs: readonly GrantOrgOption[] | undefined;
   prefs: DisplayPrefs;
   now: number;
   onCancel: () => void;
   onSave: (patch: GrantPatch) => Promise<void>;
 }) {
   const { t } = useTranslation('settings');
-  const [edited, setValue] = useState<GrantValue>(() => valueFromGrant(grant));
-  // Orgs left and groups deleted since the grant was made would fail any save (422).
-  const { value, stale } = reconcileGrant(edited, orgs);
+  const [edited, setEdited] = useState<GrantValue>(() => valueFromGrant(grant));
+  // Orgs left and groups deleted since the grant was made would fail any save (422). Only
+  // what the server confirms missing is dropped, and only from what is sent: the edits keep
+  // every id, so a removal never outlives data that shows the group exists.
+  const { value, stale } = reconcileGrant(edited, confirmedOrgs ?? []);
   const [label, setLabel] = useState(grant.label);
   const [pending, setPending] = useState(false);
   const blocked = grantIssues(value).length > 0 || label.trim() === '';
@@ -351,8 +373,8 @@ function EditGrant({
           </Banner>
         )}
         <ConstraintEditor
-          value={value}
-          onChange={setValue}
+          value={edited}
+          onChange={setEdited}
           orgs={orgs}
           ceiling={ceilingForGrant(grant)}
           currentExpiresAt={grant.expiresAt}

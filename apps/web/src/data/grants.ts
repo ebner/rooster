@@ -5,6 +5,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import type { GrantOrgOption } from '../features/access/grant-model';
 import { api, unwrap } from './http';
 import { myListKey, useListPipeline } from './list';
+import { toMe } from './mappers';
 import { useMe } from './me';
 import type { MutationResult, QueryResult } from './types';
 
@@ -89,4 +90,48 @@ export function useGrantOrgs(): GrantOrgOption[] {
     isPersonal: org.isPersonal,
     groups: groups[index]?.data,
   }));
+}
+
+/**
+ * Server-confirmed orgs and groups, for pruning a grant's stale ids before a save (P2): never
+ * the optimistic `my-list` cache, where a live group this tab has not fetched yet looks
+ * deleted. Fetches a fresh `/me` and each named org's groups (`staleTime: 0`, not retried).
+ * Until confirmed, or when offline, an org's `groups` is undefined (and with no fresh `/me`
+ * the list is empty), so nothing is pruned and the server has the last word.
+ */
+export function useConfirmedGrantOrgs(orgIds: readonly string[] | null): GrantOrgOption[] {
+  const fresh = { staleTime: 0, gcTime: 0, retry: false, refetchOnWindowFocus: false } as const;
+  const me = useQuery({
+    queryKey: ['grant-confirm', 'me'],
+    queryFn: async () => toMe(await unwrap(api.GET('/api/v1/me'))).orgs,
+    enabled: orgIds !== null,
+    ...fresh,
+  });
+  const named = (me.data ?? []).filter((org) => orgIds?.includes(org.id));
+  const groups = useQueries({
+    queries: named.map((org) => ({
+      queryKey: ['grant-confirm', 'groups', org.id],
+      queryFn: async () =>
+        (
+          await unwrap(
+            api.GET('/api/v1/orgs/{orgId}/my-list', { params: { path: { orgId: org.id } } }),
+          )
+        ).groups.map((group) => ({
+          id: group.id,
+          name: group.name,
+          isInbox: group.kind === 'inbox',
+        })),
+      ...fresh,
+    })),
+  });
+  if (orgIds === null || !me.data) return [];
+  return me.data.map((org) => {
+    const index = named.findIndex((n) => n.id === org.id);
+    return {
+      id: org.id,
+      name: org.name,
+      isPersonal: org.isPersonal,
+      groups: index >= 0 ? groups[index]?.data : undefined,
+    };
+  });
 }

@@ -149,8 +149,12 @@ function renderApps(overrides: Partial<ConnectedAppsSectionProps> = {}) {
     onRevoke: vi.fn(async () => undefined),
     ...overrides,
   };
-  render(<ConnectedAppsSection {...props} />);
-  return props;
+  const view = render(<ConnectedAppsSection {...props} />);
+  return {
+    ...props,
+    rerender: (next: Partial<ConnectedAppsSectionProps>) =>
+      view.rerender(<ConnectedAppsSection {...props} {...next} />),
+  };
 }
 
 describe('Connected apps', () => {
@@ -212,7 +216,7 @@ describe('Connected apps', () => {
       },
     };
     const onUpdate = vi.fn(async () => undefined);
-    renderApps({ grants: [stale], onUpdate });
+    renderApps({ grants: [stale], onUpdate, confirmedOrgs: orgs });
     fireEvent.click(screen.getByRole('button', { name: 'Edit Prio sync script' }));
     const form = screen.getByTestId('edit-grant');
     expect(within(form).getByRole('status').textContent).toBe(
@@ -238,6 +242,58 @@ describe('Connected apps', () => {
       },
       label: 'Renamed',
     });
+  });
+
+  test('P2: ids are only pruned when the server confirms them missing, never from a stale cache', async () => {
+    const [, pat] = fixtureGrants(now);
+    if (!pat) throw new Error('fixture');
+    const fresh = '0192f5d0-7a1e-7c3a-9f10-00000000b099';
+    const grant = {
+      ...pat,
+      constraints: {
+        orgs: [{ orgId: acme, read: 'all' as const, write: { groups: [g.companyPrio, fresh] } }],
+      },
+    };
+    // This tab's cache has not seen the new group yet; the server has it.
+    const confirmed = orgs.map((org) =>
+      org.id === acme
+        ? { ...org, groups: [...(org.groups ?? []), { id: fresh, name: 'New', isInbox: false }] }
+        : org,
+    );
+    const onUpdate = vi.fn(async () => undefined);
+    const onEditingChange = vi.fn();
+    const view = renderApps({ grants: [grant], onUpdate, onEditingChange });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Prio sync script' }));
+    expect(onEditingChange).toHaveBeenLastCalledWith(grant);
+    const form = () => screen.getByTestId('edit-grant');
+    // Not confirmed yet (or offline): nothing is pruned.
+    expect(within(form()).queryByRole('status')).toBeNull();
+    // Confirmed missing: pruned from what is sent, with the note.
+    view.rerender({ confirmedOrgs: orgs });
+    expect(within(form()).getByRole('status').textContent).toContain('1 group no longer exists');
+    // The data now shows it exists: the removal does not stick.
+    view.rerender({ confirmedOrgs: confirmed });
+    expect(within(form()).queryByRole('status')).toBeNull();
+    // Editing the picker keeps the id it does not show.
+    const picker = within(form()).getByRole('listbox', { name: 'Groups it may change in Acme' });
+    fireEvent.click(within(picker).getByRole('option', { name: 'Today' }));
+    await act(async () => {
+      fireEvent.click(within(form()).getByRole('button', { name: 'Save changes' }));
+    });
+    expect(onUpdate).toHaveBeenCalledWith(
+      pat.id,
+      expect.objectContaining({
+        constraints: {
+          orgs: [
+            {
+              orgId: acme,
+              read: 'all',
+              write: { groups: [g.companyToday, g.companyPrio, fresh] },
+            },
+          ],
+        },
+      }),
+    );
   });
 
   test('a new token is created from the form and shown once', async () => {

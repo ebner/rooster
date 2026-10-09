@@ -34,7 +34,6 @@ export type CommentBlock =
 /** Emphasis deeper than this stays text: bounds the renderer's recursion. */
 export const COMMENT_NESTING_MAX = 8;
 
-const FENCE_RE = /^ {0,3}(`{3,}|~{3,})[^`]*$/;
 const BULLET_RE = /^ {0,3}[-*+][ \t]+(.*)$/;
 const ORDERED_RE = /^ {0,3}(\d{1,9})[.)][ \t]+(.*)$/;
 const CONTINUATION_RE = /^(?: {2,}|\t)\S/;
@@ -66,11 +65,10 @@ export function parseCommentMarkdown(body: string): CommentBlock[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] as string;
-    const fence = FENCE_RE.exec(line);
-    if (fence) {
+    const marker = fenceOpener(line);
+    if (marker !== null) {
       flushParagraph();
       flushList();
-      const marker = fence[1] as string;
       const code: string[] = [];
       for (i += 1; i < lines.length; i++) {
         const next = lines[i] as string;
@@ -115,6 +113,33 @@ export function parseCommentMarkdown(body: string): CommentBlock[] {
   flushParagraph();
   flushList();
   return blocks;
+}
+
+/**
+ * The opening fence of a code block (up to 3 spaces, then 3+ backticks or tildes, and no
+ * backtick after the run), or null. A linear scan: the regex this replaces backtracked
+ * quadratically on a long tilde run followed by a backtick (110 ms per 20 KB comment).
+ */
+function fenceOpener(line: string): string | null {
+  let start = 0;
+  while (start < 3 && line[start] === ' ') start += 1;
+  const char = line[start];
+  if (char !== '`' && char !== '~') return null;
+  let end = start;
+  while (line[end] === char) end += 1;
+  if (end - start < 3) return null;
+  if (line.indexOf('`', end) !== -1) return null;
+  return line.slice(start, end);
+}
+
+/**
+ * Whether a code span's content loses one space at each end (CommonMark: it starts and ends
+ * with a space and is not only spaces). Linear; `/^ .*[^ ].* $/s` was quadratic.
+ */
+function stripsSpaces(code: string): boolean {
+  if (code.length < 3 || code[0] !== ' ' || code[code.length - 1] !== ' ') return false;
+  for (let k = 1; k < code.length - 1; k++) if (code[k] !== ' ') return true;
+  return false;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -193,7 +218,7 @@ export function parseInline(text: string, links = true): CommentInline[] {
         continue;
       }
       let code = text.slice(i + run.length, close).replace(/\n/g, ' ');
-      if (/^ .*[^ ].* $/s.test(code) || /^ [^ ] $/.test(code)) code = code.slice(1, -1);
+      if (stripsSpaces(code)) code = code.slice(1, -1);
       push({ type: 'code', text: code });
       i = close + run.length;
       continue;
@@ -462,10 +487,7 @@ function inlineMarkdown(nodes: readonly CommentInline[]): string {
         const longest = Math.max(0, ...(node.text.match(/`+/g) ?? []).map((r) => r.length));
         const ticks = '`'.repeat(longest + 1);
         const pad =
-          node.text.startsWith('`') ||
-          node.text.endsWith('`') ||
-          /^ .*[^ ].* $/s.test(node.text) ||
-          /^ [^ ] $/.test(node.text)
+          node.text.startsWith('`') || node.text.endsWith('`') || stripsSpaces(node.text)
             ? ' '
             : '';
         out += `${ticks}${pad}${node.text}${pad}${ticks}`;

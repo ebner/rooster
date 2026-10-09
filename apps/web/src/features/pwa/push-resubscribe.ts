@@ -4,7 +4,8 @@
  * (`renewsEndpoint`), so push keeps working without the app being opened, but a device the
  * user removed elsewhere is never brought back: the server answers `410 push_gone` (or `409`
  * when the endpoint is another account's) and the new subscription is dropped here. Without
- * an old subscription there is nothing to renew from: no POST; the next app open decides. The
+ * an old subscription there is nothing to renew from: no POST, and the new subscription is
+ * dropped too (never left active and unregistered); the next app open turns push off. The
  * worker has no API client (bundle size), so this is a plain same-origin POST with the cookie.
  */
 
@@ -31,7 +32,13 @@ export async function resubscribeAfterChange(
   userAgent: string,
 ): Promise<RenewalResult> {
   const old = change.oldSubscription;
-  if (!old?.endpoint) return 'skipped';
+  if (!old?.endpoint) {
+    // Nothing proves which device this renews, so it is not registered; it must not stay
+    // active either. The next app open finds no subscription, drops the marker, and Settings
+    // shows push as off with "Turn on" to re-enable it.
+    await change.newSubscription?.unsubscribe().catch(() => false);
+    return 'skipped';
+  }
   const key = old.options.applicationServerKey ?? null;
   const subscription =
     change.newSubscription ??

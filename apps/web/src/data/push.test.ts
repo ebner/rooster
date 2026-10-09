@@ -121,7 +121,7 @@ describe('pushsubscriptionchange', () => {
     },
   );
 
-  test('without an old subscription nothing is posted (the next app open decides)', async () => {
+  test('without an old subscription nothing is posted and the new one is dropped', async () => {
     const post = answer(201);
     const created = fresh();
     const result = await resubscribeAfterChange(
@@ -132,5 +132,7 @@ describe('pushsubscriptionchange', () => {
     );
     expect(result).toBe('skipped');
     expect(post).not.toHaveBeenCalled();
+    // P2: never left active and unregistered.
+    expect(created.unsubscribe).toHaveBeenCalled();
   });
 });

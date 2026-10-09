@@ -42,14 +42,17 @@ export function GroupPicker({
       selectedKeys={new Set(selected)}
       disabledKeys={disabledIds ?? []}
       onSelectionChange={(keys) => {
+        // Ids this list does not show (a group not in this tab's cache yet, or deleted) are
+        // kept: only server-confirmed deletions are pruned, before a save (reconcileGrant).
+        const shown = new Set(groups.map((g) => g.id));
+        const unshown = selected.filter((id) => !shown.has(id));
         if (keys === 'all') {
-          onChange(groups.map((g) => g.id));
+          onChange([...groups.map((g) => g.id), ...unshown]);
           return;
         }
-        // Keep the groups' own order, so the payload is stable. Ids of deleted groups are
-        // never kept selected (they are reconciled away before a save).
+        // Keep the groups' own order, so the payload is stable.
         const picked = new Set([...keys].map(String));
-        onChange(groups.filter((g) => picked.has(g.id)).map((g) => g.id));
+        onChange([...groups.filter((g) => picked.has(g.id)).map((g) => g.id), ...unshown]);
       }}
       {...(testId ? { 'data-testid': testId } : {})}
       className="flex flex-col rounded-sm border border-border bg-bg-app p-1 outline-none focus-ring:border-border-focus"
