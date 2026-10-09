@@ -152,7 +152,7 @@ Scopes can't say "write only in Prio" (RFC 9396 §1), so each grant also stores 
 - `--read-only` (stdio) and a token without write scopes (HTTP) list only the read tools.
 
 ### 5.2 Remote endpoint behaviour
-- `/.well-known/oauth-protected-resource/mcp` (RFC 9728; also served at the root path): `resource`, `authorization_servers: [ROOSTER_BASE_URL]`, `scopes_supported: ["tasks:read"]` (the minimum; MCP says to keep this minimal and step up), `bearer_methods_supported: ["header"]`, and `resource_name: "rooster"`.
+- `/.well-known/oauth-protected-resource/mcp` (RFC 9728; also served at the root path): `resource`, `authorization_servers: ["<ROOSTER_BASE_URL>/api/auth"]` (the issuer, ADR 0041), `scopes_supported: ["tasks:read"]` (the minimum; MCP says to keep this minimal and step up), `bearer_methods_supported: ["header"]`, and `resource_name: "rooster"`.
 - An unauthenticated request gets `401` with `WWW-Authenticate: Bearer resource_metadata="…", scope="tasks:read"`.
 - A tool needing more gets `403 insufficient_scope` with **all** the scopes it needs in one challenge, as the MCP spec asks:
 
@@ -177,9 +177,9 @@ Scopes can't say "write only in Prio" (RFC 9396 §1), so each grant also stores 
 |---|---|---|---|
 | `/.well-known/oauth-protected-resource/mcp` (and `/api/v1`) | RFC 9728 | Resource metadata (§5.2) | **Yes** (MCP) |
 | `/.well-known/oauth-authorization-server` | RFC 8414 | AS metadata incl. `client_id_metadata_document_supported`, `code_challenge_methods_supported: ["S256"]`, `authorization_response_iss_parameter_supported` | **Yes** (MCP) |
-| MCP Server Card, path per SEP-2127 (`/.well-known/mcp/…`) | SEP-2127, merged 2026-10-06 | `name` (`io.github.201works/rooster`, ADR 0041), title, description, `websiteUrl`, version, icons, `remotes: [{type: "streamable-http", url: "<host>/mcp", authentication: oauth2, supportedProtocolVersions}]`, `packages` (the npm CLI `@rooster/cli` for stdio; not yet published, ADR 0041) | Best effort |
+| MCP Server Card at `/mcp/server-card` (alias `/.well-known/mcp/server-card.json`; ADR 0043) | SEP-2127, final | `name` (`io.github.201works/rooster`, ADR 0041), title, description, `websiteUrl`, version, icons, `remotes: [{type: "streamable-http", url: "<host>/mcp", authentication: oauth2, supportedProtocolVersions}]`, and the OAuth hint under `_meta` (the card schema has no `authentication`; ADR 0043). The CLI is not published to npm, so the card names no package (ADR 0041) | Best effort |
 | `/.well-known/ai-catalog.json` | ARD / AI Catalog (draft) | Entries: the MCP Server Card (`application/mcp-server-card+json`), the skills index, the OpenAPI document (`/api/v1/openapi.json`) and `/llms.txt` | Best effort |
-| `/.well-known/agent-skills/index.json` and `…/rooster/SKILL.md` | Agent Skills Discovery v0.2.0 (draft) | One `skill-md` entry with its `sha256` digest (computed at boot, because the skill embeds the instance URL) | Best effort |
+| `/.well-known/agent-skills/index.json` and `…/rooster/SKILL.md` | Agent Skills Discovery v0.2.0 (draft) | One `skill-md` entry with its `digest` (`sha256:<hex>`) (computed at boot, because the skill embeds the instance URL) | Best effort |
 | `/llms.txt` | Convention | What rooster is, plus links to the API docs, MCP, the skill and the CLI | Best effort |
 
 - `ROOSTER_AGENT_DISCOVERY=on|off` (default `on`). `off` hides the best-effort documents and keeps the two the OAuth flow needs. The documents reveal only that a rooster instance and its endpoints exist, never any data.

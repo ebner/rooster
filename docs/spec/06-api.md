@@ -144,7 +144,7 @@
 | POST/GET/DELETE `/mcp` | The remote MCP endpoint (Streamable HTTP, protocol 2026-07-28). OAuth bearer tokens with audience `<host>/mcp` only. |
 | GET `/.well-known/oauth-authorization-server/api/auth` | RFC 8414 metadata for the issuer `<base>/api/auth`. |
 | GET `/.well-known/oauth-protected-resource/mcp` · `…/api/v1` | RFC 9728 resource metadata (11 §5.2). |
-| GET MCP Server Card (path per SEP-2127) · `/.well-known/ai-catalog.json` · `/.well-known/agent-skills/index.json` · `/.well-known/agent-skills/rooster/SKILL.md` · `/llms.txt` | Discovery (11 §6); off with `ROOSTER_AGENT_DISCOVERY=off`. |
+| GET `/mcp/server-card` (MCP Server Card, SEP-2127) · `/.well-known/ai-catalog.json` · `/.well-known/agent-skills/index.json` · `/.well-known/agent-skills/rooster/SKILL.md` · `/llms.txt` | Discovery (11 §6); off with `ROOSTER_AGENT_DISCOVERY=off`. |
 
 All of these live outside `/api/v1`, need no session (except the consent screen), are rate-limited per IP, and do not appear in the OpenAPI document. `/mcp` is described by its Server Card.
 
