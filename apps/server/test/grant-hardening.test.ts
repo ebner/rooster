@@ -7,8 +7,11 @@ import { describe, expect, it } from 'vitest';
 import { runMigrations } from '../src/db/migrate.ts';
 import { deviceCode, follower, idempotency } from '../src/db/schema/index.ts';
 import type { DomainEvent } from '../src/events/bus.ts';
+import { readOnly } from '../src/services/context.ts';
+import { taskReach } from '../src/services/event-audience.ts';
 import { readableTaskCondition } from '../src/services/grant-access.ts';
 import type { Actor } from '../src/services/index.ts';
+import { subtreePlacements } from '../src/services/list-access.ts';
 import { ALL, bearer, pat } from './grant-helpers.ts';
 import { groupNamed, type ListCtx, listCtx, meta, sharedOrg } from './list-helpers.ts';
 
@@ -956,4 +959,42 @@ describe('review round 6 (focused review)', () => {
     expect(best(timed)).toBeLessThan(20);
     expect(best(browserTimed)).toBeLessThan(20);
   });
+});
+
+describe('review round 7 (performance rework)', () => {
+  it('P7 subtree placements and task reach scale to 135,000 placed children and 33,000 roots', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const prio = await groupNamed(owner, 'Prio');
+    const parent = await owner.ok<Task>(
+      'POST',
+      '/api/v1/orgs/personal/tasks',
+      { title: 'Huge', groupId: prio.id },
+      201,
+    );
+    const insertTask = ctx.db.sqlite.prepare(
+      "INSERT INTO task (id, org_id, parent_id, subtask_position, title, assignee_id, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, 'sub', ?, ?, 0, 0)",
+    );
+    const insertPlacement = ctx.db.sqlite.prepare(
+      'INSERT INTO placement (task_id, user_id, org_id, group_id, position, updated_at) VALUES (?, ?, ?, ?, ?, 0)',
+    );
+    const ids: string[] = [];
+    ctx.db.sqlite.transaction(() => {
+      for (let i = 0; i < 135_000; i++) {
+        const id = `0199bbbb-0000-7000-8000-${i.toString(16).padStart(12, '0')}`;
+        ids.push(id);
+        const position = `a${i.toString(36).padStart(4, '0')}`;
+        insertTask.run(id, parent.orgId, parent.id, position, owner.userId, owner.userId);
+        insertPlacement.run(id, owner.userId, parent.orgId, prio.id, position);
+      }
+    })();
+    // A spread of every returned row into push() overflowed the argument limit (RangeError).
+    const placed = readOnly(ctx.db, (tx) => subtreePlacements(tx, [parent.id]));
+    expect(placed.length).toBeGreaterThanOrEqual(135_000);
+    // Excluding the roots from the ancestors must stay linear in the number of roots.
+    const started = performance.now();
+    const reach = readOnly(ctx.db, (tx) => taskReach(tx, ids.slice(0, 33_000)));
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(reach.taskIds.has(parent.id)).toBe(true);
+  }, 120_000);
 });

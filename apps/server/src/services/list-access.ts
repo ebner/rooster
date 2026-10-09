@@ -429,17 +429,17 @@ export function subtreePlacements(
       chunk.map((id) => sql`${id}`),
       sql`, `,
     );
-    out.push(
-      ...tx.all<{ taskId: string; userId: string; groupId: string }>(
-        sql`WITH RECURSIVE d(id, depth) AS (
+    // Appended row by row: one root can have more descendants than a spread may pass.
+    const rows = tx.all<{ taskId: string; userId: string; groupId: string }>(
+      sql`WITH RECURSIVE d(id, depth) AS (
               SELECT id, 0 FROM task WHERE id IN (${roots})
               UNION
               SELECT c.id, d.depth + 1 FROM task c JOIN d ON c.parent_id = d.id
               WHERE d.depth < ${SUBTREE_DEPTH_GUARD}
             ) SELECT p.task_id AS taskId, p.user_id AS userId, p.group_id AS groupId
               FROM placement p JOIN d ON p.task_id = d.id`,
-      ),
     );
+    for (const row of rows) out.push(row);
   }
   return out;
 }
@@ -504,7 +504,7 @@ export function descendantsOf(
     const matching = children.filter(
       (c) => filter.deletedAt === undefined || c.deletedAt === filter.deletedAt,
     );
-    out.push(...matching.map((c) => c.id));
+    for (const c of matching) out.push(c.id);
     frontier = matching.map((c) => c.id);
   }
   return out;

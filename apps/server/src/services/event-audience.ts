@@ -86,7 +86,8 @@ export function taskReach(tx: Tx, taskIds: readonly string[]): TaskReach {
   }
   // Descendants (any state) and the list users of the whole family: recursive statements,
   // so nothing scales an IN list with the subtree.
-  const ancestors = [...family].filter((id) => !taskIds.includes(id));
+  const roots = new Set(taskIds);
+  const ancestors = [...family].filter((id) => !roots.has(id));
   for (const r of subtreeOf(tx, taskIds)) family.add(r.id);
   const listUsers = new Set<string>();
   for (const p of subtreePlacements(tx, taskIds)) listUsers.add(p.userId);
