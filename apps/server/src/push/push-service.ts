@@ -16,6 +16,7 @@ import { mailT } from '../mail/i18n.ts';
 import { dueContext, tasksDueByToday, todayOrg } from '../services/assigned-tasks.ts';
 import { type Actor, immediate, readOnly, type ServiceDeps, type Tx } from '../services/context.ts';
 import { loadDeliverable } from '../services/deliverable.ts';
+import { requireBrowserSession } from '../services/grant-access.ts';
 import { claimJobRun, dueSlot, jobScope } from '../services/job-runs.ts';
 import { loadRecipient, type Recipient, recipientsWithPref } from '../services/pref-store.ts';
 import {
@@ -103,6 +104,7 @@ export class PushService {
   }
 
   list(actor: Actor): PushSubscriptionInfo[] {
+    requireBrowserSession(actor);
     return readOnly(this.deps.db, (tx) =>
       tx
         .select()
@@ -123,6 +125,7 @@ export class PushService {
     input: PushSubscriptionCreate,
     userAgentHeader: string | null,
   ): PushSubscriptionInfo {
+    requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => {
       const userAgent = input.userAgent ?? userAgentHeader?.slice(0, 256) ?? null;
       const values = {
@@ -148,6 +151,7 @@ export class PushService {
   }
 
   unsubscribe(actor: Actor, id: string): void {
+    requireBrowserSession(actor);
     immediate(this.deps.db, (tx) => {
       const changes = tx
         .delete(pushSubscription)
@@ -163,6 +167,7 @@ export class PushService {
    * other refusal is `502 push_failed`.
    */
   async test(actor: Actor, id: string): Promise<void> {
+    requireBrowserSession(actor);
     const row = readOnly(this.deps.db, (tx) =>
       tx
         .select()
@@ -196,6 +201,7 @@ export class PushService {
    * app next opens. Keys from the environment cannot be replaced here (`409`).
    */
   regenerate(actor: Actor): VapidPublicKey {
+    requireBrowserSession(actor);
     if (!actor.isAdmin) throw new AppError('forbidden', 403, 'Only instance admins can do that.');
     if (this.deps.config.vapid !== null) {
       throw new AppError(

@@ -266,7 +266,7 @@ describe('members', () => {
       isAdmin: false,
       via: 'session',
       sessionId: 's',
-      scopes: ['read', 'write'],
+      grant: null,
     });
     const a = actor(insertUser(db, { email: 'a@example.com' }));
     const b = actor(insertUser(db, { email: 'b@example.com' }));

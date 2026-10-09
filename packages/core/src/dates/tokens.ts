@@ -42,6 +42,42 @@ export function findGroupToken(title: string): GroupTokenMatch | null {
   return found;
 }
 
+/** `#tag` token (02 §3.4): the name after `#`. */
+export interface TagTokenMatch {
+  name: string;
+  start: number;
+  end: number;
+}
+
+/** `#` + letters, digits, `_` or `-`, at the start or after whitespace; at most 40 characters. */
+const TAG_TOKEN_RE = /(?<=^|\s)#([\p{L}\p{N}_-]{1,40})(?=$|[\s.,;:!?)])/gu;
+
+/** Every `#tag` token outside backtick escapes, in title order (any position, unlike `>Group`). */
+export function findTagTokens(title: string): TagTokenMatch[] {
+  const escaped = escapeSpans(title);
+  const out: TagTokenMatch[] = [];
+  for (const m of title.matchAll(TAG_TOKEN_RE)) {
+    const span = { start: m.index, end: m.index + m[0].length };
+    if (!overlapsAny(span, escaped)) out.push({ name: m[1] as string, ...span });
+  }
+  return out;
+}
+
+/** `title` without `spans` (each replaced by one space), whitespace not yet collapsed. */
+export function removeSpans(
+  title: string,
+  spans: readonly { start: number; end: number }[],
+): string {
+  let out = '';
+  let at = 0;
+  for (const span of [...spans].sort((a, b) => a.start - b.start)) {
+    if (span.start < at) continue;
+    out += `${title.slice(at, span.start)} `;
+    at = span.end;
+  }
+  return out + title.slice(at);
+}
+
 /** `@name` token for assignment on inline create (02 §3.4, P6). */
 export interface AssigneeTokenMatch {
   start: number;

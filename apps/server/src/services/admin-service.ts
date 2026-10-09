@@ -16,6 +16,7 @@ import {
   type ServiceDeps,
   type Tx,
 } from './context.ts';
+import { requireBrowserSession } from './grant-access.ts';
 import { notFound } from './org-access.ts';
 
 function requireAdmin(actor: Actor): void {
@@ -27,6 +28,7 @@ export class AdminService {
   constructor(private readonly deps: ServiceDeps) {}
 
   listAllowlist(actor: Actor): AllowlistEntry[] {
+    requireBrowserSession(actor);
     requireAdmin(actor);
     return immediate(this.deps.db, (tx) =>
       tx
@@ -43,6 +45,7 @@ export class AdminService {
   }
 
   addAllowlist(actor: Actor, input: AllowlistCreate): AllowlistEntry {
+    requireBrowserSession(actor);
     requireAdmin(actor);
     return immediate(this.deps.db, (tx) => {
       const value = input.value.trim().toLowerCase();
@@ -69,6 +72,7 @@ export class AdminService {
   }
 
   removeAllowlist(actor: Actor, id: string): void {
+    requireBrowserSession(actor);
     requireAdmin(actor);
     immediate(this.deps.db, (tx) => {
       const result = tx.delete(allowlistEntry).where(eq(allowlistEntry.id, id)).run();
@@ -77,6 +81,7 @@ export class AdminService {
   }
 
   listUsers(actor: Actor): AdminUser[] {
+    requireBrowserSession(actor);
     requireAdmin(actor);
     return immediate(this.deps.db, (tx) =>
       tx
@@ -90,6 +95,7 @@ export class AdminService {
 
   /** Disabling also deletes every session, so the user is signed out everywhere at once. */
   setDisabled(actor: Actor, userId: string, disabled: boolean): AdminUser {
+    requireBrowserSession(actor);
     requireAdmin(actor);
     if (disabled && userId === actor.userId) {
       throw new AppError('cannot_disable_self', 409, 'You cannot deactivate your own account.');

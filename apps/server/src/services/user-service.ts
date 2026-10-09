@@ -11,7 +11,7 @@ import {
   type Session,
 } from '@rooster/core/schemas';
 import { isLocale } from '@rooster/i18n';
-import { and, desc, eq, gt } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull } from 'drizzle-orm';
 import { orgMemberPref, session, user } from '../db/schema/index.ts';
 import type { Audience, DomainEventType, QueryKey } from '../events/bus.ts';
 import { AppError } from '../lib/errors.ts';
@@ -24,6 +24,7 @@ import {
   type Tx,
 } from './context.ts';
 import { memberIds, qk, selfAudience } from './event-audience.ts';
+import { grantReachesOrg, requireBrowserSession } from './grant-access.ts';
 import {
   listMemberships,
   type Membership,
@@ -92,7 +93,10 @@ export class UserService {
     );
   }
 
-  /** Resolves the actor of a session; `null` for a missing or disabled user. */
+  /**
+   * The browser-session actor of a session; `null` for a missing or disabled user. Requests
+   * resolve through `GrantService.resolveSession`, which also applies a device grant.
+   */
   resolveActor(userId: string, sessionId: string): Actor | null {
     const row = this.deps.db.orm
       .select({ email: user.email, emailVerified: user.emailVerified, disabledAt: user.disabledAt })
@@ -106,7 +110,7 @@ export class UserService {
       isAdmin: row.emailVerified && isAdminEmail(this.deps.config, row.email),
       via: 'session',
       sessionId,
-      scopes: ['read', 'write'],
+      grant: null,
     };
   }
 
@@ -123,7 +127,10 @@ export class UserService {
       timeFormat: oneOf<TimeFormat>(TIME_FORMATS, row.timeFormat, '24h'),
       prefs: resolvePrefs(parseJson(row.prefs)),
       isAdmin: actor.isAdmin,
-      orgs: listMemberships(tx, actor.userId).map(toOrgDto),
+      // A grant sees the orgs it reaches (11 §2.2).
+      orgs: listMemberships(tx, actor.userId)
+        .filter((m) => grantReachesOrg(actor, m.org.id))
+        .map(toOrgDto),
     };
   }
 
@@ -140,6 +147,7 @@ export class UserService {
   }
 
   updateMe(actor: Actor, patch: MePatch): Me {
+    requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => {
       const current = this.requireUser(tx, actor.userId);
       const changes: Partial<UserRow> = {};
@@ -176,12 +184,18 @@ export class UserService {
 
   /** Active sessions, most recently used first. */
   listSessions(actor: Actor): Session[] {
+    requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) =>
       tx
         .select()
         .from(session)
         .where(
-          and(eq(session.userId, actor.userId), gt(session.expiresAt, new Date(this.deps.clock()))),
+          and(
+            eq(session.userId, actor.userId),
+            gt(session.expiresAt, new Date(this.deps.clock())),
+            // CLI device sessions are listed (and revoked) as grants under Connected apps.
+            isNull(session.grantId),
+          ),
         )
         .orderBy(desc(session.updatedAt), desc(session.id))
         .all()
@@ -202,10 +216,13 @@ export class UserService {
    * it is signed out on its next request (AC-1.7).
    */
   revokeSession(actor: Actor, sessionId: string): void {
+    requireBrowserSession(actor);
     immediate(this.deps.db, (tx) => {
       const result = tx
         .delete(session)
-        .where(and(eq(session.id, sessionId), eq(session.userId, actor.userId)))
+        .where(
+          and(eq(session.id, sessionId), eq(session.userId, actor.userId), isNull(session.grantId)),
+        )
         .run();
       if (result.changes === 0) throw notFound('Session');
       // Closes the streams of that session; the user's other tabs refresh their session list.
@@ -218,6 +235,7 @@ export class UserService {
    * intent that does not match the current order falls back to the end.
    */
   reorderOrg(actor: Actor, input: OrgOrder): OrgOrderResult {
+    requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => {
       const target = requireMembership(tx, actor.userId, input.orgId);
       const others = listMemberships(tx, actor.userId).filter((m) => m.org.id !== target.org.id);
@@ -271,6 +289,7 @@ export class UserService {
 
   /** The sidebar section's collapse state (`org_member_pref.collapsed`). */
   setOrgCollapsed(actor: Actor, ref: string, collapsed: boolean): Org {
+    requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => {
       const membership = requireMembership(tx, actor.userId, ref);
       const result = tx

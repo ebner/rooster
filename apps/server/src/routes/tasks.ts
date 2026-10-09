@@ -41,11 +41,14 @@ const queryTasks = createRoute({
   path: '/api/v1/orgs/{orgId}/tasks',
   tags,
   operationId: 'queryTasks',
-  summary: 'Query tasks (CLI, MCP): my list or a due-date view, paged',
+  summary: 'Query tasks (CLI, MCP): my list, a due-date view or everyone’s tasks, paged',
   description:
-    '`view=my` (default) lists my list in order; `today`, `week`, `overdue` and `nodate` cover tasks assigned to me, evaluated in my timezone. `completed` defaults to `false`.',
+    'The general query for the CLI, MCP and Everyone’s tasks. `view=my` (default) lists my list in order; `today`, `week`, `overdue` and `nodate` cover tasks assigned to me, evaluated in my timezone; `everyone` lists every task of a shared org by due date (`409 personal_org` in a personal org). Filters combine: `assignee` (repeatable, OR), `tag` (repeatable, AND; ID or name), `hasDue`, `dueFrom`/`dueTo`, `groupId`, `completed` (default `false`) and `q` (the search grammar). Paged with `limit` and `cursor`.',
   request: { params: orgParams, query: taskQuerySchema },
-  responses: { 200: json(TaskPageSchema, 'A page of tasks'), ...problems(401, 404, 422, 429) },
+  responses: {
+    200: json(TaskPageSchema, 'A page of tasks'),
+    ...problems(401, 404, 422, 'personal_org'),
+  },
 });
 
 const createTask = createRoute({
@@ -55,9 +58,19 @@ const createTask = createRoute({
   operationId: 'createTask',
   summary: 'Create a task assigned to me, placed in my list',
   description:
-    'Placed in `groupId` (default: the Inbox) at the `afterId`/`beforeId` intent. Without any intent it goes to the top of the Inbox, or to the end of a named group. A repeated create with the same `id` and content returns the task; other content is `409 id_conflict`. `parse: true` reads a trailing `>Group` token and a date phrase from the title.',
+    'Placed in `groupId` (default: the Inbox) at the `afterId`/`beforeId` intent. Without any intent it goes to the top of the Inbox, or to the end of a named group. With `parentId` it is a subtask (`422 invalid_parent`, `subtask_depth`; `410 conflict_deleted` for a deleted parent). Assigning another member puts it at the top of their Inbox instead. A repeated create with the same `id` and content returns the task; other content is `409 id_conflict`. `parse: true` reads a trailing `>Group` token and a date phrase from the title.',
   request: { params: orgParams, body: body(TaskCreateSchema) },
-  responses: { 201: json(TaskSchema, 'The task'), ...problems(...AUTHED, 404, 409) },
+  responses: {
+    201: json(TaskSchema, 'The task'),
+    ...problems(
+      ...AUTHED,
+      404,
+      'id_conflict',
+      'conflict_deleted',
+      'invalid_parent',
+      'subtask_depth',
+    ),
+  },
 });
 
 const patchTask = createRoute({
@@ -66,10 +79,19 @@ const patchTask = createRoute({
   tags,
   operationId: 'updateTask',
   summary: 'Update fields (per-field last write wins; skipped fields in ignoredFields)',
+  description:
+    'Partial update of a task any member can see. Each field is last-write-wins on `X-Rooster-Edit-Time`: a field whose stored edit is newer is skipped and named in `ignoredFields` (the response is still `200`). The due unit (date, time, timezone, start date) is one field. Re-parenting checks cycles and depth (`422 subtask_cycle`, `subtask_depth`). A deleted task is `410 conflict_deleted`; restore it first.',
   request: { params: taskParams, body: body(TaskPatchSchema) },
   responses: {
     200: json(TaskPatchResultSchema, 'The task'),
-    ...problems(...AUTHED, 404, 410),
+    ...problems(
+      ...AUTHED,
+      404,
+      'conflict_deleted',
+      'invalid_parent',
+      'subtask_cycle',
+      'subtask_depth',
+    ),
   },
 });
 
@@ -79,10 +101,12 @@ const moveTask = createRoute({
   tags,
   operationId: 'moveTask',
   summary: 'Move the task within my list; 404 if it is not in my list',
+  description:
+    'Changes only MY placement (groups are personal): `groupId` is one of my groups and the intent IDs are tasks in it. Intent IDs from elsewhere fall back to the end of the group; the actual placement is returned. Last write wins on my placement clock.',
   request: { params: taskParams, body: body(TaskMoveSchema) },
   responses: {
     200: json(TaskMoveResultSchema, 'The actual placement'),
-    ...problems(...AUTHED, 404, 410),
+    ...problems(...AUTHED, 404, 'conflict_deleted'),
   },
 });
 
@@ -92,10 +116,12 @@ const completeTask = createRoute({
   tags,
   operationId: 'completeTask',
   summary: 'Complete or reopen a task; it keeps its place in the list',
+  description:
+    'Last write wins on the `completed` clock; completing a completed task changes nothing. Followers are notified. `next` will carry the next instance of a recurring task.',
   request: { params: taskParams, body: body(TaskCompleteSchema) },
   responses: {
     200: json(TaskCompleteResultSchema, 'The task'),
-    ...problems(...AUTHED, 404, 410),
+    ...problems(...AUTHED, 404, 'conflict_deleted'),
   },
 });
 
@@ -105,6 +131,8 @@ const deleteTask = createRoute({
   tags,
   operationId: 'deleteTask',
   summary: 'Move a task (and its subtasks) to Trash',
+  description:
+    'A soft delete for every member: the task and its subtasks go to the org’s Trash, from where `POST /tasks/{id}/restore` brings them back. Deleting a deleted task is a no-op.',
   request: { params: taskParams },
   responses: { 204: { description: 'Deleted' }, ...problems(...AUTHED, 404) },
 });
@@ -115,6 +143,8 @@ const restoreTask = createRoute({
   tags,
   operationId: 'restoreTask',
   summary: 'Undo a delete, or restore from Trash, to the same place in the list',
+  description:
+    'Restores the task with the subtasks deleted together with it; placements come back where they were (to the top of the Inbox when their group is gone).',
   request: { params: taskParams },
   responses: { 200: json(TaskSchema, 'The task'), ...problems(...AUTHED, 404) },
 });
@@ -125,8 +155,10 @@ const deletePermanently = createRoute({
   tags,
   operationId: 'deleteTaskPermanently',
   summary: 'Delete a task in Trash for good',
+  description:
+    'Only for a task in Trash (`409 not_in_trash`): removes it with its subtasks and placements. Cannot be undone.',
   request: { params: taskParams },
-  responses: { 204: { description: 'Deleted' }, ...problems(...AUTHED, 404, 409) },
+  responses: { 204: { description: 'Deleted' }, ...problems(...AUTHED, 404, 'not_in_trash') },
 });
 
 const bulk = createRoute({
@@ -135,6 +167,8 @@ const bulk = createRoute({
   tags,
   operationId: 'bulkTasks',
   summary: 'Apply one operation to up to 200 tasks (atomic per task)',
+  description:
+    'Each task succeeds or fails on its own, with the result it would get from the single-task route; a task I cannot see is `{ok: false, code: "not_found"}`. The whole request is `200` unless the body is invalid.',
   request: { body: body(BulkOpSchema) },
   responses: { 200: json(BulkResultSchema, 'Per-task results'), ...problems(...AUTHED) },
 });
@@ -148,7 +182,7 @@ const getTask = createRoute({
   description:
     '`parentChain` runs from the root down to the direct parent. A task in Trash is returned with `deletedAt`.',
   request: { params: taskParams },
-  responses: { 200: json(TaskDetailSchema, 'The task'), ...problems(401, 404, 429) },
+  responses: { 200: json(TaskDetailSchema, 'The task'), ...problems(401, 404) },
 });
 
 const reorderSubtask = createRoute({
@@ -162,7 +196,7 @@ const reorderSubtask = createRoute({
   request: { params: taskParams, body: body(SubtaskReorderSchema) },
   responses: {
     200: json(SubtaskReorderResultSchema, 'The actual subtask position'),
-    ...problems(...AUTHED, 404, 409, 410),
+    ...problems(...AUTHED, 404, 'not_subtask', 'conflict_deleted'),
   },
 });
 
@@ -175,7 +209,10 @@ const duplicateTask = createRoute({
   description:
     'Copies title, description, dates and tags; with `includeSubtasks` (default) every live subtask recursively, reopened. The response is the new top task.',
   request: { params: taskParams, body: optionalBody(TaskDuplicateSchema) },
-  responses: { 201: json(TaskSchema, 'The copy'), ...problems(...AUTHED, 404, 409, 410) },
+  responses: {
+    201: json(TaskSchema, 'The copy'),
+    ...problems(...AUTHED, 404, 'id_conflict', 'conflict_deleted'),
+  },
 });
 
 const expandTask = createRoute({
@@ -184,8 +221,12 @@ const expandTask = createRoute({
   tags,
   operationId: 'expandTask',
   summary: 'Remember that I expanded this parent row (idempotent)',
+  description: 'Per user: shows up in `expandedTaskIds` of my list on every device.',
   request: { params: taskParams },
-  responses: { 204: { description: 'Expanded' }, ...problems(...AUTHED, 404, 410) },
+  responses: {
+    204: { description: 'Expanded' },
+    ...problems(...AUTHED, 404, 'conflict_deleted'),
+  },
 });
 
 const collapseTask = createRoute({
@@ -194,6 +235,7 @@ const collapseTask = createRoute({
   tags,
   operationId: 'collapseTask',
   summary: 'Forget my expansion of this parent row (idempotent)',
+  description: 'The counterpart of `PUT`; collapsing a row that is not expanded is fine.',
   request: { params: taskParams },
   responses: { 204: { description: 'Collapsed' }, ...problems(...AUTHED, 404) },
 });
@@ -204,8 +246,10 @@ const listTrash = createRoute({
   tags,
   operationId: 'listTrash',
   summary: 'Deleted tasks of an org, most recently deleted first',
+  description:
+    'Deleted tasks of the org with `deletedAt` and `deletedBy`, paged with `limit` and `cursor`. A retention job empties old Trash.',
   request: { params: orgParams, query: pageQuerySchema },
-  responses: { 200: json(TrashPageSchema, 'A page of Trash'), ...problems(401, 404, 422, 429) },
+  responses: { 200: json(TrashPageSchema, 'A page of Trash'), ...problems(401, 404, 422) },
 });
 
 export function registerTaskRoutes(app: OpenAPIHono<AppEnv>, { tasks }: Services): void {

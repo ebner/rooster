@@ -40,6 +40,7 @@ import {
   taskAudiences,
   taskReach,
 } from './event-audience.ts';
+import { authorizeOrg, grantReachesOrg, requireBrowserSession } from './grant-access.ts';
 import { createDefaultGroups, deleteMemberGroups } from './group-bootstrap.ts';
 import { forgetStoredResponses } from './idempotency-store.ts';
 import {
@@ -279,14 +280,23 @@ export class OrgService {
   // --- orgs -----------------------------------------------------------------------------
 
   list(actor: Actor): Org[] {
-    return immediate(this.deps.db, (tx) => listMemberships(tx, actor.userId).map(toOrgDto));
+    return immediate(this.deps.db, (tx) =>
+      listMemberships(tx, actor.userId)
+        .filter((m) => grantReachesOrg(actor, m.org.id))
+        .map(toOrgDto),
+    );
   }
 
   get(actor: Actor, ref: string): Org {
-    return immediate(this.deps.db, (tx) => toOrgDto(requireMembership(tx, actor.userId, ref)));
+    return immediate(this.deps.db, (tx) => {
+      const membership = requireMembership(tx, actor.userId, ref);
+      if (!grantReachesOrg(actor, membership.org.id)) throw notFound();
+      return toOrgDto(membership);
+    });
   }
 
   create(actor: Actor, input: OrgCreate): Org {
+    requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => {
       let slug: string;
       if (input.slug !== undefined) {
@@ -320,6 +330,7 @@ export class OrgService {
   }
 
   update(actor: Actor, ref: string, patch: OrgPatch): Org {
+    requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => {
       const membership = requireOwner(tx, actor.userId, ref);
       const { org } = membership;
@@ -352,6 +363,7 @@ export class OrgService {
 
   /** Soft delete (FR-ORG-4): the org disappears for every member; its slug becomes free. */
   remove(actor: Actor, ref: string, confirmName: string): void {
+    requireBrowserSession(actor);
     immediate(this.deps.db, (tx) => {
       const { org } = requireOwner(tx, actor.userId, ref);
       if (org.isPersonal) throw personalOrgConflict();
@@ -380,6 +392,7 @@ export class OrgService {
   listMembers(actor: Actor, ref: string): Member[] {
     return immediate(this.deps.db, (tx) => {
       const { org } = requireMembership(tx, actor.userId, ref);
+      authorizeOrg(actor, org.id, 'tasks:read');
       return tx
         .select({
           userId: member.userId,
@@ -399,6 +412,7 @@ export class OrgService {
 
   /** Owner only. The last owner cannot be demoted (FR-ORG-5). */
   setRole(actor: Actor, ref: string, userId: string, role: OrgRole): Member {
+    requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => {
       const { org } = requireOwner(tx, actor.userId, ref);
       if (org.isPersonal) throw personalOrgConflict();
@@ -429,6 +443,7 @@ export class OrgService {
    * member-removal invariant (05 §4.2). The last owner cannot leave (FR-ORG-5).
    */
   removeMember(actor: Actor, ref: string, userId: string): void {
+    requireBrowserSession(actor);
     immediate(this.deps.db, (tx) => {
       const membership = requireMembership(tx, actor.userId, ref);
       const { org } = membership;
@@ -487,6 +502,7 @@ export class OrgService {
 
   /** Open invites of both kinds, newest first. Owner only. */
   listInvites(actor: Actor, ref: string): Invite[] {
+    requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => {
       const { org } = requireOwner(tx, actor.userId, ref);
       const now = this.now();
@@ -542,6 +558,7 @@ export class OrgService {
 
   /** An email invite (with `email`) or a link invite. Owner only; never for a personal org. */
   createInvite(actor: Actor, ref: string, input: InviteCreate): InviteCreated {
+    requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => {
       const { org } = requireOwner(tx, actor.userId, ref);
       if (org.isPersonal) throw personalOrgConflict();
@@ -631,6 +648,7 @@ export class OrgService {
 
   /** Revokes an invite of either kind. Owner only. */
   revokeInvite(actor: Actor, ref: string, inviteId: string): void {
+    requireBrowserSession(actor);
     immediate(this.deps.db, (tx) => {
       const { org } = requireOwner(tx, actor.userId, ref);
       this.emit(tx, 'invite.revoked', {
@@ -693,6 +711,7 @@ export class OrgService {
 
   /** A signed-in user accepts an invite. Accepting an org one already belongs to is a no-op. */
   acceptInvite(actor: Actor, token: string): Org {
+    requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => this.accept(tx, actor.userId, actor.email, token));
   }
 

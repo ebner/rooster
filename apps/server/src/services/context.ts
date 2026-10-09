@@ -1,21 +1,39 @@
+import type { GrantConstraints, GrantScope } from '@rooster/core/grants';
+import type { GrantKind } from '@rooster/core/schemas';
 import type { Config } from '../config.ts';
 import type { AppDb, Orm } from '../db/client.ts';
 import type { DomainEvent, EventBus } from '../events/bus.ts';
 import { currentOrigin } from '../events/origin.ts';
 import type { Logger } from '../lib/logger.ts';
 
-export type Scope = 'read' | 'write';
+/** The grant behind a PAT or CLI device request (11 §2); null for the browser session. */
+export interface ActorGrant {
+  id: string;
+  kind: GrantKind;
+  /** `rooster-cli` for devices (an OAuth client id in P9); null for PATs. */
+  clientId: string | null;
+  /** As stored; check with `hasScope`, which applies the implications. */
+  scopes: readonly GrantScope[];
+  constraints: GrantConstraints;
+}
 
-/** Who is making a request (04 §4.3). Bearer and PAT actors arrive in Phase 8. */
+/** How the request authenticated: the browser cookie, a session token as bearer, or a PAT. */
+export type ActorVia = 'session' | 'bearer' | 'pat';
+
+/** Who is making a request (04 §4.3). */
 export interface Actor {
   userId: string;
   email: string;
   /** `ROOSTER_ADMIN_EMAILS` lists the actor's (verified) email. */
   isAdmin: boolean;
-  via: 'session';
-  /** The better-auth session behind the request. */
+  via: ActorVia;
+  /**
+   * The better-auth session behind the request; for a PAT, its grant ID (an SSE stream is
+   * bookkept and ended per session).
+   */
   sessionId: string;
-  scopes: readonly Scope[];
+  /** Null: the browser session, full access. Else every service checks it (`authorizeGrant`). */
+  grant: ActorGrant | null;
 }
 
 /**

@@ -19,6 +19,13 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, type SQL, sql } from 'd
 import { member, tag as tagTable, task, user } from '../db/schema/index.ts';
 import { AppError } from '../lib/errors.ts';
 import { type Actor, immediate, readOnly, type ServiceDeps, type Tx } from './context.ts';
+import {
+  authorizeOrg,
+  grantReachesOrg,
+  readFilter,
+  requireBrowserSession,
+  requireScope,
+} from './grant-access.ts';
 import { chunked, liveTasksById, taskDtos } from './list-access.ts';
 import { listMemberships, requireMembership } from './org-access.ts';
 import { indexIsStale, rebuildIndex } from './search-index.ts';
@@ -81,11 +88,17 @@ export class SearchService {
    */
   search(actor: Actor, input: SearchQuery): SearchResult {
     return readOnly(this.deps.db, (tx) => {
+      requireScope(actor, 'tasks:read');
+      // A grant searches only the orgs it reaches (an unreached `orgId` is a 404).
       const orgIds =
         input.orgId === undefined
-          ? listMemberships(tx, actor.userId).map((m) => m.org.id)
+          ? listMemberships(tx, actor.userId)
+              .map((m) => m.org.id)
+              .filter((id) => grantReachesOrg(actor, id))
           : [requireMembership(tx, actor.userId, input.orgId).org.id];
+      for (const id of orgIds) authorizeOrg(actor, id, 'tasks:read');
       if (orgIds.length === 0) return [];
+      const filters = new Map(orgIds.map((id) => [id, readFilter(tx, actor, id)]));
       const matcher = this.matcher(tx, actor, orgIds, input.q);
       if (matcher === null) return [];
       const limit = input.limit ?? SEARCH_LIMIT_DEFAULT;
@@ -98,9 +111,9 @@ export class SearchService {
       const hits: Task[] = [];
       for (const batch of chunked(ids, FILTER_BATCH)) {
         const order = new Map(batch.map((id, i) => [id, i]));
-        const rows = liveTasksById(tx, batch).sort(
-          (a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0),
-        );
+        const rows = liveTasksById(tx, batch)
+          .filter((r) => filters.get(r.orgId)?.(r) ?? true)
+          .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
         for (const dto of taskDtos(tx, actor.userId, rows)) {
           if (matcher.accepts(dto)) hits.push(dto);
           if (hits.length === limit) break;
@@ -287,6 +300,7 @@ export class SearchService {
 
   /** `POST /admin/search/reindex` (ADR 0012): instance admins only. */
   reindex(actor: Actor): ReindexResult {
+    requireBrowserSession(actor);
     if (!actor.isAdmin) throw new AppError('forbidden', 403, 'Only instance admins can do that.');
     return this.rebuild();
   }

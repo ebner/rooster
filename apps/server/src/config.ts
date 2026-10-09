@@ -184,6 +184,8 @@ const envSchema = z.object({
   ROOSTER_BACKUP_KEEP_WEEKLY: intInRange(4, 0, 1000),
   ROOSTER_METRICS_TOKEN: z.string().min(16, 'must be at least 16 characters').optional(),
   ROOSTER_GIT_SHA: z.string().default('dev'),
+  /** Test-only (AC-8.4): check every /api/v1 response against the OpenAPI document. */
+  ROOSTER_VALIDATE_RESPONSES: booleanFlag(false),
 });
 
 type Env = z.output<typeof envSchema>;
@@ -269,6 +271,7 @@ function toConfig(env: Env) {
     },
     metricsToken: env.ROOSTER_METRICS_TOKEN ?? null,
     gitSha: env.ROOSTER_GIT_SHA,
+    validateResponses: env.ROOSTER_VALIDATE_RESPONSES,
   };
 }
 

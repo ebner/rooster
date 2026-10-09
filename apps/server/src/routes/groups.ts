@@ -35,7 +35,7 @@ const getMyList = createRoute({
   operationId: 'getMyList',
   summary: 'My tasks in an org: groups (Inbox first) and every task placed in them',
   description:
-    'Open tasks plus tasks completed at or after `completedSince` (ms epoch; default: 14 days ago).',
+    'My groups in order (Inbox first) and every task placed in them: open tasks plus tasks completed at or after `completedSince` (ms epoch; default: 14 days ago). Also all live subtasks of those tasks and the parent chain of my orphan subtasks, with `placement: null`. `expandedTaskIds` are the parent rows I expanded; `serverTime` is for clock-skew estimation. This is the payload the web app renders and caches offline.',
   request: { params: orgParams, query: myListQuerySchema },
   responses: { 200: json(MyListSchema, 'The list'), ...problems(401, 404, 422, 429) },
 });
@@ -51,7 +51,7 @@ const createGroup = createRoute({
   request: { params: orgParams, body: body(GroupCreateSchema) },
   responses: {
     201: json(GroupCreateResultSchema, 'The new group'),
-    ...problems(...AUTHED, 404, 409, 410),
+    ...problems(...AUTHED, 404, 'id_conflict', 'conflict_deleted'),
   },
 });
 
@@ -61,9 +61,13 @@ const patchGroup = createRoute({
   tags,
   operationId: 'updateGroup',
   summary: 'Rename or collapse a group (per-field last write wins)',
-  description: 'The Inbox cannot be renamed (`409 inbox_immutable`).',
+  description:
+    'Each field is last-write-wins on its own edit time (`X-Rooster-Edit-Time`): an older edit leaves the field as it is. The Inbox cannot be renamed (`409 inbox_immutable`); collapsing it is fine. Only my own groups (else `404`).',
   request: { params: groupParams, body: body(GroupPatchSchema) },
-  responses: { 200: json(GroupSchema, 'The group'), ...problems(...AUTHED, 404, 409) },
+  responses: {
+    200: json(GroupSchema, 'The group'),
+    ...problems(...AUTHED, 404, 'inbox_immutable'),
+  },
 });
 
 const moveGroup = createRoute({
@@ -72,10 +76,12 @@ const moveGroup = createRoute({
   tags,
   operationId: 'moveGroup',
   summary: 'Reorder a group; the server computes the position',
+  description:
+    'An ordering intent among my groups in the org. IDs from another domain fall back to the end; the actual position is returned. The Inbox stays first (`409 inbox_immutable`).',
   request: { params: groupParams, body: body(GroupMoveSchema) },
   responses: {
     200: json(GroupMoveResultSchema, 'The actual position'),
-    ...problems(...AUTHED, 404, 409),
+    ...problems(...AUTHED, 404, 'inbox_immutable'),
   },
 });
 
@@ -86,9 +92,12 @@ const deleteGroup = createRoute({
   operationId: 'deleteGroup',
   summary: 'Delete a group, moving or deleting its tasks',
   description:
-    'A group with open tasks needs `moveTasksTo` or `deleteTasks` (`409 group_not_empty`). The last normal group cannot be deleted (`409 last_group`).',
+    'A group with open tasks needs `moveTasksTo` or `deleteTasks` (`409 group_not_empty`); completed tasks without either go to the Inbox. The Inbox and the last normal group cannot be deleted (`409 inbox_immutable`, `409 last_group`). Undo with `POST /groups/{id}/restore`.',
   request: { params: groupParams, body: optionalBody(GroupDeleteSchema) },
-  responses: { 204: { description: 'Deleted' }, ...problems(...AUTHED, 404, 409) },
+  responses: {
+    204: { description: 'Deleted' },
+    ...problems(...AUTHED, 404, 'inbox_immutable', 'last_group', 'group_not_empty'),
+  },
 });
 
 const restoreGroup = createRoute({
@@ -97,6 +106,8 @@ const restoreGroup = createRoute({
   tags,
   operationId: 'restoreGroup',
   summary: 'Undo a group delete, with the tasks deleted together with it',
+  description:
+    'Restores the group at its old position, and the tasks that `deleteTasks` moved to Trash with it. Tasks that were moved elsewhere stay where they are.',
   request: { params: groupParams },
   responses: { 200: json(GroupSchema, 'The restored group'), ...problems(...AUTHED, 404) },
 });

@@ -51,7 +51,7 @@ export const commentPatchSchema = z.object({ body: commentBodySchema });
 // ---------------------------------------------------------------------------------------------
 
 /** `X-Rooster-Client` kind recorded on every activity entry (06 §1). */
-export const ACTIVITY_VIA = ['web', 'pwa', 'cli', 'tui', 'mcp', 'import', 'system'] as const;
+export const ACTIVITY_VIA = ['web', 'pwa', 'cli', 'tui', 'mcp', 'pat', 'import', 'system'] as const;
 export const activityViaSchema = z.enum(ACTIVITY_VIA);
 
 const dueSnapshotSchema = z

@@ -2,6 +2,8 @@ import {
   findAssigneeToken,
   findDateInTitle,
   findGroupToken,
+  findTagTokens,
+  removeSpans,
   stripBackticks,
   stripTitleMatch,
   todayIn,
@@ -64,13 +66,14 @@ import {
   type ActivityDraft,
   type ActivityScope,
   type ActivityService,
-  viaOf,
+  viaFor,
 } from './activity-service.ts';
 import {
   type Actor,
   emitAfterCommit,
   immediate,
   type OpMeta,
+  readOnly,
   type ServiceDeps,
   type Tx,
 } from './context.ts';
@@ -86,6 +89,19 @@ import {
   taskReach,
 } from './event-audience.ts';
 import type { FollowerService } from './follower-service.ts';
+import {
+  authorizeGroupRead,
+  authorizeGroupTarget,
+  authorizeOrg,
+  authorizeTaskRead,
+  authorizeTaskWrite,
+  canReadTask,
+  grantGroupOf,
+  grantReachesOrg,
+  groupReadFilter,
+  readFilter,
+  requireScope,
+} from './grant-access.ts';
 import { listGroups } from './group-service.ts';
 import {
   ancestorsOf,
@@ -117,7 +133,7 @@ import {
 } from './list-access.ts';
 import type { NotificationDraft, NotificationService } from './notification-service.ts';
 import type { OrderingService, OrderTarget } from './ordering-service.ts';
-import { requireMembership } from './org-access.ts';
+import { listMemberships, requireMembership } from './org-access.ts';
 import type { MemberRemovalStep } from './org-service.ts';
 import type { PlacementService, PlacementTarget } from './placement-service.ts';
 import { indexTasks } from './search-index.ts';
@@ -306,6 +322,7 @@ export class TaskService {
   create(actor: Actor, orgRef: string, input: TaskCreate, meta?: OpMeta): Task {
     return immediate(this.deps.db, (tx) => {
       const { org } = requireMembership(tx, actor.userId, orgRef);
+      authorizeOrg(actor, org.id, 'tasks:write');
       const fields = input.parse === true ? this.parseTitle(tx, actor, org.id, input) : input;
       const due = dueUnit(fields);
       const description = fields.description ?? '';
@@ -324,6 +341,7 @@ export class TaskService {
             existing.dueTz === due.dueTz &&
             existing.startDate === due.startDate;
           if (!same) throw new AppError('id_conflict', 409, 'That ID is already in use.');
+          authorizeTaskRead(tx, actor, existing);
           return taskDtoFor(tx, actor.userId, existing);
         }
       }
@@ -333,6 +351,7 @@ export class TaskService {
         input.parentId === undefined
           ? null
           : this.requireParent(tx, actor, org.id, input.parentId, null);
+      if (parent !== null) authorizeTaskWrite(tx, actor, parent);
       // A subtask belongs to whoever owns its parent by default, so it stays inside the
       // parent's row instead of becoming an orphan (05 §4.1).
       const assigneeId =
@@ -350,10 +369,16 @@ export class TaskService {
           : fields.groupId === undefined
             ? inboxOf(tx, actor.userId, org.id)
             : requireOwnGroup(tx, actor.userId, fields.groupId, { orgId: org.id });
+      // 11 §2.1: choosing someone else (or nobody) needs `tasks:assign`; a subtask that
+      // inherits its parent's assignee does not choose.
+      if (fields.assigneeId !== undefined && fields.assigneeId !== actor.userId) {
+        requireScope(actor, 'tasks:assign');
+      }
+      if (parent === null) authorizeGroupTarget(tx, actor, org.id, group?.id ?? null);
       const tagIds = resolveTagsForCreate(tx, {
         orgId: org.id,
         ...(input.tagIds === undefined ? {} : { tagIds: input.tagIds }),
-        ...(input.tagNames === undefined ? {} : { tagNames: input.tagNames }),
+        ...(fields.tagNames === undefined ? {} : { tagNames: fields.tagNames }),
         now,
       });
       const row = this.insertTask(tx, {
@@ -385,7 +410,7 @@ export class TaskService {
         chosen: fields.assigneeId !== undefined,
       });
       this.emit(tx, actor, 'task.created', org.id, [row.id], {
-        tags: (input.tagNames?.length ?? 0) > 0,
+        tags: (fields.tagNames?.length ?? 0) > 0,
         activity,
       });
       return taskDtoFor(tx, actor.userId, row);
@@ -428,7 +453,7 @@ export class TaskService {
   }
 
   private scope(actor: Actor, meta: OpMeta | undefined): ActivityScope {
-    return { actorId: actor.userId, via: viaOf(meta?.client) };
+    return { actorId: actor.userId, via: viaFor(actor, meta), grantId: actor.grant?.id ?? null };
   }
 
   private assignedDraft(actor: Actor, row: TaskRow, userId: string): NotificationDraft {
@@ -530,6 +555,7 @@ export class TaskService {
     let parent: TaskRow;
     try {
       parent = requireTask(tx, actor.userId, parentId);
+      authorizeTaskRead(tx, actor, parent);
     } catch (err) {
       if (err instanceof AppError && err.status === 404) {
         throw invalidParent('The parent task does not exist.');
@@ -564,9 +590,10 @@ export class TaskService {
   }
 
   /**
-   * `parse: true` (CLI, MCP): a trailing `>Group` token picks the actor's group by
-   * case-insensitive name prefix, and the last date phrase becomes the due date, both in
-   * the actor's locale, timezone and week start. Explicit body fields win.
+   * `parse: true` (CLI, MCP): `#tag` tokens tag the task, a trailing `>Group` token picks the
+   * actor's group by case-insensitive name prefix (an unknown one stays in the title and the
+   * task goes to the Inbox), `@member` assigns, and the last date phrase becomes the due date,
+   * in the actor's locale, timezone and week start. Explicit body fields win.
    */
   private parseTitle(tx: Tx, actor: Actor, orgId: string, input: TaskCreate): TaskCreate {
     const settings = tx
@@ -581,6 +608,21 @@ export class TaskService {
       .get();
     const timezone = settings?.timezone ?? 'UTC';
     let title = input.title;
+    // `#tag` tokens anywhere (ADR 0007): removed from the title and added by name (created
+    // when missing), unless nothing but tokens would be left.
+    const tagTokens = findTagTokens(title);
+    const tagNames: string[] = [...(input.tagNames ?? [])];
+    if (tagTokens.length > 0) {
+      const untagged = removeSpans(title, tagTokens);
+      if (stripBackticks(untagged).trim() !== '') {
+        title = untagged;
+        for (const t of tagTokens) {
+          if (!tagNames.some((n) => n.toLocaleLowerCase() === t.name.toLocaleLowerCase())) {
+            tagNames.push(t.name);
+          }
+        }
+      }
+    }
     let groupId = input.groupId;
     const token = findGroupToken(title);
     if (token !== null) {
@@ -594,7 +636,11 @@ export class TaskService {
         title = `${title.slice(0, token.start)} ${title.slice(token.end)}`;
       }
     }
-    const result: TaskCreate = { ...input, ...(groupId === undefined ? {} : { groupId }) };
+    const result: TaskCreate = {
+      ...input,
+      ...(groupId === undefined ? {} : { groupId }),
+      ...(tagNames.length === 0 ? {} : { tagNames }),
+    };
     if (input.assigneeId === undefined) {
       const token = this.findAssigneeToken(tx, actor, orgId, title);
       if (token !== null) {
@@ -653,9 +699,10 @@ export class TaskService {
 
   // --- edits --------------------------------------------------------------------------------
 
-  /** Live (not deleted) task the actor may edit. */
+  /** Live (not deleted) task the actor may edit (with the grant's `scope`, 11 §2.3). */
   private requireLive(tx: Tx, actor: Actor, taskId: string): TaskRow {
     const row = requireTask(tx, actor.userId, taskId);
+    authorizeTaskWrite(tx, actor, row);
     if (row.deletedAt !== null) throw taskDeleted();
     return row;
   }
@@ -730,6 +777,7 @@ export class TaskService {
           changes.subtaskPosition = null;
         } else {
           const parent = this.requireParent(tx, actor, row.orgId, parentId, row);
+          authorizeTaskWrite(tx, actor, parent);
           changes.parentId = parent.id;
           changes.subtaskPosition = this.siblingKey(tx, parent.id, 'end');
         }
@@ -738,6 +786,7 @@ export class TaskService {
     }
     let reassigned = false;
     if (input.assigneeId !== undefined && reassigning) {
+      if (input.assigneeId !== actor.userId) requireScope(actor, 'tasks:assign');
       const assigneeId = this.requireAssignee(
         tx,
         actor,
@@ -758,6 +807,11 @@ export class TaskService {
       }
     }
     if (reparented || reassigned) this.placements.reconcilePlacements(tx, [row.id]);
+    // A task may not leave the grant's groups through its parent (11 §2.2). Assigning it to
+    // someone else may: that was checked against the actor's placement before the change.
+    if (reparented && actor.grant !== null) {
+      authorizeGroupTarget(tx, actor, row.orgId, grantGroupOf(tx, actor.userId, row));
+    }
     if (applied) {
       const activity = this.recordChanges(tx, actor, meta, old, row);
       this.emit(tx, actor, 'task.updated', row.orgId, [row.id], {
@@ -896,6 +950,7 @@ export class TaskService {
   remove(actor: Actor, taskId: string, meta: OpMeta): void {
     immediate(this.deps.db, (tx) => {
       const row = requireTask(tx, actor.userId, taskId);
+      authorizeTaskWrite(tx, actor, row, 'tasks:delete');
       this.applyDelete(tx, actor, row, meta);
     });
   }
@@ -920,6 +975,7 @@ export class TaskService {
   restore(actor: Actor, taskId: string, meta: OpMeta): Task {
     return immediate(this.deps.db, (tx) => {
       const row = requireTask(tx, actor.userId, taskId);
+      authorizeTaskWrite(tx, actor, row);
       this.applyRestore(tx, actor, row, meta);
       return taskDtoFor(tx, actor.userId, { ...row, ...this.reload(tx, row.id) });
     });
@@ -976,6 +1032,7 @@ export class TaskService {
   removePermanently(actor: Actor, taskId: string, _meta?: OpMeta): void {
     immediate(this.deps.db, (tx) => {
       const row = requireTask(tx, actor.userId, taskId);
+      authorizeTaskWrite(tx, actor, row, 'tasks:delete');
       if (row.deletedAt === null) {
         throw new AppError('not_in_trash', 409, 'Only deleted tasks can be deleted permanently.');
       }
@@ -995,6 +1052,7 @@ export class TaskService {
       const row = this.requireLive(tx, actor, taskId);
       const current = this.requirePlacement(tx, actor, row);
       const group = requireOwnGroup(tx, actor.userId, input.groupId, { orgId: row.orgId });
+      authorizeGroupTarget(tx, actor, row.orgId, group.id);
       const [result] = this.movePlacements(tx, actor, group, [row], input, meta);
       return { placement: result ?? { groupId: current.groupId, position: current.position } };
     });
@@ -1078,16 +1136,22 @@ export class TaskService {
                 meta,
               );
               break;
-            case 'delete':
-              this.applyDelete(tx, actor, requireTask(tx, actor.userId, id), meta);
+            case 'delete': {
+              const row = requireTask(tx, actor.userId, id);
+              authorizeTaskWrite(tx, actor, row, 'tasks:delete');
+              this.applyDelete(tx, actor, row, meta);
               break;
-            case 'restore':
-              this.applyRestore(tx, actor, requireTask(tx, actor.userId, id), meta);
+            }
+            case 'restore': {
+              const row = requireTask(tx, actor.userId, id);
+              authorizeTaskWrite(tx, actor, row);
+              this.applyRestore(tx, actor, row, meta);
               break;
+            }
             case 'addTag':
             case 'removeTag': {
               const { row, changed } = setTaskTag(tx, {
-                userId: actor.userId,
+                actor,
                 taskId: id,
                 tagId: op.args.tagId,
                 on: op.op === 'addTag',
@@ -1134,6 +1198,7 @@ export class TaskService {
           this.requirePlacement(tx, actor, row);
           group ??= requireOwnGroup(tx, actor.userId, args.groupId, { orgId: row.orgId });
           if (group.orgId !== row.orgId) throw taskNotFound();
+          authorizeGroupTarget(tx, actor, row.orgId, group.id);
           rows.push(row);
         } catch (err) {
           if (!(err instanceof AppError)) throw err;
@@ -1194,7 +1259,10 @@ export class TaskService {
    */
   duplicate(actor: Actor, taskId: string, input: TaskDuplicate, meta?: OpMeta): Task {
     return immediate(this.deps.db, (tx) => {
-      const source = this.requireLive(tx, actor, taskId);
+      const source = requireTask(tx, actor.userId, taskId);
+      authorizeTaskRead(tx, actor, source);
+      requireScope(actor, 'tasks:write');
+      if (source.deletedAt !== null) throw taskDeleted();
       if (input.id !== undefined) {
         const existing = tx.select().from(task).where(eq(task.id, input.id)).get();
         if (existing !== undefined) {
@@ -1279,6 +1347,7 @@ export class TaskService {
         }
       }
       this.placements.reconcilePlacements(tx, [top.id], target);
+      authorizeGroupTarget(tx, actor, top.orgId, grantGroupOf(tx, actor.userId, top));
       // Only the top copy is news to its parent; copied subtasks arrive with their copy.
       const feeds = copies.flatMap(([row, under]) =>
         this.recordCreated(tx, actor, meta, row, row.id === top.id ? under : null, {
@@ -1299,6 +1368,7 @@ export class TaskService {
   setExpanded(actor: Actor, taskId: string, expanded: boolean): void {
     immediate(this.deps.db, (tx) => {
       const row = requireTask(tx, actor.userId, taskId);
+      authorizeTaskRead(tx, actor, row);
       let changes: number;
       if (expanded) {
         if (row.deletedAt !== null) throw taskDeleted();
@@ -1326,12 +1396,15 @@ export class TaskService {
   detail(actor: Actor, taskId: string): TaskDetail {
     return immediate(this.deps.db, (tx) => {
       const row = requireTask(tx, actor.userId, taskId);
-      const subtasks = tx
+      authorizeTaskRead(tx, actor, row);
+      const allSubtasks = tx
         .select()
         .from(task)
         .where(and(eq(task.parentId, row.id), isNull(task.deletedAt)))
         .orderBy(asc(task.subtaskPosition), asc(task.id))
         .all();
+      const readable = readFilter(tx, actor, row.orgId, allSubtasks);
+      const subtasks = readable === null ? allSubtasks : allSubtasks.filter(readable);
       const place = placementOf(tx, row.id);
       const dto = toTaskDto(
         row,
@@ -1345,11 +1418,96 @@ export class TaskService {
         subtasks: taskDtos(tx, actor.userId, subtasks),
         parentChain: ancestorsOf(tx, row)
           .reverse()
+          .filter((a) => canReadTask(tx, actor, a))
           .map((a) => ({ id: a.id, title: a.title })),
         followers: isSharedOrg(tx, row.orgId)
           ? this.collab.followers.activeFollowers(tx, row.id)
           : [],
       };
+    });
+  }
+
+  // --- refs (07 §3) -------------------------------------------------------------------------
+
+  /**
+   * `GET /tasks/resolve` for the CLI: `42` (seq in `org`, which it needs), `acme#42` or
+   * `personal#42` (seq in that org), or a UUID prefix of at least 8 hex digits (dashes
+   * optional) across the actor's orgs. Completed tasks always match; Trash rows only with
+   * `deleted`. Unknown or unreadable is `404`; a prefix with several matches `409
+   * ambiguous_ref` listing up to 10 candidates.
+   */
+  resolveRef(actor: Actor, input: { ref: string; org?: string; deleted?: boolean }): Task {
+    return readOnly(this.deps.db, (tx) => {
+      const ref = input.ref.trim();
+      const live = input.deleted === true ? undefined : isNull(task.deletedAt);
+      // Eight or more bare digits read as an ID prefix (UUIDv7s often start with digits).
+      const seqRef = /^(?:(.+)#(\d{1,12})|(\d{1,7}))$/.exec(ref);
+      let rows: TaskRow[];
+      if (seqRef !== null) {
+        const orgRef = seqRef[1] ?? input.org;
+        if (orgRef === undefined) {
+          throw new AppError('validation_failed', 422, 'A task number needs an org.', [
+            { path: 'org', message: 'Required for a bare number; or write org#number' },
+          ]);
+        }
+        const { org } = requireMembership(tx, actor.userId, orgRef);
+        authorizeOrg(actor, org.id, 'tasks:read');
+        rows = tx
+          .select()
+          .from(task)
+          .where(and(eq(task.orgId, org.id), eq(task.seq, Number(seqRef[2] ?? seqRef[3])), live))
+          .all();
+      } else {
+        const prefix = ref.replace(/-/g, '').toLowerCase();
+        if (!/^[0-9a-f]{8,32}$/.test(prefix)) {
+          throw new AppError('validation_failed', 422, 'Not a task ref.', [
+            { path: 'ref', message: 'Expected 42, org#42 or an ID prefix of 8+ hex digits' },
+          ]);
+        }
+        requireScope(actor, 'tasks:read');
+        const orgIds = listMemberships(tx, actor.userId)
+          .map((m) => m.org.id)
+          .filter((id) => grantReachesOrg(actor, id));
+        rows =
+          orgIds.length === 0
+            ? []
+            : tx
+                .select()
+                .from(task)
+                .where(
+                  and(
+                    inArray(task.orgId, orgIds),
+                    sql`replace(${task.id}, '-', '') LIKE ${`${prefix}%`}`,
+                    live,
+                  ),
+                )
+                .orderBy(asc(task.id))
+                .limit(200)
+                .all();
+      }
+      const visible = rows.filter((r) => canReadTask(tx, actor, r));
+      const [only] = visible;
+      if (only === undefined) throw taskNotFound();
+      if (visible.length > 1) {
+        throw new AppError(
+          'ambiguous_ref',
+          409,
+          `The ref ${ref} matches ${visible.length} tasks; use more characters.`,
+          undefined,
+          {
+            candidates: visible
+              .slice(0, 10)
+              .map((r) => ({ id: r.id, orgId: r.orgId, seq: r.seq, title: r.title })),
+          },
+        );
+      }
+      const place = placementOf(tx, only.id);
+      return toTaskDto(
+        only,
+        place !== undefined && place.userId === actor.userId ? place : null,
+        { trash: true },
+        loadTaskExtras(tx, [only.id]),
+      );
     });
   }
 
@@ -1364,9 +1522,13 @@ export class TaskService {
   myList(actor: Actor, orgRef: string, completedSince?: number): MyList {
     return immediate(this.deps.db, (tx) => {
       const { org } = requireMembership(tx, actor.userId, orgRef);
+      authorizeOrg(actor, org.id, 'tasks:read');
       const now = this.now();
       const since = completedSince ?? now - COMPLETED_WINDOW_MS;
-      const groups = listGroups(tx, actor.userId, org.id);
+      const readableGroup = groupReadFilter(actor, org.id);
+      const groups = listGroups(tx, actor.userId, org.id).filter(
+        (g) => readableGroup === null || readableGroup(g.id),
+      );
       const placed = tx
         .select({ task, place: placement })
         .from(placement)
@@ -1404,7 +1566,10 @@ export class TaskService {
           compareKeys(a.id, b.id),
       );
       const places = new Map<string, PlacementRow | null>(placed.map((r) => [r.task.id, r.place]));
-      const rows = [...placed.map((r) => r.task), ...extra];
+      const all = [...placed.map((r) => r.task), ...extra];
+      const readable = readFilter(tx, actor, org.id, all);
+      const rows = readable === null ? all : all.filter(readable);
+      const shown = new Set(rows.map((r) => r.id));
       const expandedTaskIds = tx
         .select({ id: taskExpansion.taskId })
         .from(taskExpansion)
@@ -1418,7 +1583,8 @@ export class TaskService {
         )
         .orderBy(asc(taskExpansion.taskId))
         .all()
-        .map((r) => r.id);
+        .map((r) => r.id)
+        .filter((id) => readable === null || shown.has(id));
       return {
         groups: groups.map(toGroupDto),
         tasks: taskDtos(tx, actor.userId, rows, { places }),
@@ -1432,6 +1598,7 @@ export class TaskService {
   trash(actor: Actor, orgRef: string, query: PageQuery): TrashPage {
     return immediate(this.deps.db, (tx) => {
       const { org } = requireMembership(tx, actor.userId, orgRef);
+      authorizeOrg(actor, org.id, 'tasks:read');
       const limit = query.limit ?? PAGE_LIMIT_DEFAULT;
       const after = decodeCursor(query.cursor, isTrashCursor);
       const parent = alias(task, 'parent');
@@ -1463,8 +1630,12 @@ export class TaskService {
         .map((r) => r.task);
       const page = rows.slice(0, limit);
       const last = page[page.length - 1];
+      // The read constraint filters the page; the cursor still follows the unfiltered rows.
+      const readable = readFilter(tx, actor, org.id, page);
       return {
-        items: taskDtos(tx, actor.userId, page, { trash: true }),
+        items: taskDtos(tx, actor.userId, readable === null ? page : page.filter(readable), {
+          trash: true,
+        }),
         nextCursor:
           rows.length > limit && last !== undefined
             ? encodeCursor([last.deletedAt ?? 0, last.id])
@@ -1484,6 +1655,7 @@ export class TaskService {
   query(actor: Actor, orgRef: string, query: TaskQuery): TaskPage {
     return immediate(this.deps.db, (tx) => {
       const { org } = requireMembership(tx, actor.userId, orgRef);
+      authorizeOrg(actor, org.id, 'tasks:read');
       const view = query.view ?? 'my';
       const completed = query.completed ?? 'false';
       const limit = query.limit ?? PAGE_LIMIT_DEFAULT;
@@ -1503,6 +1675,7 @@ export class TaskService {
         query.groupId === undefined
           ? undefined
           : requireOwnGroup(tx, actor.userId, query.groupId, { orgId: org.id }).id;
+      if (groupFilter !== undefined) authorizeGroupRead(actor, org.id, groupFilter);
       const groups = listGroups(tx, actor.userId, org.id);
       let rows: { task: TaskRow; place: PlacementRow | null }[];
       if (view === 'everyone') {
@@ -1561,6 +1734,13 @@ export class TaskService {
         });
       }
 
+      const readable = readFilter(
+        tx,
+        actor,
+        org.id,
+        rows.map((r) => r.task),
+      );
+      if (readable !== null) rows = rows.filter((r) => readable(r.task));
       const wantedTags = this.resolveTagFilter(tx, org.id, query.tag);
       const tagged =
         wantedTags === null

@@ -15,6 +15,8 @@ const previewInvite = createRoute({
   tags,
   operationId: 'previewInvite',
   summary: 'Preview an invite (no auth)',
+  description:
+    'What the `/invite/:token` page shows before sign-in: the org, who invited, the role, and whether the invite can still be used (`valid`, else `reason`). An unknown token is `404`.',
   request: { params: tokenParams },
   responses: { 200: json(InvitePreviewSchema, 'The invite'), ...problems(404) },
 });
@@ -30,7 +32,7 @@ const claimInvite = createRoute({
   request: { params: tokenParams },
   responses: {
     200: json(InvitePreviewSchema, 'The invite; the cookie is set'),
-    ...problems(403, 404, 410),
+    ...problems(404, 415, 'csrf_origin', 'invite_invalid'),
   },
 });
 
@@ -40,8 +42,13 @@ const acceptInvite = createRoute({
   tags,
   operationId: 'acceptInvite',
   summary: 'Join the org of an invite as the signed-in user',
+  description:
+    'Creates my membership with the invite’s role, my Inbox and the default groups. Already a member: a no-op that returns the org. An email invite only admits its address (`403 invite_email_mismatch`); a used, expired or revoked invite is `410 invite_invalid`.',
   request: { params: tokenParams },
-  responses: { 200: json(OrgSchema, 'The joined org'), ...problems(...AUTHED, 404, 410) },
+  responses: {
+    200: json(OrgSchema, 'The joined org'),
+    ...problems(...AUTHED, 404, 'invite_email_mismatch', 'invite_invalid'),
+  },
 });
 
 export function registerInviteRoutes(

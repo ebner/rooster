@@ -5,6 +5,7 @@ import { dataPaths, PRIVATE_DIR_MODE } from '../db/boot.ts';
 import { backupDatabase } from '../db/migrate.ts';
 import { AppError } from '../lib/errors.ts';
 import type { Actor, ServiceDeps } from './context.ts';
+import { requireBrowserSession } from './grant-access.ts';
 
 /** Manual and pre-migration snapshots are never rotated away below this count each. */
 export const KEEP_MANUAL = 10;
@@ -76,6 +77,7 @@ export class BackupService {
 
   /** Newest first. */
   list(actor: Actor): Backup[] {
+    requireBrowserSession(actor);
     requireAdmin(actor);
     return this.entries().map(({ name, size, createdAt, kind }) => ({
       name,
@@ -87,6 +89,7 @@ export class BackupService {
 
   /** "Back up now" (manual kind). */
   createManual(actor: Actor): Backup {
+    requireBrowserSession(actor);
     requireAdmin(actor);
     const backup = this.snapshot('manual', this.deps.clock());
     this.rotate();
@@ -98,6 +101,7 @@ export class BackupService {
    * path such as `../rooster.db` can never resolve outside the backups folder.
    */
   file(actor: Actor, name: string): { path: string; size: number; name: string } {
+    requireBrowserSession(actor);
     requireAdmin(actor);
     if (parseName(name) === null) throw backupNotFound();
     const path = join(this.dir, name);

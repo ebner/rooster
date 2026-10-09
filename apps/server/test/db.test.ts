@@ -87,6 +87,7 @@ describe('migrations', () => {
       .all() as { name: string; sql: string }[];
     const strict = tables.filter((t) => /\)\s*STRICT$/.test(t.sql)).map((t) => t.name);
     expect(strict.sort()).toEqual([
+      'access_grant',
       'activity',
       'allowlist_entry',
       'comment',
@@ -110,7 +111,14 @@ describe('migrations', () => {
       'task_tag',
     ]);
     expect(tables.map((t) => t.name)).toEqual(
-      expect.arrayContaining(['user', 'session', 'account', 'verification']),
+      expect.arrayContaining([
+        'user',
+        'session',
+        'account',
+        'verification',
+        'apikey',
+        'deviceCode',
+      ]),
     );
     db.close();
   });

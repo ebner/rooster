@@ -1,7 +1,16 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi';
 import type { AppEnv } from '../lib/context.ts';
 import type { Services } from '../services/index.ts';
-import { AUTHED, actorOf, body, idParam, json, orgIdParam, problems } from './common.ts';
+import {
+  ANY_CREDENTIAL,
+  AUTHED,
+  actorOf,
+  body,
+  idParam,
+  json,
+  orgIdParam,
+  problems,
+} from './common.ts';
 import {
   MePatchSchema,
   MeSchema,
@@ -20,7 +29,9 @@ const getMe = createRoute({
   tags,
   operationId: 'getMe',
   summary: 'The signed-in user, settings, orgs in sidebar order, and isAdmin',
-  responses: { 200: json(MeSchema, 'The signed-in user'), ...problems(401) },
+  description:
+    'The first call of every client: the profile, display settings (locale, timezone, week start, date and time format), `prefs`, every org I belong to with my role in sidebar order, and whether I am an instance admin. The CLI uses it to pick the default org.',
+  responses: { 200: json(MeSchema, 'The signed-in user'), ...problems(401, ANY_CREDENTIAL) },
 });
 
 const patchMe = createRoute({
@@ -29,6 +40,8 @@ const patchMe = createRoute({
   tags,
   operationId: 'updateMe',
   summary: 'Update profile and settings (prefs are merged)',
+  description:
+    'Partial: send only the fields that change. `prefs` keys are merged into the stored prefs. `timezone` must be an IANA name the server knows. Answers the whole updated user.',
   request: { body: body(MePatchSchema) },
   responses: { 200: json(MeSchema, 'The updated user'), ...problems(...AUTHED) },
 });
@@ -39,6 +52,8 @@ const listSessions = createRoute({
   tags,
   operationId: 'listSessions',
   summary: 'Active sessions of the signed-in user',
+  description:
+    'Browser and device sessions that have not expired, most recently used first. `current` marks the session making this request.',
   responses: { 200: json(z.array(SessionSchema), 'Sessions, most recent first'), ...problems(401) },
 });
 
@@ -48,6 +63,8 @@ const revokeSession = createRoute({
   tags,
   operationId: 'revokeSession',
   summary: 'Sign out a session; it is rejected on its next request',
+  description:
+    'Revokes one of my sessions (the current one included). Its open event streams close, and its next request is `401`. Another user’s session is `404`.',
   request: { params: z.object({ id: idParam('id', 'Session ID') }) },
   responses: { 204: { description: 'Revoked' }, ...problems(...AUTHED, 404) },
 });
@@ -58,6 +75,8 @@ const putOrgOrder = createRoute({
   tags,
   operationId: 'reorderOrg',
   summary: 'Move an org in the sidebar (server computes the position)',
+  description:
+    'An ordering intent among my orgs: `afterId` is the org directly above, `beforeId` the one directly below. The server computes the fractional key and returns it.',
   request: { body: body(OrgOrderSchema) },
   responses: { 200: json(OrgOrderResultSchema, 'The new position'), ...problems(...AUTHED, 404) },
 });
@@ -68,6 +87,7 @@ const patchMyOrg = createRoute({
   tags,
   operationId: 'updateMyOrgPrefs',
   summary: 'Collapse or expand an org section in the sidebar',
+  description: 'A per-member preference; other members are not affected.',
   request: { params: z.object({ orgId: orgIdParam }), body: body(OrgPrefPatchSchema) },
   responses: { 200: json(OrgSchema, 'The org with its prefs'), ...problems(...AUTHED, 404) },
 });

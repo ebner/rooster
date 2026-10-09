@@ -1,7 +1,16 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi';
 import type { AppEnv } from '../lib/context.ts';
 import type { Services } from '../services/index.ts';
-import { AUTHED, actorOf, body, idParam, json, orgIdParam, problems } from './common.ts';
+import {
+  ANY_CREDENTIAL,
+  AUTHED,
+  actorOf,
+  body,
+  idParam,
+  json,
+  orgIdParam,
+  problems,
+} from './common.ts';
 import {
   InviteCreatedSchema,
   InviteCreateSchema,
@@ -25,7 +34,9 @@ const listOrgs = createRoute({
   tags,
   operationId: 'listOrgs',
   summary: 'Orgs of the signed-in user, in sidebar order',
-  responses: { 200: json(z.array(OrgSchema), 'Orgs'), ...problems(401) },
+  description:
+    'The personal org first by default, then shared orgs, each with my role and sidebar state.',
+  responses: { 200: json(z.array(OrgSchema), 'Orgs'), ...problems(401, ANY_CREDENTIAL) },
 });
 
 const createOrg = createRoute({
@@ -34,8 +45,10 @@ const createOrg = createRoute({
   tags,
   operationId: 'createOrg',
   summary: 'Create an org; the creator becomes its owner',
+  description:
+    'Also creates my Inbox and the default groups in it. Without a `slug` one is derived from the name (`acme`, `acme-2`, …); a taken explicit slug is `409 slug_taken`.',
   request: { body: body(OrgCreateSchema) },
-  responses: { 201: json(OrgSchema, 'The new org'), ...problems(...AUTHED, 409) },
+  responses: { 201: json(OrgSchema, 'The new org'), ...problems(...AUTHED, 'slug_taken') },
 });
 
 const patchOrg = createRoute({
@@ -44,8 +57,13 @@ const patchOrg = createRoute({
   tags,
   operationId: 'updateOrg',
   summary: 'Rename or restyle an org (owner). Personal org: avatarEmoji and color only',
+  description:
+    'Owners only (`403 forbidden`). Changing the slug changes the org’s URLs. The personal org keeps its name and slug (`409 personal_org`).',
   request: { params: orgParams, body: body(OrgPatchSchema) },
-  responses: { 200: json(OrgSchema, 'The updated org'), ...problems(...AUTHED, 404, 409) },
+  responses: {
+    200: json(OrgSchema, 'The updated org'),
+    ...problems(...AUTHED, 404, 'forbidden', 'slug_taken', 'personal_org'),
+  },
 });
 
 const deleteOrg = createRoute({
@@ -54,8 +72,13 @@ const deleteOrg = createRoute({
   tags,
   operationId: 'deleteOrg',
   summary: 'Delete an org (owner, confirmName). Not the personal org',
+  description:
+    'Deletes the org with every task, group, tag and comment in it, for every member. `confirmName` must equal the org’s name (`422 confirm_name_mismatch`). Cannot be undone.',
   request: { params: orgParams, body: body(OrgDeleteSchema) },
-  responses: { 204: { description: 'Deleted' }, ...problems(...AUTHED, 404, 409) },
+  responses: {
+    204: { description: 'Deleted' },
+    ...problems(...AUTHED, 404, 'forbidden', 'personal_org', 'confirm_name_mismatch'),
+  },
 });
 
 const listMembers = createRoute({
@@ -64,6 +87,7 @@ const listMembers = createRoute({
   tags,
   operationId: 'listMembers',
   summary: 'Members of an org',
+  description: 'Every member with their role, for assignee pickers and mentions.',
   request: { params: orgParams },
   responses: { 200: json(z.array(MemberSchema), 'Members'), ...problems(401, 404) },
 });
@@ -74,8 +98,13 @@ const patchMember = createRoute({
   tags,
   operationId: 'updateMember',
   summary: "Change a member's role (owner). The last owner cannot be demoted",
+  description:
+    'Owners only. Demoting the only owner is `409 last_owner`; a personal org has no other members (`409 personal_org`).',
   request: { params: memberParams, body: body(MemberPatchSchema) },
-  responses: { 200: json(MemberSchema, 'The member'), ...problems(...AUTHED, 404, 409) },
+  responses: {
+    200: json(MemberSchema, 'The member'),
+    ...problems(...AUTHED, 404, 'forbidden', 'last_owner', 'personal_org'),
+  },
 });
 
 const deleteMember = createRoute({
@@ -84,8 +113,13 @@ const deleteMember = createRoute({
   tags,
   operationId: 'removeMember',
   summary: 'Remove a member (owner) or leave (your own user ID)',
+  description:
+    'The member’s groups and placements in the org are deleted; tasks assigned to them become unassigned. The only owner cannot leave (`409 last_owner`).',
   request: { params: memberParams },
-  responses: { 204: { description: 'Removed' }, ...problems(...AUTHED, 404, 409) },
+  responses: {
+    204: { description: 'Removed' },
+    ...problems(...AUTHED, 404, 'forbidden', 'last_owner', 'personal_org'),
+  },
 });
 
 const listInvites = createRoute({
@@ -94,8 +128,13 @@ const listInvites = createRoute({
   tags,
   operationId: 'listInvites',
   summary: 'Open invites of an org (owner)',
+  description:
+    'Unexpired, unrevoked invites. Email invites carry their `url` again; link invite URLs are shown only when created.',
   request: { params: orgParams },
-  responses: { 200: json(z.array(InviteSchema), 'Open invites'), ...problems(401, 403, 404) },
+  responses: {
+    200: json(z.array(InviteSchema), 'Open invites'),
+    ...problems(401, 404, 'forbidden'),
+  },
 });
 
 const createInvite = createRoute({
@@ -105,9 +144,12 @@ const createInvite = createRoute({
   operationId: 'createInvite',
   summary: 'Invite by email (with `email`) or create an invite link (owner)',
   description:
-    'Both kinds return a copyable `url` (`<ROOSTER_BASE_URL>/invite/<token>`). Email sending arrives in Phase 7. A personal org cannot be shared (`409 personal_org`).',
+    'Both kinds return a copyable `url` (`<ROOSTER_BASE_URL>/invite/<token>`), shown once for links. With SMTP configured an email invite is also sent (`emailed: true`). Email invites are single-use (`multiUse` is `422`). A personal org cannot be shared (`409 personal_org`); inviting a member is `409 already_member`.',
   request: { params: orgParams, body: body(InviteCreateSchema) },
-  responses: { 201: json(InviteCreatedSchema, 'The invite'), ...problems(...AUTHED, 404, 409) },
+  responses: {
+    201: json(InviteCreatedSchema, 'The invite'),
+    ...problems(...AUTHED, 404, 'forbidden', 'personal_org', 'already_member'),
+  },
 });
 
 const deleteInvite = createRoute({
@@ -116,8 +158,10 @@ const deleteInvite = createRoute({
   tags,
   operationId: 'revokeInvite',
   summary: 'Revoke an invite of either kind (owner)',
+  description:
+    'The invite URL stops working at once: its preview shows `valid: false` and claiming or accepting it is `410 invite_invalid`.',
   request: { params: inviteParams },
-  responses: { 204: { description: 'Revoked' }, ...problems(...AUTHED, 404) },
+  responses: { 204: { description: 'Revoked' }, ...problems(...AUTHED, 404, 'forbidden') },
 });
 
 export function registerOrgRoutes(app: OpenAPIHono<AppEnv>, { orgs }: Services): void {

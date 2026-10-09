@@ -49,9 +49,12 @@ export {
   assigneeTokenAt,
   findAssigneeToken,
   findGroupToken,
+  findTagTokens,
   type GroupTokenMatch,
   type MemberMatch,
   matchMembers,
+  removeSpans,
   stripBackticks,
   stripTitleMatch,
+  type TagTokenMatch,
 } from './tokens.ts';

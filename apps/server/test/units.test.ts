@@ -214,13 +214,15 @@ describe('CSRF (04 §4.11)', () => {
 
   it('an Authorization header does not exempt a cookie-authenticated request', async () => {
     const { post } = setup();
+    // A bearer request is judged by its token alone (P8): the cookie riding along is ignored,
+    // so a bogus token is 401 rather than a CSRF-exempt cookie request.
     for (const headers of [
       { authorization: 'Bearer abc' },
       { authorization: 'Bearer abc', origin: 'https://evil.example' },
     ]) {
       const res = await post(headers);
-      expect(res.status).toBe(403);
-      expect(await res.json()).toMatchObject({ code: 'csrf_origin' });
+      expect(res.status).toBe(401);
+      expect(await res.json()).toMatchObject({ code: 'unauthenticated' });
     }
   });
 

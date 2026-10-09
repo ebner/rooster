@@ -15,6 +15,7 @@ import {
 } from './context.ts';
 import { taskAudiences, taskReach } from './event-audience.ts';
 import type { FollowerService } from './follower-service.ts';
+import { authorizeTaskWrite, canReadTask } from './grant-access.ts';
 import { requireTask, type TaskRow, taskDeleted } from './list-access.ts';
 import {
   EXCERPT_MAX,
@@ -64,6 +65,7 @@ export class CommentService {
   create(actor: Actor, taskId: string, input: CommentCreate, _meta?: OpMeta): Comment {
     return immediate(this.deps.db, (tx) => {
       const target = requireTask(tx, actor.userId, taskId);
+      authorizeTaskWrite(tx, actor, target, 'comments:write');
       if (input.id !== undefined) {
         const existing = tx.select().from(comment).where(eq(comment.id, input.id)).get();
         if (existing !== undefined) {
@@ -175,10 +177,12 @@ export class CommentService {
     let target: TaskRow;
     try {
       target = requireTask(tx, actor.userId, row.taskId);
+      if (!canReadTask(tx, actor, target)) throw commentNotFound();
     } catch (err) {
       if (err instanceof AppError && err.status === 404) throw commentNotFound();
       throw err;
     }
+    authorizeTaskWrite(tx, actor, target, 'comments:write');
     if (row.authorId !== actor.userId) {
       throw new AppError('forbidden', 403, 'Only the author can change a comment.');
     }

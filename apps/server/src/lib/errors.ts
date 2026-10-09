@@ -20,10 +20,12 @@ export interface Problem {
   errors?: FieldError[];
   /** See `problemSchema.existingId` in @rooster/core. */
   existingId?: string;
+  /** `409 ambiguous_ref` (`GET /tasks/resolve`): the tasks the ref could mean, at most 10. */
+  candidates?: { id: string; orgId: string; seq: number | null; title: string }[];
 }
 
 /** RFC 9457 extension members a service may attach to a problem. */
-export type ProblemExtensions = Pick<Problem, 'existingId'>;
+export type ProblemExtensions = Pick<Problem, 'existingId' | 'candidates'>;
 
 /** Domain error thrown from services; rendered as problem+json with a stable `code`. */
 export class AppError extends Error {

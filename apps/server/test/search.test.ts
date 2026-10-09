@@ -148,14 +148,14 @@ describe('index maintenance (every task write path)', () => {
     await createTask(a, { title: 'Two', description: 'second' });
     const gone = await createTask(a, { title: 'Gone' });
     await a.ok('DELETE', `/api/v1/tasks/${gone.id}`, undefined, 204);
-    // Roll the FTS migration (and the later 0005 and 0006) back by hand, then let the migrator
+    // Roll the FTS migration (and the later 0005 to 0007) back by hand, then let the migrator
     // apply them again.
     ctx.db.sqlite.exec(
-      'DROP TABLE task_fts; DROP TABLE comment; DROP TABLE activity; DROP TABLE follower; DROP TABLE notification; DROP TABLE notification_pref; DROP TABLE job_run; DROP TABLE push_subscription',
+      'DROP TABLE task_fts; DROP TABLE comment; DROP TABLE activity; DROP TABLE follower; DROP TABLE notification; DROP TABLE notification_pref; DROP TABLE job_run; DROP TABLE push_subscription; DROP TABLE access_grant; DROP TABLE apikey; DROP TABLE deviceCode; DROP INDEX session_grant; ALTER TABLE session DROP COLUMN grant_id',
     );
     ctx.db.sqlite
       .prepare(
-        'DELETE FROM __drizzle_migrations WHERE created_at IN (SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 3)',
+        'DELETE FROM __drizzle_migrations WHERE created_at IN (SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 4)',
       )
       .run();
     runMigrations(ctx.db);

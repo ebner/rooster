@@ -24,8 +24,9 @@ const listTags = createRoute({
   tags,
   operationId: 'listTags',
   summary: 'The org’s tags, by name',
+  description: 'Every tag of the org, shared by all members.',
   request: { params: orgParams },
-  responses: { 200: json(z.array(TagSchema), 'The tags'), ...problems(401, 404, 429) },
+  responses: { 200: json(z.array(TagSchema), 'The tags'), ...problems(401, 404) },
 });
 
 const createTag = createRoute({
@@ -37,7 +38,10 @@ const createTag = createRoute({
   description:
     'Names are unique per org, case-insensitively (`409 tag_name_taken`). A repeated create with the same `id` and name returns the tag.',
   request: { params: orgParams, body: body(TagCreateSchema) },
-  responses: { 201: json(TagSchema, 'The tag'), ...problems(...AUTHED, 404, 409) },
+  responses: {
+    201: json(TagSchema, 'The tag'),
+    ...problems(...AUTHED, 404, 'id_conflict', 'tag_name_taken'),
+  },
 });
 
 const patchTag = createRoute({
@@ -46,8 +50,10 @@ const patchTag = createRoute({
   tags,
   operationId: 'updateTag',
   summary: 'Rename or recolour a tag',
+  description:
+    'Any member may. A name another tag of the org has (case-insensitively) is `409 tag_name_taken` with that tag’s `existingId`.',
   request: { params: tagParams, body: body(TagPatchSchema) },
-  responses: { 200: json(TagSchema, 'The tag'), ...problems(...AUTHED, 404, 409) },
+  responses: { 200: json(TagSchema, 'The tag'), ...problems(...AUTHED, 404, 'tag_name_taken') },
 });
 
 const deleteTag = createRoute({
@@ -56,6 +62,7 @@ const deleteTag = createRoute({
   tags,
   operationId: 'deleteTag',
   summary: 'Delete a tag and remove it from every task',
+  description: 'Permanent; the tasks themselves stay.',
   request: { params: tagParams },
   responses: { 204: { description: 'Deleted' }, ...problems(...AUTHED, 404) },
 });
@@ -66,6 +73,8 @@ const mergeTag = createRoute({
   tags,
   operationId: 'mergeTag',
   summary: 'Merge a tag into another: its tasks get `intoId`, then it is deleted',
+  description:
+    'Both tags must be in the same org; merging a tag into itself is `422`. Answers the remaining tag.',
   request: { params: tagParams, body: body(TagMergeSchema) },
   responses: { 200: json(TagSchema, 'The remaining tag'), ...problems(...AUTHED, 404) },
 });
@@ -76,8 +85,12 @@ const addTaskTag = createRoute({
   tags,
   operationId: 'addTaskTag',
   summary: 'Add a tag to a task (idempotent); the tag must be in the task’s org',
+  description: 'Set semantics: adding a tag the task has changes nothing. Answers the task.',
   request: { params: taskTagParams },
-  responses: { 200: json(TaskSchema, 'The task'), ...problems(...AUTHED, 404, 410) },
+  responses: {
+    200: json(TaskSchema, 'The task'),
+    ...problems(...AUTHED, 404, 'conflict_deleted'),
+  },
 });
 
 const removeTaskTag = createRoute({
@@ -86,8 +99,12 @@ const removeTaskTag = createRoute({
   tags,
   operationId: 'removeTaskTag',
   summary: 'Remove a tag from a task (idempotent)',
+  description: 'Removing a tag the task does not have changes nothing. Answers the task.',
   request: { params: taskTagParams },
-  responses: { 200: json(TaskSchema, 'The task'), ...problems(...AUTHED, 404, 410) },
+  responses: {
+    200: json(TaskSchema, 'The task'),
+    ...problems(...AUTHED, 404, 'conflict_deleted'),
+  },
 });
 
 export function registerTagRoutes(app: OpenAPIHono<AppEnv>, services: Services): void {

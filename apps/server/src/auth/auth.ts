@@ -1,14 +1,22 @@
+import { apiKey } from '@better-auth/api-key';
+import { isGrantScope } from '@rooster/core/grants';
 import { uuidv7 } from '@rooster/core/ids';
 import { isLocale } from '@rooster/i18n';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError } from 'better-auth/api';
+import { bearer } from 'better-auth/plugins/bearer';
+import {
+  type DeviceAuthorizationGrant,
+  deviceAuthorization,
+} from 'better-auth/plugins/device-authorization';
 import { genericOAuth } from 'better-auth/plugins/generic-oauth';
 import { type Config, GOOGLE_PROVIDER_ID } from '../config.ts';
 import type { AppDb } from '../db/client.ts';
-import { account, session, user, verification } from '../db/schema/index.ts';
+import { account, apikey, deviceCode, session, user, verification } from '../db/schema/index.ts';
 import { localeFromAcceptLanguage, type ServerTextKey, serverText } from '../lib/i18n.ts';
 import type { Logger } from '../lib/logger.ts';
+import { CLI_CLIENT_ID, PAT_PREFIX } from '../services/grant-service.ts';
 import type { Services } from '../services/index.ts';
 import type { SignInRejection } from '../services/sign-in-policy.ts';
 import { readInviteToken, sessionCookieName } from './cookies.ts';
@@ -19,6 +27,38 @@ export const AUTH_BASE_PATH = '/api/auth';
 export const CLIENT_IP_HEADER = 'x-rooster-client-ip';
 
 const DAY_SECONDS = 86_400;
+
+/**
+ * better-auth paths rooster replaces or must not expose. Device approval goes through
+ * `/api/v1/device/:userCode/*` so it carries a grant (ADR 0036 §6); PATs are minted only by
+ * `POST /api/v1/me/tokens`, so an API key without a grant never exists.
+ */
+const DISABLED_PATHS = [
+  '/update-user',
+  '/delete-user',
+  '/change-email',
+  '/device',
+  '/device/approve',
+  '/device/deny',
+  '/api-key/create',
+  '/api-key/verify',
+  '/api-key/get',
+  '/api-key/update',
+  '/api-key/delete',
+  '/api-key/list',
+  '/api-key/delete-all-expired-api-keys',
+];
+
+/**
+ * The grant ID of the approved device code being redeemed, by endpoint context: set by the
+ * device plugin's `assertSessionRedemption` (while the code still exists) and read by the
+ * session create hook of the same `/device/token` request (the plugin then has consumed it).
+ */
+const redeemedGrant = new WeakMap<object, string>();
+
+function deviceError(error: string, description: string): APIError {
+  return new APIError('BAD_REQUEST', { error, error_description: description });
+}
 
 const REJECTION_TEXT: Record<SignInRejection, ServerTextKey> = {
   not_invited: 'signIn.notInvited',
@@ -88,6 +128,31 @@ export function createAuth(deps: AuthDeps) {
     ),
   });
 
+  const deviceGrant: DeviceAuthorizationGrant = {
+    requestSchemaFields: {},
+    deviceCodeSchemaFields: {
+      grantId: { type: 'string', required: false, input: false },
+      userAgent: { type: 'string', required: false, input: false },
+    },
+    authorizeRequest: ({ ctx, request }) => {
+      if (request.client_id !== CLI_CLIENT_ID) {
+        throw deviceError('invalid_client', 'Unknown client ID.');
+      }
+      const scopes = (request.scope ?? '').split(/\s+/).filter((s) => s !== '');
+      if (scopes.some((s) => !isGrantScope(s))) {
+        throw deviceError('invalid_scope', 'Unknown scope requested.');
+      }
+      const userAgent = ctx.request?.headers.get('user-agent')?.slice(0, 200) ?? null;
+      return { clientId: CLI_CLIENT_ID, deviceCodeFields: { userAgent } };
+    },
+    assertSessionRedemption: ({ ctx, deviceCode: code }) => {
+      if (code.status === 'approved' && typeof code.grantId === 'string') {
+        redeemedGrant.set(ctx, code.grantId);
+      }
+    },
+    getVerificationContext: () => undefined,
+  };
+
   return betterAuth({
     appName: 'rooster',
     baseURL: config.baseUrl,
@@ -106,10 +171,10 @@ export function createAuth(deps: AuthDeps) {
     },
     database: drizzleAdapter(db.orm, {
       provider: 'sqlite',
-      schema: { user, session, account, verification },
+      schema: { user, session, account, verification, apikey, deviceCode },
     }),
     // Users change their profile through PATCH /api/v1/me; accounts are never deleted.
-    disabledPaths: ['/update-user', '/delete-user', '/change-email'],
+    disabledPaths: DISABLED_PATHS,
     socialProviders:
       config.google === null
         ? {}
@@ -120,8 +185,8 @@ export function createAuth(deps: AuthDeps) {
               prompt: 'select_account',
             },
           },
-    plugins:
-      config.oidcProviders.length === 0
+    plugins: [
+      ...(config.oidcProviders.length === 0
         ? []
         : [
             genericOAuth({
@@ -136,7 +201,27 @@ export function createAuth(deps: AuthDeps) {
                 requireIdTokenVerification: true,
               })),
             }),
-          ],
+          ]),
+      // `Authorization: Bearer <session token>` (CLI device sessions, 04 §4.4).
+      bearer(),
+      // RFC 8628 for the CLI (07 §2): `/device/code` and `/device/token` stay better-auth's;
+      // approval is rooster's (DISABLED_PATHS). The `grant` extension validates the request
+      // and hands the approved code's grant to the session its redemption creates.
+      deviceAuthorization({
+        expiresIn: '10m',
+        interval: '5s',
+        verificationUri: `${config.baseUrl}/device`,
+        grant: deviceGrant,
+      }),
+      // PATs (04 §4.4): rows of the plugin's `apikey` table, minted by GrantService and
+      // verified by hash in the actor middleware. Its HTTP endpoints are disabled.
+      apiKey({
+        defaultPrefix: PAT_PREFIX,
+        enableMetadata: true,
+        maximumNameLength: 100,
+        rateLimit: { enabled: false },
+      }),
+    ],
     user: {
       additionalFields: {
         locale: { type: 'string', required: false, defaultValue: 'en', input: false },
@@ -180,6 +265,10 @@ export function createAuth(deps: AuthDeps) {
       encryptOAuthTokens: true,
     },
     session: {
+      // A CLI device session points at its grant (11 §2.4); the browser's is null.
+      additionalFields: {
+        grantId: { type: 'string', required: false, input: false, returned: false },
+      },
       expiresIn: 30 * DAY_SECONDS,
       updateAge: DAY_SECONDS,
       // Off, so a revoked session or a disabled user is rejected on the next request (AC-1.7).
@@ -206,6 +295,15 @@ export function createAuth(deps: AuthDeps) {
           before: async (data, ctx) => {
             // Defence in depth: validateUserInfo already rejects disabled users.
             if (services.signIn.isDisabled(data.userId)) return false;
+            // A device code redeemed for a session: the session carries the grant its
+            // approval created. Without a live grant there is no session (never full access).
+            if (ctx?.path === '/device/token') {
+              const grantId = services.grants.liveDeviceGrant(redeemedGrant.get(ctx), data.userId);
+              if (grantId === null) {
+                throw deviceError('access_denied', 'The approval was revoked; log in again.');
+              }
+              return { data: { ...data, grantId } };
+            }
             // Signing in through a claimed invite joins the org (06 §2.2). validateUserInfo
             // only checked that the invite was usable; two sign-ins through one single-use
             // link can both pass that check. Accepting is atomic, so exactly one of them

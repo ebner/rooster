@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 import { e2eEnv } from './e2e/support/env';
+import { RESPONSE_CONTRACT_SERVERS_ENV } from './e2e/support/response-contract';
 
 /**
  * e2e runs the whole stack: the mock IdP (scripts/dev-idp.mjs), the API server on a
@@ -37,6 +38,9 @@ const serverEnv = {
   ROOSTER_TRUST_PROXY: 'true',
   ROOSTER_BACKUP_CRON: 'off',
   ROOSTER_LOG_LEVEL: 'warn',
+  // AC-8.4: every /api/v1 response is checked against the OpenAPI document; the global
+  // teardown (e2e/support/response-contract.ts) fails the run on any mismatch.
+  ROOSTER_VALIDATE_RESPONSES: '1',
   PORT: String(apiPort),
 };
 
@@ -50,6 +54,7 @@ const pwaPort = 3182;
 const pwaBaseURL = `http://localhost:${pwaPort}`;
 const pwaDataDir = `${process.env.ROOSTER_E2E_DATA_DIR}-pwa`;
 mkdirSync(pwaDataDir, { recursive: true });
+process.env[RESPONSE_CONTRACT_SERVERS_ENV] = `http://localhost:${apiPort},${pwaBaseURL}`;
 const pwaServerEnv = {
   ...serverEnv,
   ROOSTER_BASE_URL: pwaBaseURL,
@@ -60,7 +65,7 @@ const pwaServerEnv = {
 
 export default defineConfig({
   testDir: 'e2e',
-  globalTeardown: './e2e/support/teardown.ts',
+  globalTeardown: ['./e2e/support/response-contract.ts', './e2e/support/teardown.ts'],
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,

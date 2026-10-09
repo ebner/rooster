@@ -13,17 +13,24 @@ const exportOrg = createRoute({
   operationId: 'exportOrg',
   summary: 'Download my data in an org as JSON (lossless) or Markdown',
   description:
-    'My groups, my tasks (open and completed) with their subtasks, and their tags, as an attachment named `rooster-<slug>-<yyyy-mm-dd>.json` or `.md`.',
+    'My groups, my tasks (open and completed) with their subtasks, their tags and their comments, as an attachment named `rooster-<slug>-<yyyy-mm-dd>.json` or `.md`. `format=json` (default) is lossless (`format: "rooster-export", version: 1`); `markdown` is a readable rendering of the same data.',
   request: { params: z.object({ orgId: orgIdParam }), query: exportQuerySchema },
   responses: {
     200: {
       description: 'The export (`Content-Disposition: attachment`)',
+      headers: {
+        'Content-Disposition': {
+          description: '`attachment; filename="rooster-<slug>-<yyyy-mm-dd>.json"` (or `.md`)',
+          schema: { type: 'string' },
+          required: true,
+        },
+      },
       content: {
         'application/json': { schema: OrgExportSchema },
         'text/markdown': { schema: z.string() },
       },
     },
-    ...problems(401, 404, 422, 429),
+    ...problems(401, 404, 422),
   },
 });
 

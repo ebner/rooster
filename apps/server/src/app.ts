@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { Scalar } from '@scalar/hono-api-reference';
 import { actorMiddleware } from './auth/actor.ts';
-import { createAuth, providerOrigins } from './auth/auth.ts';
+import { type Auth, createAuth, providerOrigins } from './auth/auth.ts';
 import { registerAuthRoutes } from './auth/mount.ts';
 import type { Config } from './config.ts';
 import type { AppDb } from './db/client.ts';
@@ -16,15 +16,22 @@ import { csrfProtection } from './lib/csrf.ts';
 import { createErrorHandler, notFoundHandler, validationHook } from './lib/errors.ts';
 import { idempotencyMiddleware } from './lib/idempotency.ts';
 import type { Logger } from './lib/logger.ts';
+import { buildOpenApiDocument } from './lib/openapi.ts';
 import { API_RATE_LIMIT, type RateLimitOptions, userRateLimit } from './lib/rate-limit.ts';
 import { requestIdMiddleware, requestLogger } from './lib/request-log.ts';
 import { requestMeta } from './lib/request-meta.ts';
+import {
+  RESPONSE_VIOLATIONS_PATH,
+  ResponseViolations,
+  responseValidation,
+} from './lib/response-contract.ts';
 import { DOCS_PATH, securityHeaders } from './lib/security-headers.ts';
 import { webApp } from './lib/web-app.ts';
 import { registerAdminRoutes } from './routes/admin.ts';
 import { registerCollabRoutes } from './routes/collab.ts';
 import { registerEventRoutes } from './routes/events.ts';
 import { registerExportRoutes } from './routes/export.ts';
+import { registerGrantRoutes } from './routes/grants.ts';
 import { registerGroupRoutes } from './routes/groups.ts';
 import { registerHealthRoutes } from './routes/health.ts';
 import { registerInviteRoutes } from './routes/invites.ts';
@@ -33,6 +40,7 @@ import { registerMetaRoutes } from './routes/meta.ts';
 import { registerOrgRoutes } from './routes/orgs.ts';
 import { ProblemSchema } from './routes/problem.ts';
 import { registerPushRoutes } from './routes/push.ts';
+import { registerRefRoutes } from './routes/refs.ts';
 import { registerSearchRoutes } from './routes/search.ts';
 import { registerTagRoutes } from './routes/tags.ts';
 import { registerTaskRoutes } from './routes/tasks.ts';
@@ -54,6 +62,12 @@ export interface AppDeps {
   apiRateLimit?: RateLimitOptions | false;
   /** SSE timings; tests shorten them. Defaults: 25 s heartbeat, 50 ms coalescing. */
   sse?: { heartbeatMs?: number; coalesceMs?: number };
+  /**
+   * AC-8.4: validate every `/api/v1` response against the OpenAPI document and serve the
+   * mismatches at `/__test/response-violations`. Default: `config.validateResponses`
+   * (`ROOSTER_VALIDATE_RESPONSES`, set by the Playwright config for its servers).
+   */
+  validateResponses?: boolean;
   /** Push and SMTP transports (P7); tests inject fakes. */
   transports?: DeliveryTransports;
 }
@@ -74,19 +88,13 @@ async function readScalarBundle(): Promise<string> {
   }
 }
 
-export function openApiDocumentConfig(version: string) {
-  return {
-    openapi: '3.1.0',
-    info: { title: 'rooster API', version },
-    servers: [{ url: '/' }],
-  };
-}
-
 export type App = OpenAPIHono<AppEnv> & {
   /** Domain services, exposed for tests and the auth hooks. */
   services: Services;
   /** The SSE hub; `main.ts` shuts it down before draining connections. */
   hub: SseHub;
+  /** The better-auth instance (tests enumerate its endpoints). */
+  auth: Auth;
 };
 
 /** Pure factory: no listening, no timers. Tests drive it through `app.request()`. */
@@ -118,10 +126,21 @@ export function createApp(deps: AppDeps): App {
   app.use(requestIdMiddleware());
   app.use(requestLogger(logger));
   app.use(securityHeaders(providerOrigins(config)));
+  const validateResponses = deps.validateResponses ?? config.validateResponses;
+  const violations = new ResponseViolations();
+  if (validateResponses) {
+    app.use(
+      '/api/v1/*',
+      responseValidation(app, violations, { logger, clock, ignore: [OPENAPI_PATH] }),
+    );
+    app.get(RESPONSE_VIOLATIONS_PATH, (c) =>
+      c.json({ checked: violations.checked, violations: violations.list }),
+    );
+  }
   // Before the auth mount, which buffers the whole body (auth/mount.ts).
   app.use('/api/auth/*', bodyLimitFor(AUTH_BODY_LIMIT));
   app.use('/api/v1/*', bodyLimitFor(API_BODY_LIMIT));
-  app.use('/api/v1/*', actorMiddleware({ auth, services }));
+  app.use('/api/v1/*', actorMiddleware({ auth, services, config }));
   app.use('/api/v1/*', csrfProtection(config.baseUrl));
   const rateLimit = deps.apiRateLimit ?? API_RATE_LIMIT;
   if (rateLimit !== false) app.use('/api/v1/*', userRateLimit(rateLimit, clock));
@@ -129,7 +148,7 @@ export function createApp(deps: AppDeps): App {
   app.use('/api/v1/*', idempotencyMiddleware(services.idempotency));
 
   registerHealthRoutes(app, { db, migrationsDir: deps.migrationsDir });
-  registerAuthRoutes(app, { auth, config });
+  registerAuthRoutes(app, { auth, config, services });
   registerMetaRoutes(app, {
     config,
     version,
@@ -140,7 +159,9 @@ export function createApp(deps: AppDeps): App {
   registerOrgRoutes(app, services);
   registerInviteRoutes(app, services, { config, clock });
   registerAdminRoutes(app, services);
+  registerGrantRoutes(app, services);
   registerGroupRoutes(app, services);
+  registerRefRoutes(app, services);
   registerTaskRoutes(app, services);
   registerTagRoutes(app, services);
   registerSearchRoutes(app, services);
@@ -151,7 +172,14 @@ export function createApp(deps: AppDeps): App {
   registerEventRoutes(app, { hub, services });
 
   app.openAPIRegistry.register('Problem', ProblemSchema);
-  app.doc31(OPENAPI_PATH, openApiDocumentConfig(version));
+  let openApiDocument: string | undefined;
+  app.get(OPENAPI_PATH, (c) => {
+    // Built on first use, once every route is registered; the routes never change afterwards.
+    openApiDocument ??= JSON.stringify(
+      buildOpenApiDocument(app, { version, baseUrl: config.baseUrl }),
+    );
+    return c.body(openApiDocument, 200, { 'Content-Type': 'application/json' });
+  });
   let docsBundle: Promise<string> | undefined;
   app.get(DOCS_BUNDLE_PATH, async (c) => {
     docsBundle ??= readScalarBundle();
@@ -178,5 +206,5 @@ export function createApp(deps: AppDeps): App {
   // Last: everything no route claimed is the web app (or a problem+json 404).
   app.use(webApp(config.webDir, logger));
 
-  return Object.assign(app, { services, hub });
+  return Object.assign(app, { services, hub, auth });
 }

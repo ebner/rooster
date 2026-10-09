@@ -84,7 +84,7 @@ describe('OpenAPI', () => {
       components: { schemas: Record<string, unknown> };
     };
     expect(doc.openapi).toBe('3.1.0');
-    expect(doc.info).toEqual({ title: 'rooster API', version: '0.0.0-test' });
+    expect(doc.info).toMatchObject({ title: 'rooster API', version: '0.0.0-test' });
     expect(doc.paths['/api/v1/meta']).toBeDefined();
     expect(doc.components.schemas.Problem).toBeDefined();
   });

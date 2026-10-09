@@ -2,15 +2,17 @@
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createApp, openApiDocumentConfig } from '../app.ts';
+import { createApp } from '../app.ts';
 import { parseConfig } from '../config.ts';
 import { openDb } from '../db/client.ts';
 import { runMigrations } from '../db/migrate.ts';
 import { createLogger } from '../lib/logger.ts';
+import { buildOpenApiDocument } from '../lib/openapi.ts';
 import { VERSION } from '../version.ts';
 
 const parsed = parseConfig({
-  ROOSTER_BASE_URL: 'http://localhost:3000',
+  // The committed document's `servers` and quick start show this placeholder host.
+  ROOSTER_BASE_URL: 'https://rooster.example.com',
   ROOSTER_AUTH_SECRET: 'openapi-emitter-placeholder-secret-0000',
   ROOSTER_ADMIN_EMAILS: 'admin@example.com',
   ROOSTER_GOOGLE_CLIENT_ID: 'openapi-emitter',
@@ -27,7 +29,7 @@ const app = createApp({
   logger: createLogger('silent'),
   version: VERSION,
 });
-const document = app.getOpenAPI31Document(openApiDocumentConfig(VERSION));
+const document = buildOpenApiDocument(app, { version: VERSION, baseUrl: parsed.config.baseUrl });
 db.close();
 
 const out = join(dirname(fileURLToPath(import.meta.url)), '../../openapi.json');

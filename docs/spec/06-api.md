@@ -40,7 +40,7 @@
 | GET `/me/sessions` · DELETE `/me/sessions/:id` | List and revoke sessions. | 1 |
 | GET `/me/grants` · PATCH `/me/grants/:id` · DELETE `/me/grants/:id` | Connected apps (11 §3.2): every PAT, CLI device and OAuth client grant. PATCH edits `{label?, scopes?, constraints?, expiresAt?}` (narrowing an OAuth client's scopes is allowed, widening is not). DELETE revokes. Browser session only. | 8/9 |
 | POST `/me/tokens` | A PAT `{name, scopes, constraints, expiresInDays?}` → `{token, grant}` (the token is shown once). | 8 |
-| `/api/auth/*` | better-auth: sign-in/social, oauth2 callbacks, sign-out, device code (`/device/code`, `/device/token`, `/device/approve`, `/device/deny`; use the exact paths of the installed better-auth version and wrap them if they differ). | 1/8 |
+| `/api/auth/*` | better-auth: sign-in/social, oauth2 callbacks, sign-out, and the device flow's `/device/code` and `/device/token`. **Browser cookie only**: any `Authorization` or API-key credential gets `403`, except on the two device endpoints, which the CLI calls before it has a session (ADR 0037). Device review, approve and deny are rooster routes: `GET /device/:userCode`, `POST /device/:userCode/approve`, `POST /device/:userCode/deny`. | 1/8 |
 
 ### 2.2 Orgs, members, invites
 | Method & path | Description | P |

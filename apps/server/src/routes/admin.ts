@@ -21,7 +21,12 @@ const listAllowlist = createRoute({
   tags,
   operationId: 'listAllowlist',
   summary: 'Sign-in allowlist entries (instance admins)',
-  responses: { 200: json(z.array(AllowlistEntrySchema), 'Entries'), ...problems(401, 403) },
+  description:
+    'Who may sign in besides invitees and `ROOSTER_ADMIN_EMAILS`: single addresses and whole domains.',
+  responses: {
+    200: json(z.array(AllowlistEntrySchema), 'Entries'),
+    ...problems(401, 'forbidden'),
+  },
 });
 
 const addAllowlist = createRoute({
@@ -30,8 +35,13 @@ const addAllowlist = createRoute({
   tags,
   operationId: 'addAllowlistEntry',
   summary: 'Allow an email address or a whole domain to sign in (instance admins)',
+  description:
+    'Values are stored lowercase and compared case-insensitively. A domain entry admits addresses from identity providers that vouch for the email. A duplicate is `409 already_exists`.',
   request: { body: body(AllowlistCreateSchema) },
-  responses: { 201: json(AllowlistEntrySchema, 'The entry'), ...problems(...AUTHED, 409) },
+  responses: {
+    201: json(AllowlistEntrySchema, 'The entry'),
+    ...problems(...AUTHED, 'forbidden', 'already_exists'),
+  },
 });
 
 const deleteAllowlist = createRoute({
@@ -40,8 +50,9 @@ const deleteAllowlist = createRoute({
   tags,
   operationId: 'removeAllowlistEntry',
   summary: 'Remove an allowlist entry (instance admins)',
+  description: 'Existing users keep their accounts; only new sign-ins are affected.',
   request: { params: z.object({ id: idParam('id', 'Entry ID') }) },
-  responses: { 204: { description: 'Removed' }, ...problems(...AUTHED, 404) },
+  responses: { 204: { description: 'Removed' }, ...problems(...AUTHED, 404, 'forbidden') },
 });
 
 const listUsers = createRoute({
@@ -50,7 +61,11 @@ const listUsers = createRoute({
   tags,
   operationId: 'listUsers',
   summary: 'All users of the instance (instance admins)',
-  responses: { 200: json(z.array(AdminUserSchema), 'Users, newest first'), ...problems(401, 403) },
+  description: 'Every account, deactivated ones included (`disabledAt`).',
+  responses: {
+    200: json(z.array(AdminUserSchema), 'Users, newest first'),
+    ...problems(401, 'forbidden'),
+  },
 });
 
 const patchUser = createRoute({
@@ -59,9 +74,13 @@ const patchUser = createRoute({
   tags,
   operationId: 'updateUser',
   summary: 'Deactivate or reactivate a user (instance admins)',
-  description: 'Deactivating signs the user out everywhere.',
+  description:
+    'Deactivating signs the user out everywhere and blocks sign-in; their data stays. Admins cannot deactivate themselves (`409 cannot_disable_self`).',
   request: { params: z.object({ id: idParam('id', 'User ID') }), body: body(AdminUserPatchSchema) },
-  responses: { 200: json(AdminUserSchema, 'The user'), ...problems(...AUTHED, 404, 409) },
+  responses: {
+    200: json(AdminUserSchema, 'The user'),
+    ...problems(...AUTHED, 404, 'forbidden', 'cannot_disable_self'),
+  },
 });
 
 const listBackups = createRoute({
@@ -70,7 +89,9 @@ const listBackups = createRoute({
   tags,
   operationId: 'listBackups',
   summary: 'Database snapshots, newest first (instance admins)',
-  responses: { 200: json(z.array(BackupSchema), 'Backups'), ...problems(401, 403, 429) },
+  description:
+    'Scheduled (daily, weekly), manual and pre-migration snapshots in `<dataDir>/backups`, with their size.',
+  responses: { 200: json(z.array(BackupSchema), 'Backups'), ...problems(401, 'forbidden') },
 });
 
 const createBackup = createRoute({
@@ -79,7 +100,9 @@ const createBackup = createRoute({
   tags,
   operationId: 'createBackup',
   summary: 'Take a snapshot now (instance admins)',
-  responses: { 201: json(BackupSchema, 'The new backup'), ...problems(...AUTHED) },
+  description:
+    'A consistent online copy of the database (`manual-<time>.db`); the server keeps serving meanwhile.',
+  responses: { 201: json(BackupSchema, 'The new backup'), ...problems(...AUTHED, 'forbidden') },
 });
 
 const downloadBackup = createRoute({
@@ -88,14 +111,22 @@ const downloadBackup = createRoute({
   tags,
   operationId: 'downloadBackup',
   summary: 'Download a snapshot (instance admins)',
-  description: 'Only names from the list are accepted; anything else is 404.',
+  description:
+    'Streams the SQLite file as an attachment. Only names from the list are accepted; anything else is 404.',
   request: { params: z.object({ name: idParam('name', 'Backup file name') }) },
   responses: {
     200: {
       description: 'The SQLite database file',
+      headers: {
+        'Content-Disposition': {
+          description: '`attachment; filename="<name>"`',
+          schema: { type: 'string' },
+          required: true,
+        },
+      },
       content: { 'application/vnd.sqlite3': { schema: z.string().openapi({ format: 'binary' }) } },
     },
-    ...problems(401, 403, 404, 429),
+    ...problems(401, 404, 'forbidden'),
   },
 });
 
@@ -105,7 +136,12 @@ const reindexSearch = createRoute({
   tags,
   operationId: 'reindexSearch',
   summary: 'Rebuild the search index from the tasks (instance admins)',
-  responses: { 200: json(ReindexResultSchema, 'The rebuild'), ...problems(...AUTHED) },
+  description:
+    'Rebuilds the full-text index from the task table in one transaction. The server also does this at boot when the index looks out of step; this is the manual repair.',
+  responses: {
+    200: json(ReindexResultSchema, 'The rebuild'),
+    ...problems(...AUTHED, 'forbidden'),
+  },
 });
 
 export function registerAdminRoutes(

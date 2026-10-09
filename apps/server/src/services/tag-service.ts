@@ -20,6 +20,7 @@ import {
   type Tx,
 } from './context.ts';
 import { isSharedOrg, memberIds, qk, taskAudiences, taskReach } from './event-audience.ts';
+import { authorizeOrg, authorizeOrgWide, authorizeTaskWrite } from './grant-access.ts';
 import { isMember, requireTask, type TaskRow, taskDeleted, taskDtoFor } from './list-access.ts';
 import { requireMembership } from './org-access.ts';
 
@@ -165,7 +166,7 @@ export function detachTag(tx: Tx, taskId: string, tagId: string): boolean {
 export function setTaskTag(
   tx: Tx,
   input: {
-    userId: string;
+    actor: Actor;
     taskId: string;
     tagId: string;
     on: boolean;
@@ -174,7 +175,8 @@ export function setTaskTag(
     addedAt?: number;
   },
 ): { row: TaskRow; changed: boolean } {
-  const row = requireTask(tx, input.userId, input.taskId);
+  const row = requireTask(tx, input.actor.userId, input.taskId);
+  authorizeTaskWrite(tx, input.actor, row);
   if (row.deletedAt !== null) throw taskDeleted();
   const t = tx.select({ orgId: tag.orgId }).from(tag).where(eq(tag.id, input.tagId)).get();
   if (t === undefined || t.orgId !== row.orgId) throw tagNotFound();
@@ -248,6 +250,7 @@ export class TagService {
   list(actor: Actor, orgRef: string): Tag[] {
     return immediate(this.deps.db, (tx) => {
       const { org } = requireMembership(tx, actor.userId, orgRef);
+      authorizeOrg(actor, org.id, 'tasks:read');
       return tx
         .select()
         .from(tag)
@@ -265,6 +268,7 @@ export class TagService {
   create(actor: Actor, orgRef: string, input: TagCreate, _meta?: OpMeta): Tag {
     return immediate(this.deps.db, (tx) => {
       const { org } = requireMembership(tx, actor.userId, orgRef);
+      authorizeOrgWide(tx, actor, org.id, 'tasks:write');
       if (input.id !== undefined) {
         const existing = tx.select().from(tag).where(eq(tag.id, input.id)).get();
         if (existing !== undefined) {
@@ -290,6 +294,7 @@ export class TagService {
   update(actor: Actor, tagId: string, input: TagPatch, _meta?: OpMeta): Tag {
     return immediate(this.deps.db, (tx) => {
       const row = requireTag(tx, actor.userId, tagId);
+      authorizeOrgWide(tx, actor, row.orgId, 'tasks:write');
       const changes: Partial<TagRow> = {};
       if (input.name !== undefined) {
         const name = normaliseName(input.name);
@@ -309,6 +314,7 @@ export class TagService {
   remove(actor: Actor, tagId: string, _meta?: OpMeta): void {
     immediate(this.deps.db, (tx) => {
       const row = requireTag(tx, actor.userId, tagId);
+      authorizeOrgWide(tx, actor, row.orgId, 'tasks:write');
       const tasks = touchTasksWithTag(tx, row.id, this.now());
       tx.delete(tag).where(eq(tag.id, row.id)).run();
       this.emit(tx, actor, 'tag.deleted', row.orgId, [row.id], tasks);
@@ -325,6 +331,7 @@ export class TagService {
       const from = requireTag(tx, actor.userId, tagId);
       const into = requireTag(tx, actor.userId, intoId);
       if (into.orgId !== from.orgId) throw tagNotFound();
+      authorizeOrgWide(tx, actor, from.orgId, 'tasks:write');
       if (into.id === from.id) {
         throw new AppError('validation_failed', 422, 'A tag cannot be merged into itself.', [
           { path: 'intoId', message: 'Pick another tag' },
@@ -356,7 +363,7 @@ export class TagService {
   setOnTask(actor: Actor, taskId: string, tagId: string, on: boolean, meta?: OpMeta): Task {
     return immediate(this.deps.db, (tx) => {
       const { row, changed } = setTaskTag(tx, {
-        userId: actor.userId,
+        actor,
         taskId,
         tagId,
         on,

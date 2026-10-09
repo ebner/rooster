@@ -11,6 +11,7 @@ import { CommentService } from './comment-service.ts';
 import type { ServiceDeps } from './context.ts';
 import { ExportService } from './export-service.ts';
 import { FollowerService } from './follower-service.ts';
+import { GrantService } from './grant-service.ts';
 import { GroupService } from './group-service.ts';
 import { IdempotencyStore } from './idempotency-store.ts';
 import { NotificationService } from './notification-service.ts';
@@ -30,6 +31,8 @@ export interface Services {
   users: UserService;
   admin: AdminService;
   signIn: SignInPolicy;
+  /** PATs, CLI devices and their grants (P8, 11 §2). */
+  grants: GrantService;
   ordering: OrderingService;
   placements: PlacementService;
   groups: GroupService;
@@ -110,9 +113,15 @@ export function createServices(
     onEmailInvite: (tx, invite) => mail.inviteCreated(tx, invite),
   });
   const search = new SearchService(deps);
+  const users = new UserService(deps);
   return {
     orgs,
-    users: new UserService(deps),
+    users,
+    grants: new GrantService(
+      deps,
+      (userId, sessionId) => users.sessionActive(userId, sessionId),
+      (actor) => notifications.unreadCountFor(actor),
+    ),
     admin: new AdminService(deps),
     signIn: new SignInPolicy(deps, orgs),
     ordering,
@@ -140,4 +149,4 @@ export function createServices(
   };
 }
 
-export type { Actor, OpMeta, ServiceDeps } from './context.ts';
+export type { Actor, ActorGrant, OpMeta, ServiceDeps } from './context.ts';

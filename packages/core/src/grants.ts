@@ -81,9 +81,9 @@ export function grantsOrg(constraints: GrantConstraints, orgId: string): boolean
 }
 
 /**
- * Whether a task may be read. `groupId` is where the task sits in the grant user's My tasks
- * (for a subtask: its root's placement), or null when it is not in their list (someone else's,
- * unassigned, Everyone's tasks): those need read access to the whole org.
+ * Whether a task may be read. `groupId` is where the task shows in the grant user's My tasks:
+ * its own placement, else its nearest placed ancestor's (ADR 0037), or null when neither is in
+ * their list (someone else's, unassigned, Everyone's tasks): those need the whole org.
  */
 export function canRead(
   constraints: GrantConstraints,

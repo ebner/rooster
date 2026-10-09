@@ -21,6 +21,7 @@ import {
   type Tx,
 } from './context.ts';
 import { qk, selfAudience, taskAudiences, taskReach } from './event-audience.ts';
+import { authorizeOrgWide, requireScope } from './grant-access.ts';
 import {
   clockAllows,
   descendantsOf,
@@ -111,6 +112,7 @@ export class GroupService {
   create(actor: Actor, orgRef: string, input: GroupCreate, _meta?: OpMeta): GroupCreateResult {
     return immediate(this.deps.db, (tx) => {
       const { org } = requireMembership(tx, actor.userId, orgRef);
+      authorizeOrgWide(tx, actor, org.id, 'groups:write');
       const now = this.deps.clock();
       if (input.id !== undefined) {
         const existing = tx.select().from(taskGroup).where(eq(taskGroup.id, input.id)).get();
@@ -188,6 +190,7 @@ export class GroupService {
   update(actor: Actor, groupId: string, patch: GroupPatch, meta: OpMeta): Group {
     return immediate(this.deps.db, (tx) => {
       const group = requireOwnGroup(tx, actor.userId, groupId);
+      authorizeOrgWide(tx, actor, group.orgId, 'groups:write');
       if (patch.name !== undefined && group.kind === 'inbox') throw inboxImmutable();
       const clock = parseClock(group.fieldClock);
       const changes: Partial<GroupRow> = {};
@@ -215,6 +218,7 @@ export class GroupService {
   move(actor: Actor, groupId: string, intent: OrderingIntent, meta: OpMeta): GroupMoveResult {
     return immediate(this.deps.db, (tx) => {
       const group = requireOwnGroup(tx, actor.userId, groupId);
+      authorizeOrgWide(tx, actor, group.orgId, 'groups:write');
       if (group.kind === 'inbox') throw inboxImmutable();
       const clock = parseClock(group.fieldClock);
       if (!clockAllows(clock, 'pos', meta.editTime)) return { position: group.position };
@@ -241,6 +245,8 @@ export class GroupService {
   remove(actor: Actor, groupId: string, input: GroupDelete, meta?: OpMeta): void {
     immediate(this.deps.db, (tx) => {
       const group = requireOwnGroup(tx, actor.userId, groupId);
+      authorizeOrgWide(tx, actor, group.orgId, 'groups:write');
+      requireScope(actor, 'tasks:delete');
       if (group.kind === 'inbox') throw inboxImmutable();
       const clock = parseClock(group.fieldClock);
       const editTime = meta?.editTime ?? this.deps.clock();
@@ -319,6 +325,8 @@ export class GroupService {
   restore(actor: Actor, groupId: string, meta?: OpMeta): Group {
     return immediate(this.deps.db, (tx) => {
       const group = requireOwnGroup(tx, actor.userId, groupId, { includeDeleted: true });
+      authorizeOrgWide(tx, actor, group.orgId, 'groups:write');
+      requireScope(actor, 'tasks:write');
       if (group.deletedAt === null) return toGroupDto(group);
       const clock = parseClock(group.fieldClock);
       const editTime = meta?.editTime ?? this.deps.clock();

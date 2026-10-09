@@ -6,6 +6,7 @@ import { and, asc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { comment, placement, tag as tagTable, task, taskGroup, user } from '../db/schema/index.ts';
 import { toCommentDto } from './comment-service.ts';
 import { type Actor, immediate, type ServiceDeps } from './context.ts';
+import { requireBrowserSession } from './grant-access.ts';
 import { listGroups } from './group-service.ts';
 import {
   chunked,
@@ -38,6 +39,7 @@ export class ExportService {
    * order, oldest first per task). Members only (404 otherwise).
    */
   exportOrg(actor: Actor, orgRef: string): OrgExportFile {
+    requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => {
       const { org } = requireMembership(tx, actor.userId, orgRef);
       const me = tx

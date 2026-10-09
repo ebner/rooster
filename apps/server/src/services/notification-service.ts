@@ -25,6 +25,12 @@ import {
 } from './context.ts';
 import { decodeCursor, encodeCursor, isTimeIdCursor } from './cursor.ts';
 import { qk, selfAudience } from './event-audience.ts';
+import {
+  grantReachesOrg,
+  reachedOrgIds,
+  requireBrowserSession,
+  requireScope,
+} from './grant-access.ts';
 import { isMember } from './list-access.ts';
 import type { MemberRemovalStep } from './org-service.ts';
 import { prefEnabled, prefMatrix, setPref } from './pref-store.ts';
@@ -243,20 +249,39 @@ export class NotificationService {
     }
   }
 
-  /** The user's unread notifications across their live orgs (the bell badge). */
-  unreadCount(tx: Tx, userId: string): number {
+  /**
+   * The user's unread notifications across their live orgs (the bell badge); with `orgIds`,
+   * only in those orgs.
+   */
+  unreadCount(tx: Tx, userId: string, orgIds?: readonly string[]): number {
+    if (orgIds !== undefined && orgIds.length === 0) return 0;
     return (
       tx
         .select({ n: sql<number>`count(*)` })
         .from(notification)
         .innerJoin(organization, eq(organization.id, notification.orgId))
-        .where(and(eq(notification.userId, userId), isNull(notification.readAt), liveOrg, inInbox))
+        .where(
+          and(
+            eq(notification.userId, userId),
+            isNull(notification.readAt),
+            liveOrg,
+            inInbox,
+            orgIds === undefined ? undefined : inArray(notification.orgId, [...orgIds]),
+          ),
+        )
         .get()?.n ?? 0
     );
   }
 
+  /** The bell badge as the actor may see it: a grant counts only the orgs it reaches. */
+  unreadCountFor(actor: Actor, tx?: Tx): number {
+    const count = (t: Tx) => this.unreadCount(t, actor.userId, reachedOrgIds(actor));
+    return tx === undefined ? readOnly(this.deps.db, count) : count(tx);
+  }
+
   /** GET /notifications: newest first, cursor paged, with the unread count. */
   list(actor: Actor, query: NotificationQuery): NotificationPage {
+    requireScope(actor, 'notifications:read');
     return readOnly(this.deps.db, (tx) => {
       const limit = query.limit ?? PAGE_LIMIT_DEFAULT;
       const after = decodeCursor(query.cursor, isTimeIdCursor);
@@ -284,12 +309,15 @@ export class NotificationService {
       const page = rows.slice(0, limit);
       const last = page[page.length - 1]?.row;
       return {
-        items: page.map((r) => toNotificationDto(r.row, r.slug)),
+        // A grant sees the inbox of the orgs it reaches only.
+        items: page
+          .filter((r) => grantReachesOrg(actor, r.row.orgId))
+          .map((r) => toNotificationDto(r.row, r.slug)),
         nextCursor:
           rows.length > limit && last !== undefined
             ? encodeCursor([last.createdAt, last.id])
             : null,
-        unreadCount: this.unreadCount(tx, actor.userId),
+        unreadCount: this.unreadCountFor(actor, tx),
       };
     });
   }
@@ -300,6 +328,7 @@ export class NotificationService {
    * count (a count-only `notification` event) and an `['notifications']` invalidation.
    */
   mark(actor: Actor, input: NotificationMark, read: boolean): NotificationMarkResult {
+    requireScope(actor, 'notifications:read');
     return immediate(this.deps.db, (tx) => {
       const ids = 'ids' in input ? [...new Set(input.ids)] : null;
       const changed = tx
@@ -314,7 +343,7 @@ export class NotificationService {
           ),
         )
         .run().changes;
-      const unreadCount = this.unreadCount(tx, actor.userId);
+      const unreadCount = this.unreadCountFor(actor, tx);
       if (changed > 0) {
         const data: SseNotification = { unreadCount, notification: null };
         emitAfterCommit(this.deps, tx, {
@@ -332,6 +361,7 @@ export class NotificationService {
 
   /** GET /me/notification-prefs: all 20 cells, defaults applied (ADR 0033). */
   getPrefs(actor: Actor): NotificationPrefs {
+    requireBrowserSession(actor);
     return readOnly(this.deps.db, (tx) => ({ prefs: prefMatrix(tx, actor.userId) }));
   }
 
@@ -340,6 +370,7 @@ export class NotificationService {
    * exist). A row is stored only for a cell the user set; the rest follow the defaults.
    */
   putPrefs(actor: Actor, input: NotificationPrefsPut): NotificationPrefs {
+    requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => {
       for (const p of input.prefs) setPref(tx, actor.userId, p.type, p.channel, p.enabled);
       return { prefs: prefMatrix(tx, actor.userId) };

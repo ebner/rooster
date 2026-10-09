@@ -52,6 +52,7 @@
       "cli": "via kommandoraden",
       "tui": "via terminalappen",
       "mcp": "via en AI-assistent",
+      "pat": "via en åtkomsttoken",
       "import": "via import"
     }
   },

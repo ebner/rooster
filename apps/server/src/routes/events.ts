@@ -11,7 +11,7 @@ import type { AppEnv } from '../lib/context.ts';
 import { AppError } from '../lib/errors.ts';
 import { named } from '../lib/openapi.ts';
 import type { Services } from '../services/index.ts';
-import { actorOf, problems } from './common.ts';
+import { ANY_CREDENTIAL, actorOf, problems } from './common.ts';
 
 export const SseHelloSchema = named(sseHelloSchema, 'SseHello');
 export const SseInvalidateSchema = named(sseInvalidateSchema, 'SseInvalidate');
@@ -58,7 +58,7 @@ const eventsRoute = createRoute({
         },
       },
     },
-    ...problems(401, 429, 503),
+    ...problems(401, 503, ANY_CREDENTIAL),
   },
 });
 
@@ -83,8 +83,7 @@ export function registerEventRoutes(
         new Promise<void>((resolve) => {
           const handle = hub.open({
             userId: actor.userId,
-            sessionId: actor.sessionId,
-            isValid: () => services.users.sessionActive(actor.userId, actor.sessionId),
+            ...services.grants.streamAccess(actor),
             // `write` issues the underlying writer call synchronously, so frames keep their
             // order without a promise chain; `close` queues behind them.
             sink: {

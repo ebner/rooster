@@ -52,6 +52,7 @@
       "cli": "via the CLI",
       "tui": "via the terminal app",
       "mcp": "via an AI assistant",
+      "pat": "via an access token",
       "import": "via import"
     }
   },

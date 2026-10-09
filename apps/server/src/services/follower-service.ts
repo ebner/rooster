@@ -4,6 +4,7 @@ import { follower, task } from '../db/schema/index.ts';
 import { AppError } from '../lib/errors.ts';
 import { type Actor, emitAfterCommit, immediate, type ServiceDeps, type Tx } from './context.ts';
 import { isSharedOrg, memberIds, qk } from './event-audience.ts';
+import { authorizeTaskRead, requireScope } from './grant-access.ts';
 import { requireTask, type TaskRow, taskDeleted } from './list-access.ts';
 import type { MemberRemovalStep } from './org-service.ts';
 
@@ -50,6 +51,8 @@ export class FollowerService {
   setFollowing(actor: Actor, taskId: string, on: boolean): FollowState {
     return immediate(this.deps.db, (tx) => {
       const row = requireTask(tx, actor.userId, taskId);
+      authorizeTaskRead(tx, actor, row);
+      requireScope(actor, 'comments:write');
       if (row.deletedAt !== null) throw taskDeleted();
       if (!isSharedOrg(tx, row.orgId)) {
         throw new AppError('personal_org', 409, 'Personal organisations have no followers.');

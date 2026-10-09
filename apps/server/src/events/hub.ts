@@ -38,6 +38,13 @@ export interface SseOpen {
    * ends no event reports, such as a session that simply expired.
    */
   isValid: () => boolean;
+  /** A grant's stream (P8): invalidations of orgs it does not reach are dropped. */
+  accepts?: (org: string | null) => boolean;
+  /**
+   * A grant's stream (P8): rewrites a `notification` message for what the grant may see, or
+   * drops it (`null`).
+   */
+  notification?: (data: unknown) => unknown | null;
   /** Called once when the stream is closed, for any reason. */
   onClose?: () => void;
 }
@@ -199,7 +206,10 @@ export class SseHub {
     }
     for (const message of event.direct ?? []) {
       for (const conn of this.byUser.get(message.userId) ?? []) {
-        if (!conn.closed) conn.sink.write(frame(message.event, this.nextId(), message.data));
+        if (conn.closed) continue;
+        const data =
+          conn.notification === undefined ? message.data : conn.notification(message.data);
+        if (data !== null) conn.sink.write(frame(message.event, this.nextId(), data));
       }
     }
     if (event.type === 'session.ended') {
@@ -215,7 +225,7 @@ export class SseHub {
     origin: string | null,
     keys: readonly QueryKey[],
   ): void {
-    if (conn.closed || keys.length === 0) return;
+    if (conn.closed || keys.length === 0 || conn.accepts?.(org) === false) return;
     const slot = JSON.stringify([org, origin]);
     let bucket = conn.pending.get(slot);
     if (bucket === undefined) {

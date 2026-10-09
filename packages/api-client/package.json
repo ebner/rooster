@@ -1,12 +1,26 @@
 {
   "name": "@rooster/api-client",
   "version": "1.1.0",
+  "description": "Typed client for the rooster REST API, generated from its OpenAPI document.",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
+    "build": "tsdown",
     "gen": "openapi-typescript ../../apps/server/openapi.json -o src/schema.d.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
@@ -15,6 +29,7 @@
   },
   "devDependencies": {
     "openapi-typescript": "catalog:",
+    "tsdown": "catalog:",
     "typescript": "5.9.3"
   }
 }

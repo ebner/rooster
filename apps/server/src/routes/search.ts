@@ -14,7 +14,7 @@ const search = createRoute({
   description:
     'Free words are prefix matches over title and description (case and diacritics ignored); `#tag`, `@person`, `due:today|overdue|week|none` and `is:open|done` filter. Open tasks rank before completed ones, then by relevance; a filter-only query ranks by due date. Without `orgId` every org I belong to is searched; an org I do not belong to is 404. Matches in `snippet` are wrapped in U+E000 … U+E001.',
   request: { query: searchQuerySchema },
-  responses: { 200: json(SearchResultSchema, 'Hits, best first'), ...problems(401, 404, 422, 429) },
+  responses: { 200: json(SearchResultSchema, 'Hits, best first'), ...problems(401, 404, 422) },
 });
 
 export function registerSearchRoutes(

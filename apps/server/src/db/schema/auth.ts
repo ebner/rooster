@@ -37,8 +37,13 @@ export const session = sqliteTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
+    /**
+     * rooster's: the `access_grant` of a CLI device session (11 §2.4); null for the browser.
+     * Revoking the grant deletes the session.
+     */
+    grantId: text('grant_id'),
   },
-  (t) => [index('session_user').on(t.userId)],
+  (t) => [index('session_user').on(t.userId), index('session_grant').on(t.grantId)],
 );
 
 export const account = sqliteTable(

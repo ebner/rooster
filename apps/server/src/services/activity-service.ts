@@ -13,6 +13,7 @@ import { activity, comment, task } from '../db/schema/index.ts';
 import { toCommentDto } from './comment-service.ts';
 import { type Actor, readOnly, type ServiceDeps, type Tx } from './context.ts';
 import { compareText, decodeCursor, encodeCursor, isTimeIdCursor } from './cursor.ts';
+import { authorizeTaskRead } from './grant-access.ts';
 import { requireTask } from './list-access.ts';
 import type { MemberRemovalStep } from './org-service.ts';
 
@@ -27,6 +28,8 @@ export type ActivityDraft = {
 export interface ActivityScope {
   actorId: string | null;
   via: ActivityVia;
+  /** The grant of a PAT or CLI device write (11 §2.3), kept in the entry's data. */
+  grantId?: string | null;
 }
 
 /** Client kinds a request may claim in `X-Rooster-Client`; `import` and `system` are server-side. */
@@ -41,6 +44,17 @@ export function viaOf(client: string | null | undefined): ActivityVia {
   return kind !== undefined && CLIENT_KINDS.has(kind) ? (kind as ActivityVia) : 'web';
 }
 
+/**
+ * `via` of a write: a PAT is `pat`; a CLI device is the kind it names in `X-Rooster-Client`
+ * (`cli`, `tui`, `mcp`), else `cli`; the browser session as `viaOf`.
+ */
+export function viaFor(actor: Actor, meta: { client: string | null } | undefined): ActivityVia {
+  if (actor.grant === null) return viaOf(meta?.client);
+  if (actor.grant.kind === 'pat') return 'pat';
+  const via = viaOf(meta?.client);
+  return via === 'web' || via === 'pwa' ? 'cli' : via;
+}
+
 type ActivityRow = typeof activity.$inferSelect;
 
 function toActivityDto(row: ActivityRow): Activity {
@@ -51,7 +65,7 @@ function toActivityDto(row: ActivityRow): Activity {
   } catch {
     // An unreadable payload shows as an entry without details.
   }
-  const { via, ...data } = stored;
+  const { via, grantId: _grantId, ...data } = stored;
   const parsed = activityViaSchema.safeParse(via);
   return {
     id: row.id,
@@ -91,7 +105,11 @@ export class ActivityService {
         orgId: target.orgId,
         actorId: scope.actorId,
         type: entry.type,
-        data: JSON.stringify({ ...entry.data, via: scope.via }),
+        data: JSON.stringify({
+          ...entry.data,
+          via: scope.via,
+          ...(scope.grantId == null ? {} : { grantId: scope.grantId }),
+        }),
         createdAt: this.deps.clock(),
       })
       .run();
@@ -106,6 +124,7 @@ export class ActivityService {
   feed(actor: Actor, taskId: string, query: ActivityQuery): ActivityPage {
     return readOnly(this.deps.db, (tx) => {
       const row = requireTask(tx, actor.userId, taskId);
+      authorizeTaskRead(tx, actor, row);
       const limit = query.limit ?? PAGE_LIMIT_DEFAULT;
       const before = decodeCursor(query.cursor, isTimeIdCursor);
       const entries: FeedEntry[] = tx

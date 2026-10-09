@@ -30,7 +30,7 @@ const getActivity = createRoute({
   request: { params: taskParams, query: activityQuerySchema },
   responses: {
     200: json(ActivityPageSchema, 'A page of the feed'),
-    ...problems(401, 404, 422, 429),
+    ...problems(401, 404, 422),
   },
 });
 
@@ -43,7 +43,10 @@ const createComment = createRoute({
   description:
     'The commenter and every mentioned member follow the task. Mentioned members get a `mention` notification, the other followers a `comment` one. A repeated create with the same `id` and body returns the comment; another body is `409 id_conflict`.',
   request: { params: taskParams, body: body(CommentCreateSchema) },
-  responses: { 201: json(CommentSchema, 'The comment'), ...problems(...AUTHED, 404, 409, 410) },
+  responses: {
+    201: json(CommentSchema, 'The comment'),
+    ...problems(...AUTHED, 404, 'id_conflict', 'conflict_deleted'),
+  },
 });
 
 const patchComment = createRoute({
@@ -52,8 +55,13 @@ const patchComment = createRoute({
   tags: ['collaboration'],
   operationId: 'updateComment',
   summary: 'Edit my comment (author only); sets editedAt',
+  description:
+    'Only the author (`403 forbidden`). A deleted comment, or a comment on a deleted task, is `410 conflict_deleted`. New mentions notify and add followers.',
   request: { params: commentParams, body: body(CommentPatchSchema) },
-  responses: { 200: json(CommentSchema, 'The comment'), ...problems(...AUTHED, 404, 410) },
+  responses: {
+    200: json(CommentSchema, 'The comment'),
+    ...problems(...AUTHED, 404, 'forbidden', 'conflict_deleted'),
+  },
 });
 
 const deleteComment = createRoute({
@@ -62,8 +70,13 @@ const deleteComment = createRoute({
   tags: ['collaboration'],
   operationId: 'deleteComment',
   summary: 'Delete my comment (author only); restorable for 30 days',
+  description:
+    'A soft delete: the comment leaves the feed, and `POST /comments/{id}/restore` brings it back within 30 days.',
   request: { params: commentParams },
-  responses: { 204: { description: 'Deleted' }, ...problems(...AUTHED, 404, 410) },
+  responses: {
+    204: { description: 'Deleted' },
+    ...problems(...AUTHED, 404, 'forbidden', 'conflict_deleted'),
+  },
 });
 
 const restoreComment = createRoute({
@@ -72,8 +85,12 @@ const restoreComment = createRoute({
   tags: ['collaboration'],
   operationId: 'restoreComment',
   summary: 'Undo the delete of my comment (author only)',
+  description: 'Restoring a live comment returns it unchanged.',
   request: { params: commentParams },
-  responses: { 200: json(CommentSchema, 'The comment'), ...problems(...AUTHED, 404, 410) },
+  responses: {
+    200: json(CommentSchema, 'The comment'),
+    ...problems(...AUTHED, 404, 'forbidden', 'conflict_deleted'),
+  },
 });
 
 const followTask = createRoute({
@@ -82,10 +99,12 @@ const followTask = createRoute({
   tags: ['collaboration'],
   operationId: 'followTask',
   summary: 'Follow a task (shared orgs only)',
+  description:
+    'Followers get notifications about comments, completion and due changes. Idempotent. Personal orgs have no followers (`409 personal_org`).',
   request: { params: taskParams },
   responses: {
     200: json(FollowStateSchema, 'The active followers'),
-    ...problems(...AUTHED, 404, 409, 410),
+    ...problems(...AUTHED, 404, 'personal_org', 'conflict_deleted'),
   },
 });
 
@@ -95,10 +114,12 @@ const unfollowTask = createRoute({
   tags: ['collaboration'],
   operationId: 'unfollowTask',
   summary: 'Unfollow a task; automatic following no longer adds me back',
+  description:
+    'Mutes the task for me: commenting or being assigned later does not make me follow it again; only `PUT` does. Idempotent.',
   request: { params: taskParams },
   responses: {
     200: json(FollowStateSchema, 'The active followers'),
-    ...problems(...AUTHED, 404, 409, 410),
+    ...problems(...AUTHED, 404, 'personal_org', 'conflict_deleted'),
   },
 });
 
@@ -108,10 +129,12 @@ const listNotifications = createRoute({
   tags: ['notifications'],
   operationId: 'listNotifications',
   summary: 'My notifications across orgs, newest first, with the unread count',
+  description:
+    '`unread=true` lists unread ones only. Paged with `limit` and `cursor`; `unreadCount` counts every unread notification on every page (the bell badge). For a PAT or CLI device (`notifications:read`), both the items and `unreadCount` cover only the orgs its grant reaches, so a page may hold fewer than `limit` items.',
   request: { query: notificationQuerySchema },
   responses: {
     200: json(NotificationPageSchema, 'A page of notifications'),
-    ...problems(401, 422, 429),
+    ...problems(401, 422),
   },
 });
 
@@ -121,6 +144,8 @@ const markRead = createRoute({
   tags: ['notifications'],
   operationId: 'markNotificationsRead',
   summary: 'Mark notifications read: `{ids}` or `{all: true}`',
+  description:
+    'IDs that are not mine are ignored. Every tab and device of mine gets the new count over SSE.',
   request: { body: body(NotificationMarkSchema) },
   responses: {
     200: json(NotificationMarkResultSchema, 'The new unread count'),
@@ -134,6 +159,7 @@ const markUnread = createRoute({
   tags: ['notifications'],
   operationId: 'markNotificationsUnread',
   summary: 'Mark notifications unread: `{ids}` or `{all: true}`',
+  description: 'The inverse of `/notifications/read`.',
   request: { body: body(NotificationMarkSchema) },
   responses: {
     200: json(NotificationMarkResultSchema, 'The new unread count'),
@@ -146,8 +172,10 @@ const getPrefs = createRoute({
   path: '/api/v1/me/notification-prefs',
   tags: ['notifications'],
   operationId: 'getNotificationPrefs',
-  summary: 'The notification preference matrix (every type × channel; default on)',
-  responses: { 200: json(NotificationPrefsSchema, 'The matrix'), ...problems(401, 429) },
+  summary: 'The notification preference matrix (every type × channel)',
+  description:
+    'Every cell with defaults applied: in-app and push on for every event, email on for assignments and mentions. The digest is email only, the due reminder push only. Reminder and digest times live in `/me` prefs.',
+  responses: { 200: json(NotificationPrefsSchema, 'The matrix'), ...problems(401) },
 });
 
 const putPrefs = createRoute({
@@ -155,7 +183,9 @@ const putPrefs = createRoute({
   path: '/api/v1/me/notification-prefs',
   tags: ['notifications'],
   operationId: 'updateNotificationPrefs',
-  summary: 'Set cells of the matrix; only the `inapp` channel until Phase 7',
+  summary: 'Set cells of the matrix',
+  description:
+    'Send any subset of cells; the others keep their value. A cell that does not exist (e.g. the digest on push) is `422`. Answers the whole matrix.',
   request: { body: body(NotificationPrefsPutSchema) },
   responses: { 200: json(NotificationPrefsSchema, 'The whole matrix'), ...problems(...AUTHED) },
 });

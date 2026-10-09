@@ -31,14 +31,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The signed-in user, settings, orgs in sidebar order, and isAdmin */
+        /**
+         * The signed-in user, settings, orgs in sidebar order, and isAdmin
+         * @description The first call of every client: the profile, display settings (locale, timezone, week start, date and time format), `prefs`, every org I belong to with my role in sidebar order, and whether I am an instance admin. The CLI uses it to pick the default org.
+         */
         get: operations["getMe"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Update profile and settings (prefs are merged) */
+        /**
+         * Update profile and settings (prefs are merged)
+         * @description Partial: send only the fields that change. `prefs` keys are merged into the stored prefs. `timezone` must be an IANA name the server knows. Answers the whole updated user.
+         */
         patch: operations["updateMe"];
         trace?: never;
     };
@@ -49,7 +55,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Active sessions of the signed-in user */
+        /**
+         * Active sessions of the signed-in user
+         * @description Browser and device sessions that have not expired, most recently used first. `current` marks the session making this request.
+         */
         get: operations["listSessions"];
         put?: never;
         post?: never;
@@ -69,7 +78,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Sign out a session; it is rejected on its next request */
+        /**
+         * Sign out a session; it is rejected on its next request
+         * @description Revokes one of my sessions (the current one included). Its open event streams close, and its next request is `401`. Another user’s session is `404`.
+         */
         delete: operations["revokeSession"];
         options?: never;
         head?: never;
@@ -84,7 +96,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Move an org in the sidebar (server computes the position) */
+        /**
+         * Move an org in the sidebar (server computes the position)
+         * @description An ordering intent among my orgs: `afterId` is the org directly above, `beforeId` the one directly below. The server computes the fractional key and returns it.
+         */
         put: operations["reorderOrg"];
         post?: never;
         delete?: never;
@@ -106,7 +121,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Collapse or expand an org section in the sidebar */
+        /**
+         * Collapse or expand an org section in the sidebar
+         * @description A per-member preference; other members are not affected.
+         */
         patch: operations["updateMyOrgPrefs"];
         trace?: never;
     };
@@ -117,10 +135,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Orgs of the signed-in user, in sidebar order */
+        /**
+         * Orgs of the signed-in user, in sidebar order
+         * @description The personal org first by default, then shared orgs, each with my role and sidebar state.
+         */
         get: operations["listOrgs"];
         put?: never;
-        /** Create an org; the creator becomes its owner */
+        /**
+         * Create an org; the creator becomes its owner
+         * @description Also creates my Inbox and the default groups in it. Without a `slug` one is derived from the name (`acme`, `acme-2`, …); a taken explicit slug is `409 slug_taken`.
+         */
         post: operations["createOrg"];
         delete?: never;
         options?: never;
@@ -138,11 +162,17 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete an org (owner, confirmName). Not the personal org */
+        /**
+         * Delete an org (owner, confirmName). Not the personal org
+         * @description Deletes the org with every task, group, tag and comment in it, for every member. `confirmName` must equal the org’s name (`422 confirm_name_mismatch`). Cannot be undone.
+         */
         delete: operations["deleteOrg"];
         options?: never;
         head?: never;
-        /** Rename or restyle an org (owner). Personal org: avatarEmoji and color only */
+        /**
+         * Rename or restyle an org (owner). Personal org: avatarEmoji and color only
+         * @description Owners only (`403 forbidden`). Changing the slug changes the org’s URLs. The personal org keeps its name and slug (`409 personal_org`).
+         */
         patch: operations["updateOrg"];
         trace?: never;
     };
@@ -153,7 +183,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Members of an org */
+        /**
+         * Members of an org
+         * @description Every member with their role, for assignee pickers and mentions.
+         */
         get: operations["listMembers"];
         put?: never;
         post?: never;
@@ -173,11 +206,17 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Remove a member (owner) or leave (your own user ID) */
+        /**
+         * Remove a member (owner) or leave (your own user ID)
+         * @description The member’s groups and placements in the org are deleted; tasks assigned to them become unassigned. The only owner cannot leave (`409 last_owner`).
+         */
         delete: operations["removeMember"];
         options?: never;
         head?: never;
-        /** Change a member's role (owner). The last owner cannot be demoted */
+        /**
+         * Change a member's role (owner). The last owner cannot be demoted
+         * @description Owners only. Demoting the only owner is `409 last_owner`; a personal org has no other members (`409 personal_org`).
+         */
         patch: operations["updateMember"];
         trace?: never;
     };
@@ -188,12 +227,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Open invites of an org (owner) */
+        /**
+         * Open invites of an org (owner)
+         * @description Unexpired, unrevoked invites. Email invites carry their `url` again; link invite URLs are shown only when created.
+         */
         get: operations["listInvites"];
         put?: never;
         /**
          * Invite by email (with `email`) or create an invite link (owner)
-         * @description Both kinds return a copyable `url` (`<ROOSTER_BASE_URL>/invite/<token>`). Email sending arrives in Phase 7. A personal org cannot be shared (`409 personal_org`).
+         * @description Both kinds return a copyable `url` (`<ROOSTER_BASE_URL>/invite/<token>`), shown once for links. With SMTP configured an email invite is also sent (`emailed: true`). Email invites are single-use (`multiUse` is `422`). A personal org cannot be shared (`409 personal_org`); inviting a member is `409 already_member`.
          */
         post: operations["createInvite"];
         delete?: never;
@@ -212,7 +254,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Revoke an invite of either kind (owner) */
+        /**
+         * Revoke an invite of either kind (owner)
+         * @description The invite URL stops working at once: its preview shows `valid: false` and claiming or accepting it is `410 invite_invalid`.
+         */
         delete: operations["revokeInvite"];
         options?: never;
         head?: never;
@@ -226,7 +271,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Preview an invite (no auth) */
+        /**
+         * Preview an invite (no auth)
+         * @description What the `/invite/:token` page shows before sign-in: the org, who invited, the role, and whether the invite can still be used (`valid`, else `reason`). An unknown token is `404`.
+         */
         get: operations["previewInvite"];
         put?: never;
         post?: never;
@@ -265,7 +313,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Join the org of an invite as the signed-in user */
+        /**
+         * Join the org of an invite as the signed-in user
+         * @description Creates my membership with the invite’s role, my Inbox and the default groups. Already a member: a no-op that returns the org. An email invite only admits its address (`403 invite_email_mismatch`); a used, expired or revoked invite is `410 invite_invalid`.
+         */
         post: operations["acceptInvite"];
         delete?: never;
         options?: never;
@@ -282,7 +333,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Rebuild the search index from the tasks (instance admins) */
+        /**
+         * Rebuild the search index from the tasks (instance admins)
+         * @description Rebuilds the full-text index from the task table in one transaction. The server also does this at boot when the index looks out of step; this is the manual repair.
+         */
         post: operations["reindexSearch"];
         delete?: never;
         options?: never;
@@ -297,10 +351,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Database snapshots, newest first (instance admins) */
+        /**
+         * Database snapshots, newest first (instance admins)
+         * @description Scheduled (daily, weekly), manual and pre-migration snapshots in `<dataDir>/backups`, with their size.
+         */
         get: operations["listBackups"];
         put?: never;
-        /** Take a snapshot now (instance admins) */
+        /**
+         * Take a snapshot now (instance admins)
+         * @description A consistent online copy of the database (`manual-<time>.db`); the server keeps serving meanwhile.
+         */
         post: operations["createBackup"];
         delete?: never;
         options?: never;
@@ -317,7 +377,7 @@ export interface paths {
         };
         /**
          * Download a snapshot (instance admins)
-         * @description Only names from the list are accepted; anything else is 404.
+         * @description Streams the SQLite file as an attachment. Only names from the list are accepted; anything else is 404.
          */
         get: operations["downloadBackup"];
         put?: never;
@@ -335,10 +395,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Sign-in allowlist entries (instance admins) */
+        /**
+         * Sign-in allowlist entries (instance admins)
+         * @description Who may sign in besides invitees and `ROOSTER_ADMIN_EMAILS`: single addresses and whole domains.
+         */
         get: operations["listAllowlist"];
         put?: never;
-        /** Allow an email address or a whole domain to sign in (instance admins) */
+        /**
+         * Allow an email address or a whole domain to sign in (instance admins)
+         * @description Values are stored lowercase and compared case-insensitively. A domain entry admits addresses from identity providers that vouch for the email. A duplicate is `409 already_exists`.
+         */
         post: operations["addAllowlistEntry"];
         delete?: never;
         options?: never;
@@ -356,7 +422,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Remove an allowlist entry (instance admins) */
+        /**
+         * Remove an allowlist entry (instance admins)
+         * @description Existing users keep their accounts; only new sign-ins are affected.
+         */
         delete: operations["removeAllowlistEntry"];
         options?: never;
         head?: never;
@@ -370,7 +439,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** All users of the instance (instance admins) */
+        /**
+         * All users of the instance (instance admins)
+         * @description Every account, deactivated ones included (`disabledAt`).
+         */
         get: operations["listUsers"];
         put?: never;
         post?: never;
@@ -395,9 +467,133 @@ export interface paths {
         head?: never;
         /**
          * Deactivate or reactivate a user (instance admins)
-         * @description Deactivating signs the user out everywhere.
+         * @description Deactivating signs the user out everywhere and blocks sign-in; their data stays. Admins cannot deactivate themselves (`409 cannot_disable_self`).
          */
         patch: operations["updateUser"];
+        trace?: never;
+    };
+    "/api/v1/me/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Connected apps: every PAT, CLI device and app grant
+         * @description Unrevoked grants, newest first (expired ones too, until revoked). `current` marks the grant behind this request. Allowed for the browser session and for a CLI device or PAT (`rooster token ls`, `rooster apps ls`).
+         */
+        get: operations["listGrants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/grants/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a grant: its token or device session stops working
+         * @description The browser session may revoke any of my grants; a CLI device or PAT only its own (`rooster logout`). Deletes the PAT or the device session; the next request with it is `401`.
+         */
+        delete: operations["revokeGrant"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit a grant’s label, scopes, constraints or expiry
+         * @description Browser session only. PATs and CLI devices change freely; an OAuth app’s access may only be narrowed (`422 widening_not_allowed`). Takes effect on the next request; the grant’s open event streams reconnect.
+         */
+        patch: operations["updateGrant"];
+        trace?: never;
+    };
+    "/api/v1/me/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a personal access token (shown once)
+         * @description Answers the token (`rooster_pat_…`) once, with its grant; send it as `Authorization: Bearer rooster_pat_…`. The browser session may create any PAT. A CLI device session (`rooster token create`) may create one within its own grant: scopes it has, narrower constraints and an expiry no later than its own, else `422 widening_not_allowed`; the PAT outlives a revoke of the device. A PAT cannot create PATs (`403 forbidden_scope`).
+         */
+        post: operations["createToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/device/{userCode}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a CLI device asks for, before approval
+         * @description Browser session only. The pending device request with this code: the client and the scopes it asked for (`scope` of its `/api/auth/device/code` request; all scopes when it sent none). Unknown, expired or already handled codes are `404`.
+         */
+        get: operations["getDeviceRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/device/{userCode}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a CLI device with the chosen scopes and constraints
+         * @description Browser session only. Creates the device grant (scopes no wider than requested, else `422 widening_not_allowed`); the CLI’s next poll of `/api/auth/device/token` receives a bearer session tied to it. The default label is "rooster CLI on <device>" from the CLI’s User-Agent.
+         */
+        post: operations["approveDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/device/{userCode}/deny": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deny a CLI device
+         * @description Browser session only. The CLI’s next poll gets `access_denied`.
+         */
+        post: operations["denyDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/orgs/{orgId}/my-list": {
@@ -409,7 +605,7 @@ export interface paths {
         };
         /**
          * My tasks in an org: groups (Inbox first) and every task placed in them
-         * @description Open tasks plus tasks completed at or after `completedSince` (ms epoch; default: 14 days ago).
+         * @description My groups in order (Inbox first) and every task placed in them: open tasks plus tasks completed at or after `completedSince` (ms epoch; default: 14 days ago). Also all live subtasks of those tasks and the parent chain of my orphan subtasks, with `placement: null`. `expandedTaskIds` are the parent rows I expanded; `serverTime` is for clock-skew estimation. This is the payload the web app renders and caches offline.
          */
         get: operations["getMyList"];
         put?: never;
@@ -452,14 +648,14 @@ export interface paths {
         post?: never;
         /**
          * Delete a group, moving or deleting its tasks
-         * @description A group with open tasks needs `moveTasksTo` or `deleteTasks` (`409 group_not_empty`). The last normal group cannot be deleted (`409 last_group`).
+         * @description A group with open tasks needs `moveTasksTo` or `deleteTasks` (`409 group_not_empty`); completed tasks without either go to the Inbox. The Inbox and the last normal group cannot be deleted (`409 inbox_immutable`, `409 last_group`). Undo with `POST /groups/{id}/restore`.
          */
         delete: operations["deleteGroup"];
         options?: never;
         head?: never;
         /**
          * Rename or collapse a group (per-field last write wins)
-         * @description The Inbox cannot be renamed (`409 inbox_immutable`).
+         * @description Each field is last-write-wins on its own edit time (`X-Rooster-Edit-Time`): an older edit leaves the field as it is. The Inbox cannot be renamed (`409 inbox_immutable`); collapsing it is fine. Only my own groups (else `404`).
          */
         patch: operations["updateGroup"];
         trace?: never;
@@ -473,7 +669,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Reorder a group; the server computes the position */
+        /**
+         * Reorder a group; the server computes the position
+         * @description An ordering intent among my groups in the org. IDs from another domain fall back to the end; the actual position is returned. The Inbox stays first (`409 inbox_immutable`).
+         */
         post: operations["moveGroup"];
         delete?: never;
         options?: never;
@@ -490,8 +689,31 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Undo a group delete, with the tasks deleted together with it */
+        /**
+         * Undo a group delete, with the tasks deleted together with it
+         * @description Restores the group at its old position, and the tasks that `deleteTasks` moved to Trash with it. Tasks that were moved elsewhere stay where they are.
+         */
         post: operations["restoreGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find a task by number, org#number or ID prefix
+         * @description Completed tasks always match. Unknown or unreadable refs are `404`. A prefix matching several tasks is `409 ambiguous_ref`, with `candidates: [{id, orgId, seq, title}]` (at most 10) in the problem.
+         */
+        get: operations["resolveTaskRef"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -506,14 +728,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Query tasks (CLI, MCP): my list or a due-date view, paged
-         * @description `view=my` (default) lists my list in order; `today`, `week`, `overdue` and `nodate` cover tasks assigned to me, evaluated in my timezone. `completed` defaults to `false`.
+         * Query tasks (CLI, MCP): my list, a due-date view or everyone’s tasks, paged
+         * @description The general query for the CLI, MCP and Everyone’s tasks. `view=my` (default) lists my list in order; `today`, `week`, `overdue` and `nodate` cover tasks assigned to me, evaluated in my timezone; `everyone` lists every task of a shared org by due date (`409 personal_org` in a personal org). Filters combine: `assignee` (repeatable, OR), `tag` (repeatable, AND; ID or name), `hasDue`, `dueFrom`/`dueTo`, `groupId`, `completed` (default `false`) and `q` (the search grammar). Paged with `limit` and `cursor`.
          */
         get: operations["queryTasks"];
         put?: never;
         /**
          * Create a task assigned to me, placed in my list
-         * @description Placed in `groupId` (default: the Inbox) at the `afterId`/`beforeId` intent. Without any intent it goes to the top of the Inbox, or to the end of a named group. A repeated create with the same `id` and content returns the task; other content is `409 id_conflict`. `parse: true` reads a trailing `>Group` token and a date phrase from the title.
+         * @description Placed in `groupId` (default: the Inbox) at the `afterId`/`beforeId` intent. Without any intent it goes to the top of the Inbox, or to the end of a named group. With `parentId` it is a subtask (`422 invalid_parent`, `subtask_depth`; `410 conflict_deleted` for a deleted parent). Assigning another member puts it at the top of their Inbox instead. A repeated create with the same `id` and content returns the task; other content is `409 id_conflict`. `parse: true` reads a trailing `>Group` token and a date phrase from the title.
          */
         post: operations["createTask"];
         delete?: never;
@@ -536,11 +758,17 @@ export interface paths {
         get: operations["getTask"];
         put?: never;
         post?: never;
-        /** Move a task (and its subtasks) to Trash */
+        /**
+         * Move a task (and its subtasks) to Trash
+         * @description A soft delete for every member: the task and its subtasks go to the org’s Trash, from where `POST /tasks/{id}/restore` brings them back. Deleting a deleted task is a no-op.
+         */
         delete: operations["deleteTask"];
         options?: never;
         head?: never;
-        /** Update fields (per-field last write wins; skipped fields in ignoredFields) */
+        /**
+         * Update fields (per-field last write wins; skipped fields in ignoredFields)
+         * @description Partial update of a task any member can see. Each field is last-write-wins on `X-Rooster-Edit-Time`: a field whose stored edit is newer is skipped and named in `ignoredFields` (the response is still `200`). The due unit (date, time, timezone, start date) is one field. Re-parenting checks cycles and depth (`422 subtask_cycle`, `subtask_depth`). A deleted task is `410 conflict_deleted`; restore it first.
+         */
         patch: operations["updateTask"];
         trace?: never;
     };
@@ -553,7 +781,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Move the task within my list; 404 if it is not in my list */
+        /**
+         * Move the task within my list; 404 if it is not in my list
+         * @description Changes only MY placement (groups are personal): `groupId` is one of my groups and the intent IDs are tasks in it. Intent IDs from elsewhere fall back to the end of the group; the actual placement is returned. Last write wins on my placement clock.
+         */
         post: operations["moveTask"];
         delete?: never;
         options?: never;
@@ -570,7 +801,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Complete or reopen a task; it keeps its place in the list */
+        /**
+         * Complete or reopen a task; it keeps its place in the list
+         * @description Last write wins on the `completed` clock; completing a completed task changes nothing. Followers are notified. `next` will carry the next instance of a recurring task.
+         */
         post: operations["completeTask"];
         delete?: never;
         options?: never;
@@ -587,7 +821,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Undo a delete, or restore from Trash, to the same place in the list */
+        /**
+         * Undo a delete, or restore from Trash, to the same place in the list
+         * @description Restores the task with the subtasks deleted together with it; placements come back where they were (to the top of the Inbox when their group is gone).
+         */
         post: operations["restoreTask"];
         delete?: never;
         options?: never;
@@ -605,7 +842,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete a task in Trash for good */
+        /**
+         * Delete a task in Trash for good
+         * @description Only for a task in Trash (`409 not_in_trash`): removes it with its subtasks and placements. Cannot be undone.
+         */
         delete: operations["deleteTaskPermanently"];
         options?: never;
         head?: never;
@@ -621,7 +861,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Apply one operation to up to 200 tasks (atomic per task) */
+        /**
+         * Apply one operation to up to 200 tasks (atomic per task)
+         * @description Each task succeeds or fails on its own, with the result it would get from the single-task route; a task I cannot see is `{ok: false, code: "not_found"}`. The whole request is `200` unless the body is invalid.
+         */
         post: operations["bulkTasks"];
         delete?: never;
         options?: never;
@@ -677,10 +920,16 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Remember that I expanded this parent row (idempotent) */
+        /**
+         * Remember that I expanded this parent row (idempotent)
+         * @description Per user: shows up in `expandedTaskIds` of my list on every device.
+         */
         put: operations["expandTask"];
         post?: never;
-        /** Forget my expansion of this parent row (idempotent) */
+        /**
+         * Forget my expansion of this parent row (idempotent)
+         * @description The counterpart of `PUT`; collapsing a row that is not expanded is fine.
+         */
         delete: operations["collapseTask"];
         options?: never;
         head?: never;
@@ -694,7 +943,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Deleted tasks of an org, most recently deleted first */
+        /**
+         * Deleted tasks of an org, most recently deleted first
+         * @description Deleted tasks of the org with `deletedAt` and `deletedBy`, paged with `limit` and `cursor`. A retention job empties old Trash.
+         */
         get: operations["listTrash"];
         put?: never;
         post?: never;
@@ -711,7 +963,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The org’s tags, by name */
+        /**
+         * The org’s tags, by name
+         * @description Every tag of the org, shared by all members.
+         */
         get: operations["listTags"];
         put?: never;
         /**
@@ -735,11 +990,17 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete a tag and remove it from every task */
+        /**
+         * Delete a tag and remove it from every task
+         * @description Permanent; the tasks themselves stay.
+         */
         delete: operations["deleteTag"];
         options?: never;
         head?: never;
-        /** Rename or recolour a tag */
+        /**
+         * Rename or recolour a tag
+         * @description Any member may. A name another tag of the org has (case-insensitively) is `409 tag_name_taken` with that tag’s `existingId`.
+         */
         patch: operations["updateTag"];
         trace?: never;
     };
@@ -752,7 +1013,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Merge a tag into another: its tasks get `intoId`, then it is deleted */
+        /**
+         * Merge a tag into another: its tasks get `intoId`, then it is deleted
+         * @description Both tags must be in the same org; merging a tag into itself is `422`. Answers the remaining tag.
+         */
         post: operations["mergeTag"];
         delete?: never;
         options?: never;
@@ -768,10 +1032,16 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Add a tag to a task (idempotent); the tag must be in the task’s org */
+        /**
+         * Add a tag to a task (idempotent); the tag must be in the task’s org
+         * @description Set semantics: adding a tag the task has changes nothing. Answers the task.
+         */
         put: operations["addTaskTag"];
         post?: never;
-        /** Remove a tag from a task (idempotent) */
+        /**
+         * Remove a tag from a task (idempotent)
+         * @description Removing a tag the task does not have changes nothing. Answers the task.
+         */
         delete: operations["removeTaskTag"];
         options?: never;
         head?: never;
@@ -807,7 +1077,7 @@ export interface paths {
         };
         /**
          * Download my data in an org as JSON (lossless) or Markdown
-         * @description My groups, my tasks (open and completed) with their subtasks, and their tags, as an attachment named `rooster-<slug>-<yyyy-mm-dd>.json` or `.md`.
+         * @description My groups, my tasks (open and completed) with their subtasks, their tags and their comments, as an attachment named `rooster-<slug>-<yyyy-mm-dd>.json` or `.md`. `format=json` (default) is lossless (`format: "rooster-export", version: 1`); `markdown` is a readable rendering of the same data.
          */
         get: operations["exportOrg"];
         put?: never;
@@ -868,11 +1138,17 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete my comment (author only); restorable for 30 days */
+        /**
+         * Delete my comment (author only); restorable for 30 days
+         * @description A soft delete: the comment leaves the feed, and `POST /comments/{id}/restore` brings it back within 30 days.
+         */
         delete: operations["deleteComment"];
         options?: never;
         head?: never;
-        /** Edit my comment (author only); sets editedAt */
+        /**
+         * Edit my comment (author only); sets editedAt
+         * @description Only the author (`403 forbidden`). A deleted comment, or a comment on a deleted task, is `410 conflict_deleted`. New mentions notify and add followers.
+         */
         patch: operations["updateComment"];
         trace?: never;
     };
@@ -885,7 +1161,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Undo the delete of my comment (author only) */
+        /**
+         * Undo the delete of my comment (author only)
+         * @description Restoring a live comment returns it unchanged.
+         */
         post: operations["restoreComment"];
         delete?: never;
         options?: never;
@@ -901,10 +1180,16 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Follow a task (shared orgs only) */
+        /**
+         * Follow a task (shared orgs only)
+         * @description Followers get notifications about comments, completion and due changes. Idempotent. Personal orgs have no followers (`409 personal_org`).
+         */
         put: operations["followTask"];
         post?: never;
-        /** Unfollow a task; automatic following no longer adds me back */
+        /**
+         * Unfollow a task; automatic following no longer adds me back
+         * @description Mutes the task for me: commenting or being assigned later does not make me follow it again; only `PUT` does. Idempotent.
+         */
         delete: operations["unfollowTask"];
         options?: never;
         head?: never;
@@ -918,7 +1203,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** My notifications across orgs, newest first, with the unread count */
+        /**
+         * My notifications across orgs, newest first, with the unread count
+         * @description `unread=true` lists unread ones only. Paged with `limit` and `cursor`; `unreadCount` counts every unread notification on every page (the bell badge). For a PAT or CLI device (`notifications:read`), both the items and `unreadCount` cover only the orgs its grant reaches, so a page may hold fewer than `limit` items.
+         */
         get: operations["listNotifications"];
         put?: never;
         post?: never;
@@ -937,7 +1225,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mark notifications read: `{ids}` or `{all: true}` */
+        /**
+         * Mark notifications read: `{ids}` or `{all: true}`
+         * @description IDs that are not mine are ignored. Every tab and device of mine gets the new count over SSE.
+         */
         post: operations["markNotificationsRead"];
         delete?: never;
         options?: never;
@@ -954,7 +1245,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mark notifications unread: `{ids}` or `{all: true}` */
+        /**
+         * Mark notifications unread: `{ids}` or `{all: true}`
+         * @description The inverse of `/notifications/read`.
+         */
         post: operations["markNotificationsUnread"];
         delete?: never;
         options?: never;
@@ -969,9 +1263,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The notification preference matrix (every type × channel; default on) */
+        /**
+         * The notification preference matrix (every type × channel)
+         * @description Every cell with defaults applied: in-app and push on for every event, email on for assignments and mentions. The digest is email only, the due reminder push only. Reminder and digest times live in `/me` prefs.
+         */
         get: operations["getNotificationPrefs"];
-        /** Set cells of the matrix; only the `inapp` channel until Phase 7 */
+        /**
+         * Set cells of the matrix
+         * @description Send any subset of cells; the others keep their value. A cell that does not exist (e.g. the digest on push) is `422`. Answers the whole matrix.
+         */
         put: operations["updateNotificationPrefs"];
         post?: never;
         delete?: never;
@@ -1007,7 +1307,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** My subscribed devices, newest first, with their last successful push */
+        /**
+         * My subscribed devices, newest first, with their last successful push
+         * @description For Settings → Notifications: each device can be tested or removed.
+         */
         get: operations["listPushSubscriptions"];
         put?: never;
         /**
@@ -1031,7 +1334,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Unsubscribe one of my devices */
+        /**
+         * Unsubscribe one of my devices
+         * @description Another user’s subscription is `404`.
+         */
         delete: operations["deletePushSubscription"];
         options?: never;
         head?: never;
@@ -1119,16 +1425,248 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description One PAT, CLI device or (Phase 9) OAuth client authorization: capabilities (`scopes`) plus `constraints`.
+         * @example {
+         *       "id": "0199a1b2-0000-7000-8000-0000000000f1",
+         *       "kind": "pat",
+         *       "clientId": null,
+         *       "label": "Backup script",
+         *       "scopes": [
+         *         "tasks:write"
+         *       ],
+         *       "constraints": {
+         *         "orgs": [
+         *           {
+         *             "orgId": "0199a1b2-0000-7000-8000-000000000001",
+         *             "read": "all",
+         *             "write": {
+         *               "groups": [
+         *                 "0199a1b2-0000-7000-8000-0000000000a1"
+         *               ]
+         *             }
+         *           }
+         *         ]
+         *       },
+         *       "tokenPrefix": "rooster_pat_Ab12",
+         *       "createdAt": 1767225600000,
+         *       "updatedAt": 1767225600000,
+         *       "expiresAt": 1774998000000,
+         *       "lastUsedAt": 1767312000000,
+         *       "lastUsedIp": "203.0.113.7",
+         *       "current": false
+         *     }
+         */
+        Grant: {
+            id: string;
+            /** @enum {string} */
+            kind: "pat" | "device" | "oauth";
+            clientId: string | null;
+            label: string;
+            scopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read")[];
+            constraints: components["schemas"]["GrantConstraints"];
+            tokenPrefix: string | null;
+            createdAt: number;
+            updatedAt: number;
+            expiresAt: number | null;
+            lastUsedAt: number | null;
+            lastUsedIp: string | null;
+            current: boolean;
+        };
+        /**
+         * @description Where a grant may act (11 §2.2): `orgs: "all"` (including orgs joined later) or a list of orgs, each with `read` (`"all"` or `{groups}`) and `write` (`"none"`, `"all"` or `{groups}`). Groups are the user’s own groups; a task counts as being in the group where it sits in the user’s My tasks (a subtask: where its row sits).
+         * @example {
+         *       "orgs": [
+         *         {
+         *           "orgId": "0199a1b2-0000-7000-8000-000000000001",
+         *           "read": "all",
+         *           "write": {
+         *             "groups": [
+         *               "0199a1b2-0000-7000-8000-0000000000a1"
+         *             ]
+         *           }
+         *         }
+         *       ]
+         *     }
+         */
+        GrantConstraints: {
+            orgs: "all" | {
+                orgId: string;
+                read: "all" | {
+                    groups: string[];
+                };
+                write: "none" | "all" | {
+                    groups: string[];
+                };
+            }[];
+        };
+        /**
+         * @example {
+         *       "label": "Laptop CLI",
+         *       "constraints": {
+         *         "orgs": "all"
+         *       }
+         *     }
+         */
+        GrantPatch: {
+            label?: string;
+            scopes?: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read")[];
+            constraints?: components["schemas"]["GrantConstraints"];
+            expiresAt?: number | null;
+        };
+        /**
+         * @example {
+         *       "name": "Backup script",
+         *       "scopes": [
+         *         "tasks:read"
+         *       ],
+         *       "constraints": {
+         *         "orgs": "all"
+         *       },
+         *       "expiresInDays": 90
+         *     }
+         */
+        TokenCreate: {
+            /** @description Shown in Connected apps. */
+            name: string;
+            /** @description Capabilities: `tasks:read`, `tasks:write`, `comments:write`, `tasks:assign`, `groups:write`, `tasks:delete`, `notifications:read`. */
+            scopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read")[];
+            constraints: components["schemas"]["GrantConstraints"];
+            /** @description Omitted: the token never expires. */
+            expiresInDays?: number;
+        };
+        /**
+         * @example {
+         *       "token": "rooster_pat_Ab12…",
+         *       "grant": {
+         *         "id": "0199a1b2-0000-7000-8000-0000000000f1",
+         *         "kind": "pat",
+         *         "clientId": null,
+         *         "label": "Backup script",
+         *         "scopes": [
+         *           "tasks:write"
+         *         ],
+         *         "constraints": {
+         *           "orgs": [
+         *             {
+         *               "orgId": "0199a1b2-0000-7000-8000-000000000001",
+         *               "read": "all",
+         *               "write": {
+         *                 "groups": [
+         *                   "0199a1b2-0000-7000-8000-0000000000a1"
+         *                 ]
+         *               }
+         *             }
+         *           ]
+         *         },
+         *         "tokenPrefix": "rooster_pat_Ab12",
+         *         "createdAt": 1767225600000,
+         *         "updatedAt": 1767225600000,
+         *         "expiresAt": 1774998000000,
+         *         "lastUsedAt": 1767312000000,
+         *         "lastUsedIp": "203.0.113.7",
+         *         "current": false
+         *       }
+         *     }
+         */
+        TokenCreated: {
+            token: string;
+            grant: components["schemas"]["Grant"];
+        };
+        /**
+         * @example {
+         *       "userCode": "WDJBMJHT",
+         *       "clientId": "rooster-cli",
+         *       "clientName": "rooster CLI",
+         *       "requestedScopes": [
+         *         "tasks:delete",
+         *         "comments:write",
+         *         "tasks:assign",
+         *         "groups:write",
+         *         "notifications:read"
+         *       ],
+         *       "expiresAt": 1767226200000
+         *     }
+         */
+        DeviceRequest: {
+            userCode: string;
+            clientId: string;
+            clientName: string;
+            requestedScopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read")[];
+            expiresAt: number;
+        };
+        /**
+         * @example {
+         *       "scopes": [
+         *         "tasks:write"
+         *       ],
+         *       "constraints": {
+         *         "orgs": [
+         *           {
+         *             "orgId": "0199a1b2-0000-7000-8000-000000000001",
+         *             "read": "all",
+         *             "write": {
+         *               "groups": [
+         *                 "0199a1b2-0000-7000-8000-0000000000a1"
+         *               ]
+         *             }
+         *           }
+         *         ]
+         *       },
+         *       "label": "rooster CLI on laptop"
+         *     }
+         */
+        DeviceApprove: {
+            /** @description No wider than the device requested (`422 widening_not_allowed`). */
+            scopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read")[];
+            constraints: components["schemas"]["GrantConstraints"];
+            /** @description Default: "rooster CLI on <device>", from the CLI’s User-Agent. */
+            label?: string;
+            /** @description Omitted: the grant does not expire. */
+            expiresInDays?: number;
+        };
+        /**
+         * @example {
+         *       "version": "1.1.0",
+         *       "gitSha": "abc1234",
+         *       "serverTime": 1791532800000
+         *     }
+         */
         SseHello: {
             version: string;
             gitSha: string;
             serverTime: number;
         };
+        /**
+         * @example {
+         *       "org": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *       "keys": [
+         *         [
+         *           "my-list",
+         *           "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01"
+         *         ]
+         *       ],
+         *       "origin": "tab-0199c5a2"
+         *     }
+         */
         SseInvalidate: {
             org: string | null;
             keys: string[][];
             origin: string | null;
         };
+        /**
+         * @example {
+         *       "unreadCount": 1,
+         *       "notification": {
+         *         "id": "0199c5a2-7182-7093-a4a5-1b2c3d4e5f01",
+         *         "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *         "type": "mention",
+         *         "taskId": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *         "actorName": "Anna Lindqvist",
+         *         "title": "Pay invoice"
+         *       }
+         *     }
+         */
         SseNotification: {
             unreadCount: number;
             notification: {
@@ -1140,19 +1678,62 @@ export interface components {
                 title: string | null;
             } | null;
         };
+        /**
+         * @example {
+         *       "type": "about:blank",
+         *       "title": "Unprocessable Content",
+         *       "status": 422,
+         *       "detail": "The request did not pass validation.",
+         *       "code": "validation_failed",
+         *       "errors": [
+         *         {
+         *           "path": "title",
+         *           "message": "Too small: expected string to have >=1 characters"
+         *         }
+         *       ]
+         *     }
+         */
         Problem: {
             type: string;
             title: string;
             status: number;
             detail?: string;
             instance?: string;
+            /** @description Stable, machine-readable error code; branch on this, never on `title` or `detail`. */
             code: string;
+            /** @description `422 validation_failed`: the fields that failed, as `{path, message}`. */
             errors?: {
                 path: string;
                 message: string;
             }[];
+            /** @description `409 tag_name_taken`: the ID of the entity that already has the name, so an offline client can remap its own. */
             existingId?: string;
+            /** @description `409 ambiguous_ref` (`GET /tasks/resolve`): the tasks the ref could mean, at most 10. */
+            candidates?: {
+                id: string;
+                orgId: string;
+                seq: number | null;
+                title: string;
+            }[];
         };
+        /**
+         * @example {
+         *       "version": "1.1.0",
+         *       "gitSha": "abc1234",
+         *       "providers": [
+         *         {
+         *           "id": "google",
+         *           "name": "Google"
+         *         }
+         *       ],
+         *       "features": {
+         *         "email": true,
+         *         "push": true,
+         *         "s3": false
+         *       },
+         *       "serverTime": 1791532800000
+         *     }
+         */
         Meta: {
             version: string;
             gitSha: string;
@@ -1167,6 +1748,53 @@ export interface components {
             };
             serverTime: number;
         };
+        /**
+         * @example {
+         *       "id": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *       "name": "Anna Lindqvist",
+         *       "email": "anna@example.com",
+         *       "image": null,
+         *       "locale": "en",
+         *       "timezone": "Europe/Stockholm",
+         *       "weekStart": 1,
+         *       "dateFormat": "d MMM",
+         *       "timeFormat": "24h",
+         *       "prefs": {
+         *         "parseTitleDates": true,
+         *         "completeHideMs": 1500,
+         *         "swipeLeft": "date",
+         *         "swipeRight": "complete",
+         *         "reminderTime": "08:00",
+         *         "digestTime": "07:00",
+         *         "emailMode": "batch"
+         *       },
+         *       "isAdmin": false,
+         *       "orgs": [
+         *         {
+         *           "id": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a02",
+         *           "slug": "anna",
+         *           "name": "Personal",
+         *           "isPersonal": true,
+         *           "avatarEmoji": "🏠",
+         *           "color": "amber",
+         *           "role": "owner",
+         *           "position": "a0",
+         *           "collapsed": false
+         *         },
+         *         {
+         *           "id": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "slug": "acme",
+         *           "name": "Acme",
+         *           "isPersonal": false,
+         *           "avatarEmoji": "🚀",
+         *           "color": "blue",
+         *           "role": "owner",
+         *           "position": "a1",
+         *           "collapsed": false
+         *         }
+         *       ]
+         *     }
+         */
         Me: {
             id: string;
             name: string;
@@ -1184,6 +1812,17 @@ export interface components {
             isAdmin: boolean;
             orgs: components["schemas"]["Org"][];
         };
+        /**
+         * @example {
+         *       "parseTitleDates": true,
+         *       "completeHideMs": 1500,
+         *       "swipeLeft": "date",
+         *       "swipeRight": "complete",
+         *       "reminderTime": "08:00",
+         *       "digestTime": "07:00",
+         *       "emailMode": "batch"
+         *     }
+         */
         Prefs: {
             parseTitleDates: boolean;
             completeHideMs: number;
@@ -1196,29 +1835,60 @@ export interface components {
             /** @enum {string} */
             emailMode: "immediate" | "batch";
         };
+        /**
+         * @example {
+         *       "id": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *       "slug": "acme",
+         *       "name": "Acme",
+         *       "isPersonal": false,
+         *       "avatarEmoji": "🚀",
+         *       "color": "blue",
+         *       "role": "owner",
+         *       "position": "a1",
+         *       "collapsed": false
+         *     }
+         */
         Org: {
             id: string;
+            /** @description URL name, unique per instance; accepted wherever `{orgId}` is. */
             slug: string;
             name: string;
+            /** @description Every user has exactly one personal org; it cannot be shared or deleted. */
             isPersonal: boolean;
             avatarEmoji: string | null;
             /** @enum {string|null} */
             color: "gray" | "red" | "orange" | "amber" | "green" | "teal" | "blue" | "indigo" | "purple" | "pink" | null;
-            /** @enum {string} */
+            /**
+             * @description My role in the org.
+             * @enum {string}
+             */
             role: "owner" | "member";
+            /** @description My sidebar order of orgs. Fractional-index key computed by the server. Compare with plain code-unit order (never locale-aware); never send it back. */
             position: string;
+            /** @description Whether I collapsed the org in my sidebar. */
             collapsed: boolean;
         };
+        /**
+         * @example {
+         *       "timezone": "Europe/Stockholm",
+         *       "prefs": {
+         *         "swipeLeft": "move"
+         *       }
+         *     }
+         */
         MePatch: {
             name?: string;
             /** @enum {string} */
             locale?: "en" | "sv";
+            /** @description IANA timezone; due-date views are evaluated in it. */
             timezone?: string;
+            /** @description 0 = Sunday, 1 = Monday. */
             weekStart?: 0 | 1;
             /** @enum {string} */
             dateFormat?: "MMM d" | "d MMM";
             /** @enum {string} */
             timeFormat?: "24h" | "12h";
+            /** @description Merged into the stored prefs: send only the keys that change. */
             prefs?: {
                 parseTitleDates?: boolean;
                 completeHideMs?: number;
@@ -1232,6 +1902,17 @@ export interface components {
                 emailMode?: "immediate" | "batch";
             };
         };
+        /**
+         * @example {
+         *       "id": "0199c5a2-93a4-72b5-86c7-3d4e5f6a7b01",
+         *       "createdAt": 1791360000000,
+         *       "updatedAt": 1791532800000,
+         *       "expiresAt": 1793952000000,
+         *       "ipAddress": "203.0.113.7",
+         *       "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_6) Firefox/150.0",
+         *       "current": true
+         *     }
+         */
         Session: {
             id: string;
             createdAt: number;
@@ -1241,18 +1922,45 @@ export interface components {
             userAgent: string | null;
             current: boolean;
         };
+        /**
+         * @example {
+         *       "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *       "position": "a1"
+         *     }
+         */
         OrgOrderResult: {
             orgId: string;
             position: string;
         };
+        /**
+         * @example {
+         *       "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *       "afterId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a02",
+         *       "beforeId": null
+         *     }
+         */
         OrgOrder: {
             orgId: string;
+            /** @description Ordering intent: the item that will be directly BELOW (higher position). */
             beforeId?: string | null;
+            /** @description Ordering intent: the item that will be directly ABOVE (lower position). Null or absent with `beforeId` set means the top; both absent means the end. */
             afterId?: string | null;
         };
+        /**
+         * @example {
+         *       "collapsed": true
+         *     }
+         */
         OrgPrefPatch: {
             collapsed: boolean;
         };
+        /**
+         * @example {
+         *       "name": "Acme",
+         *       "avatarEmoji": "🚀",
+         *       "color": "blue"
+         *     }
+         */
         OrgCreate: {
             name: string;
             slug?: string;
@@ -1260,6 +1968,11 @@ export interface components {
             /** @enum {string|null} */
             color?: "gray" | "red" | "orange" | "amber" | "green" | "teal" | "blue" | "indigo" | "purple" | "pink" | null;
         };
+        /**
+         * @example {
+         *       "name": "Acme Inc."
+         *     }
+         */
         OrgPatch: {
             name?: string;
             slug?: string;
@@ -1267,9 +1980,24 @@ export interface components {
             /** @enum {string|null} */
             color?: "gray" | "red" | "orange" | "amber" | "green" | "teal" | "blue" | "indigo" | "purple" | "pink" | null;
         };
+        /**
+         * @example {
+         *       "confirmName": "Acme"
+         *     }
+         */
         OrgDelete: {
             confirmName: string;
         };
+        /**
+         * @example {
+         *       "userId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e02",
+         *       "name": "Bo Ek",
+         *       "email": "bo@example.com",
+         *       "image": null,
+         *       "role": "member",
+         *       "joinedAt": 1788940800000
+         *     }
+         */
         Member: {
             userId: string;
             name: string;
@@ -1279,10 +2007,28 @@ export interface components {
             role: "owner" | "member";
             joinedAt: number;
         };
+        /**
+         * @example {
+         *       "role": "owner"
+         *     }
+         */
         MemberPatch: {
             /** @enum {string} */
             role: "owner" | "member";
         };
+        /**
+         * @example {
+         *       "id": "0199c5a2-8293-71a4-b5b6-2c3d4e5f6a01",
+         *       "kind": "email",
+         *       "email": "cleo@example.com",
+         *       "role": "member",
+         *       "multiUse": false,
+         *       "uses": 0,
+         *       "createdAt": 1791532800000,
+         *       "expiresAt": 1792137600000,
+         *       "url": "https://rooster.example.com/invite/Zk9wQ2xhdmUtdG9rZW4"
+         *     }
+         */
         Invite: {
             id: string;
             /** @enum {string} */
@@ -1296,6 +2042,15 @@ export interface components {
             expiresAt: number;
             url: string | null;
         };
+        /**
+         * @example {
+         *       "id": "0199c5a2-8293-71a4-b5b6-2c3d4e5f6a01",
+         *       "kind": "link",
+         *       "url": "https://rooster.example.com/invite/Zk9wQ2xhdmUtdG9rZW4",
+         *       "expiresAt": 1792137600000,
+         *       "emailed": false
+         *     }
+         */
         InviteCreated: {
             id: string;
             /** @enum {string} */
@@ -1304,17 +2059,44 @@ export interface components {
             expiresAt: number;
             emailed?: boolean;
         };
+        /**
+         * @example {
+         *       "email": "cleo@example.com",
+         *       "role": "member",
+         *       "expiresInDays": 7
+         *     }
+         */
         InviteCreate: {
-            /** Format: email */
+            /**
+             * Format: email
+             * @description Invite this address (single use; sent by email when SMTP is configured). Omit it for a link invite.
+             */
             email?: string;
             /**
              * @default member
              * @enum {string}
              */
             role: "owner" | "member";
+            /** @description Link invites only: the link can be used by several people until it expires. */
             multiUse?: boolean;
+            /** @description Default 7. */
             expiresInDays?: number;
         };
+        /**
+         * @example {
+         *       "kind": "link",
+         *       "orgSlug": "acme",
+         *       "orgName": "Acme",
+         *       "orgAvatarEmoji": "🚀",
+         *       "orgColor": "blue",
+         *       "inviterName": "Anna Lindqvist",
+         *       "role": "member",
+         *       "email": null,
+         *       "expiresAt": 1792137600000,
+         *       "valid": true,
+         *       "reason": null
+         *     }
+         */
         InvitePreview: {
             /** @enum {string} */
             kind: "email" | "link";
@@ -1332,11 +2114,26 @@ export interface components {
             /** @enum {string|null} */
             reason: "expired" | "revoked" | "used" | "org_deleted" | null;
         };
+        /**
+         * @example {
+         *       "indexed": 1204,
+         *       "durationMs": 85,
+         *       "finishedAt": 1791532800000
+         *     }
+         */
         ReindexResult: {
             indexed: number;
             durationMs: number;
             finishedAt: number;
         };
+        /**
+         * @example {
+         *       "name": "manual-2026-10-09T08-00-00-000Z.db",
+         *       "size": 4194304,
+         *       "createdAt": 1791532800000,
+         *       "kind": "manual"
+         *     }
+         */
         Backup: {
             name: string;
             size: number;
@@ -1344,6 +2141,14 @@ export interface components {
             /** @enum {string} */
             kind: "daily" | "weekly" | "manual" | "pre-migrate";
         };
+        /**
+         * @example {
+         *       "id": "0199c5a2-a4b5-73c6-97d8-4e5f6a7b8c01",
+         *       "kind": "domain",
+         *       "value": "example.com",
+         *       "createdAt": 1791532800000
+         *     }
+         */
         AllowlistEntry: {
             id: string;
             /** @enum {string} */
@@ -1351,6 +2156,12 @@ export interface components {
             value: string;
             createdAt: number;
         };
+        /**
+         * @example {
+         *       "kind": "email",
+         *       "value": "cleo@example.com"
+         *     }
+         */
         AllowlistCreate: {
             /** @enum {string} */
             kind: "email";
@@ -1361,6 +2172,17 @@ export interface components {
             kind: "domain";
             value: string;
         };
+        /**
+         * @example {
+         *       "id": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e02",
+         *       "name": "Bo Ek",
+         *       "email": "bo@example.com",
+         *       "image": null,
+         *       "createdAt": 1788940800000,
+         *       "disabledAt": null,
+         *       "isAdmin": false
+         *     }
+         */
         AdminUser: {
             id: string;
             name: string;
@@ -1370,40 +2192,189 @@ export interface components {
             disabledAt: number | null;
             isAdmin: boolean;
         };
+        /**
+         * @example {
+         *       "disabled": true
+         *     }
+         */
         AdminUserPatch: {
             disabled: boolean;
         };
+        /**
+         * @example {
+         *       "groups": [
+         *         {
+         *           "id": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b01",
+         *           "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "kind": "inbox",
+         *           "name": "Inbox",
+         *           "position": "a0",
+         *           "collapsed": false
+         *         },
+         *         {
+         *           "id": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *           "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "kind": "normal",
+         *           "name": "Prio",
+         *           "position": "a1",
+         *           "collapsed": false
+         *         }
+         *       ],
+         *       "tasks": [
+         *         {
+         *           "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *           "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "seq": 42,
+         *           "parentId": null,
+         *           "subtaskPosition": null,
+         *           "title": "Pay invoice",
+         *           "hasDescription": true,
+         *           "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "dueDate": "2026-10-10",
+         *           "dueTime": null,
+         *           "dueTz": null,
+         *           "startDate": null,
+         *           "completedAt": null,
+         *           "tagIds": [
+         *             "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *           ],
+         *           "counts": {
+         *             "subtasks": 1,
+         *             "subtasksDone": 0,
+         *             "comments": 2,
+         *             "attachments": 0
+         *           },
+         *           "placement": {
+         *             "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *             "position": "a1V"
+         *           },
+         *           "createdAt": 1791532800000,
+         *           "updatedAt": 1791532800000
+         *         },
+         *         {
+         *           "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c03",
+         *           "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "seq": 43,
+         *           "parentId": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *           "subtaskPosition": "a0",
+         *           "title": "Find the invoice number",
+         *           "hasDescription": false,
+         *           "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "dueDate": null,
+         *           "dueTime": null,
+         *           "dueTz": null,
+         *           "startDate": null,
+         *           "completedAt": null,
+         *           "tagIds": [],
+         *           "counts": {
+         *             "subtasks": 0,
+         *             "subtasksDone": 0,
+         *             "comments": 0,
+         *             "attachments": 0
+         *           },
+         *           "placement": null,
+         *           "createdAt": 1791532800000,
+         *           "updatedAt": 1791532800000
+         *         }
+         *       ],
+         *       "expandedTaskIds": [
+         *         "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01"
+         *       ],
+         *       "serverTime": 1791532800000
+         *     }
+         */
         MyList: {
             groups: components["schemas"]["Group"][];
             tasks: components["schemas"]["Task"][];
             expandedTaskIds: string[];
             serverTime: number;
         };
+        /**
+         * @example {
+         *       "id": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *       "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *       "kind": "normal",
+         *       "name": "Prio",
+         *       "position": "a1",
+         *       "collapsed": false
+         *     }
+         */
         Group: {
             id: string;
             orgId: string;
-            /** @enum {string} */
+            /**
+             * @description Every user has one Inbox per org: always first, cannot be renamed or deleted.
+             * @enum {string}
+             */
             kind: "inbox" | "normal";
             name: string;
+            /** @description Fractional-index key computed by the server. Compare with plain code-unit order (never locale-aware); never send it back. Ignored for the Inbox. */
             position: string;
             collapsed: boolean;
         };
+        /**
+         * @example {
+         *       "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *       "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *       "seq": 42,
+         *       "parentId": null,
+         *       "subtaskPosition": null,
+         *       "title": "Pay invoice",
+         *       "hasDescription": true,
+         *       "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *       "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *       "dueDate": "2026-10-10",
+         *       "dueTime": null,
+         *       "dueTz": null,
+         *       "startDate": null,
+         *       "completedAt": null,
+         *       "tagIds": [
+         *         "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *       ],
+         *       "counts": {
+         *         "subtasks": 1,
+         *         "subtasksDone": 0,
+         *         "comments": 2,
+         *         "attachments": 0
+         *       },
+         *       "placement": {
+         *         "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *         "position": "a1V"
+         *       },
+         *       "createdAt": 1791532800000,
+         *       "updatedAt": 1791532800000
+         *     }
+         */
         Task: {
             id: string;
             orgId: string;
+            /** @description Org-scoped human number (`#42`); null only while a client-created task is unsynced. */
             seq: number | null;
+            /** @description The parent task when this is a subtask. */
             parentId: string | null;
+            /** @description Order among sibling subtasks. Fractional-index key computed by the server. Compare with plain code-unit order (never locale-aware); never send it back. */
             subtaskPosition: string | null;
             title: string;
+            /** @description Markdown. Left out of list payloads; see `hasDescription`. */
             description?: string;
+            /** @description True when the description is not blank. */
             hasDescription: boolean;
+            /** @description Null: unassigned. */
             assigneeId: string | null;
             createdBy: string;
+            /** @description Floating calendar date: no timezone, compare as a string. */
             dueDate: string | null;
+            /** @description Wall-clock time; only with `dueDate` and `dueTz`. */
             dueTime: string | null;
+            /** @description IANA timezone of `dueTime`. */
             dueTz: string | null;
+            /** @description Start of a date range ending at `dueDate`; only with a due date, never after it. */
             startDate: string | null;
+            /** @description Null while open. */
             completedAt: number | null;
+            /** @description Org tag IDs, in the order they were added. */
             tagIds: string[];
             counts: {
                 subtasks: number;
@@ -1414,13 +2385,37 @@ export interface components {
             placement: components["schemas"]["Placement"];
             createdAt: number;
             updatedAt: number;
+            /** @description Only in Trash payloads. */
             deletedAt?: number;
+            /** @description Only in Trash payloads. */
             deletedBy?: string;
         };
+        /**
+         * @description Where the task is in MY list; null when it is not in my list (e.g. a subtask).
+         * @example {
+         *       "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *       "position": "a1V"
+         *     }
+         */
         Placement: {
+            /** @description One of my groups. */
             groupId: string;
+            /** @description Order within the group. Fractional-index key computed by the server. Compare with plain code-unit order (never locale-aware); never send it back. */
             position: string;
         } | null;
+        /**
+         * @example {
+         *       "group": {
+         *         "id": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b03",
+         *         "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *         "kind": "normal",
+         *         "name": "Waiting for",
+         *         "position": "a1V",
+         *         "collapsed": false
+         *       },
+         *       "moved": []
+         *     }
+         */
         GroupCreateResult: {
             group: components["schemas"]["Group"];
             moved: {
@@ -1429,36 +2424,128 @@ export interface components {
                 position: string;
             }[];
         };
+        /**
+         * @example {
+         *       "name": "Waiting for",
+         *       "afterId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *       "beforeId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b03"
+         *     }
+         */
         GroupCreate: {
+            /** @description Ordering intent: the item that will be directly ABOVE (lower position). Null or absent with `beforeId` set means the top; both absent means the end. */
             afterId?: string | null;
+            /** @description Ordering intent: the item that will be directly BELOW (higher position). */
             beforeId?: string | null;
+            /** @description Client-chosen UUIDv7, so an offline client can refer to the group before it syncs. */
             id?: string;
             name: string;
+            /** @description Split instead: the group is inserted after this task’s group and every task below the task moves into it. Intents are then ignored. */
             splitAfterTaskId?: string;
         };
+        /**
+         * @example {
+         *       "name": "Next up"
+         *     }
+         */
         GroupPatch: {
             name?: string;
             collapsed?: boolean;
         };
+        /**
+         * @example {
+         *       "position": "a0V"
+         *     }
+         */
         GroupMoveResult: {
             position: string;
         };
+        /**
+         * @example {
+         *       "afterId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b01",
+         *       "beforeId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02"
+         *     }
+         */
         GroupMove: {
+            /** @description Ordering intent: the item that will be directly ABOVE (lower position). Null or absent with `beforeId` set means the top; both absent means the end. */
             afterId?: string | null;
+            /** @description Ordering intent: the item that will be directly BELOW (higher position). */
             beforeId?: string | null;
         };
+        /**
+         * @example {
+         *       "moveTasksTo": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b01"
+         *     }
+         */
         GroupDelete: {
+            /** @description Move the group’s tasks to the end of this group of mine. */
             moveTasksTo?: string;
-            /** @enum {boolean} */
+            /**
+             * @description Move the group’s tasks to Trash instead.
+             * @enum {boolean}
+             */
             deleteTasks?: true;
         };
+        /**
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *           "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "seq": 42,
+         *           "parentId": null,
+         *           "subtaskPosition": null,
+         *           "title": "Pay invoice",
+         *           "hasDescription": true,
+         *           "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "dueDate": "2026-10-10",
+         *           "dueTime": null,
+         *           "dueTz": null,
+         *           "startDate": null,
+         *           "completedAt": null,
+         *           "tagIds": [
+         *             "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *           ],
+         *           "counts": {
+         *             "subtasks": 1,
+         *             "subtasksDone": 0,
+         *             "comments": 2,
+         *             "attachments": 0
+         *           },
+         *           "placement": {
+         *             "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *             "position": "a1V"
+         *           },
+         *           "createdAt": 1791532800000,
+         *           "updatedAt": 1791532800000
+         *         }
+         *       ],
+         *       "nextCursor": "eyJvIjo1MH0"
+         *     }
+         */
         TaskPage: {
             items: components["schemas"]["Task"][];
+            /** @description Pass as `cursor` to get the next page; null on the last page. */
             nextCursor: string | null;
         };
+        /**
+         * @example {
+         *       "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *       "title": "Pay invoice",
+         *       "dueDate": "2026-10-10",
+         *       "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *       "afterId": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c02",
+         *       "tagNames": [
+         *         "finance"
+         *       ]
+         *     }
+         */
         TaskCreate: {
+            /** @description Ordering intent: the item that will be directly ABOVE (lower position). Null or absent with `beforeId` set means the top; both absent means the end. */
             afterId?: string | null;
+            /** @description Ordering intent: the item that will be directly BELOW (higher position). */
             beforeId?: string | null;
+            /** @description Client-chosen UUIDv7: retrying the same create returns the task; other content with the same ID is `409 id_conflict`. */
             id?: string;
             title: string;
             description?: string;
@@ -1466,42 +2553,167 @@ export interface components {
             dueTime?: string | null;
             dueTz?: string | null;
             startDate?: string | null;
+            /** @description Target group in my list (default: the Inbox). Ignored for subtasks. */
             groupId?: string;
+            /** @description Creates a subtask (same org, at most 5 levels). Intents then refer to sibling subtasks. */
             parentId?: string;
+            /** @description Existing org tags to attach. */
             tagIds?: string[];
+            /** @description Tag names to attach; unknown names are created. */
             tagNames?: string[];
+            /** @description Default: me (a subtask: its parent’s assignee). Another member gets it at the top of their Inbox; null creates it unassigned. */
             assigneeId?: string | null;
+            /** @description Run the natural-language parser on the title, in my locale and timezone: a date phrase ("tomorrow", "fri 14:00") and a trailing `>Group` token are taken out of the title. */
             parse?: boolean;
         };
+        /**
+         * @example {
+         *       "task": {
+         *         "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *         "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *         "seq": 42,
+         *         "parentId": null,
+         *         "subtaskPosition": null,
+         *         "title": "Pay invoice",
+         *         "hasDescription": true,
+         *         "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *         "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *         "dueDate": "2026-10-10",
+         *         "dueTime": null,
+         *         "dueTz": null,
+         *         "startDate": null,
+         *         "completedAt": null,
+         *         "tagIds": [
+         *           "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *         ],
+         *         "counts": {
+         *           "subtasks": 1,
+         *           "subtasksDone": 0,
+         *           "comments": 2,
+         *           "attachments": 0
+         *         },
+         *         "placement": {
+         *           "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *           "position": "a1V"
+         *         },
+         *         "createdAt": 1791532800000,
+         *         "updatedAt": 1791532800000
+         *       },
+         *       "ignoredFields": []
+         *     }
+         */
         TaskPatchResult: {
             task: components["schemas"]["Task"];
             ignoredFields: string[];
         };
+        /**
+         * @example {
+         *       "title": "Pay invoice #2026-117",
+         *       "dueDate": "2026-10-12"
+         *     }
+         */
         TaskPatch: {
             title?: string;
             description?: string;
+            /** @description The due unit (dueDate, dueTime, dueTz, startDate) is replaced as a whole when any of them is present; absent members become null. Null clears the due date. */
             dueDate?: string | null;
             dueTime?: string | null;
             dueTz?: string | null;
             startDate?: string | null;
+            /** @description Re-parent: an ID makes it a subtask (appended to the parent’s subtasks), null makes it top-level (top of the assignee’s Inbox). */
             parentId?: string | null;
+            /** @description An org member, or null (unassigned). A new assignee gets the task at the top of their Inbox. */
             assigneeId?: string | null;
         };
+        /**
+         * @example {
+         *       "placement": {
+         *         "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *         "position": "a1V"
+         *       }
+         *     }
+         */
         TaskMoveResult: {
             placement: components["schemas"]["Placement"];
         };
+        /**
+         * @example {
+         *       "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *       "afterId": null,
+         *       "beforeId": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c02"
+         *     }
+         */
         TaskMove: {
+            /** @description Ordering intent: the item that will be directly ABOVE (lower position). Null or absent with `beforeId` set means the top; both absent means the end. */
             afterId?: string | null;
+            /** @description Ordering intent: the item that will be directly BELOW (higher position). */
             beforeId?: string | null;
+            /** @description One of my groups. */
             groupId: string;
         };
+        /**
+         * @example {
+         *       "task": {
+         *         "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *         "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *         "seq": 42,
+         *         "parentId": null,
+         *         "subtaskPosition": null,
+         *         "title": "Pay invoice",
+         *         "hasDescription": true,
+         *         "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *         "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *         "dueDate": "2026-10-10",
+         *         "dueTime": null,
+         *         "dueTz": null,
+         *         "startDate": null,
+         *         "completedAt": 1791532800000,
+         *         "tagIds": [
+         *           "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *         ],
+         *         "counts": {
+         *           "subtasks": 1,
+         *           "subtasksDone": 0,
+         *           "comments": 2,
+         *           "attachments": 0
+         *         },
+         *         "placement": {
+         *           "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *           "position": "a1V"
+         *         },
+         *         "createdAt": 1791532800000,
+         *         "updatedAt": 1791532800000
+         *       }
+         *     }
+         */
         TaskCompleteResult: {
             task: components["schemas"]["Task"];
             next?: components["schemas"]["Task"];
         };
+        /**
+         * @example {
+         *       "completed": true
+         *     }
+         */
         TaskComplete: {
             completed: boolean;
         };
+        /**
+         * @description One result per ID, in request order. A failed task carries the problem `code` it would have got on its own (e.g. `not_found`).
+         * @example {
+         *       "results": [
+         *         {
+         *           "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *           "ok": true
+         *         },
+         *         {
+         *           "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c02",
+         *           "ok": false,
+         *           "code": "not_found"
+         *         }
+         *       ]
+         *     }
+         */
         BulkResult: {
             results: {
                 id: string;
@@ -1509,6 +2721,19 @@ export interface components {
                 code?: string;
             }[];
         };
+        /**
+         * @description One operation on up to 200 tasks: `complete`, `uncomplete`, `delete`, `restore`, `move` (`args`: a TaskMove; the tasks stay in the given order), `addTag`/`removeTag` (`args.tagId`), `setDue` (`args`: the due unit) or `assign` (`args.assigneeId`).
+         * @example {
+         *       "op": "move",
+         *       "ids": [
+         *         "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *         "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c02"
+         *       ],
+         *       "args": {
+         *         "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02"
+         *       }
+         *     }
+         */
         BulkOp: {
             /** @enum {string} */
             op: "complete";
@@ -1566,6 +2791,72 @@ export interface components {
                 assigneeId: string | null;
             };
         };
+        /**
+         * @example {
+         *       "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *       "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *       "seq": 42,
+         *       "parentId": null,
+         *       "subtaskPosition": null,
+         *       "title": "Pay invoice",
+         *       "hasDescription": true,
+         *       "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *       "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *       "dueDate": "2026-10-10",
+         *       "dueTime": null,
+         *       "dueTz": null,
+         *       "startDate": null,
+         *       "completedAt": null,
+         *       "tagIds": [
+         *         "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *       ],
+         *       "counts": {
+         *         "subtasks": 1,
+         *         "subtasksDone": 0,
+         *         "comments": 2,
+         *         "attachments": 0
+         *       },
+         *       "placement": {
+         *         "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *         "position": "a1V"
+         *       },
+         *       "createdAt": 1791532800000,
+         *       "updatedAt": 1791532800000,
+         *       "description": "Invoice **#2026-117** from the printer. Pay via the bank app.",
+         *       "subtasks": [
+         *         {
+         *           "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c03",
+         *           "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "seq": 43,
+         *           "parentId": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *           "subtaskPosition": "a0",
+         *           "title": "Find the invoice number",
+         *           "hasDescription": false,
+         *           "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "dueDate": null,
+         *           "dueTime": null,
+         *           "dueTz": null,
+         *           "startDate": null,
+         *           "completedAt": null,
+         *           "tagIds": [],
+         *           "counts": {
+         *             "subtasks": 0,
+         *             "subtasksDone": 0,
+         *             "comments": 0,
+         *             "attachments": 0
+         *           },
+         *           "placement": null,
+         *           "createdAt": 1791532800000,
+         *           "updatedAt": 1791532800000
+         *         }
+         *       ],
+         *       "parentChain": [],
+         *       "followers": [
+         *         "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01"
+         *       ]
+         *     }
+         */
         TaskDetail: {
             id: string;
             orgId: string;
@@ -1601,22 +2892,91 @@ export interface components {
             }[];
             followers: string[];
         };
+        /**
+         * @example {
+         *       "subtaskPosition": "Zz"
+         *     }
+         */
         SubtaskReorderResult: {
             subtaskPosition: string;
         };
+        /**
+         * @example {
+         *       "afterId": null,
+         *       "beforeId": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c03"
+         *     }
+         */
         SubtaskReorder: {
+            /** @description Ordering intent: the item that will be directly ABOVE (lower position). Null or absent with `beforeId` set means the top; both absent means the end. */
             afterId?: string | null;
+            /** @description Ordering intent: the item that will be directly BELOW (higher position). */
             beforeId?: string | null;
         };
+        /**
+         * @example {
+         *       "includeSubtasks": true
+         *     }
+         */
         TaskDuplicate: {
+            /** @description Client-chosen UUIDv7 for the copy. */
             id?: string;
-            /** @default true */
+            /**
+             * @description Copy every live subtask recursively (reopened). Default true.
+             * @default true
+             */
             includeSubtasks: boolean;
         };
+        /**
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *           "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "seq": 42,
+         *           "parentId": null,
+         *           "subtaskPosition": null,
+         *           "title": "Pay invoice",
+         *           "hasDescription": true,
+         *           "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "dueDate": "2026-10-10",
+         *           "dueTime": null,
+         *           "dueTz": null,
+         *           "startDate": null,
+         *           "completedAt": null,
+         *           "tagIds": [
+         *             "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *           ],
+         *           "counts": {
+         *             "subtasks": 1,
+         *             "subtasksDone": 0,
+         *             "comments": 2,
+         *             "attachments": 0
+         *           },
+         *           "placement": null,
+         *           "createdAt": 1791532800000,
+         *           "updatedAt": 1791532800000,
+         *           "deletedAt": 1791532800000,
+         *           "deletedBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01"
+         *         }
+         *       ],
+         *       "nextCursor": null
+         *     }
+         */
         TrashPage: {
             items: components["schemas"]["Task"][];
+            /** @description Pass as `cursor` to get the next page; null on the last page. */
             nextCursor: string | null;
         };
+        /**
+         * @example {
+         *       "id": "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01",
+         *       "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *       "name": "finance",
+         *       "color": "green",
+         *       "createdAt": 1790668800000
+         *     }
+         */
         Tag: {
             id: string;
             orgId: string;
@@ -1625,26 +2985,212 @@ export interface components {
             color: "gray" | "red" | "orange" | "amber" | "green" | "teal" | "blue" | "indigo" | "purple" | "pink";
             createdAt: number;
         };
+        /**
+         * @example {
+         *       "name": "finance",
+         *       "color": "green"
+         *     }
+         */
         TagCreate: {
             id?: string;
+            /** @description Unique per org, case-insensitively. */
             name: string;
-            /** @enum {string} */
+            /**
+             * @description Default: the next palette colour.
+             * @enum {string}
+             */
             color?: "gray" | "red" | "orange" | "amber" | "green" | "teal" | "blue" | "indigo" | "purple" | "pink";
         };
+        /**
+         * @example {
+         *       "name": "money"
+         *     }
+         */
         TagPatch: {
             name?: string;
             /** @enum {string} */
             color?: "gray" | "red" | "orange" | "amber" | "green" | "teal" | "blue" | "indigo" | "purple" | "pink";
         };
+        /**
+         * @example {
+         *       "intoId": "0199c5a1-5f60-7e71-8283-9e0a1b2c3d02"
+         *     }
+         */
         TagMerge: {
             intoId: string;
         };
+        /**
+         * @example [
+         *       {
+         *         "task": {
+         *           "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *           "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "seq": 42,
+         *           "parentId": null,
+         *           "subtaskPosition": null,
+         *           "title": "Pay invoice",
+         *           "hasDescription": true,
+         *           "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "dueDate": "2026-10-10",
+         *           "dueTime": null,
+         *           "dueTz": null,
+         *           "startDate": null,
+         *           "completedAt": null,
+         *           "tagIds": [
+         *             "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *           ],
+         *           "counts": {
+         *             "subtasks": 1,
+         *             "subtasksDone": 0,
+         *             "comments": 2,
+         *             "attachments": 0
+         *           },
+         *           "placement": {
+         *             "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *             "position": "a1V"
+         *           },
+         *           "createdAt": 1791532800000,
+         *           "updatedAt": 1791532800000
+         *         },
+         *         "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *         "snippet": "Pay invoice"
+         *       }
+         *     ]
+         */
         SearchResult: components["schemas"]["SearchHit"][];
+        /**
+         * @example {
+         *       "task": {
+         *         "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *         "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *         "seq": 42,
+         *         "parentId": null,
+         *         "subtaskPosition": null,
+         *         "title": "Pay invoice",
+         *         "hasDescription": true,
+         *         "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *         "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *         "dueDate": "2026-10-10",
+         *         "dueTime": null,
+         *         "dueTz": null,
+         *         "startDate": null,
+         *         "completedAt": null,
+         *         "tagIds": [
+         *           "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *         ],
+         *         "counts": {
+         *           "subtasks": 1,
+         *           "subtasksDone": 0,
+         *           "comments": 2,
+         *           "attachments": 0
+         *         },
+         *         "placement": {
+         *           "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *           "position": "a1V"
+         *         },
+         *         "createdAt": 1791532800000,
+         *         "updatedAt": 1791532800000
+         *       },
+         *       "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *       "snippet": "Pay invoice"
+         *     }
+         */
         SearchHit: {
             task: components["schemas"]["Task"];
             orgId: string;
+            /** @description An excerpt of the best-matching field (title, description or comments) with matches wrapped in U+E000 … U+E001. */
             snippet: string;
         };
+        /**
+         * @example {
+         *       "format": "rooster-export",
+         *       "version": 1,
+         *       "exportedAt": 1791532800000,
+         *       "org": {
+         *         "id": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *         "slug": "acme",
+         *         "name": "Acme"
+         *       },
+         *       "user": {
+         *         "id": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *         "email": "anna@example.com",
+         *         "name": "Anna Lindqvist"
+         *       },
+         *       "groups": [
+         *         {
+         *           "id": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b01",
+         *           "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "kind": "inbox",
+         *           "name": "Inbox",
+         *           "position": "a0",
+         *           "collapsed": false
+         *         },
+         *         {
+         *           "id": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *           "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "kind": "normal",
+         *           "name": "Prio",
+         *           "position": "a1",
+         *           "collapsed": false
+         *         }
+         *       ],
+         *       "tags": [
+         *         {
+         *           "id": "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01",
+         *           "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "name": "finance",
+         *           "color": "green",
+         *           "createdAt": 1790668800000
+         *         }
+         *       ],
+         *       "tasks": [
+         *         {
+         *           "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *           "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "seq": 42,
+         *           "parentId": null,
+         *           "subtaskPosition": null,
+         *           "title": "Pay invoice",
+         *           "hasDescription": true,
+         *           "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "dueDate": "2026-10-10",
+         *           "dueTime": null,
+         *           "dueTz": null,
+         *           "startDate": null,
+         *           "completedAt": null,
+         *           "tagIds": [
+         *             "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *           ],
+         *           "counts": {
+         *             "subtasks": 1,
+         *             "subtasksDone": 0,
+         *             "comments": 2,
+         *             "attachments": 0
+         *           },
+         *           "placement": {
+         *             "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *             "position": "a1V"
+         *           },
+         *           "createdAt": 1791532800000,
+         *           "updatedAt": 1791532800000,
+         *           "description": "Invoice **#2026-117** from the printer."
+         *         }
+         *       ],
+         *       "comments": [
+         *         {
+         *           "id": "0199c5a2-6071-7f82-9394-0a1b2c3d4e01",
+         *           "taskId": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *           "authorId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "body": "Paid, thanks @[Bo Ek](user:0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e02)!",
+         *           "createdAt": 1791532800000,
+         *           "editedAt": null,
+         *           "authorName": "Anna Lindqvist"
+         *         }
+         *       ]
+         *     }
+         */
         OrgExport: {
             /** @enum {string} */
             format: "rooster-export";
@@ -1666,6 +3212,40 @@ export interface components {
             tasks: components["schemas"]["ExportTask"][];
             comments: components["schemas"]["ExportComment"][];
         };
+        /**
+         * @example {
+         *       "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *       "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *       "seq": 42,
+         *       "parentId": null,
+         *       "subtaskPosition": null,
+         *       "title": "Pay invoice",
+         *       "hasDescription": true,
+         *       "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *       "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *       "dueDate": "2026-10-10",
+         *       "dueTime": null,
+         *       "dueTz": null,
+         *       "startDate": null,
+         *       "completedAt": null,
+         *       "tagIds": [
+         *         "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *       ],
+         *       "counts": {
+         *         "subtasks": 1,
+         *         "subtasksDone": 0,
+         *         "comments": 2,
+         *         "attachments": 0
+         *       },
+         *       "placement": {
+         *         "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *         "position": "a1V"
+         *       },
+         *       "createdAt": 1791532800000,
+         *       "updatedAt": 1791532800000,
+         *       "description": "Invoice **#2026-117** from the printer."
+         *     }
+         */
         ExportTask: {
             id: string;
             orgId: string;
@@ -1695,6 +3275,17 @@ export interface components {
             deletedAt?: number;
             deletedBy?: string;
         };
+        /**
+         * @example {
+         *       "id": "0199c5a2-6071-7f82-9394-0a1b2c3d4e01",
+         *       "taskId": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *       "authorId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *       "body": "Paid, thanks @[Bo Ek](user:0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e02)!",
+         *       "createdAt": 1791532800000,
+         *       "editedAt": null,
+         *       "authorName": "Anna Lindqvist"
+         *     }
+         */
         ExportComment: {
             id: string;
             taskId: string;
@@ -1704,6 +3295,42 @@ export interface components {
             editedAt: number | null;
             authorName: string;
         };
+        /**
+         * @example {
+         *       "items": [
+         *         {
+         *           "kind": "activity",
+         *           "activity": {
+         *             "id": "0199c5a2-6071-7f82-9394-0a1b2c3d4e02",
+         *             "taskId": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *             "actorId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *             "via": "cli",
+         *             "createdAt": 1791532800000,
+         *             "type": "due_changed",
+         *             "data": {
+         *               "from": null,
+         *               "to": {
+         *                 "dueDate": "2026-10-10",
+         *                 "dueTime": null
+         *               }
+         *             }
+         *           }
+         *         },
+         *         {
+         *           "kind": "comment",
+         *           "comment": {
+         *             "id": "0199c5a2-6071-7f82-9394-0a1b2c3d4e01",
+         *             "taskId": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *             "authorId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *             "body": "Paid, thanks @[Bo Ek](user:0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e02)!",
+         *             "createdAt": 1791532800000,
+         *             "editedAt": null
+         *           }
+         *         }
+         *       ],
+         *       "nextCursor": null
+         *     }
+         */
         ActivityPage: {
             items: ({
                 /** @enum {string} */
@@ -1716,6 +3343,16 @@ export interface components {
             })[];
             nextCursor: string | null;
         };
+        /**
+         * @example {
+         *       "id": "0199c5a2-6071-7f82-9394-0a1b2c3d4e01",
+         *       "taskId": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *       "authorId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *       "body": "Paid, thanks @[Bo Ek](user:0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e02)!",
+         *       "createdAt": 1791532800000,
+         *       "editedAt": null
+         *     }
+         */
         Comment: {
             id: string;
             taskId: string;
@@ -1724,12 +3361,29 @@ export interface components {
             createdAt: number;
             editedAt: number | null;
         };
+        /**
+         * @example {
+         *       "id": "0199c5a2-6071-7f82-9394-0a1b2c3d4e02",
+         *       "taskId": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *       "actorId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *       "via": "cli",
+         *       "createdAt": 1791532800000,
+         *       "type": "due_changed",
+         *       "data": {
+         *         "from": null,
+         *         "to": {
+         *           "dueDate": "2026-10-10",
+         *           "dueTime": null
+         *         }
+         *       }
+         *     }
+         */
         Activity: {
             id: string;
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "created";
@@ -1739,7 +3393,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "renamed";
@@ -1752,7 +3406,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "due_changed";
@@ -1771,7 +3425,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "assigned";
@@ -1784,7 +3438,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "completed";
@@ -1794,7 +3448,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "reopened";
@@ -1804,7 +3458,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "description_edited";
@@ -1814,7 +3468,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "subtask_added";
@@ -1827,7 +3481,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "moved_parent";
@@ -1840,7 +3494,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "restored";
@@ -1850,7 +3504,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "attachment_added";
@@ -1859,21 +3513,96 @@ export interface components {
                 filename: string;
             };
         };
+        /**
+         * @example {
+         *       "id": "0199c5a2-6071-7f82-9394-0a1b2c3d4e01",
+         *       "body": "Paid, thanks @[Bo Ek](user:0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e02)!"
+         *     }
+         */
         CommentCreate: {
+            /** @description Client-chosen UUIDv7, so a retry or offline replay creates the comment once. */
             id?: string;
+            /** @description Markdown-light (no raw HTML). Mention a member as `@[Name](user:<id>)`. */
             body: string;
         };
+        /**
+         * @example {
+         *       "body": "Paid on Friday."
+         *     }
+         */
         CommentPatch: {
             body: string;
         };
+        /**
+         * @example {
+         *       "followers": [
+         *         "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *         "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e02"
+         *       ]
+         *     }
+         */
         FollowState: {
             followers: string[];
         };
+        /**
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "0199c5a2-7182-7093-a4a5-1b2c3d4e5f01",
+         *           "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "orgSlug": "acme",
+         *           "type": "mention",
+         *           "task": {
+         *             "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *             "seq": 42,
+         *             "title": "Pay invoice"
+         *           },
+         *           "actor": {
+         *             "id": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *             "name": "Anna Lindqvist",
+         *             "image": null
+         *           },
+         *           "data": {
+         *             "commentId": "0199c5a2-6071-7f82-9394-0a1b2c3d4e01",
+         *             "excerpt": "Paid, thanks @Bo Ek!"
+         *           },
+         *           "readAt": null,
+         *           "createdAt": 1791532800000
+         *         }
+         *       ],
+         *       "nextCursor": null,
+         *       "unreadCount": 1
+         *     }
+         */
         NotificationPage: {
             items: components["schemas"]["Notification"][];
             nextCursor: string | null;
             unreadCount: number;
         };
+        /**
+         * @example {
+         *       "id": "0199c5a2-7182-7093-a4a5-1b2c3d4e5f01",
+         *       "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *       "orgSlug": "acme",
+         *       "type": "mention",
+         *       "task": {
+         *         "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *         "seq": 42,
+         *         "title": "Pay invoice"
+         *       },
+         *       "actor": {
+         *         "id": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *         "name": "Anna Lindqvist",
+         *         "image": null
+         *       },
+         *       "data": {
+         *         "commentId": "0199c5a2-6071-7f82-9394-0a1b2c3d4e01",
+         *         "excerpt": "Paid, thanks @Bo Ek!"
+         *       },
+         *       "readAt": null,
+         *       "createdAt": 1791532800000
+         *     }
+         */
         Notification: {
             id: string;
             orgId: string;
@@ -1906,15 +3635,49 @@ export interface components {
             readAt: number | null;
             createdAt: number;
         };
+        /**
+         * @example {
+         *       "unreadCount": 0
+         *     }
+         */
         NotificationMarkResult: {
             unreadCount: number;
         };
+        /**
+         * @description Either `ids` (up to 200 of my notifications) or `all: true`.
+         * @example {
+         *       "ids": [
+         *         "0199c5a2-7182-7093-a4a5-1b2c3d4e5f01"
+         *       ]
+         *     }
+         */
         NotificationMark: {
             ids: string[];
         } | {
             /** @enum {boolean} */
             all: true;
         };
+        /**
+         * @example {
+         *       "prefs": [
+         *         {
+         *           "type": "mention",
+         *           "channel": "inapp",
+         *           "enabled": true
+         *         },
+         *         {
+         *           "type": "mention",
+         *           "channel": "email",
+         *           "enabled": true
+         *         },
+         *         {
+         *           "type": "digest",
+         *           "channel": "email",
+         *           "enabled": false
+         *         }
+         *       ]
+         *     }
+         */
         NotificationPrefs: {
             prefs: {
                 /** @enum {string} */
@@ -1924,6 +3687,17 @@ export interface components {
                 enabled: boolean;
             }[];
         };
+        /**
+         * @example {
+         *       "prefs": [
+         *         {
+         *           "type": "comment",
+         *           "channel": "push",
+         *           "enabled": false
+         *         }
+         *       ]
+         *     }
+         */
         NotificationPrefsPut: {
             prefs: {
                 /** @enum {string} */
@@ -1933,15 +3707,38 @@ export interface components {
                 enabled: boolean;
             }[];
         };
+        /**
+         * @example {
+         *       "publicKey": "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U"
+         *     }
+         */
         VapidPublicKey: {
             publicKey: string;
         };
+        /**
+         * @example {
+         *       "id": "0199c5a2-b5c6-74d7-a8e9-5f6a7b8c9d01",
+         *       "userAgent": "Chrome on Android",
+         *       "createdAt": 1791446400000,
+         *       "lastOkAt": 1791532800000
+         *     }
+         */
         PushSubscription: {
             id: string;
             userAgent: string | null;
             createdAt: number;
             lastOkAt: number | null;
         };
+        /**
+         * @example {
+         *       "endpoint": "https://fcm.googleapis.com/fcm/send/dXJsLXNhZmUtZXhhbXBsZQ",
+         *       "keys": {
+         *         "p256dh": "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM",
+         *         "auth": "tBHItJI5svbpez7KI4CCXg"
+         *       },
+         *       "userAgent": "Chrome on Android"
+         *     }
+         */
         PushSubscriptionCreate: {
             /** Format: uri */
             endpoint: string;
@@ -1953,9 +3750,38 @@ export interface components {
         };
     };
     responses: never;
-    parameters: never;
+    parameters: {
+        /**
+         * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+         * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+         */
+        IdempotencyKey: string;
+        /**
+         * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+         * @example 1767225600000
+         */
+        EditTime: string;
+        /**
+         * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+         * @example tab-0199c5a2
+         */
+        ClientId: string;
+        /**
+         * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+         * @example cli/1.2.0
+         */
+        Client: string;
+    };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /**
+         * @description Seconds until the next request is allowed.
+         * @example 12
+         */
+        RetryAfter: string;
+        /** @description `true` when this is the stored response of an earlier request with the same `Idempotency-Key`. */
+        IdempotentReplayed: "true";
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -1998,9 +3824,19 @@ export interface operations {
                     "application/json": components["schemas"]["Me"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2012,7 +3848,28 @@ export interface operations {
     updateMe: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -2025,13 +3882,14 @@ export interface operations {
             /** @description The updated user */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Me"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2040,7 +3898,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2049,7 +3907,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -2058,7 +3925,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2067,9 +3934,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2096,9 +3964,28 @@ export interface operations {
                     "application/json": components["schemas"]["Session"][];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2110,7 +3997,28 @@ export interface operations {
     revokeSession: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Session ID */
                 id: string;
@@ -2122,11 +4030,12 @@ export interface operations {
             /** @description Revoked */
             204: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2135,7 +4044,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2144,7 +4053,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2153,7 +4062,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -2162,7 +4080,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2171,9 +4089,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2185,7 +4104,28 @@ export interface operations {
     reorderOrg: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -2198,13 +4138,14 @@ export interface operations {
             /** @description The new position */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["OrgOrderResult"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2213,7 +4154,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2222,7 +4163,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2231,7 +4172,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -2240,7 +4190,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2249,9 +4199,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2263,7 +4214,28 @@ export interface operations {
     updateMyOrgPrefs: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Org ID, slug, or `personal` for your personal org. */
                 orgId: string;
@@ -2279,13 +4251,14 @@ export interface operations {
             /** @description The org with its prefs */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Org"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2294,7 +4267,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2303,7 +4276,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2312,7 +4285,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -2321,7 +4303,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2330,9 +4312,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2359,9 +4342,19 @@ export interface operations {
                     "application/json": components["schemas"]["Org"][];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2373,7 +4366,28 @@ export interface operations {
     createOrg: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -2386,13 +4400,14 @@ export interface operations {
             /** @description The new org */
             201: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Org"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2401,7 +4416,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2410,7 +4425,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `slug_taken`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2419,7 +4434,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -2428,7 +4452,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2437,9 +4461,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2451,7 +4476,28 @@ export interface operations {
     deleteOrg: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Org ID, slug, or `personal` for your personal org. */
                 orgId: string;
@@ -2467,11 +4513,12 @@ export interface operations {
             /** @description Deleted */
             204: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2480,7 +4527,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2489,7 +4536,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2498,7 +4545,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `personal_org`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2507,7 +4554,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -2516,7 +4572,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `confirm_name_mismatch`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2525,9 +4581,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2539,7 +4596,28 @@ export interface operations {
     updateOrg: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Org ID, slug, or `personal` for your personal org. */
                 orgId: string;
@@ -2555,13 +4633,14 @@ export interface operations {
             /** @description The updated org */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Org"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2570,7 +4649,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2579,7 +4658,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2588,7 +4667,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `slug_taken`, `personal_org`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2597,7 +4676,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -2606,7 +4694,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2615,9 +4703,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2647,7 +4736,7 @@ export interface operations {
                     "application/json": components["schemas"]["Member"][];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2656,9 +4745,28 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2670,7 +4778,28 @@ export interface operations {
     removeMember: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Org ID, slug, or `personal` for your personal org. */
                 orgId: string;
@@ -2684,11 +4813,12 @@ export interface operations {
             /** @description Removed */
             204: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2697,7 +4827,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2706,7 +4836,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2715,7 +4845,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `last_owner`, `personal_org`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2724,7 +4854,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -2733,7 +4872,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2742,9 +4881,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2756,7 +4896,28 @@ export interface operations {
     updateMember: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Org ID, slug, or `personal` for your personal org. */
                 orgId: string;
@@ -2774,13 +4935,14 @@ export interface operations {
             /** @description The member */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Member"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2789,7 +4951,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2798,7 +4960,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2807,7 +4969,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `last_owner`, `personal_org`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2816,7 +4978,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -2825,7 +4996,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2834,9 +5005,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2866,7 +5038,7 @@ export interface operations {
                     "application/json": components["schemas"]["Invite"][];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2875,7 +5047,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2884,9 +5056,19 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2898,7 +5080,28 @@ export interface operations {
     createInvite: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Org ID, slug, or `personal` for your personal org. */
                 orgId: string;
@@ -2914,13 +5117,14 @@ export interface operations {
             /** @description The invite */
             201: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["InviteCreated"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -2929,7 +5133,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2938,7 +5142,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2947,7 +5151,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `personal_org`, `already_member`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2956,7 +5160,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -2965,7 +5178,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2974,9 +5187,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2988,7 +5202,28 @@ export interface operations {
     revokeInvite: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Org ID, slug, or `personal` for your personal org. */
                 orgId: string;
@@ -3002,11 +5237,12 @@ export interface operations {
             /** @description Revoked */
             204: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3015,7 +5251,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3024,7 +5260,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3033,7 +5269,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -3042,7 +5287,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3051,9 +5296,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3083,7 +5329,7 @@ export interface operations {
                     "application/json": components["schemas"]["InvitePreview"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3115,7 +5361,7 @@ export interface operations {
                     "application/json": components["schemas"]["InvitePreview"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3124,7 +5370,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3133,8 +5379,17 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `invite_invalid`. */
             410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
+            415: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3147,7 +5402,28 @@ export interface operations {
     acceptInvite: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description The token from the invite URL */
                 token: string;
@@ -3159,13 +5435,14 @@ export interface operations {
             /** @description The joined org */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Org"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3174,7 +5451,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `invite_email_mismatch`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3183,7 +5460,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3192,7 +5469,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `invite_invalid`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -3201,7 +5478,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -3210,7 +5496,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3219,9 +5505,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3233,7 +5520,28 @@ export interface operations {
     reindexSearch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3242,13 +5550,14 @@ export interface operations {
             /** @description The rebuild */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["ReindexResult"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3257,7 +5566,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3266,7 +5575,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -3275,7 +5593,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3284,9 +5602,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3313,7 +5632,7 @@ export interface operations {
                     "application/json": components["schemas"]["Backup"][];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3322,7 +5641,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3331,9 +5650,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3345,7 +5665,28 @@ export interface operations {
     createBackup: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3354,13 +5695,14 @@ export interface operations {
             /** @description The new backup */
             201: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Backup"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3369,7 +5711,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3378,7 +5720,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -3387,7 +5738,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3396,9 +5747,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3422,13 +5774,15 @@ export interface operations {
             /** @description The SQLite database file */
             200: {
                 headers: {
+                    /** @description `attachment; filename="<name>"` */
+                    "Content-Disposition": string;
                     [name: string]: unknown;
                 };
                 content: {
                     "application/vnd.sqlite3": string;
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3437,7 +5791,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3446,7 +5800,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3455,9 +5809,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3484,7 +5839,7 @@ export interface operations {
                     "application/json": components["schemas"]["AllowlistEntry"][];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3493,9 +5848,19 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `forbidden`. */
             403: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3507,7 +5872,28 @@ export interface operations {
     addAllowlistEntry: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3520,13 +5906,14 @@ export interface operations {
             /** @description The entry */
             201: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["AllowlistEntry"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3535,7 +5922,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3544,7 +5931,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `already_exists`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3553,7 +5940,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -3562,7 +5958,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3571,9 +5967,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3585,7 +5982,28 @@ export interface operations {
     removeAllowlistEntry: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Entry ID */
                 id: string;
@@ -3597,11 +6015,12 @@ export interface operations {
             /** @description Removed */
             204: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3610,7 +6029,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3619,7 +6038,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3628,7 +6047,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -3637,7 +6065,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3646,9 +6074,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3675,7 +6104,7 @@ export interface operations {
                     "application/json": components["schemas"]["AdminUser"][];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3684,9 +6113,19 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `forbidden`. */
             403: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3698,7 +6137,28 @@ export interface operations {
     updateUser: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description User ID */
                 id: string;
@@ -3714,13 +6174,14 @@ export interface operations {
             /** @description The user */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["AdminUser"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3729,7 +6190,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3738,7 +6199,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3747,7 +6208,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `cannot_disable_self`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3756,7 +6217,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -3765,7 +6235,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3774,9 +6244,650 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listGrants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Grants, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Grant"][];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    revokeGrant: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
+            path: {
+                /** @description Grant ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked */
+            204: {
+                headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateGrant: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
+            path: {
+                /** @description Grant ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrantPatch"];
+            };
+        };
+        responses: {
+            /** @description The updated grant */
+            200: {
+                headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Grant"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `widening_not_allowed`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createToken: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TokenCreate"];
+            };
+        };
+        responses: {
+            /** @description The token and its grant */
+            201: {
+                headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenCreated"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `widening_not_allowed`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getDeviceRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The code the CLI shows (`WDJB-MJHT`); case, dashes and spaces are ignored. */
+                userCode: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The pending request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceRequest"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    approveDevice: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
+            path: {
+                /** @description The code the CLI shows (`WDJB-MJHT`); case, dashes and spaces are ignored. */
+                userCode: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceApprove"];
+            };
+        };
+        responses: {
+            /** @description The new grant */
+            200: {
+                headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Grant"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `widening_not_allowed`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    denyDevice: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
+            path: {
+                /** @description The code the CLI shows (`WDJB-MJHT`); case, dashes and spaces are ignored. */
+                userCode: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Denied */
+            204: {
+                headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3808,7 +6919,7 @@ export interface operations {
                     "application/json": components["schemas"]["MyList"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3817,7 +6928,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3826,7 +6946,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3835,9 +6955,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3849,7 +6970,28 @@ export interface operations {
     createGroup: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Org ID, slug, or `personal` for your personal org. */
                 orgId: string;
@@ -3865,13 +7007,14 @@ export interface operations {
             /** @description The new group */
             201: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["GroupCreateResult"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3880,7 +7023,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3889,7 +7032,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3898,7 +7041,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `id_conflict`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3907,7 +7050,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -3916,7 +7059,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -3925,7 +7077,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3934,9 +7086,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3948,7 +7101,28 @@ export interface operations {
     deleteGroup: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Group ID */
                 id: string;
@@ -3964,11 +7138,12 @@ export interface operations {
             /** @description Deleted */
             204: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3977,7 +7152,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3986,7 +7161,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3995,7 +7170,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `inbox_immutable`, `last_group`, `group_not_empty`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4004,7 +7179,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -4013,7 +7197,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4022,9 +7206,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4036,7 +7221,28 @@ export interface operations {
     updateGroup: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Group ID */
                 id: string;
@@ -4052,13 +7258,14 @@ export interface operations {
             /** @description The group */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Group"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4067,7 +7274,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4076,7 +7283,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4085,7 +7292,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `inbox_immutable`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4094,7 +7301,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -4103,7 +7319,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4112,9 +7328,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4126,7 +7343,28 @@ export interface operations {
     moveGroup: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Group ID */
                 id: string;
@@ -4142,13 +7380,14 @@ export interface operations {
             /** @description The actual position */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["GroupMoveResult"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4157,7 +7396,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4166,7 +7405,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4175,7 +7414,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `inbox_immutable`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4184,7 +7423,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -4193,7 +7441,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4202,9 +7450,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4216,7 +7465,28 @@ export interface operations {
     restoreGroup: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Group ID */
                 id: string;
@@ -4228,13 +7498,14 @@ export interface operations {
             /** @description The restored group */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Group"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4243,7 +7514,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4252,7 +7523,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4261,7 +7532,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -4270,7 +7550,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4279,9 +7559,92 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    resolveTaskRef: {
+        parameters: {
+            query: {
+                /** @description `42` (task number in `org`), `acme#42` / `personal#42` (number in that org), or an ID prefix of at least 8 hex digits, dashes optional (across all my orgs). Eight or more bare digits read as an ID prefix. */
+                ref: string;
+                /** @description Org ID, slug or `personal`; required for a bare number. */
+                org?: string;
+                /** @description `true` also matches tasks in Trash (to restore them). */
+                deleted?: "true" | "false";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The task (with `deletedAt` when in Trash) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicts with the current state. Codes: `ambiguous_ref`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4293,7 +7656,9 @@ export interface operations {
     queryTasks: {
         parameters: {
             query?: {
+                /** @description Page size. */
                 limit?: number;
+                /** @description Opaque cursor: the `nextCursor` of the previous page. Omit it for the first page. */
                 cursor?: string;
                 view?: "my" | "today" | "week" | "overdue" | "nodate" | "everyone";
                 groupId?: string;
@@ -4323,7 +7688,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskPage"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4332,7 +7697,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4341,7 +7715,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Conflicts with the current state. Codes: `personal_org`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4350,9 +7733,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4364,7 +7748,28 @@ export interface operations {
     createTask: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Org ID, slug, or `personal` for your personal org. */
                 orgId: string;
@@ -4380,13 +7785,14 @@ export interface operations {
             /** @description The task */
             201: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Task"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4395,7 +7801,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4404,7 +7810,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4413,7 +7819,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `id_conflict`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4422,7 +7828,25 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -4431,7 +7855,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `invalid_parent`, `subtask_depth`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4440,9 +7864,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4472,7 +7897,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskDetail"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4481,7 +7906,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4490,9 +7924,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4504,7 +7939,28 @@ export interface operations {
     deleteTask: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Task ID */
                 id: string;
@@ -4516,11 +7972,12 @@ export interface operations {
             /** @description Deleted */
             204: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4529,7 +7986,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4538,7 +7995,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4547,7 +8004,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -4556,7 +8022,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4565,9 +8031,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4579,7 +8046,28 @@ export interface operations {
     updateTask: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Task ID */
                 id: string;
@@ -4595,13 +8083,14 @@ export interface operations {
             /** @description The task */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["TaskPatchResult"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4610,7 +8099,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4619,7 +8108,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4628,7 +8117,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -4637,7 +8126,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -4646,7 +8144,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `invalid_parent`, `subtask_cycle`, `subtask_depth`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4655,9 +8153,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4669,7 +8168,28 @@ export interface operations {
     moveTask: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Task ID */
                 id: string;
@@ -4685,13 +8205,14 @@ export interface operations {
             /** @description The actual placement */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["TaskMoveResult"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4700,7 +8221,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4709,7 +8230,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4718,7 +8239,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -4727,7 +8248,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -4736,7 +8266,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4745,9 +8275,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4759,7 +8290,28 @@ export interface operations {
     completeTask: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Task ID */
                 id: string;
@@ -4775,13 +8327,14 @@ export interface operations {
             /** @description The task */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["TaskCompleteResult"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4790,7 +8343,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4799,7 +8352,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4808,7 +8361,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -4817,7 +8370,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -4826,7 +8388,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4835,9 +8397,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4849,7 +8412,28 @@ export interface operations {
     restoreTask: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Task ID */
                 id: string;
@@ -4861,13 +8445,14 @@ export interface operations {
             /** @description The task */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Task"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4876,7 +8461,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4885,7 +8470,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4894,7 +8479,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -4903,7 +8497,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4912,9 +8506,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4926,7 +8521,28 @@ export interface operations {
     deleteTaskPermanently: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Task ID */
                 id: string;
@@ -4938,11 +8554,12 @@ export interface operations {
             /** @description Deleted */
             204: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4951,7 +8568,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4960,7 +8577,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4969,7 +8586,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `not_in_trash`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4978,7 +8595,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -4987,7 +8613,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4996,9 +8622,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5010,7 +8637,28 @@ export interface operations {
     bulkTasks: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -5023,13 +8671,14 @@ export interface operations {
             /** @description Per-task results */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["BulkResult"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5038,7 +8687,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5047,7 +8696,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5056,7 +8714,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5065,9 +8723,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5079,7 +8738,28 @@ export interface operations {
     reorderSubtask: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Task ID */
                 id: string;
@@ -5095,13 +8775,14 @@ export interface operations {
             /** @description The actual subtask position */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["SubtaskReorderResult"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5110,7 +8791,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5119,7 +8800,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5128,7 +8809,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `not_subtask`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5137,7 +8818,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -5146,7 +8827,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5155,7 +8845,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5164,9 +8854,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5178,7 +8869,28 @@ export interface operations {
     duplicateTask: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Task ID */
                 id: string;
@@ -5194,13 +8906,14 @@ export interface operations {
             /** @description The copy */
             201: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Task"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5209,7 +8922,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5218,7 +8931,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5227,7 +8940,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `id_conflict`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5236,7 +8949,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -5245,7 +8958,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5254,7 +8976,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5263,9 +8985,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5277,7 +9000,28 @@ export interface operations {
     expandTask: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Task ID */
                 id: string;
@@ -5289,11 +9033,12 @@ export interface operations {
             /** @description Expanded */
             204: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5302,7 +9047,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5311,7 +9056,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5320,7 +9065,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -5329,7 +9074,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5338,7 +9092,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5347,9 +9101,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5361,7 +9116,28 @@ export interface operations {
     collapseTask: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Task ID */
                 id: string;
@@ -5373,11 +9149,12 @@ export interface operations {
             /** @description Collapsed */
             204: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5386,7 +9163,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5395,7 +9172,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5404,7 +9181,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5413,7 +9199,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5422,9 +9208,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5436,7 +9223,9 @@ export interface operations {
     listTrash: {
         parameters: {
             query?: {
+                /** @description Page size. */
                 limit?: number;
+                /** @description Opaque cursor: the `nextCursor` of the previous page. Omit it for the first page. */
                 cursor?: string;
             };
             header?: never;
@@ -5457,7 +9246,7 @@ export interface operations {
                     "application/json": components["schemas"]["TrashPage"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5466,7 +9255,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5475,7 +9273,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5484,9 +9282,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5516,7 +9315,7 @@ export interface operations {
                     "application/json": components["schemas"]["Tag"][];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5525,7 +9324,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5534,9 +9342,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5548,7 +9357,28 @@ export interface operations {
     createTag: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Org ID, slug, or `personal` for your personal org. */
                 orgId: string;
@@ -5564,13 +9394,14 @@ export interface operations {
             /** @description The tag */
             201: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Tag"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5579,7 +9410,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5588,7 +9419,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5597,7 +9428,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `id_conflict`, `tag_name_taken`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5606,7 +9437,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5615,7 +9455,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5624,9 +9464,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5638,7 +9479,28 @@ export interface operations {
     deleteTag: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Tag ID */
                 id: string;
@@ -5650,11 +9512,12 @@ export interface operations {
             /** @description Deleted */
             204: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5663,7 +9526,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5672,7 +9535,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5681,7 +9544,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5690,7 +9562,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5699,9 +9571,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5713,7 +9586,28 @@ export interface operations {
     updateTag: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Tag ID */
                 id: string;
@@ -5729,13 +9623,14 @@ export interface operations {
             /** @description The tag */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Tag"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5744,7 +9639,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5753,7 +9648,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5762,7 +9657,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `tag_name_taken`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5771,7 +9666,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5780,7 +9684,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5789,9 +9693,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5803,7 +9708,28 @@ export interface operations {
     mergeTag: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Tag ID */
                 id: string;
@@ -5819,13 +9745,14 @@ export interface operations {
             /** @description The remaining tag */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Tag"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5834,7 +9761,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5843,7 +9770,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5852,7 +9779,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5861,7 +9797,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5870,9 +9806,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5884,7 +9821,28 @@ export interface operations {
     addTaskTag: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Task ID */
                 id: string;
@@ -5898,13 +9856,14 @@ export interface operations {
             /** @description The task */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Task"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5913,7 +9872,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5922,7 +9881,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5931,7 +9890,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -5940,7 +9899,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5949,7 +9917,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5958,9 +9926,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5972,7 +9941,28 @@ export interface operations {
     removeTaskTag: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Task ID */
                 id: string;
@@ -5986,13 +9976,14 @@ export interface operations {
             /** @description The task */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Task"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6001,7 +9992,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6010,7 +10001,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6019,7 +10010,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -6028,7 +10019,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -6037,7 +10037,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6046,9 +10046,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6062,6 +10063,7 @@ export interface operations {
             query: {
                 q: string;
                 orgId?: string;
+                /** @description Page size. */
                 limit?: number;
             };
             header?: never;
@@ -6079,7 +10081,7 @@ export interface operations {
                     "application/json": components["schemas"]["SearchResult"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6088,7 +10090,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6097,7 +10108,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6106,9 +10117,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6134,6 +10146,8 @@ export interface operations {
             /** @description The export (`Content-Disposition: attachment`) */
             200: {
                 headers: {
+                    /** @description `attachment; filename="rooster-<slug>-<yyyy-mm-dd>.json"` (or `.md`) */
+                    "Content-Disposition": string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -6141,7 +10155,7 @@ export interface operations {
                     "text/markdown": string;
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6150,7 +10164,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6159,7 +10182,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6168,9 +10191,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6182,7 +10206,9 @@ export interface operations {
     getTaskActivity: {
         parameters: {
             query?: {
+                /** @description Page size. */
                 limit?: number;
+                /** @description Opaque cursor: the `nextCursor` of the previous page. Omit it for the first page. */
                 cursor?: string;
                 filter?: "all" | "comments";
             };
@@ -6204,7 +10230,7 @@ export interface operations {
                     "application/json": components["schemas"]["ActivityPage"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6213,7 +10239,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6222,7 +10257,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6231,9 +10266,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6245,7 +10281,28 @@ export interface operations {
     createComment: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Task ID */
                 id: string;
@@ -6261,13 +10318,14 @@ export interface operations {
             /** @description The comment */
             201: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Comment"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6276,7 +10334,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6285,7 +10343,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6294,7 +10352,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `id_conflict`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6303,7 +10361,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -6312,7 +10370,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -6321,7 +10388,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6330,9 +10397,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6344,7 +10412,28 @@ export interface operations {
     deleteComment: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Comment ID */
                 id: string;
@@ -6356,11 +10445,12 @@ export interface operations {
             /** @description Deleted */
             204: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6369,7 +10459,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6378,7 +10468,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6387,7 +10477,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -6396,7 +10486,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -6405,7 +10504,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6414,9 +10513,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6428,7 +10528,28 @@ export interface operations {
     updateComment: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Comment ID */
                 id: string;
@@ -6444,13 +10565,14 @@ export interface operations {
             /** @description The comment */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Comment"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6459,7 +10581,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6468,7 +10590,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6477,7 +10599,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -6486,7 +10608,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -6495,7 +10626,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6504,9 +10635,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6518,7 +10650,28 @@ export interface operations {
     restoreComment: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Comment ID */
                 id: string;
@@ -6530,13 +10683,14 @@ export interface operations {
             /** @description The comment */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Comment"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6545,7 +10699,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6554,7 +10708,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6563,7 +10717,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -6572,7 +10726,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -6581,7 +10744,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6590,9 +10753,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6604,7 +10768,28 @@ export interface operations {
     followTask: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Task ID */
                 id: string;
@@ -6616,13 +10801,14 @@ export interface operations {
             /** @description The active followers */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["FollowState"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6631,7 +10817,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6640,7 +10826,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6649,7 +10835,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `personal_org`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6658,7 +10844,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -6667,7 +10853,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -6676,7 +10871,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6685,9 +10880,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6699,7 +10895,28 @@ export interface operations {
     unfollowTask: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Task ID */
                 id: string;
@@ -6711,13 +10928,14 @@ export interface operations {
             /** @description The active followers */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["FollowState"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6726,7 +10944,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6735,7 +10953,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6744,7 +10962,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `personal_org`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6753,7 +10971,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -6762,7 +10980,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -6771,7 +10998,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6780,9 +11007,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6794,7 +11022,9 @@ export interface operations {
     listNotifications: {
         parameters: {
             query?: {
+                /** @description Page size. */
                 limit?: number;
+                /** @description Opaque cursor: the `nextCursor` of the previous page. Omit it for the first page. */
                 cursor?: string;
                 unread?: "true" | "false";
             };
@@ -6813,7 +11043,7 @@ export interface operations {
                     "application/json": components["schemas"]["NotificationPage"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6822,7 +11052,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6831,9 +11070,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6845,7 +11085,28 @@ export interface operations {
     markNotificationsRead: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -6858,13 +11119,14 @@ export interface operations {
             /** @description The new unread count */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationMarkResult"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6873,7 +11135,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6882,7 +11144,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -6891,7 +11162,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6900,9 +11171,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6914,7 +11186,28 @@ export interface operations {
     markNotificationsUnread: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -6927,13 +11220,14 @@ export interface operations {
             /** @description The new unread count */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationMarkResult"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6942,7 +11236,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6951,7 +11245,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -6960,7 +11263,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6969,9 +11272,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -6998,7 +11302,7 @@ export interface operations {
                     "application/json": components["schemas"]["NotificationPrefs"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7007,9 +11311,19 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7021,7 +11335,28 @@ export interface operations {
     updateNotificationPrefs: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7034,13 +11369,14 @@ export interface operations {
             /** @description The whole matrix */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationPrefs"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7049,7 +11385,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7058,7 +11394,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -7067,7 +11412,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7076,9 +11421,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7105,7 +11451,7 @@ export interface operations {
                     "application/json": components["schemas"]["VapidPublicKey"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7114,9 +11460,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7143,7 +11490,7 @@ export interface operations {
                     "application/json": components["schemas"]["PushSubscription"][];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7152,9 +11499,19 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7166,7 +11523,28 @@ export interface operations {
     createPushSubscription: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7179,13 +11557,14 @@ export interface operations {
             /** @description The subscription */
             201: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["PushSubscription"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7194,7 +11573,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7203,7 +11582,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -7212,7 +11600,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7221,9 +11609,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7235,7 +11624,28 @@ export interface operations {
     deletePushSubscription: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Push subscription ID */
                 id: string;
@@ -7247,11 +11657,12 @@ export interface operations {
             /** @description Removed */
             204: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7260,7 +11671,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7269,7 +11680,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7278,7 +11689,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -7287,7 +11707,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7296,9 +11716,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7310,7 +11731,28 @@ export interface operations {
     testPushSubscription: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path: {
                 /** @description Push subscription ID */
                 id: string;
@@ -7322,11 +11764,12 @@ export interface operations {
             /** @description Sent */
             204: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7335,7 +11778,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7344,7 +11787,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not found, or not a member (existence is never revealed) */
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7353,7 +11796,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `push_gone`. */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -7362,7 +11805,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -7371,7 +11823,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7380,16 +11832,17 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description An upstream service (e.g. the push service) refused the request */
+            /** @description An upstream service (e.g. the push service) refused the request. Codes: `push_failed`. */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -7403,7 +11856,28 @@ export interface operations {
     regeneratePushKeys: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7412,13 +11886,14 @@ export interface operations {
             /** @description The new key */
             200: {
                 headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["VapidPublicKey"];
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7427,7 +11902,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7436,7 +11911,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Conflicts with the current state */
+            /** @description Conflicts with the current state. Codes: `push_keys_from_env`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7445,7 +11920,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not JSON */
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -7454,7 +11938,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7463,9 +11947,10 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -7492,7 +11977,7 @@ export interface operations {
                     "text/event-stream": string;
                 };
             };
-            /** @description Not signed in */
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7501,16 +11986,17 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited; retry after the Retry-After header */
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
             429: {
                 headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The server is shutting down; retry shortly */
+            /** @description The server is shutting down; retry shortly. Codes: `unavailable`. */
             503: {
                 headers: {
                     [name: string]: unknown;
