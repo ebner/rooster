@@ -72,7 +72,15 @@ export interface DomainEvent {
    * (the unread count plus a preview). Sent as they are, never coalesced.
    */
   direct?: readonly DirectMessage[];
+  /**
+   * For changes that can move tasks out of a grant's read groups (P8): each affected task's
+   * grant group per user before the change (task → user → group; a user not listed had none).
+   * Grant streams use it to tell "was readable, now gone" from "never readable".
+   */
+  priorGroups?: PriorGroups;
 }
+
+export type PriorGroups = ReadonlyMap<string, ReadonlyMap<string, string | null>>;
 
 export interface DirectMessage {
   userId: string;

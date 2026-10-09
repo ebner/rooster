@@ -1,6 +1,6 @@
 import { SSE_HEARTBEAT_MS, type SseHello, type SseInvalidate } from '@rooster/core/schemas';
 import type { Logger } from '../lib/logger.ts';
-import type { DomainEvent, EventBus, QueryKey } from './bus.ts';
+import type { DomainEvent, EventBus, PriorGroups, QueryKey } from './bus.ts';
 
 /** Invalidations for one stream are collected this long, so a burst becomes one event. */
 export const SSE_COALESCE_MS = 50;
@@ -39,7 +39,11 @@ export interface SseOpen {
    */
   isValid: () => boolean;
   /** A grant's stream (P8): the keys of an invalidation it may receive (possibly none). */
-  filterKeys?: (org: string | null, keys: readonly QueryKey[]) => readonly QueryKey[];
+  filterKeys?: (
+    org: string | null,
+    keys: readonly QueryKey[],
+    prior?: PriorGroups,
+  ) => readonly QueryKey[];
   /**
    * A grant's stream (P8): rewrites a `notification` message for what the grant may see, or
    * drops it (`null`).
@@ -200,7 +204,7 @@ export class SseHub {
         // refetch), and nobody else learns it.
         const origin = userId === event.actorId ? event.origin : null;
         for (const conn of this.byUser.get(userId) ?? []) {
-          this.enqueue(conn, audience.org, origin, audience.keys);
+          this.enqueue(conn, audience.org, origin, audience.keys, event.priorGroups);
         }
       }
     }
@@ -224,10 +228,11 @@ export class SseHub {
     org: string | null,
     origin: string | null,
     keys: readonly QueryKey[],
+    prior?: PriorGroups,
   ): void {
     if (conn.closed || keys.length === 0) return;
     if (conn.filterKeys !== undefined) {
-      keys = conn.filterKeys(org, keys);
+      keys = conn.filterKeys(org, keys, prior);
       if (keys.length === 0) return;
     }
     const slot = JSON.stringify([org, origin]);

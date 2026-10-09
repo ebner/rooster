@@ -248,11 +248,9 @@ describe('P8 grant boundary', () => {
       ['org-invites', org.id],
       ['notifications'],
     ];
-    // G is unreadable: its keys become the bare prefixes (round 3).
+    // G was never readable: nothing about it (round 4).
     expect(access.filterKeys?.(org.id, keys)).toEqual([
       ['task', t.id],
-      ['task'],
-      ['activity'],
       ['my-list', org.id],
     ]);
     const inboxOnly = await pat(owner, ['notifications:read']);
@@ -577,18 +575,99 @@ describe('review round 3', () => {
     expect(hits.map((h) => h.task.id)).toEqual([visible.id]);
   });
 
-  it('R3 a task key the grant cannot read becomes the bare prefix', async () => {
-    const { ctx, owner, org, g, prioOnly } = await tree();
+  it('R3 a task key the grant could read before becomes the bare prefix; never-readable ones are dropped', async () => {
+    const { ctx, owner, org, prio, today, g, prioOnly } = await tree();
     const reader = await pat(owner, ['tasks:read'], prioOnly('prio'));
     const access = ctx.app.services.grants.streamAccess(await actorOf(ctx, reader.token));
-    const gone = '0199aaaa-0000-7000-8000-00000000dead';
+    const keysOf = (e: DomainEvent) =>
+      access.filterKeys?.(
+        org.id,
+        e.audiences.filter((a) => a.org === org.id).flatMap((a) => a.keys),
+        e.priorGroups,
+      );
+    // Never readable: keys about G go nowhere, even with the event's prior groups.
     expect(
       access.filterKeys?.(org.id, [
         ['task', g.id],
         ['activity', g.id],
-        ['task', gone],
       ]),
-    ).toEqual([['task'], ['activity']]);
+    ).toEqual([]);
+    const x = await owner.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'X', groupId: prio.id },
+      201,
+    );
+    // Moved out of the readable group: the bare prefix.
+    const events = capture(ctx);
+    await owner.ok('POST', `/api/v1/tasks/${x.id}/move`, { groupId: today.id });
+    const moved = events.find((e) => e.type === 'task.moved');
+    expect(moved).toBeDefined();
+    expect(keysOf(moved as DomainEvent)).toEqual([['my-list', org.id], ['task']]);
+    // Purged while readable: the bare prefix too.
+    await owner.ok('POST', `/api/v1/tasks/${x.id}/move`, { groupId: prio.id });
+    await owner.ok('DELETE', `/api/v1/tasks/${x.id}`, undefined, 204);
+    events.length = 0;
+    await owner.ok('DELETE', `/api/v1/tasks/${x.id}/permanent`, undefined, 204);
+    const purged = events.find((e) => e.type === 'task.purged');
+    expect(keysOf(purged as DomainEvent)).toContainEqual(['task']);
+    expect(keysOf(purged as DomainEvent)).not.toContainEqual(['task', x.id]);
+  });
+
+  it('R3 another member unfollowing their own task outside the grant sends nothing', async () => {
+    const { ctx, owner, bob, org, prioOnly } = await tree();
+    const theirs = await bob.ok<Task>('POST', `/api/v1/orgs/${org.id}/tasks`, { title: 'B' }, 201);
+    const reader = await pat(owner, ['tasks:read'], prioOnly('prio'));
+    const access = ctx.app.services.grants.streamAccess(await actorOf(ctx, reader.token));
+    const events = capture(ctx);
+    await bob.ok('DELETE', `/api/v1/tasks/${theirs.id}/followers/me`);
+    const followed = events.find((e) => e.type === 'task.followed');
+    expect(followed).toBeDefined();
+    const keys = (followed as DomainEvent).audiences.flatMap((a) => a.keys);
+    expect(keys).toContainEqual(['task', theirs.id]);
+    expect(access.filterKeys?.(org.id, keys, followed?.priorGroups)).toEqual([]);
+  });
+
+  it('R2 restricted search stays fast with tens of thousands of hidden matches', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const prio = await groupNamed(owner, 'Prio');
+    const visible = await owner.ok<Task>(
+      'POST',
+      '/api/v1/orgs/personal/tasks',
+      { title: 'needle', groupId: prio.id },
+      201,
+    );
+    // 30,000 hidden matches: unassigned tasks, outside every group of the owner's list.
+    const insert = ctx.db.sqlite.prepare(
+      "INSERT INTO task (id, org_id, title, created_by, created_at, updated_at) VALUES (?, ?, 'needle', ?, ?, ?)",
+    );
+    ctx.db.sqlite.transaction(() => {
+      for (let i = 0; i < 30_000; i++) {
+        insert.run(
+          `0199aaaa-0000-7000-8000-${i.toString(16).padStart(12, '0')}`,
+          visible.orgId,
+          owner.userId,
+          i,
+          i,
+        );
+      }
+    })();
+    ctx.app.services.search.rebuild();
+    const api = bearer(
+      ctx,
+      (
+        await pat(owner, ['tasks:read'], {
+          orgs: [{ orgId: visible.orgId, read: { groups: [prio.id] }, write: 'none' }],
+        })
+      ).token,
+    );
+    await api.ok('GET', '/api/v1/search?q=needle&limit=1');
+    const started = performance.now();
+    const hits = await api.ok<{ task: Task }[]>('GET', '/api/v1/search?q=needle&limit=1');
+    const elapsed = performance.now() - started;
+    expect(hits.map((h) => h.task.id)).toEqual([visible.id]);
+    expect(elapsed).toBeLessThan(200);
   });
 
   it('R4 a grant marks more notifications than SQLite allows bound parameters', async () => {

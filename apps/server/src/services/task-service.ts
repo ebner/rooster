@@ -61,7 +61,7 @@ import {
   taskTag,
   user,
 } from '../db/schema/index.ts';
-import type { DomainEventType } from '../events/bus.ts';
+import type { DomainEventType, PriorGroups } from '../events/bus.ts';
 import { AppError } from '../lib/errors.ts';
 import {
   type ActivityDraft,
@@ -98,6 +98,7 @@ import {
   authorizeTaskRead,
   authorizeTaskWrite,
   canReadTask,
+  capturePriorGroups,
   childIds,
   grantGroupOf,
   grantReachesOrg,
@@ -274,6 +275,8 @@ export class TaskService {
       tags?: boolean;
       /** Tasks whose activity feed changed (`['activity', id]`). */
       activity?: readonly string[];
+      /** Grant groups before a change that can move tasks out of them (grant SSE, P8). */
+      priors?: PriorGroups;
     } = {},
   ): void {
     const after = taskReach(tx, taskIds);
@@ -294,6 +297,7 @@ export class TaskService {
       actorId: actor.userId,
       subjects: [...taskIds],
       audiences,
+      ...(options.priors === undefined ? {} : { priorGroups: options.priors }),
     });
   }
 
@@ -305,6 +309,7 @@ export class TaskService {
     orgId: string,
     taskIds: readonly string[],
     keys = [qk.myList(orgId), ...taskIds.map(qk.task)],
+    priors?: PriorGroups,
   ): void {
     emitAfterCommit(this.deps, tx, {
       type,
@@ -312,6 +317,7 @@ export class TaskService {
       actorId: actor.userId,
       subjects: [...taskIds],
       audiences: [selfAudience(actor.userId, orgId, keys)],
+      ...(priors === undefined ? {} : { priorGroups: priors }),
     });
   }
 
@@ -754,10 +760,10 @@ export class TaskService {
       actor.grant === null
         ? null
         : groupSnapshot(tx, actor.userId, [row.id, ...childIds(tx, row.id)]);
-    const before =
-      (input.parentId !== undefined && input.parentId !== row.parentId) || reassigning
-        ? taskReach(tx, [row.id])
-        : undefined;
+    const structural =
+      (input.parentId !== undefined && input.parentId !== row.parentId) || reassigning;
+    const before = structural ? taskReach(tx, [row.id]) : undefined;
+    const priors = structural ? capturePriorGroups(tx, [row.id]) : undefined;
     const apply = (key: string, fields: string[], set: () => void) => {
       if (clockAllows(clock, key, meta.editTime)) {
         set();
@@ -836,6 +842,7 @@ export class TaskService {
       const activity = this.recordChanges(tx, actor, meta, old, row);
       this.emit(tx, actor, 'task.updated', row.orgId, [row.id], {
         ...(before ? { before } : {}),
+        ...(priors ? { priors } : {}),
         activity,
       });
     }
@@ -1021,6 +1028,7 @@ export class TaskService {
     clock.deleted = meta.editTime;
     const ids = [row.id, ...descendantsOf(tx, [row.id], { deletedAt: row.deletedAt })];
     this.authorizeSubtree(tx, actor, ids.slice(1), 'tasks:write');
+    const priors = capturePriorGroups(tx, [row.id]);
     const now = this.now();
     tx.update(task)
       .set({ deletedAt: null, deletedBy: null, updatedAt: now })
@@ -1060,6 +1068,7 @@ export class TaskService {
     this.emit(tx, actor, 'task.restored', row.orgId, [row.id], {
       trash: true,
       activity: [row.id],
+      priors,
     });
   }
 
@@ -1090,6 +1099,7 @@ export class TaskService {
         throw new AppError('not_in_trash', 409, 'Only deleted tasks can be deleted permanently.');
       }
       const before = taskReach(tx, [row.id]);
+      const priors = capturePriorGroups(tx, [row.id]);
       const gone = [row.id, ...descendantsOf(tx, [row.id])];
       this.authorizeSubtree(tx, actor, gone.slice(1), 'tasks:delete');
       // Their notifications cascade away: the recipients' inboxes must refresh.
@@ -1097,7 +1107,7 @@ export class TaskService {
       tx.delete(task).where(eq(task.id, row.id)).run();
       this.collab.notifications.announceRemoved(tx, recipients, actor.userId);
       indexTasks(tx, gone);
-      this.emit(tx, actor, 'task.purged', row.orgId, [row.id], { before, trash: true });
+      this.emit(tx, actor, 'task.purged', row.orgId, [row.id], { before, trash: true, priors });
     });
   }
 
@@ -1136,6 +1146,10 @@ export class TaskService {
     const key = posClockKey(actor.userId);
     const movable = rows.filter((r) => clockAllows(parseClock(r.fieldClock), key, meta.editTime));
     if (movable.length === 0) return rows.map(() => null);
+    const priors = capturePriorGroups(
+      tx,
+      movable.map((r) => r.id),
+    );
     const target: OrderTarget = {
       ...(intent.afterId === undefined ? {} : { afterId: intent.afterId }),
       ...(intent.beforeId === undefined ? {} : { beforeId: intent.beforeId }),
@@ -1157,12 +1171,15 @@ export class TaskService {
         .run();
       byId.set(r.id, keys[i] as string);
     });
+    const moved = movable.map((r) => r.id);
     this.emitOwn(
       tx,
       actor,
       'task.moved',
       group.orgId,
-      movable.map((r) => r.id),
+      moved,
+      [qk.myList(group.orgId), ...moved.map(qk.task)],
+      priors,
     );
     return rows.map((r) => {
       const position = byId.get(r.id);

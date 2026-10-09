@@ -6,11 +6,19 @@ import {
   grantsOrg,
   hasScope,
 } from '@rooster/core/grants';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, type SQL, sql } from 'drizzle-orm';
 import { placement, task, taskGroup } from '../db/schema/index.ts';
+import type { PriorGroups } from '../events/bus.ts';
 import { AppError } from '../lib/errors.ts';
 import type { Actor, ActorGrant, Tx } from './context.ts';
-import { chunked, groupNotFound, type TaskRow, taskNotFound } from './list-access.ts';
+import {
+  ancestorsOf,
+  chunked,
+  descendantsOf,
+  groupNotFound,
+  type TaskRow,
+  taskNotFound,
+} from './list-access.ts';
 import { notFound } from './org-access.ts';
 
 /**
@@ -223,8 +231,8 @@ export function canReadNotification(
 
 /**
  * The SSE query keys a grant's stream may receive (11 §2.3): nothing of an org it does not
- * reach; task-level keys only with `tasks:read`, and for an unreadable task only the bare
- * `['task']`/`['activity']` prefix; the inbox only with
+ * reach; task-level keys only with `tasks:read`, and for a task no longer readable only the
+ * bare `['task']`/`['activity']` prefix (never for one that was not readable before); the inbox only with
  * `notifications:read`; org administration never.
  */
 export function visibleKeys(
@@ -232,6 +240,7 @@ export function visibleKeys(
   actor: Actor,
   org: string | null,
   keys: readonly (readonly string[])[],
+  prior?: PriorGroups,
 ): (readonly string[])[] {
   const grant = actor.grant;
   if (grant === null) return [...keys];
@@ -260,9 +269,22 @@ export function visibleKeys(
           .from(task)
           .where(eq(task.id, id))
           .get();
-        // A task the grant cannot read (any more: purged, or moved out of its groups) is
-        // invalidated by the bare prefix, so a cached copy goes stale without naming it.
-        push(row !== undefined && canReadTask(tx, actor, row) ? key : [key[0]]);
+        if (row !== undefined && canReadTask(tx, actor, row)) {
+          push(key);
+          break;
+        }
+        // A task the grant could read before this change (now purged, or moved out of its
+        // groups) is invalidated by the bare prefix, so a cached copy goes stale without
+        // naming it. One it never could read is not news to it at all.
+        const before = prior?.get(id);
+        const orgId = row?.orgId ?? org;
+        if (
+          before !== undefined &&
+          orgId !== null &&
+          canRead(grant.constraints, orgId, before.get(actor.userId) ?? null)
+        ) {
+          push([key[0]]);
+        }
         break;
       }
       case 'my-list':
@@ -280,6 +302,39 @@ export function visibleKeys(
       default:
         push(key);
     }
+  }
+  return out;
+}
+
+/**
+ * Before a change that can move tasks between groups, purge or re-home them: each task's
+ * (with its descendants) grant group per user, as `GrantGroups` would compute it. Carried on
+ * the domain event as `priorGroups`.
+ */
+export function capturePriorGroups(tx: Tx, taskIds: readonly string[]): PriorGroups {
+  const out = new Map<string, Map<string, string | null>>();
+  const ids = [...new Set([...taskIds, ...descendantsOf(tx, taskIds)])];
+  for (const id of ids) {
+    const row = tx
+      .select({ id: task.id, parentId: task.parentId })
+      .from(task)
+      .where(eq(task.id, id))
+      .get();
+    if (row === undefined) continue;
+    const chain = [row.id, ...ancestorsOf(tx, row).map((a) => a.id)];
+    const placed = tx
+      .select({ taskId: placement.taskId, userId: placement.userId, groupId: placement.groupId })
+      .from(placement)
+      .where(inArray(placement.taskId, chain))
+      .all();
+    const groups = new Map<string, string | null>();
+    // Nearest first: the task, then its parent, and so on.
+    for (const taskId of chain) {
+      for (const p of placed) {
+        if (p.taskId === taskId && !groups.has(p.userId)) groups.set(p.userId, p.groupId);
+      }
+    }
+    out.set(id, groups);
   }
   return out;
 }
@@ -354,6 +409,51 @@ export function readFilter(
   if (grant === null || canRead(grant.constraints, orgId, null)) return null;
   const groups = new GrantGroups(tx, actor.userId).prime(rows);
   return (row) => canRead(grant.constraints, orgId, groups.groupOf(row));
+}
+
+/** A SQL condition over a task's ID and org columns (see `readableTaskCondition`). */
+export type ReadableCondition = (id: SQL, org: SQL) => SQL;
+
+/**
+ * The read constraint as SQL, for ranked queries that must not filter after their LIMIT
+ * (search): a task is readable in an org the grant reads whole, or when its nearest placed
+ * ancestor-or-self in the actor's list sits in a readable group (the `GrantGroups` rule as a
+ * recursive CTE). Undefined when nothing in `orgIds` is restricted.
+ */
+export function readableTaskCondition(
+  actor: Actor,
+  orgIds: readonly string[],
+): ReadableCondition | undefined {
+  const grant = actor.grant;
+  if (grant === null || grant.constraints.orgs === 'all') return undefined;
+  const whole: string[] = [];
+  const groups: string[] = [];
+  for (const orgId of orgIds) {
+    const org = grant.constraints.orgs.find((o) => o.orgId === orgId);
+    if (org === undefined) continue;
+    if (org.read === 'all') whole.push(orgId);
+    else groups.push(...org.read.groups);
+  }
+  if (groups.length === 0 && whole.length === orgIds.length) return undefined;
+  const list = (ids: readonly string[]) =>
+    sql.join(
+      ids.map((id) => sql`${id}`),
+      sql`, `,
+    );
+  const user = actor.userId;
+  return (id, org) => {
+    const wholeSql = whole.length === 0 ? sql`0` : sql`${org} IN (${list(whole)})`;
+    const placedSql =
+      groups.length === 0
+        ? sql`0`
+        : sql`${id} IN (WITH RECURSIVE r(id) AS (
+            SELECT task_id FROM placement WHERE user_id = ${user} AND group_id IN (${list(groups)})
+            UNION
+            SELECT c.id FROM task c JOIN r ON c.parent_id = r.id
+            WHERE NOT EXISTS (SELECT 1 FROM placement p WHERE p.task_id = c.id AND p.user_id = ${user})
+          ) SELECT id FROM r)`;
+    return sql`(${wholeSql} OR ${placedSql})`;
+  };
 }
 
 /** Groups (by ID) the read constraint hides; null when it hides none. */

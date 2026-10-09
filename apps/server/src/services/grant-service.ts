@@ -32,6 +32,7 @@ import {
   taskGroup,
   user,
 } from '../db/schema/index.ts';
+import type { PriorGroups } from '../events/bus.ts';
 import { AppError, type FieldError } from '../lib/errors.ts';
 import {
   type Actor,
@@ -135,7 +136,11 @@ export interface StreamAccess {
   sessionId: string;
   isValid: () => boolean;
   /** The keys of an invalidation the grant may receive (orgs, tasks and scopes it reaches). */
-  filterKeys?: (org: string | null, keys: readonly (readonly string[])[]) => (readonly string[])[];
+  filterKeys?: (
+    org: string | null,
+    keys: readonly (readonly string[])[],
+    prior?: PriorGroups,
+  ) => (readonly string[])[];
   /** Rewrites or drops (`null`) a `notification` message; absent for the browser. */
   notification?: (data: unknown) => unknown | null;
 }
@@ -294,7 +299,8 @@ export class GrantService {
       isValid: () =>
         this.grantActive(grant.id, userId) &&
         (actor.via === 'pat' || this.sessionActive(userId, sessionId)),
-      filterKeys: (org, keys) => readOnly(this.deps.db, (tx) => visibleKeys(tx, actor, org, keys)),
+      filterKeys: (org, keys, prior) =>
+        readOnly(this.deps.db, (tx) => visibleKeys(tx, actor, org, keys, prior)),
       // The count is recomputed for the orgs the grant reaches; a new notification elsewhere
       // is not news to it (11 §2.3).
       notification: (data) => {
