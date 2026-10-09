@@ -1,8 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FileSecretStore, LayeredSecretStore } from '../src/secrets.ts';
+import { CredentialRemovalError, FileSecretStore, LayeredSecretStore } from '../src/secrets.ts';
+import { FAKE_ENV, fakeApi, ME } from './support/fake-api.ts';
 import { cliHarness } from './support/fake-io.ts';
 
 let dir: string;
@@ -217,4 +218,110 @@ describe('[P1] a stored login is only sent to its own server', () => {
       cli.cleanup();
     }
   });
+});
+
+describe('[P2] a read racing a login returns a settled credential', () => {
+  it('re-reads both stores until they agree (gated keychain read)', async () => {
+    const keychain = fakeKeychain();
+    const time = clock();
+    const file = new FileSecretStore(dir);
+    const setup = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
+    await setup.set('home', 'A', 'https://a.example');
+    time.tick();
+    keychain.state.locked = true;
+    await setup.set('home', 'B', 'https://a.example');
+    keychain.state.locked = false;
+    time.tick();
+
+    // The reader's first keychain read sees A, then waits until released.
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let gated = true;
+    const factory = await keychain.factory();
+    const reader = new LayeredSecretStore(
+      file,
+      async () => (service: string, account: string) => {
+        const entry = factory(service, account);
+        return {
+          ...entry,
+          getPassword: async () => {
+            const value = await entry.getPassword();
+            if (gated) {
+              gated = false;
+              await gate;
+            }
+            return value;
+          },
+        };
+      },
+      vi.fn(),
+      time.now,
+    );
+    const read = reader.get('home');
+    for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
+    // Another process logs in (C to the keychain) and removes the file's B.
+    expect(await setup.set('home', 'C', 'https://a.example')).toBe('keychain');
+    expect(file.entry('home')).toBeUndefined();
+    release();
+    // Without the re-read the reader would pair keychain A with the now empty file.
+    expect(await read).toMatchObject({ token: 'C' });
+  });
+});
+
+describe('[P2] logout never reports success while the login stays usable', () => {
+  const asRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+
+  it.skipIf(asRoot)('the store throws when the file entry cannot be removed', async () => {
+    const file = new FileSecretStore(dir);
+    const store = new LayeredSecretStore(file, async () => null, vi.fn());
+    await store.set('home', 'tok', 'https://a.example');
+    chmodSync(dir, 0o500);
+    try {
+      await expect(store.delete('home')).rejects.toBeInstanceOf(CredentialRemovalError);
+      expect(await store.get('home')).toMatchObject({ token: 'tok' });
+    } finally {
+      chmodSync(dir, 0o700);
+    }
+  });
+
+  it('a durable tombstone is a logout even when the keychain is locked', async () => {
+    const keychain = fakeKeychain();
+    const store = new LayeredSecretStore(new FileSecretStore(dir), keychain.factory, vi.fn());
+    await store.set('home', 'tok', 'https://a.example');
+    keychain.state.locked = true;
+    await store.delete('home');
+    expect(await store.get('home')).toBeUndefined();
+  });
+
+  it.skipIf(asRoot)(
+    'rooster logout exits non-zero with the path and never says signed out',
+    async () => {
+      const api = fakeApi({ 'GET /api/v1/me': ME, 'GET /api/v1/me/grants': [] });
+      const cli = cliHarness({}, { fetch: api.fetch });
+      const configDir = join(cli.home, 'config', 'rooster');
+      try {
+        expect((await cli.run(['config', 'set', 'server', FAKE_ENV.ROOSTER_SERVER])).code).toBe(0);
+        const store = new LayeredSecretStore(
+          new FileSecretStore(configDir),
+          async () => null,
+          () => {},
+        );
+        await store.set('default', 'tok', FAKE_ENV.ROOSTER_SERVER);
+        chmodSync(configDir, 0o500);
+        const out = await cli.run(['logout']);
+        expect(out.code).toBe(1);
+        expect(out.stderr).toContain(
+          `Couldn’t remove the stored credential at ${join(configDir, 'credentials')}`,
+        );
+        expect(out.stderr).not.toContain('Signed out');
+        // Still signed in, and it says so honestly.
+        expect((await cli.run(['whoami', '--quiet'])).stdout).toBe('ada@example.com\n');
+      } finally {
+        chmodSync(configDir, 0o700);
+        cli.cleanup();
+      }
+    },
+  );
 });

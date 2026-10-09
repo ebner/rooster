@@ -263,6 +263,17 @@ describe('[P2] --profile and --org reach rooster __complete', () => {
   });
 });
 
+describe('[P1] PowerShell declines quoting it cannot model', () => {
+  it('completes a plain word or an open single quote only', () => {
+    const ps = completionScript('powershell', entries);
+    expect(ps).toContain(
+      "if ($prefix -match '^[''‘’‚‛][^''‘’‚‛]*$') { $prefix = $prefix.Substring(1) }",
+    );
+    expect(ps).toContain("elseif ($prefix -match '[''‘’‚‛\"“”„$`]') { return }");
+    expect(ps).toContain('$_.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)');
+  });
+});
+
 describe('[P2] PowerShell matching', () => {
   it('is case-insensitive, like PowerShell itself', () => {
     const ps = completionScript('powershell', entries);
@@ -322,7 +333,10 @@ describe('zsh, fish and PowerShell', () => {
  */
 const hasScript = spawnSync('script', ['-V'], { encoding: 'utf8' }).stdout?.includes('util-linux');
 
-function typeAndComplete(parts: string[]): { line: string; args: string[]; files: string[] } {
+function typeAndComplete(
+  parts: string[],
+  options: { run?: boolean } = {},
+): { line: string; args: string[]; files: string[]; ran: string[] } {
   const work = mkdtempSync(join(tmpdir(), 'rooster-readline-'));
   try {
     writeFileSync(join(work, 'rooster.bash'), completionScript('bash', entries));
@@ -330,13 +344,18 @@ function typeAndComplete(parts: string[]): { line: string; args: string[]; files
       join(work, 'setup.bash'),
       [
         'source rooster.bash',
-        `rooster() { if [ "$1" = __complete ]; then printf '%s\\n' "$@" > args.out; printf '%s\\n' 'Some group' "it's" 'a"b$c' 'alpha,b1' 'alpha,b2'; fi; }`,
+        // Server names, hostile ones included; a real run records its argv in ran.out.
+        `rooster() { if [ "$1" = __complete ]; then printf '%s\\n' "$@" > args.out; printf '%s\\n' 'Some group' "it's" 'a"b$c' 'alpha,b1' 'alpha,b2' 'abc$(touch pwned)' 'xyz$(touch pwned)' 'bang!x'; else printf '%s\\n' "$@" > ran.out; fi; }`,
         `bind -x '"\\C-t": printf "%s" "$READLINE_LINE" > line.out'`,
       ].join('\n'),
     );
     const keys = parts.map((part) => `printf '%s\\t' ${shellQuote(part)}; sleep 0.4;`).join(' ');
     // Ctrl-T dumps the line; Ctrl-U clears it so it is never run (Ctrl-C does not reach readline).
-    const driver = `(printf 'source setup.bash\\n'; sleep 0.5; ${keys} printf '\\024'; sleep 0.4; printf '\\025exit\\n') | script -qfc "bash --norc --noprofile -i" /dev/null > /dev/null 2>&1`;
+    // With run, Enter executes the completed line instead.
+    const end = options.run
+      ? `printf '\\n'; sleep 0.4; printf 'exit\\n'`
+      : `printf '\\024'; sleep 0.4; printf '\\025exit\\n'`;
+    const driver = `(printf 'source setup.bash\\n'; sleep 0.5; ${keys} ${end}) | script -qfc "bash --norc --noprofile -i" /dev/null > /dev/null 2>&1`;
     execFileSync('bash', ['-c', driver], { cwd: work, timeout: 20_000 });
     const read = (name: string) => {
       try {
@@ -351,6 +370,9 @@ function typeAndComplete(parts: string[]): { line: string; args: string[]; files
         .split('\n')
         .filter((l) => l !== ''),
       files: readdirSync(work).sort(),
+      ran: read('ran.out')
+        .split('\n')
+        .filter((l) => l !== ''),
     };
   } finally {
     rmSync(work, { recursive: true, force: true });
@@ -394,6 +416,28 @@ describe.skipIf(!hasScript)('bash completion in a real interactive shell (readli
     ]);
     expect(line).toBe(`rooster --profile 'my work' --org=acme ls --group Some\\ group `);
     expect(args).toEqual(['__complete', 'groups', '--profile', 'my work', '--org', 'acme']);
+  });
+
+  it('[P1] declines words whose quoting it cannot model: nothing inserted, nothing run', () => {
+    for (const word of [`'a'"b`, `"a"'b`, `a'b'c`, `$'x`, `$"x`, `"a$b`, '$(touch pwned)']) {
+      const line = `rooster ls --group ${word}`;
+      const result = typeAndComplete([line]);
+      expect(result.line, word).toBe(line);
+      expect(result.files, word).not.toContain('pwned');
+    }
+  });
+
+  it('[P1] a completed hostile name stays one literal argument when the line runs', () => {
+    for (const typed of ['"xy', "'xy", 'xy']) {
+      const result = typeAndComplete([`rooster ls --group ${typed}`], { run: true });
+      expect(result.ran, typed).toEqual(['ls', '--group', 'xyz$(touch pwned)']);
+      expect(result.files, typed).not.toContain('pwned');
+    }
+  });
+
+  it('does not offer a name with ! inside "..." (history expansion)', () => {
+    expect(typeAndComplete(['rooster ls --group "ban']).line).toBe('rooster ls --group "ban');
+    expect(typeAndComplete(['rooster ls --group ban']).line).toBe('rooster ls --group bang\\!x ');
   });
 
   it('never runs anything from a name or the typed word', () => {

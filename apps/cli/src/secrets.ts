@@ -23,6 +23,21 @@ type Entry = Credential | { deleted: true; at: number };
 const isCredential = (entry: Entry | undefined): entry is Credential =>
   entry !== undefined && !('deleted' in entry);
 
+function isTombstoneAtLeast(entry: Entry | undefined, at: number): boolean {
+  return entry !== undefined && 'deleted' in entry && entry.at >= at;
+}
+
+/** A logout that could not make the stored login unusable locally. */
+export class CredentialRemovalError extends Error {
+  constructor(
+    readonly path: string,
+    cause: unknown,
+  ) {
+    super((cause as NodeJS.ErrnoException)?.message ?? String(cause), { cause });
+    this.name = 'CredentialRemovalError';
+  }
+}
+
 /** Where a profile's login is kept (07 §2). */
 export interface SecretStore {
   get(profile: string): Promise<Credential | undefined>;
@@ -31,6 +46,8 @@ export interface SecretStore {
 }
 
 const SERVICE = 'rooster';
+/** Snapshot re-reads before a credential read settles (see `get`). */
+const READ_ATTEMPTS = 5;
 
 interface KeyringEntry {
   getPassword(): Promise<string | undefined>;
@@ -151,14 +168,29 @@ export class LayeredSecretStore implements SecretStore {
    * The newest of keychain and file. Reads never delete: a cleanup here could race with a
    * login in another process and erase it. A stale entry is harmless, since it always loses
    * on time, and the next login or logout replaces or clears it.
+   *
+   * The two stores can't be read atomically, so a login in another process between the two
+   * reads could yield an obsolete pair. Both are read again until two snapshots agree
+   * (bounded); the newest entry of a stable snapshot wins.
    */
   async get(profile: string): Promise<Credential | undefined> {
-    const fromKeychain = await this.keychainEntry(profile);
-    const keychain = fromKeychain === 'unavailable' ? undefined : fromKeychain;
-    const file = this.file.entry(profile);
+    let snapshot = await this.snapshot(profile);
+    for (let attempt = 0; attempt < READ_ATTEMPTS; attempt++) {
+      const again = await this.snapshot(profile);
+      if (again.key === snapshot.key) break;
+      snapshot = again;
+    }
+    const { keychain, file } = snapshot;
     const winner =
       keychain !== undefined && (file === undefined || keychain.at > file.at) ? keychain : file;
     return isCredential(winner) ? winner : undefined;
+  }
+
+  private async snapshot(profile: string) {
+    const fromKeychain = await this.keychainEntry(profile);
+    const keychain = fromKeychain === 'unavailable' ? undefined : fromKeychain;
+    const file = this.file.entry(profile);
+    return { keychain, file, key: JSON.stringify([fromKeychain ?? null, file ?? null]) };
   }
 
   /** A write time newer than anything stored, even with a clock that went backwards. */
@@ -195,12 +227,28 @@ export class LayeredSecretStore implements SecretStore {
     return 'file';
   }
 
+  /**
+   * Logout. Succeeds only when no read can return the login afterwards: the keychain entry
+   * is gone and the file entry removed, or a tombstone that outranks both is written. Else it
+   * throws `CredentialRemovalError` (e.g. a read-only config directory).
+   */
   async delete(profile: string): Promise<void> {
     const at = await this.nextAt(profile);
     const cleared = await this.tryDeleteKeychain(profile);
-    if (cleared) this.tryRemoveFileOlderThan(profile, at);
-    // The keychain may still hold an older login: a tombstone outranks it until it can go.
-    else this.file.put(profile, { deleted: true, at });
+    try {
+      if (cleared) {
+        const entry = this.file.entry(profile);
+        // A newer login from another process is left alone.
+        if (entry !== undefined && entry.at < at) this.file.remove(profile);
+      } else {
+        // The keychain may still hold the login: a tombstone outranks it until it can go.
+        this.file.put(profile, { deleted: true, at });
+      }
+    } catch (error) {
+      // If a tombstone did get written durably, reads return nothing: that's a logout.
+      if (isTombstoneAtLeast(this.file.entry(profile), at)) return;
+      throw new CredentialRemovalError(this.file.path, error);
+    }
   }
 
   /** True when the keychain holds nothing for the profile afterwards. */

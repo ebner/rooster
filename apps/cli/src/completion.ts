@@ -155,15 +155,43 @@ _rooster_word() {
   done
   printf '%s' "$out"
 }
-# A candidate as text to insert, in the quoting the user opened: inside '…' (a ' becomes '\''),
-# inside "…" (\ " $ and backtick escaped), or unquoted with printf %q.
+# How the word being completed is quoted, when that is certain: plain (backslash escapes
+# only), single (an open '... with no other quote) or double (an open "... with no other
+# unescaped quote, $ or backtick). Anything else (mixed or reopened quotes, $'...', $"...", a
+# bare $) fails: inserting into a quoting this can't model could make the line run code.
+_rooster_context() {
+  local s="$1" c bt=$'\x60'
+  if [[ "$s" == "'"* ]]; then
+    [[ "@{s:1}" == *"'"* ]] && return 1
+    printf single
+    return 0
+  fi
+  local kind=plain
+  if [[ "$s" == '"'* ]]; then
+    kind=double
+    s="@{s:1}"
+  fi
+  while [[ -n "$s" ]]; do
+    c="@{s:0:1}"
+    s="@{s:1}"
+    if [[ "$c" == '\' ]]; then
+      s="@{s:1}"
+      continue
+    fi
+    if [[ "$c" == '"' || "$c" == '$' || "$c" == "$bt" ]]; then return 1; fi
+    if [[ "$kind" == plain && "$c" == "'" ]]; then return 1; fi
+  done
+  printf '%s' "$kind"
+}
+# A candidate as text to insert in that context: inside '...' (a ' becomes '\''), inside "..."
+# (\ " $ and backtick escaped), or unquoted with printf %q.
 _rooster_quote() {
-  local v="$1" bs='\' sq="'" dq='"' dl='$' bt=$'\x60'
-  case "$cur" in
-    "'"*)
+  local v="$2" bs='\' sq="'" dq='"' dl='$' bt=$'\x60'
+  case "$1" in
+    single)
       v=@{v//"$sq"/"$sq$bs$sq$sq"}
       printf "'%s'" "$v" ;;
-    '"'*)
+    double)
       v=@{v//"$bs"/"$bs$bs"}
       v=@{v//"$dq"/"$bs$dq"}
       v=@{v//"$dl"/"$bs$dl"}
@@ -176,11 +204,18 @@ _rooster_quote() {
 # shell expand them (compgen -W runs command substitution), and insert them quoted.
 # --profile and --org from the command line are passed on as separate arguments.
 _rooster_dynamic() {
-  local line raw
-  raw="$(_rooster_word "$cur")"
+  local line raw context
   COMPREPLY=()
+  if ! context="$(_rooster_context "$cur")"; then
+    # Declined: no filename fallback either, so nothing is inserted.
+    compopt +o default 2>/dev/null
+    return 0
+  fi
+  raw="$(_rooster_word "$cur")"
   while IFS= read -r line; do
-    [[ "$line" == "$raw"* ]] && COMPREPLY+=("$(_rooster_quote "$line")")
+    # History expansion still acts on ! inside "...", so such a name is not offered there.
+    [[ "$context" == double && "$line" == *'!'* ]] && continue
+    [[ "$line" == "$raw"* ]] && COMPREPLY+=("$(_rooster_quote "$context" "$line")")
   done < <(rooster __complete "$1" "@{globals[@]}" 2>/dev/null)
 }`.replaceAll('@{', '${');
 
@@ -407,7 +442,13 @@ Register-ArgumentCompleter -Native -CommandName rooster -ScriptBlock {
   }
   # Server-provided names are quoted unless plain, so a $(...) inside a tag name never runs.
   # PowerShell also ends single-quoted strings at typographic quotes; its own escaper doubles all.
-  $words | Where-Object { $_.StartsWith($wordToComplete, [System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object {
+  # Only a plain word or an open single-quoted one ('Som) is completed; any other quoting
+  # (double quotes, mixed or closed quotes, $, backtick) is declined. The inserted value
+  # replaces the whole word and is quoted on its own.
+  $prefix = $wordToComplete
+  if ($prefix -match '^[''‘’‚‛][^''‘’‚‛]*$') { $prefix = $prefix.Substring(1) }
+  elseif ($prefix -match '[''‘’‚‛"“”„$\`]') { return }
+  $words | Where-Object { $_.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object {
     $text = if ($_ -match '^[\\w./:@#+-]+$') { $_ } else {
       "'" + [System.Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($_) + "'"
     }

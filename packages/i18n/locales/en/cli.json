@@ -322,7 +322,8 @@
     "notLoggedIn": "Profile {profile} isn’t signed in.",
     "patKept": "The personal access token {prefix}… stays valid; revoke it with rooster token revoke.",
     "revokeFailed": "Couldn’t revoke the session on the server; the local credential is removed anyway.",
-    "done": "Signed out of profile {profile}."
+    "done": "Signed out of profile {profile}.",
+    "removeFailed": "Couldn’t remove the stored credential at {path}: {reason}. It may still be usable from this computer."
   },
   "whoami": {
     "server": "Server",

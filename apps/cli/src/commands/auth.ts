@@ -9,6 +9,7 @@ import { openableUrl } from '../launch.ts';
 import { clean, paint } from '../output/color.ts';
 import { styles } from '../output/theme.ts';
 import { type Runtime, rt } from '../runtime.ts';
+import { CredentialRemovalError } from '../secrets.ts';
 import { CLI_VERSION, majorOf } from '../version.ts';
 import { multi } from './util.ts';
 
@@ -247,7 +248,17 @@ export const logoutCommand = defineCommand({
         out.warn(t('logout.revokeFailed'));
       }
     }
-    await runtime.secrets.delete(runtime.profileName);
+    try {
+      await runtime.secrets.delete(runtime.profileName);
+    } catch (error) {
+      if (error instanceof CredentialRemovalError) {
+        throw new CliError(
+          EXIT.unexpected,
+          t('logout.removeFailed', { path: error.path, reason: error.message }),
+        );
+      }
+      throw error;
+    }
     runtime.config.updateProfile(runtime.profileName, ({ user: _user, ...profile }) => profile);
     runtime.state.forgetProfile(runtime.profileName);
     if (out.json) out.data({ profile: runtime.profileName, revoked });

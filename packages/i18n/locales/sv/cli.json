@@ -322,7 +322,8 @@
     "notLoggedIn": "Profilen {profile} är inte inloggad.",
     "patKept": "Den personliga åtkomsttoken {prefix}… gäller fortfarande; återkalla den med rooster token revoke.",
     "revokeFailed": "Kunde inte avsluta sessionen på servern; den lokala inloggningen tas bort ändå.",
-    "done": "Utloggad från profilen {profile}."
+    "done": "Utloggad från profilen {profile}.",
+    "removeFailed": "Kunde inte ta bort den sparade inloggningen i {path}: {reason}. Den kan fortfarande gå att använda från den här datorn."
   },
   "whoami": {
     "server": "Server",
