@@ -1205,7 +1205,7 @@ export interface paths {
         };
         /**
          * My notifications across orgs, newest first, with the unread count
-         * @description `unread=true` lists unread ones only. Paged with `limit` and `cursor`; `unreadCount` counts every unread notification on every page (the bell badge). For a PAT or CLI device (`notifications:read`), both the items and `unreadCount` cover only the orgs its grant reaches, so a page may hold fewer than `limit` items.
+         * @description `unread=true` lists unread ones only. Paged with `limit` and `cursor`; `unreadCount` counts every unread notification on every page (the bell badge). For a PAT or CLI device (`notifications:read`), both the items and `unreadCount` cover only notifications whose org the grant reaches and whose task it may read, so a page may hold fewer than `limit` items. Marking read or unread under a grant touches only those notifications.
          */
         get: operations["listNotifications"];
         put?: never;
@@ -3747,6 +3747,8 @@ export interface components {
                 auth: string;
             };
             userAgent?: string;
+            /** Format: uri */
+            renewsEndpoint?: string;
         };
     };
     responses: never;

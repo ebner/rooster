@@ -1,5 +1,4 @@
 import { uuidv7 } from '@rooster/core/ids';
-import { isAllowedPushEndpoint } from '@rooster/core/push-hosts';
 import type {
   PushPayload,
   PushSubscriptionCreate,
@@ -19,6 +18,7 @@ import { loadDeliverable } from '../services/deliverable.ts';
 import { requireBrowserSession } from '../services/grant-access.ts';
 import { claimJobRun, dueSlot, jobScope } from '../services/job-runs.ts';
 import { loadRecipient, type Recipient, recipientsWithPref } from '../services/pref-store.ts';
+import { canonicalPushEndpoint } from './endpoint.ts';
 import {
   generateVapidKeys,
   type PushSender,
@@ -28,6 +28,12 @@ import {
 import { ensureVapidKeys, type VapidKeys, writeKeys } from './vapid.ts';
 
 type SubscriptionRow = typeof pushSubscription.$inferSelect;
+
+/** Which device a queued send is for, and on whose behalf; re-checked before sending. */
+interface SubscriptionRef {
+  id: string;
+  userId: string;
+}
 
 /** Retention and priority at the push service, by kind. */
 const DELIVERY: Record<PushPayload['kind'], Pick<PushSendOptions, 'ttl' | 'urgency'>> = {
@@ -117,8 +123,14 @@ export class PushService {
   }
 
   /**
-   * Upserts by endpoint (ADR 0033): re-subscribing a browser updates its keys and owner, so a
-   * shared computer's subscription follows whoever signed in last.
+   * The user-gesture path (Settings): upserts by endpoint (ADR 0033), so re-subscribing a
+   * browser updates its keys and owner, and a shared computer's subscription follows whoever
+   * subscribed on it last.
+   *
+   * With `renewsEndpoint` it is a renewal from the service worker (`pushsubscriptionchange`,
+   * no gesture). It only replaces a live subscription of the same user, in place, so a device
+   * the user removed (from any device) never comes back by itself: `410 push_gone`. It never
+   * takes over an endpoint another user holds (`409 push_endpoint_taken`).
    */
   subscribe(
     actor: Actor,
@@ -134,6 +146,17 @@ export class PushService {
         auth: input.keys.auth,
         userAgent,
       };
+      for (const path of ['endpoint', 'renewsEndpoint'] as const) {
+        const raw = input[path];
+        if (raw !== undefined && canonicalPushEndpoint(raw) !== raw) {
+          throw new AppError('validation_failed', 422, 'Not a canonical push endpoint.', [
+            { path, message: 'Not a canonical URL on a known Web Push service' },
+          ]);
+        }
+      }
+      if (input.renewsEndpoint !== undefined) {
+        return this.renew(tx, actor, input.renewsEndpoint, input.endpoint, values);
+      }
       const row = tx
         .insert(pushSubscription)
         .values({
@@ -148,6 +171,55 @@ export class PushService {
         .get();
       return toInfo(row);
     });
+  }
+
+  private renew(
+    tx: Tx,
+    actor: Actor,
+    oldEndpoint: string,
+    endpoint: string,
+    values: { userId: string; p256dh: string; auth: string; userAgent: string | null },
+  ): PushSubscriptionInfo {
+    const old = tx
+      .select()
+      .from(pushSubscription)
+      .where(
+        and(eq(pushSubscription.endpoint, oldEndpoint), eq(pushSubscription.userId, actor.userId)),
+      )
+      .get();
+    if (old === undefined) {
+      throw new AppError('push_gone', 410, 'This device is no longer subscribed; subscribe again.');
+    }
+    const holder = tx
+      .select()
+      .from(pushSubscription)
+      .where(eq(pushSubscription.endpoint, endpoint))
+      .get();
+    if (holder !== undefined && holder.id !== old.id) {
+      if (holder.userId !== actor.userId) {
+        throw new AppError(
+          'push_endpoint_taken',
+          409,
+          'This push endpoint belongs to another account; subscribe again from Settings.',
+        );
+      }
+      // Already subscribed under the new endpoint: the old row is simply redundant.
+      tx.delete(pushSubscription).where(eq(pushSubscription.id, old.id)).run();
+      const kept = tx
+        .update(pushSubscription)
+        .set(values)
+        .where(eq(pushSubscription.id, holder.id))
+        .returning()
+        .get();
+      return toInfo(kept ?? holder);
+    }
+    const row = tx
+      .update(pushSubscription)
+      .set({ ...values, endpoint })
+      .where(eq(pushSubscription.id, old.id))
+      .returning()
+      .get();
+    return toInfo(row ?? old);
   }
 
   unsubscribe(actor: Actor, id: string): void {
@@ -177,9 +249,10 @@ export class PushService {
     );
     if (row === undefined) throw notFound();
     const recipient = readOnly(this.deps.db, (tx) => loadRecipient(tx, actor.userId));
+    const target: SubscriptionRef = { id: row.id, userId: actor.userId };
     const t = mailT(recipient?.locale ?? 'en');
     const outcome = await this.queue.run('push-test', () =>
-      this.deliver(row, {
+      this.deliver(target, {
         kind: 'test',
         title: t('push.testTitle'),
         body: t('push.testBody'),
@@ -267,9 +340,9 @@ export class PushService {
     }
   }
 
-  private subscriptionsOf(tx: Tx, userId: string): SubscriptionRow[] {
+  private subscriptionsOf(tx: Tx, userId: string): SubscriptionRef[] {
     return tx
-      .select()
+      .select({ id: pushSubscription.id, userId: pushSubscription.userId })
       .from(pushSubscription)
       .where(eq(pushSubscription.userId, userId))
       .orderBy(asc(pushSubscription.createdAt))
@@ -277,14 +350,25 @@ export class PushService {
   }
 
   /**
-   * One message to one device. The endpoint is checked again right before sending (rows
-   * written before the check existed, or by a future code path, must never reach an internal
-   * host; 04 §4.11): a failing one is deleted unsent. 404 and 410 delete the subscription;
-   * other failures are logged and never thrown.
+   * One message to one device. The subscription is read again right before sending: a send
+   * queued for one user must not reach a device that was removed meanwhile or now belongs to
+   * someone else (`subscribe` moves an endpoint to whoever subscribed it last). Only the
+   * canonical endpoint goes to the transport (`canonicalPushEndpoint`, 04 §4.11); a stored
+   * one that is not allowed is deleted unsent. 404 and 410 delete the subscription; other
+   * failures are logged and never thrown.
    */
-  private async deliver(row: SubscriptionRow, payload: PushPayload): Promise<Outcome> {
-    const log = this.deps.logger.child({ subscription: row.id, kind: payload.kind });
-    if (!isAllowedPushEndpoint(row.endpoint)) {
+  private async deliver(target: SubscriptionRef, payload: PushPayload): Promise<Outcome> {
+    const log = this.deps.logger.child({ subscription: target.id, kind: payload.kind });
+    const row = readOnly(this.deps.db, (tx) =>
+      tx
+        .select()
+        .from(pushSubscription)
+        .where(and(eq(pushSubscription.id, target.id), eq(pushSubscription.userId, target.userId)))
+        .get(),
+    );
+    if (row === undefined) return 'gone';
+    const endpoint = canonicalPushEndpoint(row.endpoint);
+    if (endpoint === null) {
       this.remove(row.id);
       log.warn('push subscription with a disallowed endpoint deleted');
       return 'gone';
@@ -296,7 +380,7 @@ export class PushService {
     };
     try {
       await this.sender(
-        { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },
+        { endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },
         JSON.stringify(message),
         { ...DELIVERY[payload.kind], vapid: this.vapid() },
       );
@@ -343,7 +427,7 @@ export class PushService {
   async runDueReminders(): Promise<number> {
     const now = this.deps.clock();
     const due = immediate(this.deps.db, (tx) => {
-      const out: { recipient: Recipient; payload: PushPayload; rows: SubscriptionRow[] }[] = [];
+      const out: { recipient: Recipient; payload: PushPayload; rows: SubscriptionRef[] }[] = [];
       for (const recipient of recipientsWithPref(tx, 'due_reminder', 'push')) {
         const rows = this.subscriptionsOf(tx, recipient.id);
         if (rows.length === 0) continue;
@@ -351,7 +435,11 @@ export class PushService {
           const slot = dueSlot(now, recipient.timezone, recipient.prefs.reminderTime);
           if (slot === null) continue;
           if (!claimJobRun(tx, DUE_REMINDER_JOB, jobScope(recipient.id, slot.date), now)) continue;
-          const tasks = tasksDueByToday(tx, recipient.id, dueContext(recipient.timezone, now));
+          const tasks = tasksDueByToday(
+            tx,
+            recipient.id,
+            dueContext(recipient.timezone, now, slot.date),
+          );
           if (tasks.length === 0) continue;
           const t = mailT(recipient.locale);
           const titles = tasks.slice(0, REMINDER_TITLES).map((task) => task.title);

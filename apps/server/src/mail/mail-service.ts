@@ -367,7 +367,7 @@ export class MailService {
           const scope = jobScope(recipient.id, slot.date);
           const since = lastUserRun(tx, DIGEST_JOB, recipient.id, scope) ?? now - DAY_MS;
           if (!claimJobRun(tx, DIGEST_JOB, scope, now)) continue;
-          const digest = this.digestOf(tx, recipient, now, since);
+          const digest = this.digestOf(tx, recipient, now, since, slot.date);
           if (digest === null) continue;
           out.push({ recipient, date: slot.date, ...digest });
         } catch (err) {
@@ -393,8 +393,10 @@ export class MailService {
     recipient: Recipient,
     now: number,
     since: number,
+    date: string,
   ): { sections: DigestSection[]; todayPath: string } | null {
-    const ctx = dueContext(recipient.timezone, now);
+    // The day the digest is for (its claimed slot), also when it is caught up after midnight.
+    const ctx = dueContext(recipient.timezone, now, date);
     const today = tasksDueByToday(tx, recipient.id, ctx);
     const { overdue, dueToday } = splitOverdue(today, ctx);
     const listed = new Set(today.map((t) => t.id));

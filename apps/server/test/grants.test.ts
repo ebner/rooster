@@ -1,125 +1,22 @@
 // WP 8.2: grants, PATs and CLI devices (11 §2, 04 §4.3–4.4, 06 §2.1). AC-8.2, AC-8.3, AC-8.5.
 import { defaultKeyHasher } from '@better-auth/api-key';
-import type { GrantConstraints, GrantScope } from '@rooster/core/grants';
 import type { Activity, Grant, Me, MyList, Task, TokenCreated } from '@rooster/core/schemas';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { DEVICE_FLOW_PATHS } from '../src/auth/mount.ts';
 import { accessGrant, apikey, session } from '../src/db/schema/index.ts';
 import { deviceLabel, GRANT_TOUCH_MS } from '../src/services/grant-service.ts';
+import {
+  ALL,
+  bearer,
+  deviceCode,
+  deviceLogin,
+  pat,
+  personalOrgId,
+  pollToken,
+} from './grant-helpers.ts';
 import { BASE_URL, TEST_ENV } from './helpers.ts';
-import { type Caller, groupNamed, inboxOf, type ListCtx, listCtx } from './list-helpers.ts';
-
-const ALL: GrantScope[] = [
-  'tasks:read',
-  'tasks:write',
-  'comments:write',
-  'tasks:assign',
-  'groups:write',
-  'tasks:delete',
-  'notifications:read',
-];
-
-/** A request with `Authorization: Bearer <token>` (no cookie, no Origin: not a browser). */
-function bearer(ctx: ListCtx, token: string) {
-  const call = (
-    method: string,
-    path: string,
-    body?: unknown,
-    headers: Record<string, string> = {},
-  ) =>
-    ctx.app.request(path, {
-      method,
-      headers: {
-        authorization: `Bearer ${token}`,
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-        ...headers,
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-  const ok = async <T>(method: string, path: string, body?: unknown, status = 200): Promise<T> => {
-    const res = await call(method, path, body);
-    const text = await res.text();
-    expect(res.status, `${method} ${path}: ${text}`).toBe(status);
-    return (text === '' ? undefined : JSON.parse(text)) as T;
-  };
-  const problem = async (method: string, path: string, body: unknown, status: number) => {
-    const res = await call(method, path, body);
-    expect(res.status, await res.clone().text()).toBe(status);
-    return (await res.json()) as { code: string; detail: string };
-  };
-  return { call, ok, problem };
-}
-
-async function pat(
-  owner: Caller,
-  scopes: GrantScope[],
-  constraints: GrantConstraints = { orgs: 'all' },
-  extra: { expiresInDays?: number } = {},
-): Promise<TokenCreated> {
-  return owner.ok<TokenCreated>(
-    'POST',
-    '/api/v1/me/tokens',
-    { name: 'Script', scopes, constraints, ...extra },
-    201,
-  );
-}
-
-async function personalOrgId(c: Caller): Promise<string> {
-  const me = await c.ok<Me>('GET', '/api/v1/me');
-  const org = me.orgs.find((o) => o.isPersonal);
-  if (org === undefined) throw new Error('no personal org');
-  return org.id;
-}
-
-/** The CLI side of RFC 8628: request a code, then poll. */
-async function deviceCode(
-  ctx: ListCtx,
-  scope?: string,
-  userAgent = 'rooster-cli/1.0.0 (linux; x64; laptop)',
-) {
-  const res = await ctx.app.request('/api/auth/device/code', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'user-agent': userAgent },
-    body: JSON.stringify({ client_id: 'rooster-cli', ...(scope === undefined ? {} : { scope }) }),
-  });
-  expect(res.status, await res.clone().text()).toBe(200);
-  return (await res.json()) as {
-    device_code: string;
-    user_code: string;
-    verification_uri: string;
-    verification_uri_complete: string;
-    expires_in: number;
-    interval: number;
-  };
-}
-
-async function pollToken(ctx: ListCtx, code: string) {
-  const res = await ctx.app.request('/api/auth/device/token', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-      device_code: code,
-      client_id: 'rooster-cli',
-    }),
-  });
-  return { status: res.status, body: (await res.json()) as Record<string, string> };
-}
-
-/** Logs a CLI device in with the given approval; returns the bearer token and the grant. */
-async function deviceLogin(
-  ctx: ListCtx,
-  owner: Caller,
-  approval: { scopes: GrantScope[]; constraints: GrantConstraints; label?: string },
-) {
-  const code = await deviceCode(ctx, ALL.join(' '));
-  const grant = await owner.ok<Grant>('POST', `/api/v1/device/${code.user_code}/approve`, approval);
-  // The plugin enforces the 5 s polling interval only after a first poll.
-  const token = await pollToken(ctx, code.device_code);
-  expect(token.status, JSON.stringify(token.body)).toBe(200);
-  return { token: token.body.access_token as string, grant, scope: token.body.scope };
-}
+import { groupNamed, inboxOf, listCtx } from './list-helpers.ts';
 
 describe('PATs (AC-8.3, 04 §4.4)', () => {
   it('AC-8.3 a read-only PAT can read but gets 403 forbidden_scope on a write', async () => {
@@ -794,14 +691,16 @@ describe('SSE with a grant', () => {
     );
     expect(actor?.grant?.id).toBe(grant.id);
     const access = ctx.app.services.grants.streamAccess(actor ?? owner.actor);
-    expect(access.accepts?.(orgId)).toBe(true);
-    expect(access.accepts?.('0199a1b2-0000-7000-8000-000000000999')).toBe(false);
-    expect(access.accepts?.(null)).toBe(true);
+    expect(access.filterKeys?.(orgId, [['my-list', orgId]])).toEqual([['my-list', orgId]]);
+    expect(access.filterKeys?.('0199a1b2-0000-7000-8000-000000000999', [['my-list', 'x']])).toEqual(
+      [],
+    );
+    expect(access.filterKeys?.(null, [['me']])).toEqual([['me']]);
     expect(access.notification?.({ unreadCount: 1, notification: null })).toBeNull();
     expect(access.isValid()).toBe(true);
     await owner.ok('DELETE', `/api/v1/me/grants/${grant.id}`, undefined, 204);
     expect(access.isValid()).toBe(false);
-    expect(ctx.app.services.grants.streamAccess(owner.actor).accepts).toBeUndefined();
+    expect(ctx.app.services.grants.streamAccess(owner.actor).filterKeys).toBeUndefined();
   });
 });
 

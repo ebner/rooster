@@ -38,8 +38,8 @@ export interface SseOpen {
    * ends no event reports, such as a session that simply expired.
    */
   isValid: () => boolean;
-  /** A grant's stream (P8): invalidations of orgs it does not reach are dropped. */
-  accepts?: (org: string | null) => boolean;
+  /** A grant's stream (P8): the keys of an invalidation it may receive (possibly none). */
+  filterKeys?: (org: string | null, keys: readonly QueryKey[]) => readonly QueryKey[];
   /**
    * A grant's stream (P8): rewrites a `notification` message for what the grant may see, or
    * drops it (`null`).
@@ -225,7 +225,11 @@ export class SseHub {
     origin: string | null,
     keys: readonly QueryKey[],
   ): void {
-    if (conn.closed || keys.length === 0 || conn.accepts?.(org) === false) return;
+    if (conn.closed || keys.length === 0) return;
+    if (conn.filterKeys !== undefined) {
+      keys = conn.filterKeys(org, keys);
+      if (keys.length === 0) return;
+    }
     const slot = JSON.stringify([org, origin]);
     let bucket = conn.pending.get(slot);
     if (bucket === undefined) {

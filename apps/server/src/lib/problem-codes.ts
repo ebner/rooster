@@ -33,6 +33,15 @@ export const PROBLEM_CODES = {
     detail: 'The personal organisation cannot be shared or changed.',
   },
   slug_taken: { status: 409, detail: 'Slug in use.' },
+  idempotency_stale: {
+    status: 409,
+    detail:
+      'The token’s access changed since this request was first sent; retry with a new Idempotency-Key.',
+  },
+  token_shown_once: {
+    status: 409,
+    detail: 'The token was already shown once and cannot be shown again; create another one.',
+  },
   ambiguous_ref: {
     status: 409,
     detail: 'The ref 0192f3a0 matches more than one task; use more characters.',

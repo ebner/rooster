@@ -30,8 +30,12 @@ export function isAllowedPushEndpoint(
   } catch {
     return false;
   }
+  // Only the canonical form: other URL parsers (web-push uses the legacy url.parse) may read a
+  // percent-encoded or otherwise non-canonical host differently and connect elsewhere.
+  if (url.href !== endpoint) return false;
   if (url.protocol !== 'https:' || url.port !== '' || url.username || url.password) return false;
-  const host = url.hostname.toLowerCase().replace(/\.$/, '');
-  if (host.startsWith('[') || IPV4.test(host)) return false;
+  const host = url.hostname;
+  // Push services never use a trailing-dot or IP-literal host.
+  if (host.endsWith('.') || host.startsWith('[') || IPV4.test(host)) return false;
   return hosts.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
 }

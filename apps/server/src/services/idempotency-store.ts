@@ -10,8 +10,17 @@ export interface StoredResponse {
   /** Hash of method, path and body of the original request. */
   fingerprint: string;
   contentType: string | null;
-  /** The response body as sent; empty for 204. */
+  /** The response body as sent; empty for 204 and for a secret. */
   body: string;
+  /**
+   * The credential that made the request: `session` (the browser) or `grant:<id>`. A replay
+   * must come from the same credential.
+   */
+  credential: string;
+  /** The grant's `updated_at` then; a replay after its access changed is refused. */
+  grantVersion: number | null;
+  /** The body held a secret (a new PAT) and was not stored. */
+  secret: boolean;
 }
 
 /**
@@ -23,13 +32,24 @@ interface Envelope {
   fp: string;
   ct: string | null;
   body: string;
+  /** Absent in rows from before Phase 8: those all came from browser sessions. */
+  cred?: string;
+  gv?: number | null;
+  secret?: boolean;
 }
 
 function parseEnvelope(text: string): Envelope | null {
   try {
     const value = JSON.parse(text) as Partial<Envelope>;
     if (typeof value.fp !== 'string' || typeof value.body !== 'string') return null;
-    return { fp: value.fp, ct: typeof value.ct === 'string' ? value.ct : null, body: value.body };
+    return {
+      fp: value.fp,
+      ct: typeof value.ct === 'string' ? value.ct : null,
+      body: value.body,
+      cred: typeof value.cred === 'string' ? value.cred : 'session',
+      gv: typeof value.gv === 'number' ? value.gv : null,
+      secret: value.secret === true,
+    };
   } catch {
     return null;
   }
@@ -75,6 +95,9 @@ export class IdempotencyStore {
       fingerprint: envelope.fp,
       contentType: envelope.ct,
       body: envelope.body,
+      credential: envelope.cred ?? 'session',
+      grantVersion: envelope.gv ?? null,
+      secret: envelope.secret === true,
     };
   }
 
@@ -82,7 +105,11 @@ export class IdempotencyStore {
     const envelope: Envelope = {
       fp: response.fingerprint,
       ct: response.contentType,
-      body: response.body,
+      // Secrets are never persisted (a PAT in plaintext).
+      body: response.secret ? '' : response.body,
+      cred: response.credential,
+      gv: response.grantVersion,
+      ...(response.secret ? { secret: true } : {}),
     };
     const values = {
       opId,

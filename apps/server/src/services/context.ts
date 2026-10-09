@@ -15,6 +15,8 @@ export interface ActorGrant {
   /** As stored; check with `hasScope`, which applies the implications. */
   scopes: readonly GrantScope[];
   constraints: GrantConstraints;
+  /** `updated_at` of the grant: changes whenever its access is edited. */
+  updatedAt: number;
 }
 
 /** How the request authenticated: the browser cookie, a session token as bearer, or a PAT. */

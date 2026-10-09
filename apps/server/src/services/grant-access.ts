@@ -201,6 +201,122 @@ export function authorizeGroupTarget(
   throw outsideGrant(tx, actor.userId, grant, orgId, where);
 }
 
+/**
+ * Whether the grant may see a notification (or its SSE preview): its org is reached and its
+ * task, if any, is readable. A task that is gone counts by its org alone.
+ */
+export function canReadNotification(
+  tx: Tx,
+  actor: Actor,
+  item: { orgId: string; taskId: string | null },
+): boolean {
+  if (actor.grant === null) return true;
+  if (!grantsOrg(actor.grant.constraints, item.orgId)) return false;
+  if (item.taskId === null || canRead(actor.grant.constraints, item.orgId, null)) return true;
+  const row = tx
+    .select({ id: task.id, parentId: task.parentId, orgId: task.orgId, title: task.title })
+    .from(task)
+    .where(eq(task.id, item.taskId))
+    .get();
+  return row === undefined || canReadTask(tx, actor, row);
+}
+
+/**
+ * The SSE query keys a grant's stream may receive (11 §2.3): nothing of an org it does not
+ * reach; task-level keys only with `tasks:read` and for readable tasks; the inbox only with
+ * `notifications:read`; org administration never.
+ */
+export function visibleKeys(
+  tx: Tx,
+  actor: Actor,
+  org: string | null,
+  keys: readonly (readonly string[])[],
+): (readonly string[])[] {
+  const grant = actor.grant;
+  if (grant === null) return [...keys];
+  if (org !== null && !grantsOrg(grant.constraints, org)) return [];
+  const reads = hasScope(grant.scopes, 'tasks:read');
+  return keys.filter((key) => {
+    switch (key[0]) {
+      case 'task':
+      case 'activity': {
+        const id = key[1];
+        if (!reads) return false;
+        if (id === undefined) return true;
+        const row = tx
+          .select({ id: task.id, parentId: task.parentId, orgId: task.orgId, title: task.title })
+          .from(task)
+          .where(eq(task.id, id))
+          .get();
+        return row !== undefined && canReadTask(tx, actor, row);
+      }
+      case 'my-list':
+      case 'everyone':
+      case 'tags':
+      case 'trash':
+      case 'org-members':
+        return reads;
+      case 'notifications':
+        return hasScope(grant.scopes, 'notifications:read');
+      case 'org-invites':
+        return false;
+      default:
+        return true;
+    }
+  });
+}
+
+/** The direct children of a task (deleted ones too). */
+export function childIds(tx: Tx, taskId: string): string[] {
+  return tx
+    .select({ id: task.id })
+    .from(task)
+    .where(eq(task.parentId, taskId))
+    .all()
+    .map((r) => r.id);
+}
+
+/** Each task's grant group (see `GrantGroups`) at this moment. */
+export function groupSnapshot(
+  tx: Tx,
+  userId: string,
+  ids: readonly string[],
+): Map<string, string | null> {
+  const out = new Map<string, string | null>();
+  for (const id of ids) {
+    const row = tx
+      .select({ id: task.id, parentId: task.parentId })
+      .from(task)
+      .where(eq(task.id, id))
+      .get();
+    if (row !== undefined) out.set(id, grantGroupOf(tx, userId, row));
+  }
+  return out;
+}
+
+/**
+ * After a change that reconciles placements: every task in `before` whose group changed must
+ * leave a writable group for a writable one, else `403 outside_grant` (rolling the change
+ * back). `leaving` may leave the list altogether (assigned to someone else).
+ */
+export function authorizeGroupMoves(
+  tx: Tx,
+  actor: Actor,
+  orgId: string,
+  before: ReadonlyMap<string, string | null>,
+  options: { leaving?: string | null } = {},
+): void {
+  if (actor.grant === null) return;
+  const after = groupSnapshot(tx, actor.userId, [...before.keys()]);
+  for (const [id, from] of before) {
+    const to = after.get(id) ?? null;
+    if (to === from) continue;
+    if (id === options.leaving && to === null) continue;
+    authorizeGroupTarget(tx, actor, orgId, from);
+    authorizeGroupTarget(tx, actor, orgId, to);
+  }
+}
+
 /** A group the grant may read (`404` otherwise, like someone else's group). */
 export function authorizeGroupRead(actor: Actor, orgId: string, groupId: string): void {
   const grant = actor.grant;

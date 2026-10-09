@@ -1,6 +1,6 @@
-import { type DueContext, diffDays, todayIn } from '@rooster/core/dates';
+import { addDays, type DueContext, diffDays, todayIn } from '@rooster/core/dates';
 import { inSmartView } from '@rooster/core/views';
-import { and, asc, eq, gt, isNotNull, isNull, lte } from 'drizzle-orm';
+import { and, asc, eq, gt, isNotNull, isNull, lte, or } from 'drizzle-orm';
 import { member, organization, placement, task, taskGroup } from '../db/schema/index.ts';
 import type { Tx } from './context.ts';
 import { listMemberships, type Membership } from './org-access.ts';
@@ -42,8 +42,12 @@ function byDue(a: AssignedTask, b: AssignedTask): number {
   return a.id < b.id ? -1 : 1;
 }
 
-export function dueContext(timezone: string, now: number): DueContext {
-  return { today: todayIn(timezone, now), nowMs: now, viewerTz: timezone };
+/**
+ * The viewer's due context. `today` overrides the local date for a scheduled send that is
+ * about a given day: a 23:55 digest caught up at 00:02 still reports on the day it was for.
+ */
+export function dueContext(timezone: string, now: number, today?: string): DueContext {
+  return { today: today ?? todayIn(timezone, now), nowMs: now, viewerTz: timezone };
 }
 
 /**
@@ -63,8 +67,13 @@ export function tasksDueByToday(tx: Tx, userId: string, ctx: DueContext): Assign
         isNull(task.completedAt),
         isNull(organization.deletedAt),
         isNotNull(task.dueDate),
-        // Floating dates compare as strings (05 §1); `inSmartView` settles timed dues.
-        lte(task.dueDate, ctx.today),
+        // Floating dates compare as strings (05 §1). A timed due set in a zone up to 26 hours
+        // ahead of the viewer can be past while dated two days after the viewer's today, so
+        // those are candidates too; `inSmartView` settles them.
+        or(
+          lte(task.dueDate, ctx.today),
+          and(isNotNull(task.dueTime), lte(task.dueDate, addDays(ctx.today, 2))),
+        ),
       ),
     )
     .all()

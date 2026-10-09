@@ -1,5 +1,12 @@
 import { and, asc, eq, inArray, isNotNull, lt } from 'drizzle-orm';
-import { comment, placement, task, taskGroup, verification } from '../db/schema/index.ts';
+import {
+  comment,
+  deviceCode,
+  placement,
+  task,
+  taskGroup,
+  verification,
+} from '../db/schema/index.ts';
 import { immediate, type ServiceDeps } from './context.ts';
 import type { IdempotencyStore } from './idempotency-store.ts';
 import { purgeJobRuns } from './job-runs.ts';
@@ -19,6 +26,8 @@ export interface PurgeReport {
   verifications: number;
   /** `job_run` claims older than 30 days (P7). */
   jobRuns: number;
+  /** Expired CLI device codes, whatever their state (P8). */
+  deviceCodes: number;
 }
 
 /**
@@ -90,6 +99,11 @@ export class RetentionService {
       .delete(verification)
       .where(lt(verification.expiresAt, new Date(now)))
       .run().changes;
-    return { ...report, idempotency: this.idempotency.purge(now), verifications };
+    // Codes live 10 minutes, so every row over a day old, whatever its state, is expired too.
+    const deviceCodes = this.deps.db.orm
+      .delete(deviceCode)
+      .where(lt(deviceCode.expiresAt, new Date(now)))
+      .run().changes;
+    return { ...report, idempotency: this.idempotency.purge(now), verifications, deviceCodes };
   }
 }

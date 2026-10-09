@@ -15,19 +15,44 @@ import { idSchema, timestampSchema } from './common.ts';
 export const vapidPublicKeySchema = z.object({ publicKey: z.string().min(1) });
 
 /**
+ * A push endpoint as the server stores it: https on a known push service (`push-hosts.ts`, the
+ * SSRF guard) and already in canonical WHATWG form. Browsers send `PushSubscription.endpoint`
+ * serialised, so a real endpoint always is; a percent-encoded or uppercase host is refused,
+ * because another URL parser (the push transport's) could read it as a different host.
+ */
+const pushEndpointSchema = z
+  .url({ protocol: /^https$/ })
+  .max(2048)
+  .refine((u) => isAllowedPushEndpoint(u), { error: 'Not a known Web Push service' })
+  .refine(
+    (u) => {
+      try {
+        return new URL(u).href === u;
+      } catch {
+        return false;
+      }
+    },
+    { error: 'Not a canonical URL' },
+  );
+
+/**
  * POST /me/push-subscriptions: `PushSubscription.toJSON()` from the browser plus a device
- * label. Upserts by `endpoint` (re-subscribing the same browser updates its keys and owner).
- * The endpoint must be on a known push service (`push-hosts.ts`, SSRF guard); the server
- * checks again with `isAllowedPushEndpoint` before every send.
+ * label. Upserts by `endpoint` (re-subscribing the same browser updates its keys and owner):
+ * that is the user-gesture path (Settings). The server checks the endpoint again before every
+ * send.
+ *
+ * With `renewsEndpoint` it is a renewal (the service worker's `pushsubscriptionchange`, no
+ * gesture): accepted only while that old endpoint is a live subscription of the same user,
+ * which it then replaces in place (same id). A device removed meanwhile, or someone else's,
+ * is `410 push_gone`; a new endpoint that belongs to another user is `409 push_endpoint_taken`.
  */
 export const pushSubscriptionCreateSchema = z.object({
-  endpoint: z
-    .url({ protocol: /^https$/ })
-    .max(2048)
-    .refine((u) => isAllowedPushEndpoint(u), { error: 'Not a known Web Push service' }),
+  endpoint: pushEndpointSchema,
   keys: z.object({ p256dh: z.string().min(1).max(256), auth: z.string().min(1).max(64) }),
   /** A readable device label, e.g. "Chrome on Android"; the server falls back to its UA. */
   userAgent: z.string().max(256).optional(),
+  /** The endpoint this subscription replaces (`pushsubscriptionchange`'s `oldSubscription`). */
+  renewsEndpoint: pushEndpointSchema.optional(),
 });
 
 /** One of the user's subscribed devices (Settings → Notifications). */

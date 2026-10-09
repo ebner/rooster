@@ -5,7 +5,6 @@ import {
   GRANT_SCOPES,
   type GrantConstraints,
   type GrantScope,
-  grantsOrg,
   hasScope,
   isGrantScope,
   isNarrowing,
@@ -46,7 +45,7 @@ import {
   type Tx,
 } from './context.ts';
 import { selfAudience } from './event-audience.ts';
-import { requireBrowserSession } from './grant-access.ts';
+import { canReadNotification, requireBrowserSession, visibleKeys } from './grant-access.ts';
 
 const DAY_MS = 86_400_000;
 /** `last_used_at`/`last_used_ip` are written at most this often per grant (11 §2.4). */
@@ -135,8 +134,8 @@ export async function mintToken(): Promise<MintedToken> {
 export interface StreamAccess {
   sessionId: string;
   isValid: () => boolean;
-  /** Invalidations of orgs outside the grant are dropped. */
-  accepts?: (org: string | null) => boolean;
+  /** The keys of an invalidation the grant may receive (orgs, tasks and scopes it reaches). */
+  filterKeys?: (org: string | null, keys: readonly (readonly string[])[]) => (readonly string[])[];
   /** Rewrites or drops (`null`) a `notification` message; absent for the browser. */
   notification?: (data: unknown) => unknown | null;
 }
@@ -173,6 +172,7 @@ export class GrantService {
       clientId: row.clientId,
       scopes: parseScopes(row.scopes),
       constraints: parseConstraints(row.constraints),
+      updatedAt: row.updatedAt,
     };
   }
 
@@ -294,14 +294,19 @@ export class GrantService {
       isValid: () =>
         this.grantActive(grant.id, userId) &&
         (actor.via === 'pat' || this.sessionActive(userId, sessionId)),
-      accepts: (org) => org === null || grantsOrg(grant.constraints, org),
+      filterKeys: (org, keys) => readOnly(this.deps.db, (tx) => visibleKeys(tx, actor, org, keys)),
       // The count is recomputed for the orgs the grant reaches; a new notification elsewhere
       // is not news to it (11 §2.3).
       notification: (data) => {
         if (!reads) return null;
         const message = data as SseNotification;
-        const org = message.notification?.orgId;
-        if (org !== undefined && !grantsOrg(grant.constraints, org)) return null;
+        const preview = message.notification;
+        if (
+          preview !== null &&
+          !readOnly(this.deps.db, (tx) => canReadNotification(tx, actor, preview))
+        ) {
+          return null;
+        }
         return { ...message, unreadCount: this.unreadCount(actor) };
       },
     };

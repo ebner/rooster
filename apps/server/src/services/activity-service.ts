@@ -13,7 +13,7 @@ import { activity, comment, task } from '../db/schema/index.ts';
 import { toCommentDto } from './comment-service.ts';
 import { type Actor, readOnly, type ServiceDeps, type Tx } from './context.ts';
 import { compareText, decodeCursor, encodeCursor, isTimeIdCursor } from './cursor.ts';
-import { authorizeTaskRead } from './grant-access.ts';
+import { authorizeTaskRead, canReadTask } from './grant-access.ts';
 import { requireTask } from './list-access.ts';
 import type { MemberRemovalStep } from './org-service.ts';
 
@@ -56,6 +56,18 @@ export function viaFor(actor: Actor, meta: { client: string | null } | undefined
 }
 
 type ActivityRow = typeof activity.$inferSelect;
+
+/** Other tasks an entry names: the added subtask, the old and new parent. */
+function referencedTasks(entry: Activity): string[] {
+  const data = entry.data as Record<string, unknown>;
+  const ids =
+    entry.type === 'subtask_added'
+      ? [data.subtaskId]
+      : entry.type === 'moved_parent'
+        ? [data.from, data.to]
+        : [];
+  return ids.filter((id): id is string => typeof id === 'string');
+}
 
 function toActivityDto(row: ActivityRow): Activity {
   let stored: Record<string, unknown> = {};
@@ -178,8 +190,25 @@ export class ActivityService {
       entries.sort((a, b) => b.at - a.at || compareText(b.id, a.id));
       const page = entries.slice(0, limit);
       const oldest = page[page.length - 1];
+      // Entries naming another task (a subtask added, a move between parents) are left out
+      // when the grant cannot read that task; the cursor still follows the whole page.
+      const readable = (id: string) => {
+        const other = tx
+          .select({ id: task.id, parentId: task.parentId, orgId: task.orgId, title: task.title })
+          .from(task)
+          .where(eq(task.id, id))
+          .get();
+        return other !== undefined && canReadTask(tx, actor, other);
+      };
+      const shown = (e: FeedEntry) =>
+        actor.grant === null ||
+        e.item.kind !== 'activity' ||
+        referencedTasks(e.item.activity).every(readable);
       return {
-        items: page.reverse().map((e) => e.item),
+        items: page
+          .reverse()
+          .filter(shown)
+          .map((e) => e.item),
         nextCursor:
           entries.length > limit && oldest !== undefined
             ? encodeCursor([oldest.at, oldest.id])

@@ -8,7 +8,6 @@ describe('push endpoint allowlist (SSRF guard, 04 §4.11)', () => {
     'https://updates.push.services.mozilla.com/wpush/v2/abc',
     'https://web.push.apple.com/QGd',
     'https://wns2-par02p.notify.windows.com/w/?token=abc',
-    'https://FCM.googleapis.com./fcm/send/abc',
   ])('allows %s', (url) => {
     expect(isAllowedPushEndpoint(url)).toBe(true);
   });
@@ -24,6 +23,10 @@ describe('push endpoint allowlist (SSRF guard, 04 §4.11)', () => {
     'https://localhost/x',
     'https://intranet.example.com/x',
     'not a url',
+    // Non-canonical forms other parsers may resolve to another host (review finding, P1).
+    'https://127.0.0.1%2efcm.googleapis.com/x',
+    'https://FCM.googleapis.com/fcm/send/abc',
+    'https://fcm.googleapis.com./fcm/send/abc',
   ])('rejects %s', (url) => {
     expect(isAllowedPushEndpoint(url)).toBe(false);
   });

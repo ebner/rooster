@@ -26,7 +26,7 @@ import {
 import { decodeCursor, encodeCursor, isTimeIdCursor } from './cursor.ts';
 import { qk, selfAudience } from './event-audience.ts';
 import {
-  grantReachesOrg,
+  canReadNotification,
   reachedOrgIds,
   requireBrowserSession,
   requireScope,
@@ -249,6 +249,43 @@ export class NotificationService {
     }
   }
 
+  /** Users holding notifications about `taskIds` (before a hard delete cascades them away). */
+  recipientsOf(tx: Tx, taskIds: readonly string[]): string[] {
+    const out = new Set<string>();
+    for (let i = 0; i < taskIds.length; i += 500) {
+      for (const r of tx
+        .select({ userId: notification.userId })
+        .from(notification)
+        .where(inArray(notification.taskId, taskIds.slice(i, i + 500)))
+        .all()) {
+        out.add(r.userId);
+      }
+    }
+    return [...out];
+  }
+
+  /**
+   * After notifications went with their tasks (permanent delete): the recipients' inboxes and
+   * badges refresh once `tx` commits.
+   */
+  announceRemoved(tx: Tx, userIds: readonly string[], actorId: string | null): void {
+    if (userIds.length === 0) return;
+    emitAfterCommit(this.deps, tx, {
+      type: 'notification.read',
+      orgId: null,
+      actorId,
+      subjects: [],
+      audiences: userIds.map((userId) => selfAudience(userId, null, [qk.notifications])),
+      direct: userIds.map(
+        (userId): DirectMessage => ({
+          userId,
+          event: 'notification',
+          data: { unreadCount: this.unreadCount(tx, userId), notification: null },
+        }),
+      ),
+    });
+  }
+
   /**
    * The user's unread notifications across their live orgs (the bell badge); with `orgIds`,
    * only in those orgs.
@@ -273,9 +310,31 @@ export class NotificationService {
     );
   }
 
-  /** The bell badge as the actor may see it: a grant counts only the orgs it reaches. */
+  /**
+   * The bell badge as the actor may see it: a grant counts only notifications it may read
+   * (its orgs, and tasks its read constraint shows).
+   */
   unreadCountFor(actor: Actor, tx?: Tx): number {
-    const count = (t: Tx) => this.unreadCount(t, actor.userId, reachedOrgIds(actor));
+    const count = (t: Tx) => {
+      if (actor.grant === null) return this.unreadCount(t, actor.userId);
+      const orgIds = reachedOrgIds(actor);
+      if (orgIds !== undefined && orgIds.length === 0) return 0;
+      return t
+        .select({ orgId: notification.orgId, taskId: notification.taskId })
+        .from(notification)
+        .innerJoin(organization, eq(organization.id, notification.orgId))
+        .where(
+          and(
+            eq(notification.userId, actor.userId),
+            isNull(notification.readAt),
+            liveOrg,
+            inInbox,
+            orgIds === undefined ? undefined : inArray(notification.orgId, [...orgIds]),
+          ),
+        )
+        .all()
+        .filter((n) => canReadNotification(t, actor, n)).length;
+    };
     return tx === undefined ? readOnly(this.deps.db, count) : count(tx);
   }
 
@@ -309,9 +368,9 @@ export class NotificationService {
       const page = rows.slice(0, limit);
       const last = page[page.length - 1]?.row;
       return {
-        // A grant sees the inbox of the orgs it reaches only.
+        // A grant sees only what it may read: its orgs, and tasks its constraints show.
         items: page
-          .filter((r) => grantReachesOrg(actor, r.row.orgId))
+          .filter((r) => canReadNotification(tx, actor, r.row))
           .map((r) => toNotificationDto(r.row, r.slug)),
         nextCursor:
           rows.length > limit && last !== undefined
@@ -330,22 +389,46 @@ export class NotificationService {
   mark(actor: Actor, input: NotificationMark, read: boolean): NotificationMarkResult {
     requireScope(actor, 'notifications:read');
     return immediate(this.deps.db, (tx) => {
-      const ids = 'ids' in input ? [...new Set(input.ids)] : null;
-      const changed = tx
-        .update(notification)
-        .set({ readAt: read ? this.deps.clock() : null })
-        .where(
-          and(
-            eq(notification.userId, actor.userId),
-            inInbox,
-            ids === null ? undefined : inArray(notification.id, ids),
-            read ? isNull(notification.readAt) : isNotNull(notification.readAt),
-          ),
-        )
-        .run().changes;
+      let ids = 'ids' in input ? [...new Set(input.ids)] : null;
+      if (actor.grant !== null) {
+        // A grant marks only notifications it may read, also for `{all: true}`.
+        ids = tx
+          .select({ id: notification.id, orgId: notification.orgId, taskId: notification.taskId })
+          .from(notification)
+          .where(
+            and(
+              eq(notification.userId, actor.userId),
+              inInbox,
+              ids === null ? undefined : inArray(notification.id, ids),
+            ),
+          )
+          .all()
+          .filter((n) => canReadNotification(tx, actor, n))
+          .map((n) => n.id);
+      }
+      const changed =
+        ids !== null && ids.length === 0
+          ? 0
+          : tx
+              .update(notification)
+              .set({ readAt: read ? this.deps.clock() : null })
+              .where(
+                and(
+                  eq(notification.userId, actor.userId),
+                  inInbox,
+                  ids === null ? undefined : inArray(notification.id, ids),
+                  read ? isNull(notification.readAt) : isNotNull(notification.readAt),
+                ),
+              )
+              .run().changes;
       const unreadCount = this.unreadCountFor(actor, tx);
       if (changed > 0) {
-        const data: SseNotification = { unreadCount, notification: null };
+        // Every stream gets the user's whole count; a grant's stream rewrites it to its own
+        // (GrantService.streamAccess).
+        const data: SseNotification = {
+          unreadCount: this.unreadCount(tx, actor.userId),
+          notification: null,
+        };
         emitAfterCommit(this.deps, tx, {
           type: 'notification.read',
           orgId: null,

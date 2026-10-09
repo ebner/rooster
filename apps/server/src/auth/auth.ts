@@ -1,5 +1,5 @@
 import { apiKey } from '@better-auth/api-key';
-import { isGrantScope } from '@rooster/core/grants';
+import { GRANT_SCOPES, isGrantScope } from '@rooster/core/grants';
 import { uuidv7 } from '@rooster/core/ids';
 import { isLocale } from '@rooster/i18n';
 import { betterAuth } from 'better-auth';
@@ -27,6 +27,9 @@ export const AUTH_BASE_PATH = '/api/auth';
 export const CLIENT_IP_HEADER = 'x-rooster-client-ip';
 
 const DAY_SECONDS = 86_400;
+
+/** The longest `scope` a device code request may carry. */
+const DEVICE_SCOPE_MAX_BYTES = 512;
 
 /**
  * better-auth paths rooster replaces or must not expose. Device approval goes through
@@ -138,10 +141,18 @@ export function createAuth(deps: AuthDeps) {
       if (request.client_id !== CLI_CLIENT_ID) {
         throw deviceError('invalid_client', 'Unknown client ID.');
       }
-      const scopes = (request.scope ?? '').split(/\s+/).filter((s) => s !== '');
+      const raw = request.scope ?? '';
+      if (Buffer.byteLength(raw) > DEVICE_SCOPE_MAX_BYTES) {
+        throw deviceError('invalid_scope', 'The scope is too long.');
+      }
+      const scopes = raw.split(/\s+/).filter((s) => s !== '');
       if (scopes.some((s) => !isGrantScope(s))) {
         throw deviceError('invalid_scope', 'Unknown scope requested.');
       }
+      // Stored canonical (known scopes, once each, in contract order); the plugin persists
+      // `request.scope` after this hook.
+      const canonical = GRANT_SCOPES.filter((s) => scopes.includes(s)).join(' ');
+      request.scope = canonical === '' ? undefined : canonical;
       const userAgent = ctx.request?.headers.get('user-agent')?.slice(0, 200) ?? null;
       return { clientId: CLI_CLIENT_ID, deviceCodeFields: { userAgent } };
     },

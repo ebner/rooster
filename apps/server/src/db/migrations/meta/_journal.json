@@ -57,6 +57,13 @@
       "when": 1791549348067,
       "tag": "0007_agent_access",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791554906241,
+      "tag": "0008_grant_hardening",
+      "breakpoints": true
     }
   ]
 }

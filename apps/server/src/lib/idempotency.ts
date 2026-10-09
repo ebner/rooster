@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { MiddlewareHandler } from 'hono';
+import { PAT_PREFIX } from '../services/grant-service.ts';
 import type { IdempotencyStore } from '../services/idempotency-store.ts';
 import type { AppEnv } from './context.ts';
 import { problemResponse } from './errors.ts';
@@ -44,14 +45,34 @@ export function idempotencyMiddleware(store: IdempotencyStore): MiddlewareHandle
       await pending;
     }
 
+    const credential = actor.grant === null ? 'session' : `grant:${actor.grant.id}`;
+    const grantVersion = actor.grant?.updatedAt ?? null;
     const stored = store.get(actor.userId, key);
     if (stored !== null) {
-      if (stored.fingerprint !== fingerprint) {
+      // Another credential of the same user (a PAT replaying the browser's key) gets nothing.
+      if (stored.fingerprint !== fingerprint || stored.credential !== credential) {
         return problemResponse(
           c,
           422,
           'idempotency_key_reuse',
           'This Idempotency-Key was already used for a different request.',
+        );
+      }
+      // A grant narrowed since may no longer reach what the stored response shows.
+      if (stored.grantVersion !== grantVersion) {
+        return problemResponse(
+          c,
+          409,
+          'idempotency_stale',
+          'The token’s access changed since this request was first sent; retry with a new Idempotency-Key.',
+        );
+      }
+      if (stored.secret) {
+        return problemResponse(
+          c,
+          409,
+          'token_shown_once',
+          'The token was already shown once and cannot be shown again; create another one.',
         );
       }
       const headers = new Headers({ 'Idempotent-Replayed': 'true' });
@@ -73,11 +94,16 @@ export function idempotencyMiddleware(store: IdempotencyStore): MiddlewareHandle
       await next();
       const status = c.res.status;
       if (storable(status)) {
+        const body = status === 204 ? '' : await c.res.clone().text();
         store.put(actor.userId, key, {
           status,
           fingerprint,
           contentType: c.res.headers.get('content-type'),
-          body: status === 204 ? '' : await c.res.clone().text(),
+          body,
+          credential,
+          grantVersion,
+          // Belt and braces: a PAT in any body is never written down.
+          secret: c.get('secretResponse') === true || body.includes(PAT_PREFIX),
         });
       }
     } finally {

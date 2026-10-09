@@ -95,5 +95,14 @@ export class FollowerService {
         .where(and(eq(follower.userId, userId), inArray(follower.taskId, ids.slice(i, i + 500))))
         .run();
     }
+    if (ids.length === 0) return;
+    // The tasks' follower lists changed for everyone still in the org.
+    emitAfterCommit(this.deps, tx, {
+      type: 'task.followed',
+      orgId,
+      actorId: null,
+      subjects: ids,
+      audiences: [{ org: orgId, userIds: memberIds(tx, orgId), keys: ids.map(qk.task) }],
+    });
   };
 }

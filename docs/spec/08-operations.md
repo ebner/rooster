@@ -164,5 +164,5 @@ The required claims are `email`, `email_verified` and `name`, with `picture` opt
 
 ## 10. Security operations
 - Rotating `ROOSTER_AUTH_SECRET` invalidates all sessions. This is documented.
-- To rotate VAPID keys, delete them from `instance_setting` (via `/admin/system` → "Regenerate push keys"). Push subscriptions are then dropped, and devices re-subscribe on next open.
+- To rotate VAPID keys, delete them from `instance_setting` (via `/admin/system` → "Regenerate push keys"). Push subscriptions are then dropped, and push is off on every device until each user turns it on again in Settings → Notifications. Devices deliberately do not re-subscribe silently, so a device the user removed can never come back by itself (ADR 0040).
 - No telemetry, no external calls except the configured integrations, and no CDN fonts (D-28 self-hosted).

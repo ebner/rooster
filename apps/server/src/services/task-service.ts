@@ -39,6 +39,7 @@ import {
   asc,
   desc,
   eq,
+  gt,
   gte,
   inArray,
   isNotNull,
@@ -90,15 +91,18 @@ import {
 } from './event-audience.ts';
 import type { FollowerService } from './follower-service.ts';
 import {
+  authorizeGroupMoves,
   authorizeGroupRead,
   authorizeGroupTarget,
   authorizeOrg,
   authorizeTaskRead,
   authorizeTaskWrite,
   canReadTask,
+  childIds,
   grantGroupOf,
   grantReachesOrg,
   groupReadFilter,
+  groupSnapshot,
   readFilter,
   requireScope,
 } from './grant-access.ts';
@@ -145,6 +149,10 @@ const DAY_MS = 86_400_000;
 export const COMPLETED_WINDOW_MS = 14 * DAY_MS;
 
 const DUE_KEYS = ['dueDate', 'dueTime', 'dueTz', 'startDate'] as const;
+
+/** `GET /tasks/resolve`: at most this many candidates in `409 ambiguous_ref`. */
+const AMBIGUOUS_CANDIDATES = 10;
+const REF_SCAN_BATCH = 200;
 
 interface DueUnit {
   dueDate: string | null;
@@ -406,6 +414,11 @@ export class TaskService {
         [row.id],
         group === null ? undefined : { userId: actor.userId, group, intent },
       );
+      // Where the task actually landed: a self-assigned subtask under someone else's task
+      // gets its own Inbox placement.
+      if (actor.grant !== null) {
+        authorizeGroupTarget(tx, actor, org.id, grantGroupOf(tx, actor.userId, row));
+      }
       const activity = this.recordCreated(tx, actor, meta, row, parent, {
         chosen: fields.assigneeId !== undefined,
       });
@@ -735,6 +748,12 @@ export class TaskService {
     const ignoredFields: string[] = [];
     let applied = false;
     const reassigning = input.assigneeId !== undefined && input.assigneeId !== row.assigneeId;
+    // Grant actors: where the task and its direct children sit now, to check every move a
+    // re-parent or reassignment causes (05 §4.1 reconciles both).
+    const groupsBefore =
+      actor.grant === null
+        ? null
+        : groupSnapshot(tx, actor.userId, [row.id, ...childIds(tx, row.id)]);
     const before =
       (input.parentId !== undefined && input.parentId !== row.parentId) || reassigning
         ? taskReach(tx, [row.id])
@@ -785,16 +804,14 @@ export class TaskService {
       });
     }
     let reassigned = false;
-    if (input.assigneeId !== undefined && reassigning) {
-      if (input.assigneeId !== actor.userId) requireScope(actor, 'tasks:assign');
-      const assigneeId = this.requireAssignee(
-        tx,
-        actor,
-        this.orgOf(tx, row.orgId),
-        input.assigneeId,
-      );
+    if (input.assigneeId !== undefined) {
+      const wanted = input.assigneeId;
+      if (reassigning && wanted !== actor.userId) requireScope(actor, 'tasks:assign');
+      // The clock advances whenever the edit wins, also for the same value; the assignee is
+      // validated only then, so a stale edit naming a departed member is merely ignored.
       apply('assignee', ['assigneeId'], () => {
-        changes.assigneeId = assigneeId;
+        if (wanted === row.assigneeId) return;
+        changes.assigneeId = this.requireAssignee(tx, actor, this.orgOf(tx, row.orgId), wanted);
         reassigned = true;
       });
     }
@@ -807,10 +824,13 @@ export class TaskService {
       }
     }
     if (reparented || reassigned) this.placements.reconcilePlacements(tx, [row.id]);
-    // A task may not leave the grant's groups through its parent (11 §2.2). Assigning it to
-    // someone else may: that was checked against the actor's placement before the change.
-    if (reparented && actor.grant !== null) {
-      authorizeGroupTarget(tx, actor, row.orgId, grantGroupOf(tx, actor.userId, row));
+    // No task may move between groups outside the grant (11 §2.2). Assigning the task itself
+    // to someone else may take it out of the list: that was checked against the actor's
+    // placement before the change.
+    if (groupsBefore !== null && (reparented || reassigned)) {
+      authorizeGroupMoves(tx, actor, row.orgId, groupsBefore, {
+        leaving: reassigned && row.assigneeId !== actor.userId ? row.id : null,
+      });
     }
     if (applied) {
       const activity = this.recordChanges(tx, actor, meta, old, row);
@@ -959,6 +979,13 @@ export class TaskService {
     if (row.deletedAt !== null) return;
     const clock = parseClock(row.fieldClock);
     if (!clockAllows(clock, 'deleted', meta.editTime)) return;
+    // The whole subtree goes, so the grant must reach all of it.
+    this.authorizeSubtree(
+      tx,
+      actor,
+      descendantsOf(tx, [row.id], { deletedAt: null }),
+      'tasks:delete',
+    );
     clock.deleted = meta.editTime;
     tx.update(task)
       .set({ fieldClock: JSON.stringify(clock) })
@@ -993,6 +1020,7 @@ export class TaskService {
     if (!clockAllows(clock, 'deleted', meta.editTime)) return;
     clock.deleted = meta.editTime;
     const ids = [row.id, ...descendantsOf(tx, [row.id], { deletedAt: row.deletedAt })];
+    this.authorizeSubtree(tx, actor, ids.slice(1), 'tasks:write');
     const now = this.now();
     tx.update(task)
       .set({ deletedAt: null, deletedBy: null, updatedAt: now })
@@ -1028,6 +1056,24 @@ export class TaskService {
     });
   }
 
+  /**
+   * A grant actor's cascade (delete, restore, purge) must reach every task it touches; one
+   * out of reach rejects the whole operation (the transaction rolls back).
+   */
+  private authorizeSubtree(
+    tx: Tx,
+    actor: Actor,
+    ids: readonly string[],
+    scope: 'tasks:write' | 'tasks:delete',
+  ): void {
+    if (actor.grant === null || ids.length === 0) return;
+    for (const chunk of chunked([...ids])) {
+      for (const r of tx.select().from(task).where(inArray(task.id, chunk)).all()) {
+        authorizeTaskWrite(tx, actor, r, scope);
+      }
+    }
+  }
+
   /** Hard delete, only from Trash. Placements and subtasks go with it (FK cascade). */
   removePermanently(actor: Actor, taskId: string, _meta?: OpMeta): void {
     immediate(this.deps.db, (tx) => {
@@ -1038,7 +1084,11 @@ export class TaskService {
       }
       const before = taskReach(tx, [row.id]);
       const gone = [row.id, ...descendantsOf(tx, [row.id])];
+      this.authorizeSubtree(tx, actor, gone.slice(1), 'tasks:delete');
+      // Their notifications cascade away: the recipients' inboxes must refresh.
+      const recipients = this.collab.notifications.recipientsOf(tx, gone);
       tx.delete(task).where(eq(task.id, row.id)).run();
+      this.collab.notifications.announceRemoved(tx, recipients, actor.userId);
       indexTasks(tx, gone);
       this.emit(tx, actor, 'task.purged', row.orgId, [row.id], { before, trash: true });
     });
@@ -1272,6 +1322,7 @@ export class TaskService {
             existing.parentId === source.parentId &&
             existing.title === source.title;
           if (!same) throw new AppError('id_conflict', 409, 'That ID is already in use.');
+          authorizeTaskWrite(tx, actor, existing);
           return taskDtoFor(tx, actor.userId, existing);
         }
       }
@@ -1331,6 +1382,8 @@ export class TaskService {
               .orderBy(asc(task.subtaskPosition), asc(task.id))
               .all();
             for (const child of children) {
+              // Every copied subtask must be readable and writable for the grant.
+              authorizeTaskWrite(tx, actor, child);
               // The new parent's domain is empty, so the original keys keep the order.
               next.push([child, copyOf(child, uuidv7(), to, child.subtaskPosition)]);
             }
@@ -1468,22 +1521,29 @@ export class TaskService {
         const orgIds = listMemberships(tx, actor.userId)
           .map((m) => m.org.id)
           .filter((id) => grantReachesOrg(actor, id));
-        rows =
-          orgIds.length === 0
-            ? []
-            : tx
-                .select()
-                .from(task)
-                .where(
-                  and(
-                    inArray(task.orgId, orgIds),
-                    sql`replace(${task.id}, '-', '') LIKE ${`${prefix}%`}`,
-                    live,
-                  ),
-                )
-                .orderBy(asc(task.id))
-                .limit(200)
-                .all();
+        // Scanned in batches with the read filter applied first, so unreadable matches
+        // never hide readable ones; stops once enough are found to list the candidates.
+        rows = [];
+        let afterId: string | null = null;
+        while (orgIds.length > 0 && rows.length < AMBIGUOUS_CANDIDATES) {
+          const batch: TaskRow[] = tx
+            .select()
+            .from(task)
+            .where(
+              and(
+                inArray(task.orgId, orgIds),
+                sql`replace(${task.id}, '-', '') LIKE ${`${prefix}%`}`,
+                live,
+                afterId === null ? undefined : gt(task.id, afterId),
+              ),
+            )
+            .orderBy(asc(task.id))
+            .limit(REF_SCAN_BATCH)
+            .all();
+          rows.push(...batch.filter((r) => canReadTask(tx, actor, r)));
+          if (batch.length < REF_SCAN_BATCH) break;
+          afterId = batch[batch.length - 1]?.id ?? null;
+        }
       }
       const visible = rows.filter((r) => canReadTask(tx, actor, r));
       const [only] = visible;
@@ -1496,7 +1556,7 @@ export class TaskService {
           undefined,
           {
             candidates: visible
-              .slice(0, 10)
+              .slice(0, AMBIGUOUS_CANDIDATES)
               .map((r) => ({ id: r.id, orgId: r.orgId, seq: r.seq, title: r.title })),
           },
         );

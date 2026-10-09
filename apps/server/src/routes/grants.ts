@@ -139,9 +139,10 @@ export function registerGrantRoutes(app: OpenAPIHono<AppEnv>, { grants }: Servic
     grants.revoke(actorOf(c), c.req.valid('param').id);
     return c.body(null, 204);
   });
-  app.openapi(createToken, async (c) =>
-    c.json(await grants.createToken(actorOf(c), c.req.valid('json')), 201),
-  );
+  app.openapi(createToken, async (c) => {
+    c.set('secretResponse', true);
+    return c.json(await grants.createToken(actorOf(c), c.req.valid('json')), 201);
+  });
   app.openapi(getDevice, (c) =>
     c.json(grants.deviceRequest(actorOf(c), c.req.valid('param').userCode), 200),
   );
