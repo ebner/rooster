@@ -160,6 +160,28 @@ test('AC-9.3 consent: an unverified app on this computer asks; least privilege b
   const app = grants.find((g) => g.kind === 'oauth' && g.clientId === clientId);
   expect(app).toMatchObject({ scopes: ['tasks:write'] });
   expect(JSON.stringify(app?.constraints)).toContain(orgId);
+
+  // Step-up: what the grant has stays checked and fixed (the server merges, ADR 0045 §5).
+  await page.unroute(`${redirectUri}**`);
+  const reachedAgain = await catchRedirect(page, redirectUri);
+  await page.goto(
+    authorizeUrl({
+      clientId,
+      redirectUri,
+      challenge,
+      scope: 'tasks:write comments:write',
+      resource,
+      state: 'st-456',
+    }),
+  );
+  await page.waitForURL(/\/oauth\/consent\?/);
+  const write = page.getByRole('checkbox', { name: /Add and change tasks/ });
+  await expect(write).toBeChecked();
+  await expect(write).toBeDisabled();
+  await expect(page.getByTestId('fixed-scopes-hint')).toBeVisible();
+  await expect(page.getByTestId('scope-comments:write').getByText('New')).toBeVisible();
+  await page.getByTestId('consent-deny').click();
+  expect((await reachedAgain()).searchParams.get('error')).toBe('access_denied');
 });
 
 test('consent while signed out: sign in first, then the same consent screen', async ({

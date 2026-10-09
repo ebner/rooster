@@ -150,6 +150,7 @@ export function fixtureConsentRequests(now: number): {
   dynamic: OAuthConsentRequest;
   loopback: OAuthConsentRequest;
   stepUp: OAuthConsentRequest;
+  stepUpDeleting: OAuthConsentRequest;
 } {
   const claude = fixtureGrants(now).find((grant) => grant.kind === 'oauth') ?? null;
   return {
@@ -229,8 +230,43 @@ export function fixtureConsentRequests(now: number): {
       existing: claude,
       prefill: null,
     },
+    // A step-up of a grant that already deletes and names a group deleted since.
+    stepUpDeleting: {
+      oauthQuery: signedQuery,
+      clientId: 'https://claude.ai/oauth/mcp-client-metadata.json',
+      client: {
+        name: 'Claude',
+        domain: 'claude.ai',
+        logoUri: null,
+        clientUri: 'https://claude.ai',
+        verified: true,
+        dynamic: false,
+      },
+      redirectUri: 'https://claude.ai/api/mcp/auth_callback',
+      loopback: false,
+      resource: 'https://rooster.example.com/mcp',
+      requestedScopes: ['tasks:write', 'notifications:read'],
+      newScopes: ['notifications:read'],
+      existing: claude && {
+        ...claude,
+        scopes: ['tasks:delete'],
+        constraints: {
+          orgs: [
+            {
+              orgId: fixtureIds.personalOrg,
+              read: 'all',
+              write: { groups: [fixtureGroupIds.personalInbox, deletedGroupId] },
+            },
+          ],
+        },
+      },
+      prefill: null,
+    },
   };
 }
+
+/** A group id no fixture org has any more (deleted since a grant named it). */
+export const deletedGroupId = '0192f5d0-7a1e-7c3a-9f10-00000000b0ff';
 
 /** Linked sign-in identities (P9, FR-SET-3). */
 export function fixtureIdentities(now: number): LinkedIdentity[] {

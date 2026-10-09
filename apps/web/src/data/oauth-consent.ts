@@ -52,14 +52,19 @@ export function useOAuthConsentDecision(): MutationResult<
   });
 }
 
-export type ConsentErrorKind = 'invalid' | 'failed';
+export type ConsentErrorKind = 'invalid' | 'failed' | 'nothingApproved';
+
+/** `422`: the decision approves none of what the app asked for (Allow with nothing). */
+export const NOTHING_APPROVED = 'nothing_approved';
 
 /**
  * An expired, tampered or already answered request (`4xx`) can't be retried from here: the
- * user starts again in the app. Anything else (network, `5xx`) may work on a second try.
+ * user starts again in the app. Approving nothing is fixable on the screen. Anything else
+ * (network, `5xx`) may work on a second try.
  */
 export function consentErrorKind(error: unknown): ConsentErrorKind {
   if (!(error instanceof ApiError)) return 'failed';
+  if (error.code === NOTHING_APPROVED) return 'nothingApproved';
   if (error.status === 401 || error.status === 403 || error.status === 429) return 'failed';
   return error.status >= 400 && error.status < 500 ? 'invalid' : 'failed';
 }

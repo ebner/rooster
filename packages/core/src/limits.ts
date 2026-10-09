@@ -17,6 +17,11 @@ export const SUBTASK_DEPTH_MAX = 5;
 export const TAG_NAME_MAX = 40;
 /** P6. 05 §3 `comment.body`. */
 export const COMMENT_BODY_MAX = 20_000;
+/**
+ * P9. The longest signed authorization query (`oauth_query`) the consent API accepts; the
+ * provider's own is a few hundred bytes, plus the client's `state`.
+ */
+export const OAUTH_QUERY_MAX = 16_384;
 
 /**
  * Snippet highlight markers (Unicode private use area). The server wraps every matched term in

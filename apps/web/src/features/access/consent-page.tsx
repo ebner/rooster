@@ -28,10 +28,13 @@ import { ConsentActions, ConsentFrame } from './consent-frame';
 import { ConstraintEditor } from './constraint-editor';
 import {
   consentCeiling,
-  defaultConsentValue,
+  consentStart,
+  type GrantIssue,
   type GrantOrgOption,
   type GrantValue,
   grantIssues,
+  reconcileGrant,
+  retainedScopes,
   toConsentDecision,
 } from './grant-model';
 
@@ -58,6 +61,13 @@ export interface ConsentPageProps {
   homeHref: string;
   /** Loads the request again (the `failed` state). */
   onRetry?: (() => void) | undefined;
+  /**
+   * The server-confirmed orgs and groups, fetched afresh right before Allow: what is gone is
+   * dropped from the decision (as in Connected apps). Without it nothing is pruned on send.
+   */
+  confirmOrgs?: (() => Promise<readonly GrantOrgOption[]>) | undefined;
+  /** The server refused the decision as approving nothing the app asked for (`422`). */
+  notice?: 'nothingApproved' | null | undefined;
   /** Kitchen sink: no full-viewport frame, no focus moves. */
   embedded?: boolean | undefined;
   /** Kitchen sink: start the editor from this value. */
@@ -247,12 +257,22 @@ function RequestStep({
   onDeny,
   initialValue,
   embedded,
+  confirmOrgs,
+  notice,
 }: ConsentPageProps & { request: OAuthConsentRequest }) {
   const { t } = useTranslation('auth');
-  const [value, setValue] = useState<GrantValue>(
-    () => initialValue ?? defaultConsentValue(request, orgs),
+  const { t: ts } = useTranslation('settings');
+  // On step-up the grant may name groups deleted (or orgs left) since: dropped up front, and
+  // said so, since the server would refuse them.
+  const [start] = useState(() =>
+    initialValue
+      ? { value: initialValue, stale: { orgs: 0, groups: 0 } }
+      : consentStart(request, orgs),
   );
+  const [value, setValue] = useState<GrantValue>(start.value);
+  const [saveIssue, setSaveIssue] = useState<GrantIssue | null>(null);
   const [pending, setPending] = useState<'approve' | 'deny' | null>(null);
+  const fixedScopes = retainedScopes(request);
   const titleId = useId();
   const titleRef = useRef<HTMLHeadingElement>(null);
   const name = clientName(request.client);
@@ -279,9 +299,21 @@ function RequestStep({
       className="flex flex-col gap-6"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!blocked && !pending) {
-          void run('approve', () => onAllow(toConsentDecision(value, request.oauthQuery)));
-        }
+        if (blocked || pending) return;
+        void run('approve', async () => {
+          setSaveIssue(null);
+          // Confirm afresh right before sending: a group deleted meanwhile would fail it. A
+          // failed confirmation prunes nothing; the server has the last word.
+          const fresh = confirmOrgs ? await confirmOrgs().catch(() => []) : [];
+          const toSend = reconcileGrant(value, fresh).value;
+          const [issue] = grantIssues(toSend);
+          if (issue) {
+            setValue(toSend);
+            setSaveIssue(issue);
+            return;
+          }
+          await onAllow(toConsentDecision(toSend, request.oauthQuery));
+        });
       }}
       aria-labelledby={titleId}
       data-testid="consent-request"
@@ -308,6 +340,20 @@ function RequestStep({
           </Banner>
         )}
         {stepUp && <Banner>{t('consent.stepUp', { client: name })}</Banner>}
+        {(start.stale.orgs > 0 || start.stale.groups > 0) && (
+          <Banner tone="warning" role="status">
+            {[
+              start.stale.groups > 0
+                ? ts('access.apps.staleGroups', { count: start.stale.groups })
+                : null,
+              start.stale.orgs > 0
+                ? ts('access.apps.staleOrgs', { count: start.stale.orgs })
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          </Banner>
+        )}
         <RequestDetails request={request} />
       </div>
       <ConstraintEditor
@@ -319,10 +365,22 @@ function RequestStep({
         newScopes={stepUp ? request.newScopes : undefined}
         offerSessionOnly
         deleteCheckbox
+        fixedScopes={request.existing ? fixedScopes : undefined}
         prefs={prefs}
         now={now}
         data-testid="consent-editor"
       />
+      {(saveIssue || notice) && (
+        <p role="alert" className="text-sm text-text-danger" data-testid="consent-issue">
+          {notice === 'nothingApproved'
+            ? t('consent.nothingApproved')
+            : saveIssue?.kind === 'noScopes'
+              ? ts('access.issue.noScopes')
+              : saveIssue?.kind === 'noOrgs'
+                ? ts('access.issue.noOrgs')
+                : ts('access.issue.noGroups')}
+        </p>
+      )}
       <ConsentActions
         approveLabel={t('consent.allow')}
         denyLabel={t('consent.deny')}

@@ -83,6 +83,7 @@ export function AccessKitchenSection() {
     [t('access.dev.consentDynamic'), { kind: 'request', request: consent.dynamic }],
     [t('access.dev.consentLoopback'), { kind: 'request', request: consent.loopback }],
     [t('access.dev.consentStepUp'), { kind: 'request', request: consent.stepUp }],
+    [t('access.dev.consentStepUpDeleting'), { kind: 'request', request: consent.stepUpDeleting }],
     [t('access.dev.consentInvalid'), { kind: 'invalid' }],
     [t('access.dev.consentFailed'), { kind: 'failed' }],
     [t('access.dev.consentLoading'), { kind: 'loading' }],

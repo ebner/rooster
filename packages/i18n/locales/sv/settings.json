@@ -327,7 +327,9 @@
       "summary": "Sammanfattning",
       "readAllForWrite": "För att ändra allt här måste den också kunna läsa allt här.",
       "allowDelete": "Tillåt att uppgifter tas bort",
-      "allowDeleteHint": "Den kan flytta uppgifter till papperskorgen. Där kan du återställa dem i 30 dagar."
+      "allowDeleteHint": "Den kan flytta uppgifter till papperskorgen. Där kan du återställa dem i 30 dagar.",
+      "alreadyAllowed": "Redan tillåten",
+      "fixedHint": "Den behåller det du redan har tillåtit. Ändra i Inställningar → Anslutna appar för att ta bort något."
     },
     "issue": {
       "noScopes": "Välj minst en behörighet.",
@@ -422,6 +424,7 @@
       "consentDynamic": "OAuth-medgivande: overifierad app (dynamiskt registrerad)",
       "consentLoopback": "OAuth-medgivande: en app på den här datorn",
       "consentStepUp": "OAuth-medgivande: utökad åtkomst med nya behörigheter, ber om att få ta bort",
+      "consentStepUpDeleting": "OAuth-medgivande: utökad åtkomst för en app som redan får ta bort, med en borttagen grupp",
       "consentInvalid": "OAuth-medgivande: utgången eller ogiltig begäran",
       "consentFailed": "OAuth-medgivande: kunde inte hämtas",
       "consentLoading": "OAuth-medgivande: hämtar",

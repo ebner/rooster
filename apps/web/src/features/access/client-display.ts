@@ -75,20 +75,28 @@ export function resourceKind(resource: string): ResourceKind {
   return 'other';
 }
 
+/** Schemes never navigated to, whatever the server or the client registered. */
+const FORBIDDEN_SCHEMES = new Set(['javascript:', 'data:', 'vbscript:', 'file:', 'blob:']);
+
 /**
  * Where to go after the decision. The server answers with the client's registered redirect
- * URI (with `code` and `iss`, or `error=access_denied`), which is by design another origin,
- * so it can't pass `safeRedirectPath`. It is followed only when it is http(s) (never
- * `javascript:` or `data:`) and goes to the very redirect target the screen showed
- * (`expected`: same origin and path), whatever the response says.
+ * URI (with `code` and `iss`, or `error=access_denied`), which is by design another origin, so
+ * it can't pass `safeRedirectPath`. It is followed only to the very target the screen showed
+ * (`expected`, which the server validated):
+ * - http(s): the same origin and path;
+ * - a native app's private-use scheme (`com.example.app:/callback`, RFC 8252 §7.1): the same
+ *   scheme, host and path.
+ * `javascript:`, `data:`, `vbscript:`, `file:` and `blob:` are never followed.
  */
 export function externalRedirect(redirectTo: string, expected: string): string | null {
   try {
     const url = new URL(redirectTo);
     const shown = new URL(expected);
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
-    if (url.origin !== shown.origin || url.pathname !== shown.pathname) return null;
-    return url.href;
+    if (FORBIDDEN_SCHEMES.has(url.protocol) || url.protocol !== shown.protocol) return null;
+    if (url.protocol === 'https:' || url.protocol === 'http:') {
+      return url.origin === shown.origin && url.pathname === shown.pathname ? url.href : null;
+    }
+    return url.host === shown.host && url.pathname === shown.pathname ? url.href : null;
   } catch {
     return null;
   }

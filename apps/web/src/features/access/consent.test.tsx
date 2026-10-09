@@ -16,6 +16,7 @@ import { NewTokenForm } from './connected-apps';
 import { ConsentPage, type ConsentPageProps } from './consent-page';
 import { DevicePage } from './device-page';
 import {
+  deletedGroupId,
   fixtureConsentRequests,
   fixtureGrantOrgs,
   fixtureGroupIds,
@@ -24,8 +25,10 @@ import {
 import {
   consentCeiling,
   consentScopes,
+  consentStart,
   defaultConsentValue,
   defaultDeviceValue,
+  keepsScopes,
   offeredScopes,
   toConsentDecision,
 } from './grant-model';
@@ -398,5 +401,138 @@ describe('admin capability (ADR 0041/0042)', () => {
       name: /Administer the server/,
     }) as HTMLInputElement;
     expect(admin.checked).toBe(false);
+  });
+});
+
+describe('step-up keeps what the grant has (ADR 0045 §5: the server merges)', () => {
+  const deleting = requests.stepUpDeleting;
+
+  test('retained scopes are in the default, the ceiling, and can’t be dropped', () => {
+    const value = defaultConsentValue(deleting, orgs);
+    expect(value.scopes).toEqual(['tasks:delete', 'notifications:read']);
+    expect(consentCeiling(deleting).scopes).toEqual(['tasks:delete', 'notifications:read']);
+    expect(keepsScopes(['tasks:delete'], ['tasks:write'])).toBe(true);
+    expect(keepsScopes(['tasks:write'], ['tasks:delete'])).toBe(false);
+  });
+
+  test('a retained delete is checked and fixed, with a hint where to narrow', async () => {
+    const props = renderConsent({ state: { kind: 'request', request: deleting } });
+    const del = screen.getByRole('checkbox', { name: /Allow deleting tasks/ }) as HTMLInputElement;
+    expect(del.checked).toBe(true);
+    expect(del.disabled).toBe(true);
+    expect(within(screen.getByTestId('allow-delete')).getByText('Already allowed')).toBeTruthy();
+    expect(screen.getByTestId('fixed-scopes-hint').textContent).toContain(
+      'Settings → Connected apps',
+    );
+    // The newly asked scope can still be left out.
+    const notifications = screen.getByRole('checkbox', {
+      name: /Read notifications/,
+    }) as HTMLInputElement;
+    expect(notifications.disabled).toBe(false);
+    fireEvent.click(notifications);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('consent-approve'));
+    });
+    expect(props.onAllow).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: ['tasks:delete'] }),
+    );
+  });
+
+  test('a deleted group in the existing grant is dropped up front and said so', () => {
+    const { value, stale } = consentStart(deleting, orgs);
+    expect(stale).toEqual({ orgs: 0, groups: 1 });
+    expect(JSON.stringify(value.constraints)).not.toContain(deletedGroupId);
+    renderConsent({ state: { kind: 'request', request: deleting } });
+    expect(screen.getByText('1 group no longer exists and will be removed.')).toBeTruthy();
+  });
+
+  test('Allow re-confirms orgs and groups and sends only what still exists', async () => {
+    const gone = fixtureGroupIds.personalHome;
+    const request = {
+      ...requests.stepUp,
+      existing: requests.stepUp.existing && {
+        ...requests.stepUp.existing,
+        constraints: {
+          orgs: [
+            {
+              orgId: personal,
+              read: 'all' as const,
+              write: { groups: [fixtureGroupIds.personalInbox, gone] },
+            },
+          ],
+        },
+      },
+    };
+    const confirmOrgs = vi.fn(async () =>
+      orgs.map((org) =>
+        org.id === personal ? { ...org, groups: org.groups?.filter((g) => g.id !== gone) } : org,
+      ),
+    );
+    const props = renderConsent({ state: { kind: 'request', request }, confirmOrgs });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('consent-approve'));
+    });
+    expect(confirmOrgs).toHaveBeenCalled();
+    expect(props.onAllow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        constraints: {
+          orgs: [
+            {
+              orgId: personal,
+              read: 'all',
+              write: { groups: [fixtureGroupIds.personalInbox] },
+            },
+          ],
+        },
+      }),
+    );
+  });
+});
+
+describe('approving nothing (422 nothing_approved)', () => {
+  test('is its own kind, not an invalid request', () => {
+    expect(consentErrorKind(new ApiError('nothing_approved', 422))).toBe('nothingApproved');
+    expect(consentErrorKind(new ApiError('validation_failed', 422))).toBe('invalid');
+  });
+
+  test('shows an inline message on the screen, which stays usable', () => {
+    renderConsent({ notice: 'nothingApproved' });
+    expect(screen.getByTestId('consent-issue').textContent).toBe(
+      'Approve at least one capability, or Deny.',
+    );
+    expect(screen.getByTestId('consent-request')).toBeTruthy();
+  });
+
+  test('a request for only an implied-by-delete scope submits what is implied', () => {
+    const value = defaultConsentValue(
+      { ...requests.verified, requestedScopes: ['tasks:delete'] },
+      orgs,
+    );
+    expect(value.scopes).toEqual(['tasks:write']);
+  });
+});
+
+describe('native app redirects (RFC 8252 §7.1)', () => {
+  const shown = 'com.example.app:/oauth/callback';
+
+  test('a private-use scheme is followed only to the shown target', () => {
+    expect(externalRedirect('com.example.app:/oauth/callback?code=1&iss=x', shown)).toBe(
+      'com.example.app:/oauth/callback?code=1&iss=x',
+    );
+    expect(externalRedirect('com.example.app:/elsewhere?code=1', shown)).toBeNull();
+    expect(externalRedirect('com.other.app:/oauth/callback?code=1', shown)).toBeNull();
+    expect(externalRedirect('https://claude.ai/oauth/callback?code=1', shown)).toBeNull();
+  });
+
+  test('dangerous schemes are refused even when they are what the screen showed', () => {
+    for (const bad of [
+      'javascript:alert(1)',
+      'data:text/html,hi',
+      'vbscript:msgbox',
+      'file:///etc/passwd',
+      'blob:https://x/1',
+    ]) {
+      expect(externalRedirect(bad, bad)).toBeNull();
+    }
   });
 });

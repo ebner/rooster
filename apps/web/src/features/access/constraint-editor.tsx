@@ -1,4 +1,4 @@
-import type { GrantScope } from '@rooster/core/grants';
+import { expandScopes, type GrantScope } from '@rooster/core/grants';
 import { type ReactNode, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DisplayPrefs } from '../../lib/format';
@@ -14,6 +14,7 @@ import {
   type GrantValue,
   grantIssues,
   hasWriteScope,
+  keepsScopes,
   offeredScopes,
   type ReadMode,
   readMode,
@@ -61,6 +62,11 @@ export interface ConstraintEditorProps {
    * asked for it (ADR 0041/0042 §4).
    */
   deleteCheckbox?: boolean | undefined;
+  /**
+   * Scopes that can't be taken away here: on an OAuth step-up, what the grant already has (the
+   * server merges, ADR 0045 §5). Shown checked and fixed; narrowing is in Connected apps.
+   */
+  fixedScopes?: readonly GrantScope[] | undefined;
   prefs: DisplayPrefs;
   now: number;
   /** Extra fields above the capabilities, e.g. a token name. */
@@ -84,6 +90,7 @@ export function ConstraintEditor({
   offerSessionOnly = false,
   offerAdmin = false,
   deleteCheckbox = false,
+  fixedScopes,
   prefs,
   now,
   children,
@@ -92,7 +99,12 @@ export function ConstraintEditor({
   const { t } = useTranslation('settings');
   const scopesId = useId();
   const whereId = useId();
-  const can = (next: GrantValue) => withinCeiling(next, ceiling);
+  const can = (next: GrantValue) =>
+    withinCeiling(next, ceiling) && (!fixedScopes || keepsScopes(next.scopes, fixedScopes));
+  const fixed = expandScopes(fixedScopes ?? []);
+  const fixedNote = (
+    <span className="text-xs text-text-muted">{t('access.editor.alreadyAllowed')}</span>
+  );
   const issues = grantIssues(value);
   const writes = hasWriteScope(value.scopes);
   const list = value.constraints.orgs;
@@ -125,6 +137,7 @@ export function ConstraintEditor({
               data-testid={`scope-${scope}`}
               aside={
                 <>
+                  {fixed.has(scope) && state !== 'implied' && fixedNote}
                   {state === 'implied' && (
                     <span className="text-xs text-text-muted">{t('access.editor.included')}</span>
                   )}
@@ -143,6 +156,11 @@ export function ConstraintEditor({
         {issues.some((i) => i.kind === 'noScopes') && (
           <IssueText>{t('access.issue.noScopes')}</IssueText>
         )}
+        {fixed.size > 0 && (
+          <p className="text-sm text-text-muted" data-testid="fixed-scopes-hint">
+            {t('access.editor.fixedHint')}
+          </p>
+        )}
       </fieldset>
 
       {deleteOffered && (
@@ -154,11 +172,13 @@ export function ConstraintEditor({
             description={t('access.editor.allowDeleteHint')}
             data-testid="allow-delete"
             aside={
-              newScopes?.includes('tasks:delete') && (
-                <span className="rounded-xs bg-bg-accent-subtle px-1.5 text-xs font-medium text-text">
-                  {t('access.editor.new')}
-                </span>
-              )
+              fixed.has('tasks:delete')
+                ? fixedNote
+                : newScopes?.includes('tasks:delete') && (
+                    <span className="rounded-xs bg-bg-accent-subtle px-1.5 text-xs font-medium text-text">
+                      {t('access.editor.new')}
+                    </span>
+                  )
             }
           >
             {t('access.editor.allowDelete')}

@@ -454,23 +454,38 @@ export function consentScopes(request: Pick<OAuthConsentRequest, 'requestedScope
 }
 
 /**
- * The ceiling of the consent editor: the requested scopes, and the client's
- * `authorization_details`, which pre-fill the screen and may only be narrowed (11 §2.2).
+ * On step-up, what the existing grant already allows. The server merges a step-up into the
+ * grant (ADR 0045 §5), so these can't be taken away here: the screen shows them checked and
+ * fixed, and narrowing happens in Settings → Connected apps.
+ */
+export function retainedScopes(request: Pick<OAuthConsentRequest, 'existing'>): GrantScope[] {
+  return (request.existing?.scopes ?? []).filter((scope) => !OAUTH_EXCLUDED_SCOPES.includes(scope));
+}
+
+/** Whether `scopes` still include everything `fixed` allows (implied scopes count). */
+export function keepsScopes(scopes: readonly GrantScope[], fixed: readonly GrantScope[]): boolean {
+  const kept = expandScopes(scopes);
+  return [...expandScopes(fixed)].every((scope) => kept.has(scope));
+}
+
+/**
+ * The ceiling of the consent editor: the requested scopes plus what a step-up's grant already
+ * has, and the client's `authorization_details`, which pre-fill the screen and may only be
+ * narrowed (11 §2.2).
  */
 export function consentCeiling(
-  request: Pick<OAuthConsentRequest, 'requestedScopes' | 'prefill'>,
+  request: Pick<OAuthConsentRequest, 'requestedScopes' | 'prefill' | 'existing'>,
 ): GrantCeiling {
   return {
-    scopes: consentScopes(request),
+    scopes: minimalScopes([...consentScopes(request), ...retainedScopes(request)]),
     ...(request.prefill ? { constraints: request.prefill as GrantConstraints } : {}),
   };
 }
 
 /**
  * The consent screen's starting point, least privilege first (11 §3.1):
- * - Scopes: what the client asked for, but "Allow deleting tasks" unticked (ADR 0041/0042):
- *   only a step-up of a grant that already deletes keeps it ticked, since the user allowed it
- *   before and `existing` is the user's own earlier choice.
+ * - Scopes: what the client asked for, but "Allow deleting tasks" unticked (ADR 0041/0042),
+ *   plus on step-up everything the grant already has (`retainedScopes`, delete included).
  * - Where: `prefill` (the client's `authorization_details`), else the existing grant on
  *   step-up, else every current org (never `"all"`): read everything, write nothing, or the
  *   personal org's Inbox only when the client may write.
@@ -483,10 +498,9 @@ export function defaultConsentValue(
   orgs: readonly GrantOrgOption[],
 ): GrantValue {
   const requested = consentScopes(request);
-  const keepDelete = request.existing?.scopes.includes('tasks:delete') === true;
-  const expanded = [...expandScopes(requested)].filter(
-    (scope) => keepDelete || scope !== 'tasks:delete',
-  );
+  const retained = retainedScopes(request);
+  const asked = [...expandScopes(requested)].filter((scope) => scope !== 'tasks:delete');
+  const expanded = [...asked, ...retained];
   const scopes = minimalScopes(expanded.length > 0 ? expanded : ['tasks:read']);
   const expiry: ExpiryChoice = request.existing?.idleTimeoutMs ? 'session' : OAUTH_DEFAULT_EXPIRY;
   const existing = request.existing?.constraints as GrantConstraints | undefined;
@@ -513,6 +527,18 @@ export function defaultConsentValue(
     },
     expiry,
   };
+}
+
+/**
+ * `defaultConsentValue`, without what no longer exists for the user: on step-up the grant may
+ * name orgs left or groups deleted since, which the server would refuse (`422`). `stale` says
+ * what was dropped, for the note.
+ */
+export function consentStart(
+  request: Pick<OAuthConsentRequest, 'requestedScopes' | 'prefill' | 'existing'>,
+  orgs: readonly GrantOrgOption[],
+): { value: GrantValue; stale: StaleIds } {
+  return reconcileGrant(defaultConsentValue(request, orgs), orgs);
 }
 
 /** `POST /oauth/consent` with Allow. */

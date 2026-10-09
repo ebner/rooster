@@ -327,7 +327,9 @@
       "summary": "Summary",
       "readAllForWrite": "Changing everything here needs reading everything here.",
       "allowDelete": "Allow deleting tasks",
-      "allowDeleteHint": "It can move tasks to the trash. You can restore them from there for 30 days."
+      "allowDeleteHint": "It can move tasks to the trash. You can restore them from there for 30 days.",
+      "alreadyAllowed": "Already allowed",
+      "fixedHint": "It keeps what you allowed before. To take something away, change it in Settings → Connected apps."
     },
     "issue": {
       "noScopes": "Choose at least one capability.",
@@ -422,6 +424,7 @@
       "consentDynamic": "OAuth consent: unverified app (registered dynamically)",
       "consentLoopback": "OAuth consent: an app on this computer",
       "consentStepUp": "OAuth consent: step-up with new capabilities, deleting asked for",
+      "consentStepUpDeleting": "OAuth consent: step-up of a grant that already deletes, with a deleted group",
       "consentInvalid": "OAuth consent: expired or invalid request",
       "consentFailed": "OAuth consent: couldn’t load",
       "consentLoading": "OAuth consent: loading",

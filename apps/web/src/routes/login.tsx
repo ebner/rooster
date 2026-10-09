@@ -1,3 +1,4 @@
+import { OAUTH_QUERY_MAX } from '@rooster/core/limits';
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -14,9 +15,6 @@ interface LoginSearch {
   oauth_query?: string;
 }
 
-/** The signed query is a few hundred bytes; anything far larger is not one. */
-const MAX_OAUTH_QUERY = 8192;
-
 /**
  * better-auth's OAuth provider sends a signed-out user here with its signed authorization
  * query (`?client_id=…&ba_param=…&sig=…`). The router re-serialises the search on the first
@@ -29,7 +27,7 @@ function loginOAuthQuery(search: Record<string, unknown>): string | undefined {
   else if (globalThis.location?.pathname === '/login') {
     query = signedOAuthQuery(globalThis.location.search);
   }
-  return query && query.length <= MAX_OAUTH_QUERY ? query : undefined;
+  return query && query.length <= OAUTH_QUERY_MAX ? query : undefined;
 }
 
 /** better-auth error codes (`/login?error=…`) → the banners the page knows. */

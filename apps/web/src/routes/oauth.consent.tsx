@@ -1,10 +1,11 @@
+import { OAUTH_QUERY_MAX } from '@rooster/core/limits';
 import { isLocale } from '@rooster/i18n/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiError, meQueryOptions, queryKeys, useDisplayPrefs, useMe } from '../data';
-import { useGrantOrgsState } from '../data/grants';
+import { confirmGrantOrgs, useGrantOrgsState } from '../data/grants';
 import {
   consentErrorKind,
   useOAuthConsentDecision,
@@ -19,9 +20,6 @@ import { toast } from '../ui/toast';
 interface ConsentSearch {
   oauth_query?: string;
 }
-
-/** The provider's signed query is a few hundred bytes; anything far larger is not one. */
-const MAX_QUERY_LENGTH = 8192;
 
 /**
  * `/oauth/consent` (11 §3.1, ADR 0041/0042): where better-auth's OAuth provider sends the
@@ -38,7 +36,7 @@ export const Route = createFileRoute('/oauth/consent')({
     else if (globalThis.location?.pathname === '/oauth/consent') {
       query = signedOAuthQuery(globalThis.location.search);
     }
-    return query && query.length <= MAX_QUERY_LENGTH ? { oauth_query: query } : {};
+    return query && query.length <= OAUTH_QUERY_MAX ? { oauth_query: query } : {};
   },
   beforeLoad: async ({ context, search }) => {
     try {
@@ -76,19 +74,21 @@ function ConsentRoute() {
   const [leaving, setLeaving] = useState<Leaving | null>(null);
   // A decision the server refused as expired or already answered: nothing left to retry here.
   const [lateInvalid, setLateInvalid] = useState(false);
+  const [notice, setNotice] = useState<'nothingApproved' | null>(null);
 
   const state: ConsentPageState = leaving
     ? leaving
     : !oauthQuery || lateInvalid
       ? { kind: 'invalid' }
       : request.error
-        ? { kind: consentErrorKind(request.error) }
+        ? { kind: consentErrorKind(request.error) === 'failed' ? 'failed' : 'invalid' }
         : request.data && ready
           ? { kind: 'request', request: request.data }
           : { kind: 'loading' };
 
   const answer = async (accept: boolean, body: Parameters<typeof decide.mutateAsync>[0]) => {
     if (!request.data) return;
+    setNotice(null);
     try {
       const result = await decide.mutateAsync(body);
       // The one navigation to another origin: the client's registered redirect URI, as the
@@ -104,7 +104,9 @@ function ConsentRoute() {
       });
       window.location.assign(target);
     } catch (error) {
-      if (consentErrorKind(error) === 'invalid') setLateInvalid(true);
+      const kind = consentErrorKind(error);
+      if (kind === 'nothingApproved') setNotice('nothingApproved');
+      else if (kind === 'invalid') setLateInvalid(true);
       else
         toast({
           message: t(accept ? 'consent.allowFailed' : 'consent.denyFailed'),
@@ -125,6 +127,8 @@ function ConsentRoute() {
       onRetry={() =>
         void queryClient.resetQueries({ queryKey: queryKeys.oauthConsent(oauthQuery ?? '') })
       }
+      notice={notice}
+      confirmOrgs={() => confirmGrantOrgs(orgs.map((org) => org.id))}
       onAllow={(decision) => answer(true, decision)}
       onDeny={() => answer(false, { accept: false, oauthQuery: request.data?.oauthQuery ?? '' })}
     />
