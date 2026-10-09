@@ -8,7 +8,12 @@ import { localeFromEnv, resolveLocale, t, withLocale } from './i18n.ts';
 import type { Io } from './io.ts';
 import { stripAnsi } from './output/color.ts';
 import { NO_GLOBALS, Runtime, withRuntime } from './runtime.ts';
-import { CredentialStoreUnavailable, KeychainRefused, type KeyringFactory } from './secrets.ts';
+import {
+  CredentialStoreUnavailable,
+  CredentialsChanging,
+  KeychainRefused,
+  type KeyringFactory,
+} from './secrets.ts';
 
 export interface RunOptions {
   /** Tests replace the keychain. */
@@ -66,9 +71,14 @@ async function report(runtime: Runtime, error: unknown): Promise<ExitCode> {
   let failure: CliError;
   if (error instanceof CliError) failure = error;
   else if (error instanceof ConfigLockedError) {
-    failure = new CliError(EXIT.conflict, t('config.locked', { path: error.lockPath }));
+    failure = new CliError(
+      EXIT.conflict,
+      t('config.locked', { path: error.lockPath, pid: String(error.holderPid ?? '?') }),
+    );
   } else if (error instanceof KeychainRefused) {
     failure = new CliError(EXIT.auth, t('auth.keychainRefused', { reason: error.message }));
+  } else if (error instanceof CredentialsChanging) {
+    failure = new CliError(EXIT.conflict, t('auth.credentialsChanging'));
   } else if (error instanceof CredentialStoreUnavailable) {
     failure = new CliError(EXIT.auth, t('auth.keychainUnavailable'));
   } else if (error instanceof RoosterApiError) {

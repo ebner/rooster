@@ -1,13 +1,4 @@
-import {
-  chmodSync,
-  linkSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { parse, stringify } from 'smol-toml';
 import { CliError, EXIT } from './errors.ts';
@@ -27,8 +18,8 @@ export interface Profile {
   credential_store?: 'keychain' | 'file';
   /** The server origin the login was issued by; it is only ever sent there. */
   credential_origin?: string;
-  /** The keychain account holding the login (`<profile>:<uuid>`), with `credential_store = "keychain"`. */
-  credential_account?: string;
+  /** The exact ref of the login in that store: keychain account or credential file name. */
+  credential_ref?: string;
 }
 
 export interface Config {
@@ -101,7 +92,7 @@ function asProfile(value: unknown): Profile {
   const out: Profile = {};
   if (value === null || typeof value !== 'object') return out;
   const record = value as Record<string, unknown>;
-  for (const key of [...PROFILE_KEYS, 'user', 'credential_origin', 'credential_account'] as const) {
+  for (const key of [...PROFILE_KEYS, 'user', 'credential_origin', 'credential_ref'] as const) {
     if (typeof record[key] === 'string') out[key] = record[key];
   }
   if (record.credential_store === 'keychain' || record.credential_store === 'file') {
@@ -145,13 +136,14 @@ export function serializeConfig(config: Config): string {
 export interface LockOptions {
   /** How long to wait for another process's lock before giving up. */
   timeoutMs?: number;
-  /** A lock older than this whose process is gone is taken over. */
-  staleMs?: number;
 }
 
-/** Another rooster process holds the config lock (or left it behind, still running). */
+/** Another process holds the config lock (or left it behind). */
 export class ConfigLockedError extends Error {
-  constructor(readonly lockPath: string) {
+  constructor(
+    readonly lockPath: string,
+    readonly holderPid: number | null,
+  ) {
     super(`Locked: ${lockPath}`);
     this.name = 'ConfigLockedError';
   }
@@ -161,40 +153,25 @@ function sleepSync(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-function processAlive(pid: number): boolean {
+function holderOf(lockPath: string): number | null {
   try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
+    const pid = Number((readIfExists(lockPath) ?? '').split(' ')[0]);
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
   }
-}
-
-/** A lock left by a process that is gone, older than `staleMs`. */
-function isStale(content: string | undefined, lockPath: string, staleMs: number): boolean {
-  const [pidText, timeText] = (content ?? '').split(' ');
-  const pid = Number(pidText);
-  let time = Number(timeText);
-  if (!Number.isFinite(time)) {
-    try {
-      time = statSync(lockPath).mtimeMs;
-    } catch {
-      return false;
-    }
-  }
-  if (Date.now() - time < staleMs) return false;
-  return !(Number.isInteger(pid) && pid > 0 && processAlive(pid));
 }
 
 /**
  * Runs `fn` holding an interprocess lock on `path`: `<path>.lock`, created exclusively
- * (`O_EXCL`) with this process's pid and the time, waited for with a bounded retry, taken
- * over when stale (its process gone, older than `staleMs`), and always released.
+ * (`O_EXCL`) with this process's pid and the time, and always released. Only `EEXIST` is
+ * retried, until the deadline; any other error propagates at once. There is no automatic
+ * takeover of a stale lock (two takers can't be told apart safely): the timeout names the
+ * lock file and its holder so the user can remove it when no rooster process runs.
  */
 export function withFileLock<T>(path: string, fn: () => T, options: LockOptions = {}): T {
   const lockPath = `${path}.lock`;
   const timeoutMs = options.timeoutMs ?? 5_000;
-  const staleMs = options.staleMs ?? 10_000;
   const id = `${process.pid} ${Date.now()} ${Math.random().toString(36).slice(2)}`;
   const deadline = Date.now() + timeoutMs;
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
@@ -205,28 +182,8 @@ export function withFileLock<T>(path: string, fn: () => T, options: LockOptions 
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     }
-    const seen = readIfExists(lockPath);
-    if (isStale(seen, lockPath, staleMs)) {
-      // Take over by moving the stale lock aside, then check it was the one judged stale;
-      // if another process replaced it meanwhile, put that one back.
-      const aside = `${lockPath}.${process.pid}.${Date.now()}.stale`;
-      try {
-        renameSync(lockPath, aside);
-        if (readIfExists(aside) !== seen) {
-          try {
-            linkSync(aside, lockPath);
-          } catch {
-            // Someone holds the lock again; we keep waiting below.
-          }
-        }
-        rmSync(aside, { force: true });
-      } catch {
-        // Gone already: try again.
-      }
-      continue;
-    }
-    if (Date.now() > deadline) throw new ConfigLockedError(lockPath);
-    sleepSync(10 + Math.floor(Math.random() * 20));
+    if (Date.now() >= deadline) throw new ConfigLockedError(lockPath, holderOf(lockPath));
+    sleepSync(Math.min(10 + Math.floor(Math.random() * 20), Math.max(1, deadline - Date.now())));
   }
   try {
     return fn();
@@ -234,7 +191,7 @@ export function withFileLock<T>(path: string, fn: () => T, options: LockOptions 
     try {
       if (readIfExists(lockPath) === id) rmSync(lockPath, { force: true });
     } catch {
-      // Released enough: a lock that isn't ours is never removed.
+      // A lock that isn't ours is never removed.
     }
   }
 }

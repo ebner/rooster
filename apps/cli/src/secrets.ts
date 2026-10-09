@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { uuidv7 } from '@rooster/core/ids';
@@ -22,6 +23,14 @@ export class CredentialStoreUnavailable extends Error {
   constructor(cause?: unknown) {
     super('The system keychain could not be read.', { cause });
     this.name = 'CredentialStoreUnavailable';
+  }
+}
+
+/** A profile's login kept changing while it was read (other rooster processes); retryable. */
+export class CredentialsChanging extends Error {
+  constructor() {
+    super('The stored login is being changed by another rooster process.');
+    this.name = 'CredentialsChanging';
   }
 }
 
@@ -124,16 +133,27 @@ function decode(raw: string | undefined | null): StoredLogin | undefined {
   return undefined;
 }
 
-/**
- * A profile name as a file name: `p-` plus the lowercase hex of its UTF-8 bytes. Never a
- * separator or `.`/`..`, and `home` and `Home` stay apart on case-insensitive file systems.
- */
-export function fileNameOf(profile: string): string {
-  return `p-${Buffer.from(profile, 'utf8').toString('hex')}`;
+/** A stored login's exact identity: the store and the one ref (account or file) holding it. */
+export interface CredentialRef {
+  store: StoreKind;
+  /** Keychain: the account `<profile>:<uuidv7>`. File: the name `<32 hex>-<uuidv7>`. */
+  ref: string;
 }
 
-/** Where a login was stored: what the profile records to find it again. */
-export type SavedLogin = { store: 'keychain'; account: string } | { store: 'file' };
+const FILE_REF = /^[0-9a-f]{32}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * A fresh file name for one login generation of `profile`: the first 32 hex digits of the
+ * name's SHA-256 (bounded, case-safe, no separators) and a UUIDv7. 69 characters, which
+ * leaves room for the temp suffix of the atomic write.
+ */
+export function newFileRef(profile: string): string {
+  return `${createHash('sha256').update(profile, 'utf8').digest('hex').slice(0, 32)}-${uuidv7()}`;
+}
+
+export function isFileRef(ref: string): boolean {
+  return FILE_REF.test(ref);
+}
 
 export class CredentialStore {
   readonly dir: string;
@@ -146,9 +166,10 @@ export class CredentialStore {
     this.dir = join(configDir, 'credentials.d');
   }
 
-  /** `<config dir>/credentials.d/p-<hex>`: one file per profile, so profiles never collide. */
-  pathOf(profile: string): string {
-    return join(this.dir, fileNameOf(profile));
+  /** The file of a file ref; refs that aren't ours (a tampered config) never become paths. */
+  pathOf(ref: string): string {
+    if (!isFileRef(ref)) throw new Error(`Not a credential file ref: ${ref}`);
+    return join(this.dir, ref);
   }
 
   private async factory(): Promise<KeyringFactory | null> {
@@ -157,13 +178,13 @@ export class CredentialStore {
   }
 
   /**
-   * Login. In the keychain, the new login is staged under a fresh account
-   * (`<profile>:<uuid>`) and read back, so a refused login never touches the active one; the
-   * caller publishes the account in the profile and then drops the previous one. The file is
-   * used only when the keychain is provably absent (no addon, `ROOSTER_KEYRING=off`, or an
-   * allowlisted error); a keychain that refuses is `KeychainRefused`.
+   * Login, staged: the new login gets a fresh ref of its own (a keychain account
+   * `<profile>:<uuid>`, read back to verify, or a new file), so nothing active is touched
+   * until the caller publishes the ref in the profile. The file is used only when the
+   * keychain is provably absent (no addon, `ROOSTER_KEYRING=off`, or an allowlisted
+   * error); a keychain that refuses is `KeychainRefused`.
    */
-  async save(profile: string, login: StoredLogin): Promise<SavedLogin> {
+  async save(profile: string, login: StoredLogin): Promise<CredentialRef> {
     const factory = await this.factory();
     if (factory !== null) {
       const account = `${profile}:${uuidv7()}`;
@@ -180,92 +201,70 @@ export class CredentialStore {
           if (back?.token !== login.token || back.server !== login.server) {
             throw new Error('The keychain did not return the stored login.');
           }
-          return { store: 'keychain', account };
+          return { store: 'keychain', ref: account };
         } catch (error) {
-          await this.discardAccount(account);
+          await this.discard({ store: 'keychain', ref: account });
           if (!isStoreAbsent(error, 'call')) throw new KeychainRefused(error);
         }
       }
     }
-    writeFileAtomic(this.pathOf(profile), `${encode(login)}\n`, 0o600);
-    return { store: 'file' };
+    const ref = newFileRef(profile);
+    writeFileAtomic(this.pathOf(ref), `${encode(login)}\n`, 0o600);
+    return { store: 'file', ref };
   }
 
   /**
-   * The login in the recorded store (the keychain account the profile records), or undefined
-   * when it holds none. A keychain that can't be read is `CredentialStoreUnavailable`, never
-   * a fallback to the file.
+   * The login at an exact ref, or undefined when it holds none. A keychain that can't be
+   * read is `CredentialStoreUnavailable`, never a fallback to a file.
    */
-  async load(
-    profile: string,
-    kind: StoreKind,
-    account: string | undefined,
-  ): Promise<StoredLogin | undefined> {
-    if (kind === 'file') return decode(readIfExists(this.pathOf(profile)));
-    if (account === undefined) return undefined;
+  async load(credential: CredentialRef): Promise<StoredLogin | undefined> {
+    if (credential.store === 'file') {
+      return isFileRef(credential.ref)
+        ? decode(readIfExists(this.pathOf(credential.ref)))
+        : undefined;
+    }
     const factory = await this.factory();
     if (factory === null) throw new CredentialStoreUnavailable();
     try {
-      return decode(await factory(SERVICE, account).getPassword());
+      return decode(await factory(SERVICE, credential.ref).getPassword());
     } catch (error) {
       throw new CredentialStoreUnavailable(error);
     }
   }
 
-  /** Logout: removes the login from the recorded store, or throws `CredentialRemovalError`. */
-  async remove(profile: string, kind: StoreKind, account: string | undefined): Promise<void> {
-    if (kind === 'file') {
+  /** Logout: removes exactly this ref, or throws `CredentialRemovalError`. Gone is fine. */
+  async remove(credential: CredentialRef): Promise<void> {
+    if (credential.store === 'file') {
+      if (!isFileRef(credential.ref)) return;
+      const path = this.pathOf(credential.ref);
       try {
-        unlinkSync(this.pathOf(profile));
+        unlinkSync(path);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-          throw new CredentialRemovalError(this.pathOf(profile), error);
+          throw new CredentialRemovalError(path, error);
         }
       }
       return;
     }
-    if (account === undefined) return;
     const factory = await this.factory();
     if (factory === null) {
       throw new CredentialRemovalError('keychain', new Error('The keychain is not available.'));
     }
     try {
-      await factory(SERVICE, account).deletePassword();
+      await factory(SERVICE, credential.ref).deletePassword();
     } catch (error) {
       throw new CredentialRemovalError('keychain', error);
     }
   }
 
   /**
-   * After a new login is published: removes what the profile pointed at before (another
-   * keychain account, or the profile's file when the new login is in the keychain). False
-   * when something could not be removed (the caller warns; it is no longer referenced).
+   * Best-effort removal of one exact ref that nothing references any more: a staged login
+   * whose publication failed, or the previous generation after a new one was published.
+   * False when it could not be confirmed (the caller warns). Never touches any other ref.
    */
-  async dropPrevious(
-    profile: string,
-    previous: { store?: StoreKind; account?: string },
-    current: SavedLogin,
-  ): Promise<boolean> {
-    let ok = true;
-    if (previous.store === 'keychain' && previous.account !== undefined) {
-      const same = current.store === 'keychain' && current.account === previous.account;
-      if (!same) ok = (await this.discardAccount(previous.account)) && ok;
-    }
-    if (current.store === 'keychain') {
-      try {
-        unlinkSync(this.pathOf(profile));
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') ok = false;
-      }
-    }
-    return ok;
-  }
-
-  private async discardAccount(account: string): Promise<boolean> {
+  async discard(credential: CredentialRef): Promise<boolean> {
     try {
-      const factory = await this.factory();
-      if (factory === null) return false;
-      await factory(SERVICE, account).deletePassword();
+      await this.remove(credential);
       return true;
     } catch {
       return false;

@@ -297,7 +297,8 @@
     "keychainFallback": "No system keychain available; the credential is stored in {path} (readable only by you).",
     "otherServer": "This profile’s login is for {stored}, not {server}. Run rooster login --server {server} (or use another --profile).",
     "keychainUnavailable": "This profile’s login is stored in the system keychain, which can’t be read now (it may be locked). Unlock it and try again, or sign in again with rooster login (with ROOSTER_KEYRING=off the new login is stored in a file).",
-    "keychainRefused": "The system keychain refused to store the login ({reason}). Unlock it and run rooster login again, or set ROOSTER_KEYRING=off to store the login in a file (readable only by you)."
+    "keychainRefused": "The system keychain refused to store the login ({reason}). Unlock it and run rooster login again, or set ROOSTER_KEYRING=off to store the login in a file (readable only by you).",
+    "credentialsChanging": "The stored login is being changed by another rooster process; try again."
   },
   "login": {
     "arg": {
@@ -317,7 +318,8 @@
     "expired": "The code expired before it was approved. Run rooster login again.",
     "failed": "Sign-in failed: {error}",
     "done": "Signed in as {name} <{email}> (profile {profile}).",
-    "previousKept": "The previous login could not be removed from its store; it is no longer used."
+    "previousKept": "The previous login could not be removed from its store; it is no longer used.",
+    "stagedKept": "The new login could not be saved to the configuration, and its stored copy could not be removed either; it is not used."
   },
   "logout": {
     "envToken": "ROOSTER_TOKEN is set; unset it to sign out. Tokens are revoked with rooster token revoke.",
@@ -326,7 +328,8 @@
     "revokeFailed": "Couldn’t revoke the session on the server; the local credential is removed anyway.",
     "done": "Signed out of profile {profile}.",
     "removeFailed": "Couldn’t remove the stored credential from {path}: {reason}. You are still signed in; fix that and run rooster logout again.",
-    "keychainWhere": "the system keychain (service “rooster”, account “{profile}”)"
+    "keychainWhere": "the system keychain (service “rooster”, account “{profile}”)",
+    "replaced": "Profile {profile} was signed in again by another rooster process while signing out; that newer login was kept."
   },
   "whoami": {
     "server": "Server",
@@ -353,7 +356,7 @@
     "unset": "{key} isn’t set.",
     "saved": "Saved {key} for profile {profile}.",
     "badServer": "“{value}” isn’t a server address. Use https://rooster.example.com.",
-    "locked": "Another rooster process is changing the configuration; try again. If none is running, delete {path}."
+    "locked": "The configuration is locked by process {pid}. If no rooster process is running, delete {path} and try again."
   },
   "completion": {
     "badShell": "Choose a shell: {shells}"

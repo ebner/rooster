@@ -15,13 +15,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ConfigLockedError, ConfigStore, writeFileAtomic } from '../src/config.ts';
 import { NO_GLOBALS, Runtime, withRuntime } from '../src/runtime.ts';
 import {
+  type CredentialRef,
   CredentialRemovalError,
   CredentialStore,
   CredentialStoreUnavailable,
-  fileNameOf,
+  isFileRef,
   isStoreAbsent,
   KeychainRefused,
   type KeyringFactory,
+  newFileRef,
 } from '../src/secrets.ts';
 import { FAKE_ENV, fakeApi, ME } from './support/fake-api.ts';
 import { cliHarness, fakeIo } from './support/fake-io.ts';
@@ -60,6 +62,9 @@ function fakeKeychain() {
     failDelete: null as string | null,
     /** Per account: a message to fail reads with (e.g. only the staged account). */
     failGet: null as ((account: string) => string | null) | null,
+    /** Pauses a read (before it looks) or a delete of an account, to interleave processes. */
+    beforeGet: null as ((account: string) => Promise<void>) | null,
+    beforeDelete: null as ((account: string) => Promise<void>) | null,
     calls: 0,
   };
   const guard = () => {
@@ -73,6 +78,7 @@ function fakeKeychain() {
     return {
       getPassword: async () => {
         guard();
+        await state.beforeGet?.(account);
         const message = state.failGet?.(account) ?? null;
         if (message !== null) throw new Error(message);
         return entries.get(key);
@@ -84,6 +90,7 @@ function fakeKeychain() {
       deletePassword: async () => {
         guard();
         if (state.failDelete !== null) throw new Error(state.failDelete);
+        await state.beforeDelete?.(account);
         return entries.delete(key);
       },
     };
@@ -122,36 +129,36 @@ describe('isStoreAbsent: the strict allowlist', () => {
   });
 });
 
-describe('login picks one store (CredentialStore.save)', () => {
-  it('the keychain when a write and its read-back succeed; a stale file is removed', async () => {
+describe('login stages one store (CredentialStore.save)', () => {
+  it('the keychain under a fresh account when a write and its read-back succeed', async () => {
     const keychain = fakeKeychain();
     const store = new CredentialStore(dir, keychain.load);
-    mkdirSync(join(dir, 'credentials.d'), { recursive: true });
-    writeFileSync(store.pathOf('home'), JSON.stringify({ token: 'old', server: A.server }));
     const saved = await store.save('home', A);
-    if (saved.store !== 'keychain') throw new Error('expected the keychain');
-    // Staged under a fresh account, never the active one.
-    expect(saved.account).toMatch(/^home:[0-9a-f-]{36}$/);
-    expect(JSON.parse(keychain.entries.get(`rooster/${saved.account}`) ?? '{}')).toEqual(A);
-    expect(await store.load('home', 'keychain', saved.account)).toEqual(A);
-    // Once published, the profile's old file login is dropped.
-    expect(await store.dropPrevious('home', { store: 'file' }, saved)).toBe(true);
-    expect(existsSync(store.pathOf('home'))).toBe(false);
+    expect(saved.store).toBe('keychain');
+    expect(saved.ref).toMatch(/^home:[0-9a-f-]{36}$/);
+    expect(JSON.parse(keychain.entries.get(`rooster/${saved.ref}`) ?? '{}')).toEqual(A);
+    expect(await store.load(saved)).toEqual(A);
   });
 
   it.each([
     ['no addon', async () => null],
     ['ServiceUnknown on every call', 'calls'],
     ['KeyRevoked when creating the entry', 'construct'],
-  ] as const)('a provably absent keychain (%s): a 0600 file of its own', async (_name, how) => {
+  ] as const)('a provably absent keychain (%s): a new 0600 file of its own', async (_name, how) => {
     const keychain = fakeKeychain();
     if (how === 'calls') keychain.state.failCalls = SERVICE_UNKNOWN;
     if (how === 'construct') keychain.state.failConstruct = KEY_REVOKED;
     const store = new CredentialStore(dir, typeof how === 'function' ? how : keychain.load);
-    expect(await store.save('home', A)).toEqual({ store: 'file' });
-    expect(statSync(store.pathOf('home')).mode & 0o777).toBe(0o600);
+    const saved = await store.save('home', A);
+    expect(saved.store).toBe('file');
+    expect(isFileRef(saved.ref)).toBe(true);
+    expect(statSync(store.pathOf(saved.ref)).mode & 0o777).toBe(0o600);
     expect(statSync(join(dir, 'credentials.d')).mode & 0o777).toBe(0o700);
-    expect(await store.load('home', 'file', undefined)).toEqual(A);
+    expect(await store.load(saved)).toEqual(A);
+    // Every login is a new generation: a second one never overwrites the first.
+    const again = await store.save('home', { ...A, token: 'tok-2' });
+    expect(again.ref).not.toBe(saved.ref);
+    expect(await store.load(saved)).toEqual(A);
   });
 
   it.each([OBJECT_LOCKED, PROMPT_DISMISSED, ACCESS_DENIED, SOCKET_OUTAGE, 'Access is denied.'])(
@@ -161,7 +168,7 @@ describe('login picks one store (CredentialStore.save)', () => {
       keychain.state.failCalls = message;
       const store = new CredentialStore(dir, keychain.load);
       await expect(store.save('home', A)).rejects.toBeInstanceOf(KeychainRefused);
-      expect(existsSync(store.pathOf('home'))).toBe(false);
+      expect(existsSync(join(dir, 'credentials.d'))).toBe(false);
     },
   );
 
@@ -182,29 +189,21 @@ describe('login picks one store (CredentialStore.save)', () => {
   });
 });
 
-describe('reads use only the recorded store', () => {
+describe('reads use only the recorded ref', () => {
   it.each([OBJECT_LOCKED, PROMPT_DISMISSED, ACCESS_DENIED, SOCKET_OUTAGE, SERVICE_UNKNOWN])(
-    'a recorded keychain failing with "%s" fails closed, even with a file login present',
+    'a recorded keychain failing with "%s" fails closed',
     async (message) => {
       const keychain = fakeKeychain();
       const store = new CredentialStore(dir, keychain.load);
       const saved = await store.save('home', A);
-      const account = saved.store === 'keychain' ? saved.account : undefined;
-      mkdirSync(join(dir, 'credentials.d'), { recursive: true });
-      writeFileSync(
-        store.pathOf('home'),
-        JSON.stringify({ token: 'stale-file', server: A.server }),
-      );
       keychain.state.failCalls = message;
-      await expect(store.load('home', 'keychain', account)).rejects.toBeInstanceOf(
-        CredentialStoreUnavailable,
-      );
+      await expect(store.load(saved)).rejects.toBeInstanceOf(CredentialStoreUnavailable);
     },
   );
 
   it('a recorded keychain without the addon fails closed', async () => {
     const store = new CredentialStore(dir, async () => null);
-    await expect(store.load('home', 'keychain', 'home:x')).rejects.toBeInstanceOf(
+    await expect(store.load({ store: 'keychain', ref: 'home:x' })).rejects.toBeInstanceOf(
       CredentialStoreUnavailable,
     );
   });
@@ -213,37 +212,40 @@ describe('reads use only the recorded store', () => {
     const keychain = fakeKeychain();
     keychain.state.failCalls = SERVICE_UNKNOWN;
     const store = new CredentialStore(dir, keychain.load);
-    expect(await store.save('home', A)).toEqual({ store: 'file' });
+    const saved = await store.save('home', A);
     keychain.state.failCalls = null;
-    keychain.entries.set('rooster/home', JSON.stringify({ token: 'keychain', server: A.server }));
     const before = keychain.state.calls;
-    expect(await store.load('home', 'file', undefined)).toEqual(A);
+    expect(await store.load(saved)).toEqual(A);
     expect(keychain.state.calls).toBe(before);
+  });
+
+  it('a file ref that is not ours (a tampered config) is never a path', async () => {
+    const store = new CredentialStore(dir, async () => null);
+    expect(await store.load({ store: 'file', ref: '../../etc/passwd' })).toBeUndefined();
+    await store.remove({ store: 'file', ref: '../../etc/passwd' });
+    expect(() => store.pathOf('../x')).toThrow();
   });
 });
 
-describe('logout removes from the recorded store, confirmed or not at all', () => {
+describe('logout removes exactly the recorded ref, confirmed or not at all', () => {
   it('a failed keychain delete (ServiceUnknown after reads worked) is an error', async () => {
     const keychain = fakeKeychain();
     const store = new CredentialStore(dir, keychain.load);
     const saved = await store.save('home', A);
-    const account = saved.store === 'keychain' ? saved.account : undefined;
     keychain.state.failCalls = SERVICE_UNKNOWN;
-    await expect(store.remove('home', 'keychain', account)).rejects.toMatchObject({
-      where: 'keychain',
-    });
+    await expect(store.remove(saved)).rejects.toMatchObject({ where: 'keychain' });
     keychain.state.failCalls = null;
-    expect(await store.load('home', 'keychain', account)).toEqual(A);
+    expect(await store.load(saved)).toEqual(A);
   });
 
   it.skipIf(asRoot)('a file that cannot be removed is an error naming the file', async () => {
     const store = new CredentialStore(dir, async () => null);
-    await store.save('home', A);
+    const saved = await store.save('home', A);
     chmodSync(join(dir, 'credentials.d'), 0o500);
     try {
-      const error = await store.remove('home', 'file', undefined).catch((e: unknown) => e);
+      const error = await store.remove(saved).catch((e: unknown) => e);
       expect(error).toBeInstanceOf(CredentialRemovalError);
-      expect((error as CredentialRemovalError).where).toBe(store.pathOf('home'));
+      expect((error as CredentialRemovalError).where).toBe(store.pathOf(saved.ref));
     } finally {
       chmodSync(join(dir, 'credentials.d'), 0o700);
     }
@@ -251,30 +253,46 @@ describe('logout removes from the recorded store, confirmed or not at all', () =
 
   it('a removed or never stored login is confirmed', async () => {
     const store = new CredentialStore(dir, async () => null);
-    await store.save('home', A);
-    await store.remove('home', 'file', undefined);
-    await store.remove('home', 'file', undefined);
-    expect(await store.load('home', 'file', undefined)).toBeUndefined();
+    const saved = await store.save('home', A);
+    await store.remove(saved);
+    await store.remove(saved);
+    expect(await store.load(saved)).toBeUndefined();
   });
 });
 
-describe('one file per profile', () => {
+describe('credential files', () => {
   it('concurrent logins and logouts of different profiles leave each other intact', async () => {
     const store = new CredentialStore(dir, async () => null);
     const profiles = ['work', 'home', 'ci', 'a.b', '../x', 'with space'];
-    await Promise.all(profiles.map((p) => store.save(p, { token: `t-${p}`, server: A.server })));
-    await Promise.all([
-      store.remove('ci', 'file', undefined),
-      store.save('work', { token: 't-work-2', server: A.server }),
-    ]);
-    for (const p of profiles) {
-      const expected =
-        p === 'ci' ? undefined : { token: p === 'work' ? 't-work-2' : `t-${p}`, server: A.server };
-      expect(await store.load(p, 'file', undefined), p).toEqual(expected);
+    const refs = await Promise.all(
+      profiles.map((p) => store.save(p, { token: `t-${p}`, server: A.server })),
+    );
+    await store.remove(refs[2] as CredentialRef);
+    for (const [i, p] of profiles.entries()) {
+      const expected = p === 'ci' ? undefined : { token: `t-${p}`, server: A.server };
+      expect(await store.load(refs[i] as CredentialRef), p).toEqual(expected);
     }
-    // Names never escape the directory.
-    expect(store.pathOf('../x').startsWith(join(dir, 'credentials.d'))).toBe(true);
     expect(existsSync(join(dir, 'x'))).toBe(false);
+  });
+
+  it('[P1] home and Home get different, lowercase-only names', () => {
+    const home = newFileRef('home');
+    const Home = newFileRef('Home');
+    expect(home.slice(0, 32)).not.toBe(Home.slice(0, 32));
+    for (const ref of [home, Home, newFileRef('ÄRENDE'), newFileRef('../x')]) {
+      expect(ref).toMatch(/^[0-9a-f]{32}-[0-9a-f-]{36}$/);
+      expect(ref).toBe(ref.toLowerCase());
+    }
+  });
+
+  it('[P2] a 128-character profile name still fits (with the atomic-write temp suffix)', async () => {
+    const store = new CredentialStore(dir, async () => null);
+    const profile = 'p'.repeat(128);
+    const saved = await store.save(profile, A);
+    expect(saved.ref.length).toBe(69);
+    expect(await store.load(saved)).toEqual(A);
+    const longest = `${saved.ref}.${2 ** 22}.${Date.now()}.tmp`;
+    expect(longest.length).toBeLessThan(255);
   });
 });
 
@@ -332,7 +350,7 @@ describe('the CLI with one store per profile', () => {
       const dirPath = join(h.cli.home, 'config', 'rooster', 'credentials.d');
       mkdirSync(dirPath, { recursive: true });
       writeFileSync(
-        join(dirPath, fileNameOf('default')),
+        join(dirPath, newFileRef('default')),
         JSON.stringify({ token: 'stale', server: FAKE_ENV.ROOSTER_SERVER }),
       );
       for (const message of [OBJECT_LOCKED, SOCKET_OUTAGE]) {
@@ -378,7 +396,8 @@ describe('the CLI with one store per profile', () => {
         try {
           const logout = await h.run(['logout']);
           expect(logout.code).toBe(1);
-          expect(logout.stderr).toContain(join(dirPath, fileNameOf('default')));
+          const ref = /credential_ref = "([^"]+)"/.exec(h.configText())?.[1] as string;
+          expect(logout.stderr).toContain(join(dirPath, ref));
           expect(logout.stderr).not.toContain('Signed out');
         } finally {
           chmodSync(dirPath, 0o700);
@@ -482,22 +501,18 @@ describe('[P1] a stored login is only sent to its own server', () => {
           })
         ).code,
       ).toBe(0);
-      const store = new CredentialStore(join(cli.home, 'config', 'rooster'), async () => null);
-      await store.save('default', { token: 'tok-b', server: 'https://b.example' });
+      // The recorded file now holds a login for another server (a racing login).
+      const configDirPath = join(cli.home, 'config', 'rooster');
+      const ref = new ConfigStore(configDirPath).reload().profiles.default
+        ?.credential_ref as string;
+      writeFileAtomic(
+        join(configDirPath, 'credentials.d', ref),
+        JSON.stringify({ token: 'tok-b', server: 'https://b.example' }),
+        0o600,
+      );
       expect((await cli.run(['whoami'])).code).toBe(3);
     } finally {
       cli.cleanup();
-    }
-  });
-});
-
-describe('[P1] profile names on case-insensitive file systems', () => {
-  it('home and Home get different files; names are p- plus lowercase hex', () => {
-    expect(fileNameOf('home')).toBe('p-686f6d65');
-    expect(fileNameOf('Home')).toBe('p-486f6d65');
-    expect(fileNameOf('home')).not.toBe(fileNameOf('Home'));
-    for (const name of ['home', 'Home', 'HOME', '../x', 'Ärende', 'with space', '.', '']) {
-      expect(fileNameOf(name), name).toMatch(/^p-[0-9a-f]*$/);
     }
   });
 });
@@ -528,7 +543,7 @@ describe('[P2] a refused login never replaces the active keychain login', () => 
       });
       expect(first.code).toBe(0);
       const config = readFileSync(join(cli.home, 'config', 'rooster', 'config.toml'), 'utf8');
-      const active = /credential_account = "([^"]+)"/.exec(config)?.[1] as string;
+      const active = /credential_ref = "([^"]+)"/.exec(config)?.[1] as string;
       expect(active).toMatch(/^default:/);
 
       // The new login's write works; reading it back fails as with a locked collection.
@@ -596,20 +611,23 @@ describe('[P1] the token is chosen for the origin the request goes to', () => {
         }) as typeof fetch,
       });
       const configDirPath = join(cli.home, 'config', 'rooster');
+      const original = new ConfigStore(configDirPath).reload().profiles.default ?? {};
       for (const freshConfig of [false, true]) {
         const runtime = new Runtime(io, NO_GLOBALS);
         const realServer = runtime.server.bind(runtime);
         runtime.server = () => {
           const server = realServer();
           // Another process logs the same profile in to b.example right now.
+          const ref = newFileRef('default');
           writeFileAtomic(
-            join(configDirPath, 'credentials.d', fileNameOf('default')),
+            join(configDirPath, 'credentials.d', ref),
             JSON.stringify({ token: 'tok-b', server: 'https://b.example' }),
             0o600,
           );
           new ConfigStore(configDirPath).updateProfile('default', (p) => ({
             ...p,
             server: 'https://b.example',
+            credential_ref: ref,
             credential_origin: 'https://b.example',
           }));
           // Whether this process sees the new config or its earlier read, no token may go
@@ -622,16 +640,7 @@ describe('[P1] the token is chosen for the origin the request goes to', () => {
         expect(result, `fresh=${freshConfig}`).toMatchObject({ exitCode: 3 });
         expect(requests).toEqual([]);
         // Back to a.example for the next round.
-        writeFileAtomic(
-          join(configDirPath, 'credentials.d', fileNameOf('default')),
-          JSON.stringify({ token: 'tok-a', server: 'https://a.example' }),
-          0o600,
-        );
-        new ConfigStore(configDirPath).updateProfile('default', (p) => ({
-          ...p,
-          server: 'https://a.example',
-          credential_origin: 'https://a.example',
-        }));
+        new ConfigStore(configDirPath).updateProfile('default', () => original);
       }
       // And a direct check: a stored login for a.example is never handed out for b.example.
       const fresh = new Runtime(fakeIo(cli.home), NO_GLOBALS);
@@ -656,18 +665,55 @@ describe('[P1] config.toml read-modify-write is locked across processes', () => 
     expect(existsSync(`${store.path}.lock`)).toBe(false);
   });
 
-  it('takes over a stale lock whose process is gone, but not one whose process lives', () => {
-    const store = new ConfigStore(dir, { timeoutMs: 100, staleMs: 1_000 });
-    const old = Date.now() - 60_000;
-    writeFileSync(`${store.path}.lock`, `2147483646 ${old} x`);
-    store.updateProfile('home', (p) => ({ ...p, org: 'a' }));
-    expect(existsSync(`${store.path}.lock`)).toBe(false);
-    writeFileSync(`${store.path}.lock`, `${process.pid} ${old} x`);
-    expect(() => store.updateProfile('home', (p) => ({ ...p, org: 'b' }))).toThrow(
-      ConfigLockedError,
-    );
+  it('[P1] never takes over a lock automatically, even a dead holder’s; names the holder', () => {
+    const store = new ConfigStore(dir, { timeoutMs: 100 });
+    writeFileSync(`${store.path}.lock`, `2147483646 ${Date.now() - 3_600_000} x`);
+    const error = (() => {
+      try {
+        store.updateProfile('home', (p) => ({ ...p, org: 'a' }));
+      } catch (e) {
+        return e;
+      }
+      return undefined;
+    })();
+    expect(error).toBeInstanceOf(ConfigLockedError);
+    expect((error as ConfigLockedError).holderPid).toBe(2147483646);
+    expect(existsSync(`${store.path}.lock`)).toBe(true);
+    expect(store.reload().profiles.home).toBeUndefined();
     rmSync(`${store.path}.lock`);
   });
+
+  it.skipIf(asRoot)(
+    '[P1] gives up within the deadline in a read-only directory, never spinning',
+    () => {
+      const store = new ConfigStore(dir, { timeoutMs: 50 });
+      writeFileSync(`${store.path}.lock`, `2147483646 ${Date.now() - 3_600_000} x`);
+      chmodSync(dir, 0o500);
+      try {
+        const started = Date.now();
+        expect(() => store.updateProfile('home', (p) => ({ ...p, org: 'a' }))).toThrow();
+        expect(Date.now() - started).toBeLessThan(1_000);
+      } finally {
+        chmodSync(dir, 0o700);
+      }
+      rmSync(`${store.path}.lock`);
+      // Without a lock file, the read-only directory's EACCES propagates at once.
+      chmodSync(dir, 0o500);
+      try {
+        const started = Date.now();
+        let code: string | undefined;
+        try {
+          store.updateProfile('home', (p) => ({ ...p, org: 'a' }));
+        } catch (e) {
+          code = (e as NodeJS.ErrnoException).code;
+        }
+        expect(code).toBe('EACCES');
+        expect(Date.now() - started).toBeLessThan(200);
+      } finally {
+        chmodSync(dir, 0o700);
+      }
+    },
+  );
 
   it('releases the lock when the change throws', () => {
     const store = new ConfigStore(dir);
@@ -678,6 +724,26 @@ describe('[P1] config.toml read-modify-write is locked across processes', () => 
     ).toThrow('boom');
     expect(existsSync(`${store.path}.lock`)).toBe(false);
   });
+
+  it('[P1] a left-behind lock stops real processes instead of letting two in', async () => {
+    writeFileSync(join(dir, 'config.toml.lock'), `2147483646 ${Date.now() - 3_600_000} x`);
+    const writer = join(import.meta.dirname, 'support', 'config-writer.ts');
+    const codes = await Promise.all(
+      ['a', 'b', 'c'].map(
+        (prefix) =>
+          new Promise<number | null>((resolve) => {
+            const child = spawn(
+              process.execPath,
+              ['--import', 'tsx', writer, dir, prefix, '1', '200'],
+              { cwd: join(import.meta.dirname, '..'), stdio: 'ignore' },
+            );
+            child.on('exit', resolve);
+          }),
+      ),
+    );
+    expect(codes.every((code) => code !== 0)).toBe(true);
+    expect(existsSync(join(dir, 'config.toml'))).toBe(false);
+  }, 60_000);
 
   it('three real processes adding profiles at once lose none of them', () => {
     const writer = join(import.meta.dirname, 'support', 'config-writer.ts');
@@ -709,4 +775,197 @@ describe('[P1] config.toml read-modify-write is locked across processes', () => 
       expect(Object.keys(profiles)).toHaveLength(3 * count);
     });
   }, 60_000);
+});
+
+/** A promise to pause on, with its release. */
+function gate() {
+  let release = () => {};
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
+}
+
+const until = async (check: () => boolean) => {
+  for (let i = 0; i < 500 && !check(); i++) await new Promise((r) => setTimeout(r, 2));
+  expect(check()).toBe(true);
+};
+
+/** A home with a keychain, a fake API that records the bearer tokens it receives, and a gate. */
+function sharedHome() {
+  const keychain = fakeKeychain();
+  const bearers: string[] = [];
+  const grantsGate: { current: ReturnType<typeof gate> | null; asked: boolean } = {
+    current: null,
+    asked: false,
+  };
+  const api = fakeApi({
+    'GET /api/v1/meta': {},
+    'GET /api/v1/me': ME,
+    'GET /api/v1/me/grants': [],
+  });
+  const fetchFn = (async (input: Request) => {
+    bearers.push(input.headers.get('authorization') ?? '');
+    if (new URL(input.url).pathname === '/api/v1/me/grants' && grantsGate.current !== null) {
+      grantsGate.asked = true;
+      await grantsGate.current.promise;
+    }
+    return api.fetch(input);
+  }) as typeof fetch;
+  const cli = cliHarness({ loadKeyring: keychain.load }, { fetch: fetchFn });
+  const env = { ROOSTER_KEYRING: '' };
+  const login = (token: string, extra: Record<string, string> = {}) =>
+    cli.run(['login', '--with-token', '--server', FAKE_ENV.ROOSTER_SERVER], {
+      stdin: token,
+      env: { ...env, ...extra },
+    });
+  const profile = () =>
+    new ConfigStore(join(cli.home, 'config', 'rooster')).reload().profiles.default ?? {};
+  return { keychain, bearers, grantsGate, cli, env, login, profile, fetchFn };
+}
+
+describe('round 9 regressions', () => {
+  it.skipIf(asRoot)(
+    '[2] a failed publication discards exactly the staged login; the active one stays',
+    async () => {
+      const h = sharedHome();
+      try {
+        expect((await h.login('tok-1')).code).toBe(0);
+        const active = h.profile().credential_ref as string;
+        const configDirPath = join(h.cli.home, 'config', 'rooster');
+        chmodSync(configDirPath, 0o500);
+        let second: { code: number; stderr: string };
+        try {
+          second = await h.login('tok-2');
+        } finally {
+          chmodSync(configDirPath, 0o700);
+        }
+        expect(second.code).not.toBe(0);
+        expect([...h.keychain.entries.keys()]).toEqual([`rooster/${active}`]);
+        expect(h.profile().credential_ref).toBe(active);
+        h.bearers.length = 0;
+        expect((await h.cli.run(['whoami', '--quiet'], { env: h.env })).stdout).toBe(
+          'ada@example.com\n',
+        );
+        expect(h.bearers[0]).toBe('Bearer tok-1');
+      } finally {
+        h.cli.cleanup();
+      }
+    },
+  );
+
+  it('[3] a process with an earlier config read sends the newer login, not a superseded one', async () => {
+    const h = sharedHome();
+    try {
+      expect((await h.login('tok-1')).code).toBe(0);
+      const runtimeA = new Runtime(
+        {
+          ...fakeIo(h.cli.home, { fetch: h.fetchFn }),
+          env: { ...fakeIo(h.cli.home).env, ...h.env },
+        },
+        NO_GLOBALS,
+        { loadKeyring: h.keychain.load },
+      );
+      expect(runtimeA.profile.credential_store).toBe('keychain'); // cached now
+      // B logs in again and can't delete the old account: it is still in the keychain.
+      h.keychain.state.failDelete = SERVICE_UNKNOWN;
+      const relogin = await h.login('tok-2');
+      h.keychain.state.failDelete = null;
+      expect(relogin.code).toBe(0);
+      expect(relogin.stderr).toContain('previous login could not be removed');
+      expect(h.keychain.entries.size).toBe(2);
+      expect(await runtimeA.token(FAKE_ENV.ROOSTER_SERVER)).toBe('tok-2');
+    } finally {
+      h.cli.cleanup();
+    }
+  });
+
+  it('[3] a ref that changes during the secret read is read again', async () => {
+    const h = sharedHome();
+    try {
+      expect((await h.login('tok-1')).code).toBe(0);
+      const first = h.profile().credential_ref as string;
+      const paused = gate();
+      let reading = false;
+      h.keychain.state.beforeGet = async (account) => {
+        if (account === first && !reading) {
+          reading = true;
+          await paused.promise;
+        }
+      };
+      const runtimeA = new Runtime(
+        { ...fakeIo(h.cli.home), env: { ...fakeIo(h.cli.home).env, ...h.env } },
+        NO_GLOBALS,
+        { loadKeyring: h.keychain.load },
+      );
+      const read = runtimeA.token(FAKE_ENV.ROOSTER_SERVER);
+      await until(() => reading);
+      h.keychain.state.beforeGet = null;
+      // B publishes a new login while A's read of the old one is in flight.
+      expect((await h.login('tok-2')).code).toBe(0);
+      paused.release();
+      expect(await read).toBe('tok-2');
+    } finally {
+      h.cli.cleanup();
+    }
+  });
+
+  it('[4] a logout overtaken by a new login leaves the new login alone and says so', async () => {
+    const h = sharedHome();
+    try {
+      expect((await h.login('tok-1')).code).toBe(0);
+      h.grantsGate.current = gate();
+      const logout = h.cli.run(['logout'], { env: h.env });
+      await until(() => h.grantsGate.asked);
+      const paused = h.grantsGate.current;
+      h.grantsGate.current = null;
+      expect((await h.login('tok-2')).code).toBe(0);
+      const newer = h.profile().credential_ref as string;
+      paused.release();
+      const result = await logout;
+      expect(result.code).toBe(5);
+      expect(result.stderr).toContain('newer login was kept');
+      expect(result.stderr).not.toContain('Signed out');
+      expect(h.profile().credential_ref).toBe(newer);
+      expect([...h.keychain.entries.keys()]).toEqual([`rooster/${newer}`]);
+      h.bearers.length = 0;
+      expect((await h.cli.run(['whoami', '--quiet'], { env: h.env })).stdout).toBe(
+        'ada@example.com\n',
+      );
+      expect(h.bearers[0]).toBe('Bearer tok-2');
+    } finally {
+      h.cli.cleanup();
+    }
+  });
+
+  it('[5] a delayed cleanup of the previous keychain login never deletes a newer file login', async () => {
+    const h = sharedHome();
+    try {
+      expect((await h.login('tok-1')).code).toBe(0);
+      const k1 = h.profile().credential_ref as string;
+      const paused = gate();
+      let deleting = false;
+      h.keychain.state.beforeDelete = async (account) => {
+        if (account === k1) {
+          deleting = true;
+          await paused.promise;
+        }
+      };
+      // A logs in to the keychain; its cleanup of K1 pauses.
+      const loginA = h.login('tok-2');
+      await until(() => deleting);
+      // B logs in with ROOSTER_KEYRING=off: a file login of its own, published.
+      expect((await h.login('tok-3', { ROOSTER_KEYRING: 'off' })).code).toBe(0);
+      expect(h.profile().credential_store).toBe('file');
+      paused.release();
+      expect((await loginA).code).toBe(0);
+      h.bearers.length = 0;
+      expect((await h.cli.run(['whoami', '--quiet'], { env: h.env })).stdout).toBe(
+        'ada@example.com\n',
+      );
+      expect(h.bearers[0]).toBe('Bearer tok-3');
+    } finally {
+      h.cli.cleanup();
+    }
+  });
 });

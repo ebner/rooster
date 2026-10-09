@@ -27,14 +27,24 @@ import { isLocale, setLocale, t } from './i18n.ts';
 import type { Io } from './io.ts';
 import { Output } from './output/output.ts';
 import {
+  type CredentialRef,
   CredentialStore,
+  CredentialsChanging,
   type KeyringFactory,
   loadKeyring,
   type StoredLogin,
-  type StoreKind,
   serverOrigin,
 } from './secrets.ts';
 import { StateStore } from './state.ts';
+
+/** Fresh re-reads of a profile's credential ref before giving up (see `storedLogin`). */
+const REF_ATTEMPTS = 3;
+
+/** The exact credential a profile points at, or undefined when it has no login. */
+export function credentialOf(profile: Profile): CredentialRef | undefined {
+  const { credential_store: store, credential_ref: ref } = profile;
+  return store === undefined || ref === undefined ? undefined : { store, ref };
+}
 
 /** Resolves to the caller's personal org wherever an org is accepted (05 §2). */
 export const PERSONAL_ORG_ALIAS = 'personal';
@@ -121,20 +131,31 @@ export class Runtime {
   }
 
   /**
-   * The profile's stored login, from the store (and keychain account) recorded at login.
-   * Undefined when the profile has none; a recorded keychain that can't be read is an
-   * error, never a fallback. The store and the profile must agree on the server origin.
+   * The profile's stored login. The ref is taken from a fresh read of `config.toml` (not
+   * this invocation's cached copy), and the config is read again after the secret: if the
+   * ref changed meanwhile (another login or logout), it starts over, a few times, then
+   * gives up (`CredentialsChanging`). A recorded keychain that can't be read is an error,
+   * never a fallback.
    */
-  async storedLogin(): Promise<{ login: StoredLogin; store: StoreKind } | undefined> {
-    const profile = this.profile;
-    if (profile.credential_store === undefined) return undefined;
-    const login = await this.credentials.load(
-      this.profileName,
-      profile.credential_store,
-      profile.credential_account,
-    );
-    if (login === undefined || login.server !== profile.credential_origin) return undefined;
-    return { login, store: profile.credential_store };
+  async storedLogin(): Promise<{ login: StoredLogin; origin: string } | undefined> {
+    for (let attempt = 0; attempt < REF_ATTEMPTS; attempt++) {
+      const before = this.config.reload().profiles[this.profileName] ?? {};
+      const credential = credentialOf(before);
+      if (credential === undefined || before.credential_origin === undefined) return undefined;
+      const login = await this.credentials.load(credential);
+      const after = this.config.reload().profiles[this.profileName] ?? {};
+      const still = credentialOf(after);
+      if (
+        still?.store !== credential.store ||
+        still.ref !== credential.ref ||
+        after.credential_origin !== before.credential_origin
+      ) {
+        continue;
+      }
+      if (login === undefined || login.server !== before.credential_origin) return undefined;
+      return { login, origin: before.credential_origin };
+    }
+    throw new CredentialsChanging();
   }
 
   /**

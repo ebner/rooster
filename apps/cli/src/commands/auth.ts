@@ -8,7 +8,7 @@ import { isLocale, setLocale, t } from '../i18n.ts';
 import { openableUrl } from '../launch.ts';
 import { clean, paint } from '../output/color.ts';
 import { styles } from '../output/theme.ts';
-import { type Runtime, rt } from '../runtime.ts';
+import { credentialOf, type Runtime, rt } from '../runtime.ts';
 import { CredentialRemovalError, serverOrigin } from '../secrets.ts';
 import { CLI_VERSION, majorOf } from '../version.ts';
 import { multi } from './util.ts';
@@ -111,49 +111,48 @@ async function finishLogin(
   }
   const profileName = runtime.profileName;
   const origin = serverOrigin(server);
-  // 1. Store the new login (a keychain login is staged under a fresh account, so a refused
-  // login leaves the active one alone).
+  // 1. Stage the new login under a fresh ref of its own; nothing active is touched yet.
   const saved = await runtime.credentials.save(profileName, { token, server: origin });
   if (saved.store === 'file' && !runtime.keyringOff && runtime.state.takeKeychainNotice()) {
-    runtime.out.notice(
-      t('auth.keychainFallback', { path: runtime.credentials.pathOf(profileName) }),
-    );
+    runtime.out.notice(t('auth.keychainFallback', { path: runtime.credentials.pathOf(saved.ref) }));
   }
-  // 2. Publish it: one locked update of the profile (and the default profile).
+  // 2. Publish it: one locked swap of the profile (and the default profile). If that fails,
+  // the staged ref is discarded and the active login stays as it was.
   let previous: Profile = {};
-  runtime.config.update((config) => {
-    previous = config.profiles[profileName] ?? {};
-    const wanted = orgFlag ?? (previous.server === server ? previous.org : undefined);
-    const org =
-      (wanted === undefined
-        ? undefined
-        : me.orgs.find((o) => o.slug === wanted || o.id === wanted)) ??
-      me.orgs.find((o) => o.isPersonal) ??
-      me.orgs[0];
-    const { credential_account: _account, ...rest } = previous;
-    const profile: Profile = {
-      ...rest,
-      server,
-      ...(org === undefined ? {} : { org: org.slug }),
-      user: me.email,
-      credential_store: saved.store,
-      credential_origin: origin,
-      ...(saved.store === 'keychain' ? { credential_account: saved.account } : {}),
-    };
-    const makeDefault = config.default_profile === undefined && profileName !== 'default';
-    return {
-      ...config,
-      ...(makeDefault ? { default_profile: profileName } : {}),
-      profiles: { ...config.profiles, [profileName]: profile },
-    };
-  });
-  // 3. Drop what the profile pointed at before; it is no longer referenced either way.
-  const before = {
-    ...(previous.credential_store === undefined ? {} : { store: previous.credential_store }),
-    ...(previous.credential_account === undefined ? {} : { account: previous.credential_account }),
-  };
-  if (!(await runtime.credentials.dropPrevious(profileName, before, saved))) {
-    runtime.out.warn(t('login.previousKept'));
+  try {
+    runtime.config.update((config) => {
+      previous = config.profiles[profileName] ?? {};
+      const wanted = orgFlag ?? (previous.server === server ? previous.org : undefined);
+      const org =
+        (wanted === undefined
+          ? undefined
+          : me.orgs.find((o) => o.slug === wanted || o.id === wanted)) ??
+        me.orgs.find((o) => o.isPersonal) ??
+        me.orgs[0];
+      const profile: Profile = {
+        ...previous,
+        server,
+        ...(org === undefined ? {} : { org: org.slug }),
+        user: me.email,
+        credential_store: saved.store,
+        credential_ref: saved.ref,
+        credential_origin: origin,
+      };
+      const makeDefault = config.default_profile === undefined && profileName !== 'default';
+      return {
+        ...config,
+        ...(makeDefault ? { default_profile: profileName } : {}),
+        profiles: { ...config.profiles, [profileName]: profile },
+      };
+    });
+  } catch (error) {
+    if (!(await runtime.credentials.discard(saved))) runtime.out.warn(t('login.stagedKept'));
+    throw error;
+  }
+  // 3. Drop exactly the previous ref the swap replaced; no other ref, no reusable path.
+  const before = credentialOf(previous);
+  if (before !== undefined && before.ref !== saved.ref) {
+    if (!(await runtime.credentials.discard(before))) runtime.out.warn(t('login.previousKept'));
   }
   runtime.state.setUserLocale(profileName, me.locale);
   if (!isLocale(previous.locale)) setLocale(me.locale);
@@ -251,8 +250,8 @@ export const logoutCommand = defineCommand({
       out.warn(t('logout.envToken'));
       return;
     }
-    const { credential_store: store, credential_account: account } = runtime.profile;
-    if (store === undefined) {
+    const captured = credentialOf(runtime.config.reload().profiles[runtime.profileName] ?? {});
+    if (captured === undefined) {
       out.notice(t('logout.notLoggedIn', { profile: runtime.profileName }));
       return;
     }
@@ -273,8 +272,9 @@ export const logoutCommand = defineCommand({
         out.warn(t('logout.revokeFailed'));
       }
     }
+    // Delete exactly the captured ref, confirmed, before the profile lets go of it.
     try {
-      await runtime.credentials.remove(runtime.profileName, store, account);
+      await runtime.credentials.remove(captured);
     } catch (error) {
       if (error instanceof CredentialRemovalError) {
         const where =
@@ -288,12 +288,28 @@ export const logoutCommand = defineCommand({
       }
       throw error;
     }
-    // Only a confirmed delete ends the login: the profile no longer points at a store.
-    runtime.config.updateProfile(
-      runtime.profileName,
-      ({ user: _user, credential_store: _store, credential_origin: _origin, ...profile }) =>
-        profile,
-    );
+    // Clear the profile only if it still points at what was deleted: a login that completed
+    // meanwhile is newer and stays.
+    let replaced = false;
+    runtime.config.update((config) => {
+      const current = config.profiles[runtime.profileName] ?? {};
+      const now = credentialOf(current);
+      if (now === undefined || now.store !== captured.store || now.ref !== captured.ref) {
+        replaced = now !== undefined;
+        return config;
+      }
+      const {
+        user: _user,
+        credential_store: _store,
+        credential_ref: _ref,
+        credential_origin: _origin,
+        ...profile
+      } = current;
+      return { ...config, profiles: { ...config.profiles, [runtime.profileName]: profile } };
+    });
+    if (replaced) {
+      throw new CliError(EXIT.conflict, t('logout.replaced', { profile: runtime.profileName }));
+    }
     runtime.state.forgetProfile(runtime.profileName);
     if (out.json) out.data({ profile: runtime.profileName, revoked });
     else out.notice(t('logout.done', { profile: runtime.profileName }));
