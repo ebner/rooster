@@ -56,25 +56,42 @@ export class KeychainRefused extends Error {
 }
 
 /**
- * Whether a keychain error means there is no usable platform store at all (the backend
- * service can't be reached or isn't supported), as opposed to a store that refuses access.
- * `@napi-rs/keyring` reports both as generic errors, so this reads the message; anything not
- * recognised counts as a refusal, which fails closed.
+ * Whether a keychain error proves there is no platform store to hold a login (an empty
+ * keychain), as opposed to one that exists but can't be read now (unknown). `@napi-rs/keyring`
+ * reports both as generic errors, so this matches exact message fragments on a strict
+ * allowlist; refusals and anything unrecognised are unknown, which fails closed.
+ * `KeyRevoked`/`KeyExpired` (Linux keyutils without a session keyring) count only when
+ * creating the entry fails.
  */
-export function isStoreUnreachable(error: unknown): boolean {
+export function isStoreAbsent(error: unknown, phase: 'construct' | 'call'): boolean {
   const message =
     error instanceof Error ? `${error.message} ${String(error.cause ?? '')}` : String(error);
-  return STORE_UNREACHABLE.some((re) => re.test(message));
+  if (STORE_REFUSED.some((re) => re.test(message))) return false;
+  if (phase === 'construct' && /\bKey(Revoked|Expired)\b/.test(message)) return true;
+  return STORE_ABSENT.some((re) => re.test(message));
 }
 
-const STORE_UNREACHABLE = [
-  /org\.freedesktop\.DBus\.Error\.(ServiceUnknown|NoServer|NameHasNoOwner|NotSupported|Spawn\.\w+|NoReply|Disconnected|FileNotFound|BadAddress)/,
-  /secret service/i,
-  /org\.freedesktop\.secrets/,
-  /D-?Bus (session )?(bus )?(is )?(not available|unavailable)|no D-?Bus/i,
+/** A store that exists but refuses or doesn't answer: never absent. */
+const STORE_REFUSED = [
+  /Secret Service: object locked/,
+  /Secret Service: unlock prompt was dismissed/,
+  /AccessDenied/,
+  /Access is denied/i,
+  /denied/i,
+  /\bNoReply\b/,
+  /\bDisconnected\b/,
+  /time(d)? ?out/i,
+];
+
+/** The allowlist of "no store here" (Linux without a Secret Service or a D-Bus session). */
+const STORE_ABSENT = [
+  /org\.freedesktop\.DBus\.Error\.ServiceUnknown/,
+  /org\.freedesktop\.DBus\.Error\.NameHasNoOwner/,
+  /The name org\.freedesktop\.secrets was not provided by any \.service files/,
   /DBUS_SESSION_BUS_ADDRESS/,
-  /platform (is )?not supported|not supported on this platform/i,
-  /\bKeyRevoked\b|\bKeyExpired\b/,
+  /Failed to connect to socket/,
+  /org\.freedesktop\.DBus\.Error\.Spawn\.\w+/,
+  /platform not supported/i,
 ];
 
 /** A logout that could not make the stored login unusable locally. */
@@ -177,16 +194,23 @@ export class FileSecretStore {
   }
 }
 
+/** The keychain for one profile: an entry, no store at all, or a store that can't be used now. */
+type Opened =
+  | { kind: 'entry'; entry: KeyringEntry }
+  | { kind: 'absent' }
+  | { kind: 'unknown'; error: unknown };
+
 /**
- * Keychain first, file second, newest wins. A login or logout that had to use the file while
- * the keychain was locked stays authoritative: every entry carries its write time, a logout
- * that cannot clear the keychain leaves a tombstone in the file, and a read removes the
- * stale side when it can. `onFallback` fires when a login had to use the file.
+ * Keychain first, file second, newest wins (a tie goes to the file, where logout tombstones
+ * live). Every entry carries its write time. Reads never delete and fail closed when the
+ * keychain's state is unknown. `onFallback` fires when a login has to use the file.
+ *
+ * Only permanent absence is cached for the process (no addon, `ROOSTER_KEYRING=off`); a
+ * missing D-Bus or Secret Service is probed again on every read, so a store that comes back
+ * is seen at once.
  */
 export class LayeredSecretStore implements SecretStore {
   private keyring: Promise<KeyringFactory | null> | undefined;
-  /** This process found no usable platform store (see `keychain`). */
-  private noStore = false;
 
   constructor(
     private readonly file: FileSecretStore,
@@ -195,48 +219,27 @@ export class LayeredSecretStore implements SecretStore {
     private readonly now: () => number = Date.now,
   ) {}
 
-  /**
-   * The profile's keychain entry, or null when there is no usable platform store: the addon
-   * is missing, its backend can't be initialised (creating the entry throws, e.g. Linux
-   * keyutils or Secret Service unavailable), or an earlier call in this process found it
-   * unreachable. Remembered per process, so reads and writes agree.
-   */
-  private async keychain(profile: string): Promise<KeyringEntry | null> {
-    if (this.noStore) return null;
+  private async open(profile: string): Promise<Opened> {
     this.keyring ??= this.loadKeyringFn();
     const factory = await this.keyring;
-    if (factory === null) return null;
+    if (factory === null) return { kind: 'absent' };
     try {
-      return factory(SERVICE, profile);
-    } catch {
-      this.noStore = true;
-      return null;
+      return { kind: 'entry', entry: factory(SERVICE, profile) };
+    } catch (error) {
+      return isStoreAbsent(error, 'construct') ? { kind: 'absent' } : { kind: 'unknown', error };
     }
   }
 
-  /**
-   * The keychain's entry: `undefined` when it holds none, or when there is no keychain at all
-   * (no native module, `ROOSTER_KEYRING=off`); `UNKNOWN` when a keychain exists but could
-   * not be read. Unknown is never treated as empty.
-   */
+  /** The keychain's entry: `undefined` when it holds none or there is no store; else `UNKNOWN`. */
   private async keychainEntry(profile: string): Promise<Entry | undefined | typeof UNKNOWN> {
-    let keychain: KeyringEntry | null;
-    try {
-      keychain = await this.keychain(profile);
-    } catch {
-      return UNKNOWN;
-    }
-    if (keychain === null) return undefined;
+    const opened = await this.open(profile);
+    if (opened.kind === 'absent') return undefined;
+    if (opened.kind === 'unknown') return UNKNOWN;
     let raw: string | undefined | null;
     try {
-      raw = await keychain.getPassword();
+      raw = await opened.entry.getPassword();
     } catch (error) {
-      if (isStoreUnreachable(error)) {
-        this.noStore = true;
-        return undefined;
-      }
-      // A store that exists but refuses this read (locked, denied): unknown, never empty.
-      return UNKNOWN;
+      return isStoreAbsent(error, 'call') ? undefined : UNKNOWN;
     }
     if (raw === undefined || raw === null || raw === '') return undefined;
     try {
@@ -295,26 +298,29 @@ export class LayeredSecretStore implements SecretStore {
     return Math.max(this.now(), latest + 1);
   }
 
+  /**
+   * Login. To the keychain when there is one; to the file (with the notice) only when there
+   * is provably no store. A store that exists but refuses (locked, denied, unrecognised)
+   * would also refuse the reads that decide which login is current, so that is
+   * `KeychainRefused` rather than a login no later command could use.
+   */
   async set(profile: string, token: string, server: string): Promise<'keychain' | 'file'> {
     const credential: Credential = {
       token,
       server: serverOrigin(server),
       at: await this.nextAt(profile),
     };
-    const keychain = await this.keychain(profile);
-    if (keychain !== null) {
+    const opened = await this.open(profile);
+    if (opened.kind === 'unknown') throw new KeychainRefused(opened.error);
+    if (opened.kind === 'entry') {
       try {
-        await keychain.setPassword(JSON.stringify(credential));
-        // An older file entry is outranked anyway; remove it so the secret isn't kept twice,
-        // but never one written since by another process.
+        await opened.entry.setPassword(JSON.stringify(credential));
+        // An older file entry (or tombstone) is outranked anyway; remove it so the secret
+        // isn't kept twice, but never one written since by another process.
         this.tryRemoveFileOlderThan(profile, credential.at);
         return 'keychain';
       } catch (error) {
-        // A keychain that exists but refuses the write (locked, denied) would also refuse the
-        // reads that decide which login is current: report it instead of a login no later
-        // command could use.
-        if (!isStoreUnreachable(error)) throw new KeychainRefused(error);
-        this.noStore = true;
+        if (!isStoreAbsent(error, 'call')) throw new KeychainRefused(error);
       }
     }
     this.onFallback();
@@ -323,42 +329,42 @@ export class LayeredSecretStore implements SecretStore {
   }
 
   /**
-   * Logout. Succeeds only when no read can return the login afterwards: the keychain entry
-   * is gone and the file entry removed, or a tombstone that outranks both is written. Else it
-   * throws `CredentialRemovalError` (e.g. a read-only config directory).
+   * Logout. A tombstone newer than every stored entry goes to the file first, so the login
+   * stays gone even if a keychain entry this process can't delete (or can't see) comes back.
+   * Then the keychain entry is deleted where possible. Succeeds only with a durable
+   * tombstone, or a confirmed keychain delete and no credential left in the file; else
+   * `CredentialRemovalError` (e.g. a read-only config directory).
    */
   async delete(profile: string): Promise<void> {
     const at = await this.nextAt(profile);
-    const cleared = await this.tryDeleteKeychain(profile);
+    let tombstoned = false;
+    let failure: unknown;
     try {
-      if (cleared) {
-        const entry = this.file.entry(profile);
-        // A newer login from another process is left alone.
-        if (entry !== undefined && entry.at < at) this.file.remove(profile);
-      } else {
-        // The keychain may still hold the login: a tombstone outranks it until it can go.
-        this.file.put(profile, { deleted: true, at });
-      }
+      this.file.put(profile, { deleted: true, at });
+      tombstoned = isTombstoneAtLeast(this.file.entry(profile), at);
     } catch (error) {
-      // If a tombstone did get written durably, reads return nothing: that's a logout.
-      if (isTombstoneAtLeast(this.file.entry(profile), at)) return;
-      throw new CredentialRemovalError(this.file.path, error);
+      failure = error;
     }
+    const keychainCleared = await this.tryDeleteKeychain(profile);
+    if (tombstoned) return;
+    if (keychainCleared && !isCredential(this.file.entry(profile))) return;
+    throw new CredentialRemovalError(this.file.path, failure ?? new Error('not removed'));
   }
 
-  /** True when the keychain holds nothing for the profile afterwards. */
+  /**
+   * True only when the keychain provably holds nothing afterwards: no store at all for good
+   * (no addon, `ROOSTER_KEYRING=off`) or a delete that succeeded. A delete that fails for any
+   * reason, a missing Secret Service included, is unconfirmed.
+   */
   private async tryDeleteKeychain(profile: string): Promise<boolean> {
+    this.keyring ??= this.loadKeyringFn();
+    if ((await this.keyring) === null) return true;
+    const opened = await this.open(profile);
+    if (opened.kind !== 'entry') return false;
     try {
-      const keychain = await this.keychain(profile);
-      if (keychain === null) return true;
-      await keychain.deletePassword();
+      await opened.entry.deletePassword();
       return true;
-    } catch (error) {
-      // An unreachable store holds nothing this process could have written.
-      if (isStoreUnreachable(error)) {
-        this.noStore = true;
-        return true;
-      }
+    } catch {
       return false;
     }
   }

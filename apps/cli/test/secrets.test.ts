@@ -7,7 +7,7 @@ import {
   CredentialStoreUnavailable,
   CredentialsChanging,
   FileSecretStore,
-  isStoreUnreachable,
+  isStoreAbsent,
   LayeredSecretStore,
 } from '../src/secrets.ts';
 import { FAKE_ENV, fakeApi, ME } from './support/fake-api.ts';
@@ -162,10 +162,14 @@ describe('credential storage (07 §2)', () => {
     keychain.state.locked = false;
     expect(await store.get('home')).toBeUndefined();
     expect(await store.get('home')).toBeUndefined();
-    // The next logout, with the keychain unlocked, clears both.
+    // The next logout, with the keychain unlocked, clears the keychain; the file keeps only a
+    // tombstone (newest wins), which the next login replaces.
     await store.delete('home');
     expect(keychain.entries.has('rooster/home')).toBe(false);
+    expect(file.entry('home')).toMatchObject({ deleted: true });
+    await store.set('home', 'again', 'https://a.example');
     expect(file.entry('home')).toBeUndefined();
+    expect(await store.get('home')).toMatchObject({ token: 'again' });
   });
 
   it('[P2] a newer keychain login beats an older file entry, even with a clock that went back', async () => {
@@ -531,24 +535,163 @@ describe('[P2] no usable platform store versus a refusing keychain', () => {
     expect(whoami.code).toBe(3);
   });
 
-  it('classifies errors: unreachable backends versus refusals', () => {
-    for (const message of [
+  it('classifies only the allowlist as absent; refusals and unknown messages are unknown', () => {
+    const absent = [
       NO_SERVICE,
-      'org.freedesktop.DBus.Error.NoServer: Failed to connect to socket',
+      'org.freedesktop.DBus.Error.NameHasNoOwner: Could not get owner of name',
+      'DBUS_SESSION_BUS_ADDRESS is not set',
+      'org.freedesktop.DBus.Error.NoServer: Failed to connect to socket /run/user/1000/bus',
       'DBus error: org.freedesktop.DBus.Error.Spawn.ExecFailed',
-      "Couldn't access platform storage: KeyRevoked",
       'Platform not supported',
-    ]) {
-      expect(isStoreUnreachable(new Error(message)), message).toBe(true);
+    ];
+    for (const message of absent) {
+      expect(isStoreAbsent(new Error(message), 'call'), message).toBe(true);
     }
+    // keyutils without a session keyring: absent only when creating the entry fails.
+    expect(
+      isStoreAbsent(new Error("Couldn't access platform storage: KeyRevoked"), 'construct'),
+    ).toBe(true);
+    expect(
+      isStoreAbsent(new Error("Couldn't access platform storage: KeyExpired"), 'construct'),
+    ).toBe(true);
+    expect(isStoreAbsent(new Error("Couldn't access platform storage: KeyRevoked"), 'call')).toBe(
+      false,
+    );
     for (const message of [
+      'Secret Service: object locked',
+      'Secret Service: unlock prompt was dismissed',
+      'org.freedesktop.DBus.Error.AccessDenied: Rejected send message to org.freedesktop.secrets',
+      'Access is denied.',
+      'permission denied',
+      'org.freedesktop.DBus.Error.NoReply: Did not receive a reply',
+      'org.freedesktop.DBus.Error.Disconnected: Connection was disconnected',
+      'Operation timed out',
+      'Secret Service: something new',
       "Couldn't access platform secure storage: the keychain is locked",
       'User interaction is not allowed.',
-      'org.freedesktop.DBus.Error.AccessDenied: denied',
-      'Access is denied.',
       'something else',
     ]) {
-      expect(isStoreUnreachable(new Error(message)), message).toBe(false);
+      expect(isStoreAbsent(new Error(message), 'call'), message).toBe(false);
+      expect(isStoreAbsent(new Error(message), 'construct'), message).toBe(false);
     }
+  });
+});
+
+describe('[P1] round 6: the strict allowlist, with the exact messages', () => {
+  /** A keyring whose every call throws `message` (entries are created fine). */
+  const failingCalls = (message: string) => async () => () => {
+    const fail = async (): Promise<never> => {
+      throw new Error(message);
+    };
+    return { getPassword: fail, setPassword: fail, deletePassword: fail };
+  };
+
+  it.each([
+    'Secret Service: object locked',
+    'Secret Service: unlock prompt was dismissed',
+    'org.freedesktop.DBus.Error.AccessDenied: Rejected send message to org.freedesktop.secrets',
+  ])(
+    'an old file credential plus a keychain throwing "%s": get() fails closed',
+    async (message) => {
+      const file = new FileSecretStore(dir);
+      file.put('home', { token: 'old-file', server: 'https://a.example', at: 1 });
+      const store = new LayeredSecretStore(file, failingCalls(message), vi.fn());
+      await expect(store.get('home')).rejects.toBeInstanceOf(CredentialStoreUnavailable);
+    },
+  );
+
+  it('a constructor throwing "Access is denied." is unknown, not absent', async () => {
+    const file = new FileSecretStore(dir);
+    file.put('home', { token: 'old-file', server: 'https://a.example', at: 1 });
+    const store = new LayeredSecretStore(
+      file,
+      async () => () => {
+        throw new Error('Access is denied.');
+      },
+      vi.fn(),
+    );
+    await expect(store.get('home')).rejects.toBeInstanceOf(CredentialStoreUnavailable);
+    await expect(store.set('home', 'x', 'https://a.example')).rejects.toThrow('Access is denied.');
+  });
+
+  it('reads succeed, then deletePassword throws ServiceUnknown: logout leaves a tombstone that wins later', async () => {
+    const keychain = fakeKeychain();
+    const time = clock();
+    const file = new FileSecretStore(dir);
+    await new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now).set(
+      'home',
+      'tok',
+      'https://a.example',
+    );
+    time.tick();
+    const factory = await keychain.factory();
+    const noServiceOnDelete = new LayeredSecretStore(
+      file,
+      async () => (service: string, account: string) => ({
+        ...factory(service, account),
+        deletePassword: async () => {
+          throw new Error(
+            'org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.secrets was not provided by any .service files',
+          );
+        },
+      }),
+      vi.fn(),
+      time.now,
+    );
+    expect(await noServiceOnDelete.get('home')).toMatchObject({ token: 'tok' });
+    await noServiceOnDelete.delete('home');
+    // The keychain entry is still there; the tombstone outranks it.
+    expect(keychain.entries.has('rooster/home')).toBe(true);
+    expect(file.entry('home')).toMatchObject({ deleted: true });
+    // A later process, keychain fully working again, gets nothing.
+    time.tick();
+    expect(
+      await new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now).get('home'),
+    ).toBeUndefined();
+  });
+
+  it('gated cross-process read: A’s first read fails with ServiceUnknown, A re-probes and returns B’s login', async () => {
+    const keychain = fakeKeychain();
+    const time = clock();
+    const file = new FileSecretStore(dir);
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let first = true;
+    const factory = await keychain.factory();
+    const processA = new LayeredSecretStore(
+      file,
+      async () => (service: string, account: string) => {
+        const entry = factory(service, account);
+        return {
+          ...entry,
+          getPassword: async () => {
+            if (first) {
+              first = false;
+              await gate;
+              throw new Error(
+                'org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.secrets was not provided by any .service files',
+              );
+            }
+            return entry.getPassword();
+          },
+        };
+      },
+      vi.fn(),
+      time.now,
+    );
+    const read = processA.get('home');
+    for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
+    // Process B logs in to the (now available) keychain.
+    expect(
+      await new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now).set(
+        'home',
+        'from-B',
+        'https://a.example',
+      ),
+    ).toBe('keychain');
+    release();
+    expect(await read).toMatchObject({ token: 'from-B' });
   });
 });
