@@ -214,10 +214,16 @@ export const subCommand = defineCommand({
   },
 });
 
+/**
+ * The newest `max` comments, oldest first. The feed pages newest page first, each page in
+ * chronological order, so earlier pages are prepended and paging stops once there are enough.
+ */
 async function recentComments(api: RoosterClient, taskId: string, max: number) {
-  const comments: { authorId: string; body: string; createdAt: number }[] = [];
+  type Comment = { authorId: string; body: string; createdAt: number };
+  const pages: Comment[][] = [];
+  let count = 0;
   let cursor: string | undefined;
-  for (let page = 0; page < 10; page++) {
+  for (let page = 0; page < 10 && count < max; page++) {
     const result = await unwrap(
       api.GET('/api/v1/tasks/{id}/activity', {
         params: {
@@ -226,11 +232,15 @@ async function recentComments(api: RoosterClient, taskId: string, max: number) {
         },
       }),
     );
-    for (const item of result.items) if (item.kind === 'comment') comments.push(item.comment);
+    const comments = result.items.flatMap((item) =>
+      item.kind === 'comment' ? [item.comment] : [],
+    );
+    pages.unshift(comments);
+    count += comments.length;
     cursor = result.nextCursor ?? undefined;
     if (cursor === undefined) break;
   }
-  return comments.slice(-max);
+  return pages.flat().slice(-max);
 }
 
 export const showCommand = defineCommand({

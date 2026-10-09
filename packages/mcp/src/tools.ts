@@ -78,6 +78,8 @@ export const ASSIGNEE_NONE = ['none', 'nobody', 'ingen'] as const;
 export function isAssigneeMe(assignee: string, ctx: ScopeContext): boolean {
   const text = assignee.trim().toLowerCase();
   if (text === '') return false;
+  // The unassign words win over a user who is literally named "none", as in `resolveAssignee`.
+  if ((ASSIGNEE_NONE as readonly string[]).includes(text)) return false;
   if ((ASSIGNEE_ME as readonly string[]).includes(text)) return true;
   if (text === ctx.userId.toLowerCase()) return true;
   if (ctx.email !== undefined && text === ctx.email.trim().toLowerCase()) return true;

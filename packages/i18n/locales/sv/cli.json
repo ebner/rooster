@@ -420,7 +420,8 @@
       "badConfig": {
         "json": "{path} är inte giltig JSON, så rooster lät den vara. Rätta filen, eller använd --client print och lägg till rooster för hand.",
         "shape": "{path} har inte den väntade formen (ett objekt med mcpServers), så rooster lät den vara. Använd --client print och lägg till rooster för hand."
-      }
+      },
+      "fromSource": "Körd från TypeScript-källkoden ({script}) kan agentens klient inte starta den här rooster. Kör setup med en byggd eller installerad rooster, t.ex. node apps/cli/dist/rooster.mjs mcp setup."
     }
   },
   "skill": {

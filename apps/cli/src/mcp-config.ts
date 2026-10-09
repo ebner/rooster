@@ -1,5 +1,5 @@
 import { accessSync, constants, realpathSync } from 'node:fs';
-import { basename, delimiter, isAbsolute, join } from 'node:path';
+import { delimiter, isAbsolute, join } from 'node:path';
 
 /** The MCP clients `rooster mcp setup --client` knows (07 §4). */
 export const MCP_CLIENTS = ['claude-code', 'claude-desktop', 'cursor', 'print'] as const;
@@ -25,6 +25,11 @@ export function serverKey(profile: string): string {
 export interface LaunchContext {
   /** `process.execPath`: node, or the single-file binary itself. */
   execPath: string;
+  /**
+   * Running as a Bun single-file binary (`process.versions.bun`), whatever the file is called
+   * (`rooster`, `rooster-1.2.0-linux-x64`, …).
+   */
+  compiled: boolean;
   /** `process.argv[1]`: the script node runs (absent in a compiled binary). */
   script: string | undefined;
   env: Readonly<Record<string, string | undefined>>;
@@ -49,9 +54,26 @@ const defaultIsExecutable = (path: string) => {
   }
 };
 
+/** Bun's virtual file system, where a compiled binary's own script lives. */
+const BUNFS_RE = /^(\/\$bunfs\/|[A-Z]:\\~BUN\\)/i;
+/** TypeScript run through a loader (tsx: `pnpm --filter @rooster/cli dev`). */
+const SOURCE_RE = /\.[cm]?tsx?$/i;
+
+/**
+ * The CLI runs from TypeScript sources through a loader that a client's plain `node` would not
+ * have: setup refuses rather than write a command that cannot start.
+ */
+export class SourceLaunchError extends Error {
+  constructor(readonly script: string) {
+    super(script);
+    this.name = 'SourceLaunchError';
+  }
+}
+
 /**
  * The absolute command that starts this CLI again, for an MCP client's config:
- * - a single-file binary (`rooster`, `rooster.exe`) runs itself;
+ * - a single-file binary runs itself, under whatever name it has;
+ * - from TypeScript sources (a dev run), `SourceLaunchError`;
  * - a `rooster` on `PATH` that resolves to the running script (an npm install) is used by
  *   its absolute path, which survives the node binary moving;
  * - otherwise node plus the absolute script.
@@ -61,7 +83,11 @@ export function launchCommand(ctx: LaunchContext, profile: string): McpServerEnt
   const realpath = ctx.realpath ?? defaultRealpath;
   const isExecutable = ctx.isExecutable ?? defaultIsExecutable;
   const args = ['mcp', '--profile', profile];
-  if (/^rooster(\.exe)?$/i.test(basename(ctx.execPath))) return { command: ctx.execPath, args };
+  if (ctx.compiled || (ctx.script !== undefined && BUNFS_RE.test(ctx.script))) {
+    return { command: ctx.execPath, args };
+  }
+  if (ctx.script !== undefined && SOURCE_RE.test(ctx.script))
+    throw new SourceLaunchError(ctx.script);
   const script =
     ctx.script !== undefined && isAbsolute(ctx.script) ? realpath(ctx.script) : undefined;
   if (script !== undefined && ctx.platform !== 'win32') {

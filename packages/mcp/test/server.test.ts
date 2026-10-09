@@ -294,6 +294,58 @@ describe('untrusted text (11 §5.2)', () => {
   });
 });
 
+describe('get_task comments', () => {
+  /** The feed as the server pages it: newest page first, each page oldest first. */
+  function feed(total: number, pageSize: number) {
+    const all = Array.from({ length: total }, (_, i) => ({
+      kind: 'comment',
+      comment: { id: `c${i + 1}`, authorId: ME.id, body: `comment ${i + 1}`, createdAt: NOW + i },
+    }));
+    return (call: { query: URLSearchParams }) => {
+      const end = call.query.has('cursor') ? Number(call.query.get('cursor')) : total;
+      const start = Math.max(0, end - pageSize);
+      return { items: all.slice(start, end), nextCursor: start > 0 ? String(start) : null };
+    };
+  }
+
+  async function commentsOf(total: number, pageSize: number) {
+    const detail = {
+      ...task({ counts: { subtasks: 0, subtasksDone: 0, comments: total, attachments: 0 } }),
+      description: '',
+      subtasks: [],
+      parentChain: [],
+      followers: [],
+    };
+    const { mcp, api } = await start({
+      ...baseRoutes(),
+      'GET /api/v1/tasks/resolve': task(),
+      'GET /api/v1/tasks/*/activity': feed(total, pageSize),
+      'GET /api/v1/tasks/*': detail,
+    });
+    const result = await mcp.callTool({ name: 'get_task', arguments: { ref: '41' } });
+    const pages = api.calls.filter((c) => c.path.endsWith('/activity')).length;
+    return {
+      bodies: (dataOf(result).task.comments as { body: string }[]).map((c) => c.body),
+      pages,
+    };
+  }
+
+  const last10 = (total: number) =>
+    Array.from({ length: 10 }, (_, i) => `comment ${total - 9 + i}`);
+
+  it('shows the newest ten, oldest first, from a full first page', async () => {
+    const { bodies, pages } = await commentsOf(101, 100);
+    expect(bodies).toEqual(last10(101));
+    expect(pages).toBe(1);
+  });
+
+  it('pages back only until it has ten, keeping the order across pages', async () => {
+    const { bodies, pages } = await commentsOf(101, 3);
+    expect(bodies).toEqual(last10(101));
+    expect(pages).toBe(4);
+  });
+});
+
 describe('writes', () => {
   it('create_task: the raw title with parse, NL due, group top, assignee me', async () => {
     const first = task({ id: 'first', placement: { groupId: PRIO.id, position: 'a' } });

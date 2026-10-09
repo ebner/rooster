@@ -1,14 +1,20 @@
+import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
+  closeSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
+  renameSync,
   symlinkSync,
   writeFileSync,
+  writeSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   ConfigFormatError,
@@ -16,15 +22,17 @@ import {
   clientConfigPath,
   launchCommand,
   mergeMcpEntry,
+  SourceLaunchError,
   serverKey,
   shellQuote,
 } from '../src/mcp-config.ts';
-import { readRegularFile, UnsafePathError, writeFileAtomic } from '../src/safe-write.ts';
+import { readRegularFile, UnsafePathError, writeAll, writeFileAtomic } from '../src/safe-write.ts';
 import { type CliHarness, cliHarness } from './support/fake-io.ts';
 import { type RoosterServer, startServer } from './support/rooster-server.ts';
 
 describe('launchCommand', () => {
   const base = {
+    compiled: false,
     env: { PATH: '/usr/local/bin:/usr/bin' },
     platform: 'linux' as const,
     realpath: (p: string) => (p === '/usr/local/bin/rooster' ? '/opt/rooster/dist/rooster.mjs' : p),
@@ -37,6 +45,36 @@ describe('launchCommand', () => {
         'agent',
       ),
     ).toEqual({ command: '/home/a/bin/rooster', args: ['mcp', '--profile', 'agent'] });
+  });
+
+  it('a compiled binary runs itself whatever it is called, never with its virtual script', () => {
+    expect(
+      launchCommand(
+        {
+          ...base,
+          compiled: true,
+          execPath: '/dl/rooster-1.2.0-linux-x64',
+          script: '/$bunfs/root/rooster-1.2.0-linux-x64',
+        },
+        'agent',
+      ),
+    ).toEqual({ command: '/dl/rooster-1.2.0-linux-x64', args: ['mcp', '--profile', 'agent'] });
+    // Recognised by Bun's virtual paths too, on POSIX and Windows.
+    for (const script of ['/$bunfs/root/x', 'B:\\~BUN\\root\\x.exe']) {
+      expect(launchCommand({ ...base, execPath: '/dl/x', script }, 'agent').args).toEqual([
+        'mcp',
+        '--profile',
+        'agent',
+      ]);
+    }
+  });
+
+  it('a run from TypeScript sources (tsx) is refused rather than writing a command that fails', () => {
+    for (const script of ['/repo/apps/cli/src/main.ts', '/repo/x.mts', '/repo/x.tsx']) {
+      expect(() => launchCommand({ ...base, execPath: '/usr/bin/node', script }, 'agent')).toThrow(
+        SourceLaunchError,
+      );
+    }
   });
 
   it('an npm install is found on PATH by its real path', () => {
@@ -159,6 +197,73 @@ describe('client config helpers', () => {
   });
 });
 
+describe('rooster mcp setup from sources', () => {
+  it('exits 2 before signing in, naming the built CLI', () => {
+    const cliDir = join(dirname(fileURLToPath(import.meta.url)), '..');
+    const cli = cliHarness();
+    try {
+      const run = spawnSync(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          join(cliDir, 'src/main.ts'),
+          'mcp',
+          'setup',
+          '--server',
+          'https://rooster.test',
+        ],
+        {
+          cwd: cliDir,
+          encoding: 'utf8',
+          env: {
+            PATH: process.env.PATH,
+            HOME: cli.home,
+            XDG_CONFIG_HOME: join(cli.home, 'config'),
+            ROOSTER_KEYRING: 'off',
+            LANG: 'en_US.UTF-8',
+          },
+        },
+      );
+      expect(run.status).toBe(2);
+      expect(run.stderr).toContain('TypeScript sources');
+      expect(run.stdout).not.toContain('Code:');
+    } finally {
+      cli.cleanup();
+    }
+  });
+});
+
+describe('writeAll', () => {
+  let cli: CliHarness;
+  beforeAll(() => {
+    cli = cliHarness();
+  });
+  afterAll(() => cli.cleanup());
+
+  it('keeps writing after short writes', () => {
+    const file = join(cli.home, 'short.txt');
+    const fd = openSync(file, 'w');
+    const data = Buffer.from('x'.repeat(4204));
+    try {
+      writeAll(fd, data, (f, b, o, l) => writeSync(f, b, o, Math.min(l, 1000)));
+    } finally {
+      closeSync(fd);
+    }
+    expect(readFileSync(file, 'utf8')).toBe(data.toString());
+  });
+
+  it('fails when nothing more can be written', () => {
+    let calls = 0;
+    expect(() =>
+      writeAll(0, Buffer.from('abc'), () => {
+        calls++;
+        return calls === 1 ? 1 : 0;
+      }),
+    ).toThrow('short write');
+  });
+});
+
 describe('writeFileAtomic', () => {
   let cli: CliHarness;
   beforeAll(() => {
@@ -214,6 +319,103 @@ describe('writeFileAtomic', () => {
       writeFileAtomic(file, 'mine', { previous, newMode: 0o600, backup: false, now: 0 }),
     ).toThrow(UnsafePathError);
     expect(readFileSync(file, 'utf8')).toBe('new arrival');
+  });
+
+  it('refuses a write after a chmod, and removes the backup it made', () => {
+    const file = join(cli.home, 'chmod', 'config.json');
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, 'secret');
+    chmodSync(file, 0o644);
+    const previous = readRegularFile(file);
+    chmodSync(file, 0o600);
+    expect(() =>
+      writeFileAtomic(file, 'mine', { previous, newMode: 0o600, backup: true, now: 0 }),
+    ).toThrow(UnsafePathError);
+    expect(lstatSync(file).mode & 0o777).toBe(0o600);
+    expect(readdirSync(dirname(file))).toEqual(['config.json']);
+
+    // The same change between the backup and the rename: refused, and no 0644 copy is left.
+    chmodSync(file, 0o644);
+    const again = readRegularFile(file);
+    expect(() =>
+      writeFileAtomic(file, 'mine', {
+        previous: again,
+        newMode: 0o600,
+        backup: true,
+        now: 0,
+        beforeCommit: () => chmodSync(file, 0o600),
+      }),
+    ).toThrow(UnsafePathError);
+    expect(readFileSync(file, 'utf8')).toBe('secret');
+    expect(readdirSync(dirname(file))).toEqual(['config.json']);
+  });
+
+  it('noLinksBelow: a directory swapped for a link before the rename is caught', () => {
+    const project = join(cli.home, 'project');
+    const outside = join(cli.home, 'outside');
+    mkdirSync(outside, { recursive: true });
+    const file = join(project, '.agents', 'skills', 'rooster', 'SKILL.md');
+    expect(() =>
+      writeFileAtomic(file, 'skill', {
+        previous: null,
+        newMode: 0o644,
+        backup: false,
+        now: 0,
+        noLinksBelow: project,
+        beforeCommit: () => {
+          const dir = dirname(file);
+          renameSync(dir, `${dir}-moved`);
+          symlinkSync(outside, dir);
+        },
+      }),
+    ).toThrow(UnsafePathError);
+    expect(readdirSync(outside)).toEqual([]);
+  });
+
+  it('noLinksBelow: a link already on the way is refused before anything is written', () => {
+    const project = join(cli.home, 'project2');
+    const outside = join(cli.home, 'outside2');
+    mkdirSync(join(project, '.agents'), { recursive: true });
+    mkdirSync(outside, { recursive: true });
+    symlinkSync(outside, join(project, '.agents', 'skills'));
+    const file = join(project, '.agents', 'skills', 'rooster', 'SKILL.md');
+    expect(() =>
+      writeFileAtomic(file, 'skill', {
+        previous: null,
+        newMode: 0o644,
+        backup: false,
+        now: 0,
+        noLinksBelow: project,
+      }),
+    ).toThrow(UnsafePathError);
+    expect(readdirSync(outside)).toEqual([]);
+  });
+
+  it('a config directory swapped before the rename is caught (links allowed, identity pinned)', () => {
+    const real = join(cli.home, 'dotfiles-cursor');
+    const outside = join(cli.home, 'outside3');
+    mkdirSync(real, { recursive: true });
+    mkdirSync(outside, { recursive: true });
+    const linked = join(cli.home, '.cursor');
+    symlinkSync(real, linked);
+    const file = join(linked, 'mcp.json');
+    // Through a dotfiles link: fine.
+    writeFileAtomic(file, '{}\n', { previous: null, newMode: 0o600, backup: false, now: 0 });
+    expect(readFileSync(join(real, 'mcp.json'), 'utf8')).toBe('{}\n');
+    const previous = readRegularFile(file);
+    expect(() =>
+      writeFileAtomic(file, '{"x":1}\n', {
+        previous,
+        newMode: 0o600,
+        backup: false,
+        now: 0,
+        beforeCommit: () => {
+          renameSync(linked, `${linked}-old`);
+          symlinkSync(outside, linked);
+        },
+      }),
+    ).toThrow(UnsafePathError);
+    expect(readdirSync(outside)).toEqual([]);
   });
 
   it('refuses to read through a symlink', () => {

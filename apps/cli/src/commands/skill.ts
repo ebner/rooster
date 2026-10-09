@@ -56,8 +56,8 @@ export function installSkill(
   now: number,
 ): { file: string; status: SkillInstallStatus; backup: string | null } {
   const { base, file } = skillPath(options);
-  if (options.project) assertNoSymlinksBelow(base, file);
-  else assertNoSymlinksBelow(join(file, '..', '..'), file);
+  const noLinksBelow = options.project ? base : join(file, '..', '..');
+  assertNoSymlinksBelow(noLinksBelow, file);
   const previous = readRegularFile(file);
   if (previous !== null && previous.text === content) {
     return { file, status: 'unchanged', backup: null };
@@ -67,6 +67,8 @@ export function installSkill(
     newMode: 0o644,
     backup: true,
     now,
+    // Pins every directory below the base, so a swap after the checks above is caught too.
+    noLinksBelow,
   });
   return { file, status: previous === null ? 'added' : 'updated', backup };
 }

@@ -71,6 +71,17 @@ describe('requiredScopes (11 §5.2)', () => {
     expect(requiredScopes('update_task', 'x', ctx)).toEqual(['tasks:write']);
   });
 
+  it('the unassign words win over a user named like one (agrees with resolveAssignee)', () => {
+    for (const name of ['none', 'Nobody', 'ingen']) {
+      const named = { userId: 'u', email: `${name}@example.com`, name };
+      expect(isAssigneeMe(name, named)).toBe(false);
+      expect(requiredScopes('update_task', { ref: '1', assignee: name }, named)).toEqual([
+        'tasks:write',
+        'tasks:assign',
+      ]);
+    }
+  });
+
   it('knows the user by id alone when there is no email or name', () => {
     expect(isAssigneeMe('01A0-ME', { userId: '01a0-me' })).toBe(true);
     expect(isAssigneeMe('ada@example.com', { userId: '01a0-me' })).toBe(false);

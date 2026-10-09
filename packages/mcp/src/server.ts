@@ -861,10 +861,17 @@ async function firstInGroup(client: RoosterClient, orgId: string, groupId: strin
   return page.items.find((task) => task.id !== skip) ?? null;
 }
 
+/**
+ * The newest `max` comments, oldest first. The feed pages go back in time (the first page is
+ * the newest) while each page is oldest first, so pages are prepended, and paging stops once
+ * enough comments are in hand.
+ */
 async function recentComments(client: RoosterClient, taskId: string, max: number) {
-  const comments: { authorId: string; body: string; createdAt: number }[] = [];
+  type Comment = { authorId: string; body: string; createdAt: number };
+  const pages: Comment[][] = [];
+  let count = 0;
   let cursor: string | undefined;
-  for (let page = 0; page < 5; page++) {
+  for (let page = 0; page < 5 && count < max; page++) {
     const result = await unwrap(
       client.GET('/api/v1/tasks/{id}/activity', {
         params: {
@@ -873,15 +880,22 @@ async function recentComments(client: RoosterClient, taskId: string, max: number
         },
       }),
     );
-    for (const item of result.items) if (item.kind === 'comment') comments.push(item.comment);
+    const comments = result.items.flatMap((item) =>
+      item.kind === 'comment' ? [item.comment] : [],
+    );
+    pages.unshift(comments);
+    count += comments.length;
     cursor = result.nextCursor ?? undefined;
     if (cursor === undefined) break;
   }
-  return comments.slice(-max).map((c) => ({
-    ...c,
-    // Mentions are stored as `@[Name](user:<id>)`; the name reads better.
-    body: c.body.replace(/@\[([^\]]+)\]\(user:[^)]+\)/g, '@$1'),
-  }));
+  return pages
+    .flat()
+    .slice(-max)
+    .map((c) => ({
+      ...c,
+      // Mentions are stored as `@[Name](user:<id>)`; the name reads better.
+      body: c.body.replace(/@\[([^\]]+)\]\(user:[^)]+\)/g, '@$1'),
+    }));
 }
 
 function taskUrl(instanceUrl: string, org: Pick<Org, 'slug'>, taskId: string): string {

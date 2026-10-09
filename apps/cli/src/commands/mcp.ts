@@ -19,6 +19,7 @@ import {
   type McpServerEntry,
   mergeMcpEntry,
   PROFILE_NAME_RE,
+  SourceLaunchError,
   serverKey,
 } from '../mcp-config.ts';
 import { clean } from '../output/color.ts';
@@ -243,6 +244,8 @@ const setupCommand = defineCommand({
       throw new CliError(EXIT.usage, t('mcp.setup.badProfile', { profile }));
     }
     if (runtime.tokenFromEnv()) throw new CliError(EXIT.usage, t('mcp.setup.envToken'));
+    // Before signing in: a command that cannot start would make the login useless.
+    const entry = launchEntry(runtime, profile);
     const allowDelete = args['allow-delete'] === true;
     const agent = runtime.forProfile(profile);
     await withRuntime(agent, async () => {
@@ -267,15 +270,6 @@ const setupCommand = defineCommand({
           makeDefault: false,
         });
       }
-      const entry = launchCommand(
-        {
-          execPath: process.execPath,
-          script: process.argv[1],
-          env: agent.io.env,
-          platform: agent.io.platform,
-        },
-        profile,
-      );
       const key = serverKey(profile);
       const result =
         client === 'claude-desktop' || client === 'cursor'
@@ -285,6 +279,27 @@ const setupCommand = defineCommand({
     });
   },
 });
+
+/** The client's command for this CLI; a run from sources is refused (exit 2). */
+function launchEntry(runtime: Runtime, profile: string): McpServerEntry {
+  try {
+    return launchCommand(
+      {
+        execPath: process.execPath,
+        compiled: typeof process.versions.bun === 'string',
+        script: process.argv[1],
+        env: runtime.io.env,
+        platform: runtime.io.platform,
+      },
+      profile,
+    );
+  } catch (error) {
+    if (error instanceof SourceLaunchError) {
+      throw new CliError(EXIT.usage, t('mcp.setup.fromSource', { script: error.script }));
+    }
+    throw error;
+  }
+}
 
 /**
  * An existing login of the profile on the same server whose grant matches what was asked for
