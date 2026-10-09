@@ -242,5 +242,154 @@
     "devices": "Push on this device and devices",
     "pushStates": "Push states: blocked, iOS hint, unsupported, loading",
     "pushKeys": "Regenerate push keys"
+  },
+  "access": {
+    "inbox": "Inbox",
+    "groupsLoading": "Loading groups…",
+    "noGroups": "No groups in this organisation yet.",
+    "cancel": "Cancel",
+    "scope": {
+      "tasksRead": {
+        "label": "See tasks",
+        "description": "Lists, search, task details, comments, tags and groups.",
+        "short": "see tasks"
+      },
+      "tasksWrite": {
+        "label": "Add and change tasks",
+        "description": "Create, edit, complete, move and tag tasks, and restore them from the trash.",
+        "short": "add and change tasks"
+      },
+      "commentsWrite": {
+        "label": "Comment",
+        "description": "Post and edit its own comments, and follow tasks.",
+        "short": "comment"
+      },
+      "tasksAssign": {
+        "label": "Assign to others",
+        "description": "Make other members responsible for tasks, or unassign them.",
+        "short": "assign to others"
+      },
+      "groupsWrite": {
+        "label": "Manage groups",
+        "description": "Create, rename, reorder and collapse groups.",
+        "short": "manage groups"
+      },
+      "tasksDelete": {
+        "label": "Delete",
+        "description": "Move tasks and groups to the trash.",
+        "short": "delete tasks"
+      },
+      "notificationsRead": {
+        "label": "Read notifications",
+        "description": "Your inbox and the unread count.",
+        "short": "read notifications"
+      }
+    },
+    "kind": {
+      "pat": "Token",
+      "device": "CLI device",
+      "oauth": "App"
+    },
+    "editor": {
+      "capabilities": "What it can do",
+      "included": "Included",
+      "new": "New",
+      "where": "Where",
+      "whereHint": "“Everything” includes groups created later; a list of groups does not.",
+      "allOrgs": "All organisations",
+      "allOrgsHint": "Everything, including organisations you join later.",
+      "read": "Read",
+      "write": "Change",
+      "everything": "Everything",
+      "onlyGroups": "Only these groups",
+      "nothing": "Nothing",
+      "readGroups": "Groups it may read in {org}",
+      "writeGroups": "Groups it may change in {org}",
+      "writesNothing": "It can’t change anything yet. Choose where under “Change”.",
+      "summary": "Summary"
+    },
+    "issue": {
+      "noScopes": "Choose at least one capability.",
+      "noOrgs": "Choose at least one organisation.",
+      "noGroups": "Choose at least one group."
+    },
+    "expiry": {
+      "label": "Expires",
+      "days": "{count, plural, one {In # day} other {In # days}}",
+      "year": "In 1 year",
+      "never": "Never",
+      "keep": "Keep: {date}",
+      "keepNever": "Keep: never"
+    },
+    "summary": {
+      "allOrgsRead": "Can read everything in all your organisations, including ones you join later.",
+      "allOrgsWrite": "Can read and {verb} anywhere in all your organisations, including ones you join later.",
+      "nothing": "Can’t reach any organisation.",
+      "everythingIn": "everything in {orgs}",
+      "only": "only {groups}",
+      "anywhereIn": "anywhere in {orgs}",
+      "onlyIn": "only in {groups}",
+      "read": "Can read {parts}",
+      "readOnly": "{read}; can’t change anything.",
+      "readWrite": "{read}; can {verb} {parts}.",
+      "verbTasks": "add and change tasks",
+      "verbChanges": "make changes",
+      "groupPath": "{org} › {group}",
+      "groupsIn": "{count, plural, one {# group} other {# groups}} in {org}",
+      "unknownOrg": "an organisation you left",
+      "removedGroup": "a deleted group"
+    },
+    "apps": {
+      "title": "Connected apps",
+      "body": "Tokens, CLI devices and apps that use rooster for you. Each one sees and changes only what you allowed, and revoking it stops it at once.",
+      "newToken": "New token",
+      "empty": "Nothing is connected yet. Create a token for a script, or run rooster login in a terminal to connect the CLI.",
+      "loadFailed": "Couldn’t load your connected apps.",
+      "created": "Created {date}",
+      "neverUsed": "Never used",
+      "lastUsed": "Last used {when}",
+      "lastUsedFrom": "Last used {when} from {ip}",
+      "expires": "Expires {date}",
+      "expiredOn": "Expired {date}",
+      "neverExpires": "Never expires",
+      "expired": "Expired",
+      "edit": "Edit",
+      "editNamed": "Edit {name}",
+      "revoke": "Revoke",
+      "revokeNamed": "Revoke {name}",
+      "revokeConfirm": "Revoke {name}? Anything using it stops working right away.",
+      "revokeCurrent": "Revoke {name}? It’s the device you’re using, so it’s signed out right away.",
+      "revoked": "Access revoked",
+      "saved": "Changes saved",
+      "narrowOnly": "You can narrow what this app may do. To give it more, connect it again.",
+      "name": "Name",
+      "nameHint": "To tell your tokens apart, like “Backup script”.",
+      "save": "Save changes",
+      "create": "Create token",
+      "createFailed": "Couldn’t create the token."
+    },
+    "reveal": {
+      "title": "{name} is ready",
+      "once": "Copy the token now. You won’t be able to see it again.",
+      "label": "Token",
+      "copy": "Copy",
+      "copied": "Copied",
+      "done": "Done"
+    },
+    "dev": {
+      "section": "Agent access",
+      "editor": "Constraint editor",
+      "narrowOnly": "Narrow only (an app’s grant, with a new capability)",
+      "phone": "Phone width",
+      "device": "Device approval page",
+      "deviceEnter": "Enter the code",
+      "deviceExpired": "Expired code",
+      "deviceRequest": "Approve the CLI",
+      "deviceApproved": "Approved",
+      "deviceDenied": "Denied",
+      "apps": "Connected apps",
+      "tokenCreated": "Token created (shown once)",
+      "empty": "Nothing connected"
+    }
   }
 }

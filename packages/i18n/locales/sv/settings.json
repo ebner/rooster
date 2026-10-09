@@ -242,5 +242,154 @@
     "devices": "Push på den här enheten och enheter",
     "pushStates": "Pushlägen: blockerad, iOS-tips, stöds inte, laddar",
     "pushKeys": "Skapa nya pushnycklar"
+  },
+  "access": {
+    "inbox": "Inkorg",
+    "groupsLoading": "Hämtar grupper…",
+    "noGroups": "Inga grupper i den här organisationen än.",
+    "cancel": "Avbryt",
+    "scope": {
+      "tasksRead": {
+        "label": "Se uppgifter",
+        "description": "Listor, sökning, uppgiftsdetaljer, kommentarer, taggar och grupper.",
+        "short": "se uppgifter"
+      },
+      "tasksWrite": {
+        "label": "Lägga till och ändra uppgifter",
+        "description": "Skapa, redigera, slutföra, flytta och tagga uppgifter, och återställa dem från papperskorgen.",
+        "short": "lägga till och ändra uppgifter"
+      },
+      "commentsWrite": {
+        "label": "Kommentera",
+        "description": "Skriva och redigera egna kommentarer, och följa uppgifter.",
+        "short": "kommentera"
+      },
+      "tasksAssign": {
+        "label": "Tilldela andra",
+        "description": "Göra andra medlemmar ansvariga för uppgifter, eller ta bort ansvarig.",
+        "short": "tilldela andra"
+      },
+      "groupsWrite": {
+        "label": "Hantera grupper",
+        "description": "Skapa, byta namn på, ordna om och fälla ihop grupper.",
+        "short": "hantera grupper"
+      },
+      "tasksDelete": {
+        "label": "Ta bort",
+        "description": "Flytta uppgifter och grupper till papperskorgen.",
+        "short": "ta bort uppgifter"
+      },
+      "notificationsRead": {
+        "label": "Läsa aviseringar",
+        "description": "Din inkorg och antalet olästa.",
+        "short": "läsa aviseringar"
+      }
+    },
+    "kind": {
+      "pat": "Token",
+      "device": "CLI-enhet",
+      "oauth": "App"
+    },
+    "editor": {
+      "capabilities": "Vad den får göra",
+      "included": "Ingår",
+      "new": "Ny",
+      "where": "Var",
+      "whereHint": "”Allt” omfattar grupper som skapas senare, men en lista med grupper gör det inte.",
+      "allOrgs": "Alla organisationer",
+      "allOrgsHint": "Allt, även organisationer du går med i senare.",
+      "read": "Läsa",
+      "write": "Ändra",
+      "everything": "Allt",
+      "onlyGroups": "Bara dessa grupper",
+      "nothing": "Ingenting",
+      "readGroups": "Grupper den får läsa i {org}",
+      "writeGroups": "Grupper den får ändra i {org}",
+      "writesNothing": "Den kan inte ändra något än. Välj var under ”Ändra”.",
+      "summary": "Sammanfattning"
+    },
+    "issue": {
+      "noScopes": "Välj minst en behörighet.",
+      "noOrgs": "Välj minst en organisation.",
+      "noGroups": "Välj minst en grupp."
+    },
+    "expiry": {
+      "label": "Upphör",
+      "days": "{count, plural, one {Om # dag} other {Om # dagar}}",
+      "year": "Om 1 år",
+      "never": "Aldrig",
+      "keep": "Behåll: {date}",
+      "keepNever": "Behåll: aldrig"
+    },
+    "summary": {
+      "allOrgsRead": "Kan läsa allt i alla dina organisationer, även dem du går med i senare.",
+      "allOrgsWrite": "Kan läsa och {verb} överallt i alla dina organisationer, även dem du går med i senare.",
+      "nothing": "Når ingen organisation.",
+      "everythingIn": "allt i {orgs}",
+      "only": "bara {groups}",
+      "anywhereIn": "överallt i {orgs}",
+      "onlyIn": "bara i {groups}",
+      "read": "Kan läsa {parts}",
+      "readOnly": "{read}; kan inte ändra något.",
+      "readWrite": "{read}; kan {verb} {parts}.",
+      "verbTasks": "lägga till och ändra uppgifter",
+      "verbChanges": "göra ändringar",
+      "groupPath": "{org} › {group}",
+      "groupsIn": "{count, plural, one {# grupp} other {# grupper}} i {org}",
+      "unknownOrg": "en organisation du har lämnat",
+      "removedGroup": "en borttagen grupp"
+    },
+    "apps": {
+      "title": "Anslutna appar",
+      "body": "Token, CLI-enheter och appar som använder rooster åt dig. Var och en ser och ändrar bara det du har tillåtit, och slutar fungera direkt när du återkallar den.",
+      "newToken": "Ny token",
+      "empty": "Inget är anslutet än. Skapa en token för ett skript, eller kör rooster login i en terminal för att ansluta CLI:t.",
+      "loadFailed": "Det gick inte att hämta dina anslutna appar.",
+      "created": "Skapad {date}",
+      "neverUsed": "Aldrig använd",
+      "lastUsed": "Senast använd {when}",
+      "lastUsedFrom": "Senast använd {when} från {ip}",
+      "expires": "Upphör {date}",
+      "expiredOn": "Upphörde {date}",
+      "neverExpires": "Upphör aldrig",
+      "expired": "Har upphört",
+      "edit": "Redigera",
+      "editNamed": "Redigera {name}",
+      "revoke": "Återkalla",
+      "revokeNamed": "Återkalla {name}",
+      "revokeConfirm": "Återkalla {name}? Allt som använder den slutar fungera direkt.",
+      "revokeCurrent": "Återkalla {name}? Det är enheten du använder, så den loggas ut direkt.",
+      "revoked": "Åtkomsten har återkallats",
+      "saved": "Ändringarna har sparats",
+      "narrowOnly": "Du kan begränsa vad appen får göra. Anslut den igen för att ge den mer.",
+      "name": "Namn",
+      "nameHint": "Så att du kan skilja dina token åt, till exempel ”Säkerhetskopieringsskript”.",
+      "save": "Spara ändringar",
+      "create": "Skapa token",
+      "createFailed": "Det gick inte att skapa token."
+    },
+    "reveal": {
+      "title": "{name} är klar",
+      "once": "Kopiera token nu. Du kommer inte att kunna se den igen.",
+      "label": "Token",
+      "copy": "Kopiera",
+      "copied": "Kopierad",
+      "done": "Klar"
+    },
+    "dev": {
+      "section": "Agentåtkomst",
+      "editor": "Behörighetsredigerare",
+      "narrowOnly": "Bara begränsa (en apps behörighet, med en ny förmåga)",
+      "phone": "Telefonbredd",
+      "device": "Sidan för att godkänna enheter",
+      "deviceEnter": "Ange koden",
+      "deviceExpired": "Utgången kod",
+      "deviceRequest": "Godkänn CLI:t",
+      "deviceApproved": "Godkänd",
+      "deviceDenied": "Nekad",
+      "apps": "Anslutna appar",
+      "tokenCreated": "Token skapad (visas en gång)",
+      "empty": "Inget anslutet"
+    }
   }
 }
