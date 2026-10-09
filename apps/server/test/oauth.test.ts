@@ -19,6 +19,7 @@ import { BASE_URL, testConfig } from './helpers.ts';
 import { createTask, groupNamed, inboxOf } from './list-helpers.ts';
 import {
   API_RESOURCE,
+  age,
   allow,
   authorize,
   CLIENT_ID,
@@ -75,7 +76,8 @@ describe('AC-9.3 the authorization code flow', () => {
     expect(token.body).toMatchObject({ token_type: 'Bearer', expires_in: 900 });
     expect(token.body.access_token).toMatch(/^rooster_at_/);
     expect(token.body.refresh_token).toMatch(/^rooster_rt_/);
-    expect(String(token.body.scope).split(' ').sort()).toEqual(['offline_access', 'tasks:write']);
+    // The response reports what the grant allows, implied scopes spelled out.
+    expect(token.body.scope).toBe('tasks:read tasks:write offline_access');
 
     // The grant handoff: every token, the consent and the grant agree (ADR 0041 §1).
     const [grant] = grantsOf(ctx, user.userId);
@@ -358,30 +360,6 @@ describe('AC-9.3 the authorization code flow', () => {
     expect((await refresh(ctx, dated.refresh ?? '')).status).toBe(200);
   });
 });
-
-/**
- * Time passes for the tokens and grants: every timestamp the idle rule reads moves back by
- * `ms` (the provider stamps rows with the real clock, so the server clock stays put).
- */
-function age(ctx: OAuthCtx, ms: number): void {
-  for (const table of [oauthRefreshToken, oauthAccessToken]) {
-    for (const row of ctx.db.orm.select().from(table).all()) {
-      if (row.createdAt === null) continue;
-      ctx.db.orm
-        .update(table)
-        .set({ createdAt: new Date(row.createdAt.getTime() - ms) })
-        .where(eq(table.id, row.id))
-        .run();
-    }
-  }
-  for (const row of ctx.db.orm.select().from(accessGrant).all()) {
-    ctx.db.orm
-      .update(accessGrant)
-      .set({ updatedAt: row.updatedAt - ms, createdAt: row.createdAt - ms })
-      .where(eq(accessGrant.id, row.id))
-      .run();
-  }
-}
 
 describe('OAuth conformance (11 §7)', () => {
   it('PKCE is required, and only S256', async () => {

@@ -85,6 +85,10 @@ export const PROBLEM_CODES = {
     status: 422,
     detail: "An app's access can only be narrowed here; reconnect the app to widen it.",
   },
+  nothing_approved: {
+    status: 422,
+    detail: 'Choose at least one thing the app may do, or deny it.',
+  },
   confirm_name_mismatch: {
     status: 422,
     detail: 'Type the organisation name exactly to delete it.',

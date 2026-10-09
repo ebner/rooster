@@ -3,7 +3,9 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { GrantConstraints, GrantScope } from '@rooster/core/grants';
 import type { OAuthConsentRequest } from '@rooster/core/schemas';
+import { eq } from 'drizzle-orm';
 import { expect } from 'vitest';
+import { accessGrant, oauthAccessToken, oauthRefreshToken } from '../src/db/schema/index.ts';
 import { BASE_URL } from './helpers.ts';
 import { type Caller, type ListCtx, listCtx } from './list-helpers.ts';
 
@@ -239,4 +241,28 @@ export async function withToken(
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+}
+
+/**
+ * Time passes for the tokens and grants: every timestamp the idle rule reads moves back by
+ * `ms` (the provider stamps rows with the real clock, so the server clock stays put).
+ */
+export function age(ctx: ListCtx, ms: number): void {
+  for (const table of [oauthRefreshToken, oauthAccessToken]) {
+    for (const row of ctx.db.orm.select().from(table).all()) {
+      if (row.createdAt === null) continue;
+      ctx.db.orm
+        .update(table)
+        .set({ createdAt: new Date(row.createdAt.getTime() - ms) })
+        .where(eq(table.id, row.id))
+        .run();
+    }
+  }
+  for (const row of ctx.db.orm.select().from(accessGrant).all()) {
+    ctx.db.orm
+      .update(accessGrant)
+      .set({ updatedAt: row.updatedAt - ms, createdAt: row.createdAt - ms })
+      .where(eq(accessGrant.id, row.id))
+      .run();
+  }
 }

@@ -150,6 +150,31 @@ function headersOf(res: IncomingMessage): Headers {
   return headers;
 }
 
+const timedOut = () => new TypeError('The client metadata fetch timed out.');
+
+/** `work`, unless the deadline passes or `signal` aborts first (DNS cannot stall a request). */
+function bounded<T>(work: Promise<T>, ms: number, signal: AbortSignal | undefined): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () =>
+      finish(() => reject(new TypeError('The client metadata fetch was aborted.')));
+    const timer = setTimeout(() => finish(() => reject(timedOut())), ms);
+    let done = false;
+    function finish(settle: () => void) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      settle();
+    }
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener('abort', onAbort, { once: true });
+    work.then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => finish(() => reject(error)),
+    );
+  });
+}
+
 /** The guarded fetch (see the module comment). Rejects with a `TypeError` on every refusal. */
 export function createCimdFetch(deps: CimdFetchDeps = {}) {
   const lookup = deps.lookup ?? defaultLookup;
@@ -165,10 +190,15 @@ export function createCimdFetch(deps: CimdFetchDeps = {}) {
     if (url.username !== '' || url.password !== '') {
       throw new TypeError('Client metadata URLs must not carry credentials.');
     }
+    // One deadline for the whole exchange, DNS included; an abort ends it at any point.
+    const deadline = Date.now() + timeoutMs;
+    const signal = init?.signal ?? undefined;
     const host = url.hostname.replace(/^\[|\]$/g, '');
     const literal = isIP(host);
     const answers: readonly LookupAddress[] =
-      literal === 0 ? await lookup(host) : [{ address: host, family: literal }];
+      literal === 0
+        ? await bounded(lookup(host), timeoutMs, signal)
+        : [{ address: host, family: literal }];
     if (answers.length === 0) throw new TypeError('The client metadata host does not resolve.');
     if (!answers.every((a) => isPublicAddress(a.address))) {
       throw new TypeError('The client metadata host resolves to a non-public address.');
@@ -193,7 +223,7 @@ export function createCimdFetch(deps: CimdFetchDeps = {}) {
           headers,
           agent: false,
           ...(literal === 0 ? { servername: host } : {}),
-          ...(init?.signal ? { signal: init.signal } : {}),
+          ...(signal ? { signal } : {}),
           // Pinned: whatever name the socket asks for, it gets the address approved above.
           lookup: ((_hostname: string, options: { all?: boolean }, callback: PinnedCallback) => {
             if (options.all) callback(null, [pinned]);
@@ -202,7 +232,8 @@ export function createCimdFetch(deps: CimdFetchDeps = {}) {
         },
         (res) => {
           const status = res.statusCode ?? 502;
-          if (status >= 300 && status < 400) {
+          // 304 answers a conditional revalidation (no body, cache headers): not a redirect.
+          if (status >= 300 && status < 400 && status !== 304) {
             res.destroy();
             req.destroy();
             fail(new TypeError('Client metadata redirects are refused.'));
@@ -222,7 +253,11 @@ export function createCimdFetch(deps: CimdFetchDeps = {}) {
             res.resume();
             settled = true;
             clearTimeout(timer);
-            resolve(new Response(null, { status: status < 200 || status > 599 ? 502 : status }));
+            resolve(
+              status < 200 || status > 599
+                ? new Response(null, { status: 502 })
+                : new Response(null, { status, headers: headersOf(res) }),
+            );
             return;
           }
           settled = true;
@@ -234,11 +269,14 @@ export function createCimdFetch(deps: CimdFetchDeps = {}) {
           );
         },
       );
-      const timer = setTimeout(() => {
-        const error = new TypeError('The client metadata fetch timed out.');
-        req.destroy(error);
-        fail(error);
-      }, timeoutMs);
+      const timer = setTimeout(
+        () => {
+          const error = timedOut();
+          req.destroy(error);
+          fail(error);
+        },
+        Math.max(0, deadline - Date.now()),
+      );
       req.once('error', fail);
       req.end();
     });

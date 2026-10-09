@@ -22,6 +22,11 @@ export interface ActorGrant {
    * records `via: 'mcp'` for `'mcp'` and `'oauth'` for `'api'` (11 §2.3).
    */
   resource?: 'mcp' | 'api';
+  /**
+   * P9, OAuth only: the provider's access token row behind the request. An event stream opened
+   * with it ends when the token expires or is revoked.
+   */
+  oauthTokenId?: string;
 }
 
 /**

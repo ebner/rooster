@@ -1,5 +1,6 @@
 import { verifyOAuthQueryParams } from '@better-auth/oauth-provider';
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi';
+import { OAUTH_QUERY_MAX } from '@rooster/core/limits';
 import type { Context } from 'hono';
 import { OAUTH_SCOPES, oauthProviderApi } from '../auth/auth.ts';
 import { consentHandoff } from '../auth/oauth-handoff.ts';
@@ -33,7 +34,7 @@ const consentNotFound = () =>
 
 /** The authorization request of a signed `oauth_query`; null when its signature or expiry fails. */
 async function verifiedQuery(oauthQuery: string, secret: string): Promise<URLSearchParams | null> {
-  if (oauthQuery.length > 16_384 || !(await verifyOAuthQueryParams(oauthQuery, secret))) {
+  if (oauthQuery.length > OAUTH_QUERY_MAX || !(await verifyOAuthQueryParams(oauthQuery, secret))) {
     return null;
   }
   const params = new URLSearchParams(oauthQuery);
@@ -44,7 +45,7 @@ async function verifiedQuery(oauthQuery: string, secret: string): Promise<URLSea
 const oauthQueryParam = z
   .string()
   .min(1)
-  .max(16_384)
+  .max(OAUTH_QUERY_MAX)
   .openapi({
     param: { name: 'oauth_query', in: 'query' },
     description: 'The query string the provider sent the browser to `/oauth/consent` with.',
@@ -69,11 +70,11 @@ const postConsent = createRoute({
   operationId: 'decideOAuthConsent',
   summary: 'Allow or deny an app',
   description:
-    'Browser session only. Allow creates or updates my grant for the app (scopes no wider than requested; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.',
+    'Browser session only. Allow creates or updates my grant for the app (scopes no wider than requested; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Approving nothing at all is `422 nothing_approved`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.',
   request: { body: body(OAuthConsentDecisionSchema) },
   responses: {
     200: json(OAuthConsentResultSchema, 'Where to send the browser'),
-    ...problems(...AUTHED, 404),
+    ...problems(...AUTHED, 404, 'nothing_approved'),
   },
 });
 
@@ -170,7 +171,11 @@ export function registerOAuthRoutes(app: OpenAPIHono<AppEnv>, deps: P9RouteDeps)
             provider.oauth2Consent({
               headers: headers(),
               request: request(),
-              body: { accept: true, scope: prepared.pluginScope, oauth_query: decision.oauthQuery },
+              body: {
+                accept: true,
+                ...(prepared.pluginScope === '' ? {} : { scope: prepared.pluginScope }),
+                oauth_query: decision.oauthQuery,
+              },
             }),
         ),
       );

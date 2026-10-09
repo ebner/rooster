@@ -25797,7 +25797,7 @@
         ],
         "operationId": "decideOAuthConsent",
         "summary": "Allow or deny an app",
-        "description": "Browser session only. Allow creates or updates my grant for the app (scopes no wider than requested; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.",
+        "description": "Browser session only. Allow creates or updates my grant for the app (scopes no wider than requested; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Approving nothing at all is `422 nothing_approved`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -25955,7 +25955,7 @@
             }
           },
           "422": {
-            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`.",
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `nothing_approved`.",
             "content": {
               "application/problem+json": {
                 "examples": {
@@ -25983,6 +25983,22 @@
                       "status": 422,
                       "detail": "This Idempotency-Key was already used for a different request.",
                       "code": "idempotency_key_reuse"
+                    }
+                  },
+                  "nothing_approved": {
+                    "summary": "Choose at least one thing the app may do, or deny it.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "Choose at least one thing the app may do, or deny it.",
+                      "code": "nothing_approved",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
                     }
                   }
                 },

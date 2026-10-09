@@ -1436,7 +1436,7 @@ export interface paths {
         put?: never;
         /**
          * Allow or deny an app
-         * @description Browser session only. Allow creates or updates my grant for the app (scopes no wider than requested; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.
+         * @description Browser session only. Allow creates or updates my grant for the app (scopes no wider than requested; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Approving nothing at all is `422 nothing_approved`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.
          */
         post: operations["decideOAuthConsent"];
         delete?: never;
@@ -12366,7 +12366,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `nothing_approved`. */
             422: {
                 headers: {
                     [name: string]: unknown;

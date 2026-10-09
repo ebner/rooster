@@ -5,9 +5,11 @@ import { clientIp } from '../lib/client-ip.ts';
 import type { AppEnv } from '../lib/context.ts';
 import { problemResponse } from '../lib/errors.ts';
 import type { Services } from '../services/index.ts';
+import { hashOAuthToken } from '../services/oauth-grants.ts';
 import type { SignInRejection } from '../services/sign-in-policy.ts';
 import { AUTH_BASE_PATH, type Auth, CLIENT_IP_HEADER } from './auth.ts';
 import { clearInviteCookie } from './cookies.ts';
+import { KeyedLock } from './keyed-lock.ts';
 import { resourceOf } from './oauth-metadata.ts';
 
 const REJECTIONS: ReadonlySet<string> = new Set<SignInRejection>([
@@ -87,6 +89,8 @@ const DEFAULT_OAUTH_SCOPE = 'tasks:read offline_access';
 function normalizeAuthorize(params: URLSearchParams, config: Config): URLSearchParams {
   const out = new URLSearchParams(params);
   for (const name of SIGNED_QUERY_PARAMS) out.delete(name);
+  // No sender-constrained (DPoP) tokens: a key binding asked for up front is dropped.
+  out.delete('dpop_jkt');
   const resources = out.getAll('resource');
   out.delete('resource');
   if (resources.length === 0) out.set('resource', RESOURCE_REQUIRED);
@@ -110,51 +114,113 @@ function tokenError(error: string, description: string): Response {
   });
 }
 
-/** A token request's fields: form-encoded (RFC 6749) or JSON. Repeated fields are kept. */
-function tokenFields(body: ArrayBuffer, contentType: string): URLSearchParams | null {
+/**
+ * A token request's fields, canonical: form-encoded (RFC 6749) or a flat JSON object of
+ * strings, each field at most once (a repeated `resource` is reported as such), `grant_type`
+ * trimmed as the provider trims it. The provider then receives exactly these fields as a form,
+ * so every check here sees what the provider acts on.
+ */
+function canonicalTokenFields(
+  body: ArrayBuffer,
+  contentType: string,
+): Map<string, string> | { error: string; description: string } {
   const text = new TextDecoder().decode(body);
-  if (/^application\/x-www-form-urlencoded\b/i.test(contentType)) return new URLSearchParams(text);
-  if (/^application\/json\b/i.test(contentType)) {
+  const entries: [string, unknown][] = [];
+  if (/^application\/x-www-form-urlencoded\b/i.test(contentType)) {
+    entries.push(...new URLSearchParams(text).entries());
+  } else if (/^application\/json\b/i.test(contentType)) {
+    let value: unknown;
     try {
-      const value = JSON.parse(text) as unknown;
-      if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
-      const out = new URLSearchParams();
-      for (const [key, v] of Object.entries(value)) {
-        for (const item of Array.isArray(v) ? v : [v]) {
-          if (typeof item === 'string') out.append(key, item);
-        }
-      }
-      return out;
+      value = JSON.parse(text);
     } catch {
-      return null;
+      return { error: 'invalid_request', description: 'The request body is not valid JSON.' };
     }
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      return { error: 'invalid_request', description: 'Send the parameters as an object.' };
+    }
+    for (const [key, v] of Object.entries(value)) {
+      for (const item of Array.isArray(v) ? v : [v]) entries.push([key, item]);
+    }
+  } else {
+    return { error: 'invalid_request', description: 'Send application/x-www-form-urlencoded.' };
   }
-  return null;
+  const fields = new Map<string, string>();
+  for (const [key, value] of entries) {
+    if (key === 'resource' && fields.has(key)) {
+      return { error: 'invalid_target', description: 'Request one resource per token.' };
+    }
+    if (typeof value !== 'string' || fields.has(key)) {
+      return { error: 'invalid_request', description: `Send "${key}" once, as a string.` };
+    }
+    fields.set(key, key === 'grant_type' ? value.trim() : value);
+  }
+  return fields;
 }
 
 /**
- * rooster's checks before the provider handles a token request (ADR 0041): one `resource` at
- * most; a code must carry a live grant; a refresh token must not be reused (reuse revokes the
- * grant) nor idle past "this session only". Null lets the provider proceed.
+ * The provider's token response with `scope` replaced by what the grant allows now (the user
+ * may have approved less than was requested, or narrowed the app since).
  */
-function checkTokenRequest(fields: URLSearchParams, services: Services): Response | null {
-  if (fields.getAll('resource').length > 1) {
-    return tokenError('invalid_target', 'Request one resource per token.');
+async function withGrantScope(
+  res: Response,
+  grantId: string | null,
+  services: Services,
+): Promise<Response> {
+  if (grantId === null || res.status !== 200) return res;
+  const body = (await res.clone().json()) as Record<string, unknown>;
+  const scope = services.grants.oauthTokenScope(grantId, typeof body.refresh_token === 'string');
+  if (scope === null || typeof body.access_token !== 'string') return res;
+  const headers = new Headers(res.headers);
+  headers.delete('content-length');
+  return new Response(JSON.stringify({ ...body, scope }), { status: 200, headers });
+}
+
+/** One refresh-token exchange at a time per token (reuse detection, ADR 0041). */
+const refreshLocks = new KeyedLock();
+
+/**
+ * `POST /api/auth/oauth2/token` (ADR 0041): DPoP is refused (bearer tokens only); the fields
+ * are made canonical; a code must carry a live grant; a refresh token is checked for reuse and
+ * idleness and rotated by the provider under one lock, so a concurrent second use is detected
+ * as reuse; the response reports the grant's scopes.
+ */
+async function tokenRequest(
+  init: RequestInit,
+  headers: Headers,
+  forward: () => Promise<Response>,
+  services: Services,
+): Promise<Response> {
+  if (headers.has('dpop')) {
+    return tokenError('invalid_dpop_proof', 'DPoP is not supported; use bearer tokens.');
   }
+  const fields =
+    init.body instanceof ArrayBuffer
+      ? canonicalTokenFields(init.body, headers.get('content-type') ?? '')
+      : { error: 'invalid_request', description: 'The request has no parameters.' };
+  if (!(fields instanceof Map)) return tokenError(fields.error, fields.description);
+  init.body = new URLSearchParams([...fields]).toString();
+  headers.set('content-type', 'application/x-www-form-urlencoded');
+  headers.delete('content-length');
   const grantType = fields.get('grant_type');
   if (grantType === 'authorization_code') {
     const code = fields.get('code');
-    if (code === null) return null;
-    const check = services.grants.checkOAuthCode(code);
-    return check.ok ? null : tokenError('invalid_grant', check.description);
+    const check =
+      code === undefined
+        ? { ok: true as const, grantId: null }
+        : services.grants.checkOAuthCode(code);
+    if (!check.ok) return tokenError('invalid_grant', check.description);
+    return withGrantScope(await forward(), check.grantId, services);
   }
   if (grantType === 'refresh_token') {
     const token = fields.get('refresh_token');
-    if (token === null) return null;
-    const check = services.grants.checkOAuthRefresh(token);
-    return check.ok ? null : tokenError('invalid_grant', check.description);
+    if (token === undefined) return forward();
+    return refreshLocks.run(hashOAuthToken(token), async () => {
+      const check = services.grants.checkOAuthRefresh(token);
+      if (!check.ok) return tokenError('invalid_grant', check.description);
+      return withGrantScope(await forward(), check.grantId, services);
+    });
   }
-  return null;
+  return forward();
 }
 
 /** Headers that carry a non-browser credential (a session token as bearer, a PAT, an API key). */
@@ -250,12 +316,13 @@ export function registerAuthRoutes(
         headers.set('content-type', 'application/x-www-form-urlencoded');
       }
     }
-    if (path === OAUTH_TOKEN_PATH && init.body instanceof ArrayBuffer) {
-      const fields = tokenFields(init.body, headers.get('content-type') ?? '');
-      if (fields !== null) {
-        const refused = checkTokenRequest(fields, services);
-        if (refused !== null) return refused;
-      }
+    if (path === OAUTH_TOKEN_PATH) {
+      return tokenRequest(
+        init,
+        headers,
+        async () => withoutAuthToken(await auth.handler(new Request(url, init))),
+        services,
+      );
     }
     if (
       c.req.path === DEVICE_TOKEN_PATH &&

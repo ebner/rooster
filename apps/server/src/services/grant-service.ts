@@ -108,7 +108,14 @@ const adminOnly = () =>
   new AppError('admin_only_scope', 403, 'Only instance admins can grant the "admin" permission.');
 
 /** The outcome of an OAuth token request check (the mount answers `invalid_grant` on `false`). */
-export type OAuthTokenCheck = { ok: true } | { ok: false; description: string };
+export type OAuthTokenCheck =
+  | { ok: true; grantId: string | null }
+  | { ok: false; description: string };
+
+/** A provider `confirmation` column (JSON) that binds a token to a key (DPoP `jkt`). */
+function isBound(confirmation: string | null): boolean {
+  return confirmation !== null && confirmation !== '' && confirmation !== 'null';
+}
 
 /** What `applyOAuthConsent` changed, to finish or undo it around the provider's answer. */
 export interface PreparedConsent {
@@ -116,7 +123,10 @@ export interface PreparedConsent {
   clientId: string;
   /** The grant row before the decision; null when the decision created the grant. */
   previous: GrantRow | null;
-  /** The `scope` to hand the provider: the requested scopes the grant covers. */
+  /**
+   * The `scope` to hand the provider: the requested scopes the grant covers; empty when it
+   * covers none literally (the provider then keeps the request's own scopes).
+   */
   pluginScope: string;
   /** Every resource consented for this grant, the new one included. */
   resources: string[];
@@ -380,6 +390,9 @@ export class GrantService {
     const row = db.select().from(oauthAccessToken).where(eq(oauthAccessToken.token, hash)).get();
     if (row === undefined || row.revoked !== null || row.expiresAt === null) return null;
     if (row.expiresAt.getTime() <= now || row.referenceId === null) return null;
+    // Sender-constrained (DPoP) tokens are never issued here; one that is bound fails closed
+    // rather than working as a plain bearer token.
+    if (isBound(row.confirmation)) return null;
     const resources = jsonList(row.resources);
     if (resources.length !== 1 || resources[0] !== resourceUri(this.deps.config, resource)) {
       return null;
@@ -400,8 +413,40 @@ export class GrantService {
       ...base,
       via: 'oauth',
       sessionId: grant.id,
-      grant: { ...this.toActorGrant(grant), resource },
+      grant: { ...this.toActorGrant(grant), resource, oauthTokenId: row.id },
     };
+  }
+
+  /** Whether an access token row is still usable (an OAuth event stream's heartbeat). */
+  private oauthTokenActive(tokenId: string): boolean {
+    const row = this.deps.db.orm
+      .select({ revoked: oauthAccessToken.revoked, expiresAt: oauthAccessToken.expiresAt })
+      .from(oauthAccessToken)
+      .where(eq(oauthAccessToken.id, tokenId))
+      .get();
+    return (
+      row !== undefined &&
+      row.revoked === null &&
+      row.expiresAt !== null &&
+      row.expiresAt.getTime() > this.now()
+    );
+  }
+
+  /**
+   * The `scope` a token response reports: what the grant allows now (implied scopes spelled
+   * out), plus `offline_access` when a refresh token comes with it. The provider would report
+   * the requested scopes, which the user may have narrowed (ADR 0041).
+   */
+  oauthTokenScope(grantId: string, withRefresh: boolean): string | null {
+    const row = this.deps.db.orm
+      .select({ scopes: accessGrant.scopes })
+      .from(accessGrant)
+      .where(eq(accessGrant.id, grantId))
+      .get();
+    if (row === undefined) return null;
+    const covered = expandScopes(parseScopes(row.scopes));
+    const scopes: string[] = ALL_OAUTH_SCOPES.filter((s) => covered.has(s));
+    return [...scopes, ...(withRefresh ? ['offline_access'] : [])].join(' ');
   }
 
   /**
@@ -476,7 +521,7 @@ export class GrantService {
   checkOAuthCode(code: string): OAuthTokenCheck {
     const value = readOnly(this.deps.db, (tx) => authorizationCodeValue(tx, code));
     // Unknown or used codes are the provider's to answer (replay handling included).
-    if (value === null) return { ok: true };
+    if (value === null) return { ok: true, grantId: null };
     const grantId = value.referenceId;
     if (typeof grantId !== 'string' || grantId === NO_GRANT_REFERENCE) {
       this.deps.logger.error('OAuth authorization code without a rooster grant');
@@ -494,7 +539,7 @@ export class GrantService {
     ) {
       return { ok: false, description: 'The authorization was revoked or has expired.' };
     }
-    return { ok: true };
+    return { ok: true, grantId: row.id };
   }
 
   /**
@@ -502,11 +547,14 @@ export class GrantService {
    * it (11 §2.4, ADR 0041):
    * - a refresh token that was already rotated (or revoked) is reuse: the whole grant is
    *   revoked, with its tokens and consent;
-   * - "this session only": a refresh token unused for `idle_timeout_ms` ends the grant;
-   * - a token whose grant is no longer live is refused.
+   * - "this session only": once the grant has had no token activity for `idle_timeout_ms`, it
+   *   ends; a stale refresh token of a grant still in use (another chain refreshed since) is only
+   *   refused;
+   * - a token whose grant is no longer live, or one bound to a key (DPoP), is refused.
+   * The caller serialises this check and the provider's rotation per token (auth/mount.ts).
    */
   checkOAuthRefresh(refreshToken: string): OAuthTokenCheck {
-    if (!refreshToken.startsWith(OAUTH_REFRESH_PREFIX)) return { ok: true };
+    if (!refreshToken.startsWith(OAUTH_REFRESH_PREFIX)) return { ok: true, grantId: null };
     const now = this.now();
     const hash = hashOAuthToken(refreshToken.slice(OAUTH_REFRESH_PREFIX.length));
     const row = this.deps.db.orm
@@ -514,7 +562,7 @@ export class GrantService {
       .from(oauthRefreshToken)
       .where(eq(oauthRefreshToken.token, hash))
       .get();
-    if (row === undefined) return { ok: true };
+    if (row === undefined) return { ok: true, grantId: null };
     const grant =
       row.referenceId === null
         ? undefined
@@ -537,14 +585,19 @@ export class GrantService {
     if (grant.userId !== row.userId || grant.clientId !== row.clientId) {
       return { ok: false, description: 'The authorization was revoked or has expired.' };
     }
-    if (
-      grant.idleTimeoutMs !== null &&
-      now - (row.createdAt?.getTime() ?? 0) > grant.idleTimeoutMs
-    ) {
-      this.revokeOAuthGrant(grant, grant.id);
-      return { ok: false, description: 'The session ended after a day without use.' };
+    if (isBound(row.confirmation)) {
+      return { ok: false, description: 'Sender-constrained tokens are not supported.' };
     }
-    return { ok: true };
+    if (grant.idleTimeoutMs !== null) {
+      if (this.idleExpired(grant, now)) {
+        this.revokeOAuthGrant(grant, grant.id);
+        return { ok: false, description: 'The session ended after a day without use.' };
+      }
+      if (now - (row.createdAt?.getTime() ?? 0) > grant.idleTimeoutMs) {
+        return { ok: false, description: 'This refresh token went unused for too long.' };
+      }
+    }
+    return { ok: true, grantId: grant.id };
   }
 
   /** Revokes an OAuth grant outside a user request (refresh reuse, idle expiry). */
@@ -591,6 +644,7 @@ export class GrantService {
         orgs === 'all' ? [] : orgs.filter((o) => o.read !== 'all').map((o) => o.orgId),
       isValid: () =>
         this.grantActive(grant.id, userId) &&
+        (grant.oauthTokenId === undefined || this.oauthTokenActive(grant.oauthTokenId)) &&
         (actor.via === 'pat' || actor.via === 'oauth' || this.sessionActive(userId, sessionId)),
       filterKeys: (org, keys, prior) =>
         readOnly(this.deps.db, (tx) => visibleKeys(tx, actor, org, keys, prior)),
@@ -1173,6 +1227,61 @@ export class GrantService {
   }
 
   /**
+   * The grant with its constraints reduced to orgs and groups that still exist for the user
+   * (a deleted group, a left org), so the step-up pre-fill is always a valid decision. An org
+   * whose read list empties is dropped (reading nothing there); a write list that empties is
+   * `none`. If no org would remain, the constraints stay as they are.
+   */
+  private withLiveConstraints(tx: Tx, userId: string, grant: Grant): Grant {
+    const orgs = grant.constraints.orgs;
+    if (orgs === 'all') return grant;
+    const memberOf = new Set(
+      tx
+        .select({ orgId: member.organizationId })
+        .from(member)
+        .innerJoin(organization, eq(organization.id, member.organizationId))
+        .where(and(eq(member.userId, userId), isNull(organization.deletedAt)))
+        .all()
+        .map((m) => m.orgId),
+    );
+    const liveGroups = (orgId: string, groups: readonly string[]) => {
+      if (groups.length === 0) return [];
+      const found = new Set(
+        tx
+          .select({ id: taskGroup.id })
+          .from(taskGroup)
+          .where(
+            and(
+              inArray(taskGroup.id, [...groups]),
+              eq(taskGroup.userId, userId),
+              eq(taskGroup.orgId, orgId),
+              isNull(taskGroup.deletedAt),
+            ),
+          )
+          .all()
+          .map((g) => g.id),
+      );
+      return groups.filter((g) => found.has(g));
+    };
+    const pruned = orgs.flatMap((org) => {
+      if (!memberOf.has(org.orgId)) return [];
+      let read: typeof org.read = org.read;
+      if (read !== 'all') {
+        const groups = liveGroups(org.orgId, read.groups);
+        if (groups.length === 0) return [];
+        read = { groups };
+      }
+      let write: typeof org.write = org.write;
+      if (write !== 'all' && write !== 'none') {
+        const groups = liveGroups(org.orgId, write.groups);
+        write = groups.length === 0 ? 'none' : { groups };
+      }
+      return [{ orgId: org.orgId, read, write }];
+    });
+    return pruned.length === 0 ? grant : { ...grant, constraints: { orgs: pruned } };
+  }
+
+  /**
    * GET /oauth/consent: what the consent screen shows (11 §3.1). `query` is the provider's
    * signed query without its signature fields, or null when the signature or its expiry failed
    * (the route verifies it).
@@ -1198,7 +1307,10 @@ export class GrantService {
         requestedScopes: req.scopes,
         // Step-up only: a first request has nothing to be "new" against.
         newScopes: existing === undefined ? [] : req.scopes.filter((s) => !have.has(s)),
-        existing: existing === undefined ? null : this.toDto(tx, actor, existing),
+        existing:
+          existing === undefined
+            ? null
+            : this.withLiveConstraints(tx, actor.userId, this.toDto(tx, actor, existing)),
         prefill: this.consentPrefill(tx, actor.userId, req.authorizationDetails),
       };
     });
@@ -1227,10 +1339,14 @@ export class GrantService {
           requested.has(s) &&
           (s !== 'tasks:delete' || req.scopes.includes('tasks:delete')),
       );
+      // Narrowing is the user's call: the grant holds exactly what was approved (implied
+      // scopes of the request included), however little of the request that is.
       if (approved.length === 0) {
-        throw new AppError('validation_failed', 422, 'Allow at least one requested capability.', [
-          { path: 'scopes', message: 'None of these was requested' },
-        ]);
+        throw new AppError(
+          'nothing_approved',
+          422,
+          'Choose at least one thing the app may do, or deny it.',
+        );
       }
       this.validateConstraints(tx, actor.userId, decision.constraints);
       const now = this.now();
@@ -1238,14 +1354,13 @@ export class GrantService {
       const live = this.liveOAuth(current, now) ? current : undefined;
       const scopes = minimalScopes([...approved, ...(live ? parseScopes(live.scopes) : [])]);
       const covered = expandScopes(scopes);
+      // The provider's consent may name only requested scopes: those the grant covers. When it
+      // covers none of them literally (read approved for a write request), the provider records
+      // the request as is; `finishOAuthConsent` then rewrites the consent to the grant, and token
+      // responses report the grant's scopes (auth/mount.ts), which are what is enforced.
       const pluginScopes = req.literal.filter(
         (s) => s === 'offline_access' || covered.has(s as GrantScope),
       );
-      if (!pluginScopes.some((s) => s !== 'offline_access')) {
-        throw new AppError('validation_failed', 422, 'Allow at least one requested capability.', [
-          { path: 'scopes', message: 'None of the requested capabilities is allowed' },
-        ]);
-      }
       const sessionOnly = decision.sessionOnly === true;
       const fields = {
         label: clientInfo(req.client).name.slice(0, 100) || req.clientId.slice(0, 100),
