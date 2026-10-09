@@ -71,7 +71,7 @@ export const brandColors = {
   ink: '#16191E', // n-900
   inkInverse: '#FFFFFF',
   paint: '#F59E0B', // amber-500, --color-brand
-  tile: '#16191E', // app icon background
+  tile: '#FFFBEB', // app icon background: cream (amber-50), the ink line as in the app
 } as const;
 
 /** One static mark as SVG markup (no masks, no animation): for files and icons. */

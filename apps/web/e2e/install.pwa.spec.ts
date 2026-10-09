@@ -32,7 +32,7 @@ test('AC-4.6 the manifest and icons are valid and the service worker controls th
     scope: '/',
     display: 'standalone',
     theme_color: '#ffffff',
-    background_color: '#ffffff',
+    background_color: '#fffbeb',
     lang: 'en',
   });
   const sizes = (purpose: string) =>

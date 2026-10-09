@@ -33,6 +33,7 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 ### Changed
 - **Today view:** the section for today's tasks is now labelled with the date ("Friday, Oct 9") instead of repeating "Today" under the Today heading.
 - **Larger logo** in the desktop sidebar and the collapsed rail.
+- **New app icon:** the rooster now appears as it does in the app: dark line and amber comb on a cream tile, instead of a white line on a dark tile. Installed apps may need to be reinstalled before some launchers show it.
 
 ### Fixed
 - **A tab woken from the background now shows changes made in another tab meanwhile.** Every tab of a browser shared one client id, so each tab took the others' changes for its own and skipped refreshing; a tab frozen by Android could stay stale until reload. Each tab now has its own id.

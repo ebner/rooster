@@ -53,7 +53,8 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'any',
         theme_color: '#ffffff',
-        background_color: '#ffffff',
+        // The splash screen behind the icon: the icon's cream tile (amber-50).
+        background_color: '#fffbeb',
         categories: ['productivity'],
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },

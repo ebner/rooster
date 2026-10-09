@@ -101,7 +101,7 @@ function iconSvg({ size, rounded, mark }) {
   const scale = box / markGrid;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
   <rect width="${size}" height="${size}" rx="${radius}" fill="${brandColors.tile}"/>
-  <g transform="translate(${offset} ${offset}) scale(${scale}) ${markCentre}">${markSvgBody({ ink: brandColors.inkInverse, paint: brandColors.paint })}</g>
+  <g transform="translate(${offset} ${offset}) scale(${scale}) ${markCentre}">${markSvgBody({ ink: brandColors.ink, paint: brandColors.paint })}</g>
 </svg>`;
 }
 
