@@ -9,7 +9,7 @@ import { openableUrl } from '../launch.ts';
 import { clean, paint } from '../output/color.ts';
 import { styles } from '../output/theme.ts';
 import { type Runtime, rt } from '../runtime.ts';
-import { CredentialRemovalError } from '../secrets.ts';
+import { CredentialRemovalError, serverOrigin } from '../secrets.ts';
 import { CLI_VERSION, majorOf } from '../version.ts';
 import { multi } from './util.ts';
 
@@ -110,7 +110,14 @@ async function finishLogin(
     throw error;
   }
   const profileName = runtime.profileName;
-  const where = await runtime.secrets.set(profileName, token, server);
+  const origin = serverOrigin(server);
+  // The store first, then the profile that points at it: a login completes with the config.
+  const where = await runtime.credentials.save(profileName, { token, server: origin });
+  if (where === 'file' && !runtime.keyringOff && runtime.state.takeKeychainNotice()) {
+    runtime.out.notice(
+      t('auth.keychainFallback', { path: runtime.credentials.pathOf(profileName) }),
+    );
+  }
   const previous = runtime.profile;
   const wanted = orgFlag ?? (previous.server === server ? previous.org : undefined);
   const org =
@@ -124,6 +131,8 @@ async function finishLogin(
     server,
     ...(org === undefined ? {} : { org: org.slug }),
     user: me.email,
+    credential_store: where,
+    credential_origin: origin,
   }));
   const config = runtime.config.read();
   if (config.default_profile === undefined && profileName !== 'default') {
@@ -226,8 +235,10 @@ export const logoutCommand = defineCommand({
       out.warn(t('logout.envToken'));
       return;
     }
-    const token = await runtime.secrets.get(runtime.profileName);
-    if (token === undefined) {
+    // Moves a login from the old shared credentials file first, if there is one.
+    await runtime.storedLogin().catch(() => undefined);
+    const store = runtime.profile.credential_store;
+    if (store === undefined) {
       out.notice(t('logout.notLoggedIn', { profile: runtime.profileName }));
       return;
     }
@@ -249,17 +260,26 @@ export const logoutCommand = defineCommand({
       }
     }
     try {
-      await runtime.secrets.delete(runtime.profileName);
+      await runtime.credentials.remove(runtime.profileName, store);
     } catch (error) {
       if (error instanceof CredentialRemovalError) {
+        const where =
+          error.where === 'keychain'
+            ? t('logout.keychainWhere', { profile: runtime.profileName })
+            : error.where;
         throw new CliError(
           EXIT.unexpected,
-          t('logout.removeFailed', { path: error.path, reason: error.message }),
+          t('logout.removeFailed', { path: where, reason: error.message }),
         );
       }
       throw error;
     }
-    runtime.config.updateProfile(runtime.profileName, ({ user: _user, ...profile }) => profile);
+    // Only a confirmed delete ends the login: the profile no longer points at a store.
+    runtime.config.updateProfile(
+      runtime.profileName,
+      ({ user: _user, credential_store: _store, credential_origin: _origin, ...profile }) =>
+        profile,
+    );
     runtime.state.forgetProfile(runtime.profileName);
     if (out.json) out.data({ profile: runtime.profileName, revoked });
     else out.notice(t('logout.done', { profile: runtime.profileName }));

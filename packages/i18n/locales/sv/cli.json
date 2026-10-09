@@ -297,8 +297,7 @@
     "keychainFallback": "Ingen nyckelring finns tillgänglig; inloggningen sparas i {path} (bara läsbar för dig).",
     "storedInFile": "Inloggningen sparades i credentials-filen.",
     "otherServer": "Profilens inloggning gäller {stored}, inte {server}. Kör rooster login --server {server} (eller använd en annan --profile).",
-    "keychainUnavailable": "Systemets nyckelring går inte att läsa (den kan vara låst), så kommandot gissar inte vilken sparad inloggning som gäller. Lås upp nyckelringen och försök igen, eller sätt ROOSTER_KEYRING=off för att bara använda credentials-filen.",
-    "credentialsChanging": "De sparade inloggningarna ändras av en annan rooster-process; försök igen.",
+    "keychainUnavailable": "Profilens inloggning finns i systemets nyckelring, som inte går att läsa nu (den kan vara låst). Lås upp den och försök igen, eller logga in igen med rooster login (med ROOSTER_KEYRING=off sparas den nya inloggningen i en fil).",
     "keychainRefused": "Systemets nyckelring vägrade spara inloggningen ({reason}). Lås upp den och kör rooster login igen, eller sätt ROOSTER_KEYRING=off för att spara inloggningen i en fil (bara läsbar för dig)."
   },
   "login": {
@@ -326,7 +325,8 @@
     "patKept": "Den personliga åtkomsttoken {prefix}… gäller fortfarande; återkalla den med rooster token revoke.",
     "revokeFailed": "Kunde inte avsluta sessionen på servern; den lokala inloggningen tas bort ändå.",
     "done": "Utloggad från profilen {profile}.",
-    "removeFailed": "Kunde inte ta bort den sparade inloggningen i {path}: {reason}. Den kan fortfarande gå att använda från den här datorn."
+    "removeFailed": "Kunde inte ta bort den sparade inloggningen från {path}: {reason}. Du är fortfarande inloggad; åtgärda det och kör rooster logout igen.",
+    "keychainWhere": "systemets nyckelring (tjänst ”rooster”, konto ”{profile}”)"
   },
   "whoami": {
     "server": "Server",

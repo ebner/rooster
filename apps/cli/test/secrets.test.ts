@@ -1,14 +1,23 @@
-import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   CredentialRemovalError,
+  CredentialStore,
   CredentialStoreUnavailable,
-  CredentialsChanging,
-  FileSecretStore,
   isStoreAbsent,
-  LayeredSecretStore,
+  KeychainRefused,
+  type KeyringFactory,
 } from '../src/secrets.ts';
 import { FAKE_ENV, fakeApi, ME } from './support/fake-api.ts';
 import { cliHarness } from './support/fake-io.ts';
@@ -17,203 +26,445 @@ let dir: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'rooster-secrets-'));
 });
-afterEach(() => rmSync(dir, { recursive: true, force: true }));
+afterEach(() => {
+  chmodSync(dir, 0o700);
+  rmSync(dir, { recursive: true, force: true });
+});
 
-/** A keychain that can be locked and unlocked, like a desktop session's. */
+const asRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+const A = { token: 'tok-a', server: 'https://a.example' };
+
+// The exact messages from the reviews and from `@napi-rs/keyring` on Linux.
+const SERVICE_UNKNOWN =
+  'Platform secure storage failure: org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.secrets was not provided by any .service files';
+const OBJECT_LOCKED = 'Secret Service: object locked';
+const PROMPT_DISMISSED = 'Secret Service: unlock prompt was dismissed';
+const ACCESS_DENIED =
+  'org.freedesktop.DBus.Error.AccessDenied: Rejected send message to org.freedesktop.secrets';
+const SOCKET_OUTAGE = 'Failed to connect to socket /run/user/1000/bus: Connection refused';
+const KEY_REVOKED = "Couldn't access platform storage: KeyRevoked";
+
+/**
+ * A keychain that can work, or fail every call (or creating entries) with a given message.
+ * `calls` counts every use, so tests can prove it was never consulted.
+ */
 function fakeKeychain() {
   const entries = new Map<string, string>();
-  const state = { locked: false };
-  const guard = () => {
-    if (state.locked) throw new Error('locked');
+  const state = {
+    failCalls: null as string | null,
+    failConstruct: null as string | null,
+    failDelete: null as string | null,
+    calls: 0,
   };
-  const factory = async () => (service: string, account: string) => ({
-    getPassword: async () => {
-      guard();
-      return entries.get(`${service}/${account}`);
-    },
-    setPassword: async (p: string) => {
-      guard();
-      entries.set(`${service}/${account}`, p);
-    },
-    deletePassword: async () => {
-      guard();
-      return entries.delete(`${service}/${account}`);
-    },
-  });
-  return { entries, state, factory };
-}
-
-function clock(start = 1_000) {
-  let now = start;
-  return { now: () => now, tick: (ms = 1_000) => (now += ms) };
-}
-
-describe('credential storage (07 §2)', () => {
-  it('the file fallback is mode 0600, per profile, bound to the server origin', async () => {
-    const notice = vi.fn();
-    const store = new LayeredSecretStore(new FileSecretStore(dir), async () => null, notice);
-    expect(await store.set('home', 'tok-1', 'https://a.example/sub')).toBe('file');
-    expect(await store.set('work', 'tok-2', 'https://b.example')).toBe('file');
-    const path = join(dir, 'credentials');
-    expect(statSync(path).mode & 0o777).toBe(0o600);
-    expect(await store.get('home')).toMatchObject({ token: 'tok-1', server: 'https://a.example' });
-    await store.delete('home');
-    expect(await store.get('home')).toBeUndefined();
-    expect(await store.get('work')).toMatchObject({ token: 'tok-2' });
-    expect(notice).toHaveBeenCalledTimes(2);
-    expect(readFileSync(path, 'utf8')).not.toContain('tok-1');
-  });
-
-  it('uses the keychain when it works and keeps no copy in the file', async () => {
-    const keychain = fakeKeychain();
-    const file = new FileSecretStore(dir);
-    const store = new LayeredSecretStore(file, keychain.factory, vi.fn());
-    expect(await store.set('home', 'tok', 'https://a.example')).toBe('keychain');
-    expect(JSON.parse(keychain.entries.get('rooster/home') ?? '{}')).toMatchObject({
-      token: 'tok',
-      server: 'https://a.example',
-    });
-    expect(file.entry('home')).toBeUndefined();
-    expect(await store.get('home')).toMatchObject({ token: 'tok' });
-  });
-
-  it('a raw (unbound) keychain token is never used', async () => {
-    const keychain = fakeKeychain();
-    keychain.entries.set('rooster/home', 'rooster_pat_old');
-    const store = new LayeredSecretStore(new FileSecretStore(dir), keychain.factory, vi.fn());
-    expect(await store.get('home')).toBeUndefined();
-  });
-
-  it('[P2] a login written to the file while the keychain was locked beats the older keychain entry', async () => {
-    const keychain = fakeKeychain();
-    const time = clock();
-    const file = new FileSecretStore(dir);
-    const store = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
-    await store.set('home', 'old', 'https://a.example');
-    time.tick();
-    // A later login from a session without a usable keychain (SSH, no Secret Service).
-    const elsewhere = new LayeredSecretStore(file, async () => null, vi.fn(), time.now);
-    expect(await elsewhere.set('home', 'new', 'https://a.example')).toBe('file');
-    expect(await store.get('home')).toMatchObject({ token: 'new' });
-    // Reads never delete: the stale keychain entry stays until the next login or logout.
-    expect(keychain.entries.has('rooster/home')).toBe(true);
-    expect(await store.get('home')).toMatchObject({ token: 'new' });
-    await store.set('home', 'newest', 'https://a.example');
-    expect(await store.get('home')).toMatchObject({ token: 'newest' });
-    expect(file.entry('home')).toBeUndefined();
-  });
-
-  it('[P2] a read never erases a login that happens while it runs (interleaving)', async () => {
-    const keychain = fakeKeychain();
-    const time = clock();
-    const file = new FileSecretStore(dir);
-    const store = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
-    // A stale keychain login (T1) and a newer fallback login in the file (T2).
-    await store.set('home', 't1', 'https://a.example');
-    time.tick();
-    await new LayeredSecretStore(file, async () => null, vi.fn(), time.now).set(
-      'home',
-      't2',
-      'https://a.example',
-    );
-    time.tick();
-    // Every keychain delete waits until released, so the reader can be caught mid-cleanup.
-    let release = () => {};
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const factory = await keychain.factory();
-    const gated = new LayeredSecretStore(
-      file,
-      async () => (service: string, account: string) => {
-        const entry = factory(service, account);
-        return {
-          ...entry,
-          deletePassword: async () => {
-            await gate;
-            return entry.deletePassword();
-          },
-        };
+  const guard = () => {
+    state.calls += 1;
+    if (state.failCalls !== null) throw new Error(state.failCalls);
+  };
+  const factory: KeyringFactory = (service, account) => {
+    state.calls += 1;
+    if (state.failConstruct !== null) throw new Error(state.failConstruct);
+    const key = `${service}/${account}`;
+    return {
+      getPassword: async () => {
+        guard();
+        return entries.get(key);
       },
-      vi.fn(),
-      time.now,
-    );
-    const reader = gated.get('home');
-    for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
-    // Another process logs in meanwhile: keychain T3, file entry removed.
-    const writer = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
-    expect(await writer.set('home', 't3', 'https://a.example')).toBe('keychain');
-    release();
-    expect(await reader).toMatchObject({ token: 't2' });
-    expect(await store.get('home')).toMatchObject({ token: 't3' });
-  });
+      setPassword: async (value: string) => {
+        guard();
+        entries.set(key, value);
+      },
+      deletePassword: async () => {
+        guard();
+        if (state.failDelete !== null) throw new Error(state.failDelete);
+        return entries.delete(key);
+      },
+    };
+  };
+  return { entries, state, load: async () => factory };
+}
 
-  it('[P2] a logout while the keychain is locked is not undone when it unlocks', async () => {
+describe('isStoreAbsent: the strict allowlist', () => {
+  it('only proven absence counts; refusals, outages and unknown messages do not', () => {
+    for (const message of [
+      SERVICE_UNKNOWN,
+      'org.freedesktop.DBus.Error.NameHasNoOwner: Could not get owner of name',
+      'DBUS_SESSION_BUS_ADDRESS is not set',
+      'DBus error: org.freedesktop.DBus.Error.Spawn.ExecFailed',
+      'Platform not supported',
+    ]) {
+      expect(isStoreAbsent(new Error(message), 'call'), message).toBe(true);
+    }
+    expect(isStoreAbsent(new Error(KEY_REVOKED), 'construct')).toBe(true);
+    expect(isStoreAbsent(new Error(KEY_REVOKED), 'call')).toBe(false);
+    for (const message of [
+      OBJECT_LOCKED,
+      PROMPT_DISMISSED,
+      ACCESS_DENIED,
+      SOCKET_OUTAGE,
+      'Access is denied.',
+      'org.freedesktop.DBus.Error.NoReply: Did not receive a reply',
+      'org.freedesktop.DBus.Error.Disconnected: Connection was disconnected',
+      'Operation timed out',
+      'Secret Service: something new',
+      'something else',
+    ]) {
+      expect(isStoreAbsent(new Error(message), 'call'), message).toBe(false);
+      expect(isStoreAbsent(new Error(message), 'construct'), message).toBe(false);
+    }
+  });
+});
+
+describe('login picks one store (CredentialStore.save)', () => {
+  it('the keychain when a write and its read-back succeed; a stale file is removed', async () => {
     const keychain = fakeKeychain();
-    const time = clock();
-    const file = new FileSecretStore(dir);
-    const store = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
-    await store.set('home', 'tok', 'https://a.example');
-    time.tick();
-    keychain.state.locked = true;
-    await store.delete('home');
-    // Locked, the keychain's state is unknown: reads fail closed rather than guess.
-    await expect(store.get('home')).rejects.toBeInstanceOf(CredentialStoreUnavailable);
-    keychain.state.locked = false;
-    expect(await store.get('home')).toBeUndefined();
-    expect(await store.get('home')).toBeUndefined();
-    // The next logout, with the keychain unlocked, clears the keychain; the file keeps only a
-    // tombstone (newest wins), which the next login replaces.
-    await store.delete('home');
-    expect(keychain.entries.has('rooster/home')).toBe(false);
-    expect(file.entry('home')).toMatchObject({ deleted: true });
-    await store.set('home', 'again', 'https://a.example');
-    expect(file.entry('home')).toBeUndefined();
-    expect(await store.get('home')).toMatchObject({ token: 'again' });
+    const store = new CredentialStore(dir, keychain.load);
+    mkdirSync(join(dir, 'credentials.d'), { recursive: true });
+    writeFileSync(store.pathOf('home'), JSON.stringify({ token: 'old', server: A.server }));
+    expect(await store.save('home', A)).toBe('keychain');
+    expect(JSON.parse(keychain.entries.get('rooster/home') ?? '{}')).toEqual(A);
+    expect(existsSync(store.pathOf('home'))).toBe(false);
+    expect(await store.load('home', 'keychain')).toEqual(A);
   });
 
-  it('[P2] a newer keychain login beats an older file entry, even with a clock that went back', async () => {
+  it.each([
+    ['no addon', async () => null],
+    ['ServiceUnknown on every call', 'calls'],
+    ['KeyRevoked when creating the entry', 'construct'],
+  ] as const)('a provably absent keychain (%s): a 0600 file of its own', async (_name, how) => {
     const keychain = fakeKeychain();
-    const time = clock(50_000);
-    const file = new FileSecretStore(dir);
-    const store = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
-    await new LayeredSecretStore(file, async () => null, vi.fn(), time.now).set(
-      'home',
-      'from-file',
-      'https://a.example',
-    );
-    time.tick(-20_000);
-    expect(await store.set('home', 'from-keychain', 'https://a.example')).toBe('keychain');
-    expect(await store.get('home')).toMatchObject({ token: 'from-keychain' });
+    if (how === 'calls') keychain.state.failCalls = SERVICE_UNKNOWN;
+    if (how === 'construct') keychain.state.failConstruct = KEY_REVOKED;
+    const store = new CredentialStore(dir, typeof how === 'function' ? how : keychain.load);
+    expect(await store.save('home', A)).toBe('file');
+    expect(statSync(store.pathOf('home')).mode & 0o777).toBe(0o600);
+    expect(statSync(join(dir, 'credentials.d')).mode & 0o777).toBe(0o700);
+    expect(await store.load('home', 'file')).toEqual(A);
   });
 
-  it('ignores a corrupt credentials file instead of crashing', async () => {
-    writeFileSync(join(dir, 'credentials'), '[[[', { mode: 0o600 });
-    const store = new LayeredSecretStore(new FileSecretStore(dir), async () => null, vi.fn());
-    expect(await store.get('home')).toBeUndefined();
+  it.each([OBJECT_LOCKED, PROMPT_DISMISSED, ACCESS_DENIED, SOCKET_OUTAGE, 'Access is denied.'])(
+    'a keychain failing with "%s" refuses the login (never a silent file login)',
+    async (message) => {
+      const keychain = fakeKeychain();
+      keychain.state.failCalls = message;
+      const store = new CredentialStore(dir, keychain.load);
+      await expect(store.save('home', A)).rejects.toBeInstanceOf(KeychainRefused);
+      expect(existsSync(store.pathOf('home'))).toBe(false);
+    },
+  );
+
+  it('a constructor throwing "Access is denied." refuses too', async () => {
+    const keychain = fakeKeychain();
+    keychain.state.failConstruct = 'Access is denied.';
+    const store = new CredentialStore(dir, keychain.load);
+    await expect(store.save('home', A)).rejects.toBeInstanceOf(KeychainRefused);
+  });
+
+  it('a read-back that differs refuses', async () => {
+    const store = new CredentialStore(dir, async () => () => ({
+      getPassword: async () => JSON.stringify({ token: 'someone-else', server: A.server }),
+      setPassword: async () => {},
+      deletePassword: async () => true,
+    }));
+    await expect(store.save('home', A)).rejects.toBeInstanceOf(KeychainRefused);
+  });
+});
+
+describe('reads use only the recorded store', () => {
+  it.each([OBJECT_LOCKED, PROMPT_DISMISSED, ACCESS_DENIED, SOCKET_OUTAGE, SERVICE_UNKNOWN])(
+    'a recorded keychain failing with "%s" fails closed, even with a file login present',
+    async (message) => {
+      const keychain = fakeKeychain();
+      const store = new CredentialStore(dir, keychain.load);
+      await store.save('home', A);
+      mkdirSync(join(dir, 'credentials.d'), { recursive: true });
+      writeFileSync(
+        store.pathOf('home'),
+        JSON.stringify({ token: 'stale-file', server: A.server }),
+      );
+      keychain.state.failCalls = message;
+      await expect(store.load('home', 'keychain')).rejects.toBeInstanceOf(
+        CredentialStoreUnavailable,
+      );
+    },
+  );
+
+  it('a recorded keychain without the addon fails closed', async () => {
+    const store = new CredentialStore(dir, async () => null);
+    await expect(store.load('home', 'keychain')).rejects.toBeInstanceOf(CredentialStoreUnavailable);
+  });
+
+  it('a recorded file never consults the keychain', async () => {
+    const keychain = fakeKeychain();
+    keychain.state.failCalls = SERVICE_UNKNOWN;
+    const store = new CredentialStore(dir, keychain.load);
+    expect(await store.save('home', A)).toBe('file');
+    keychain.state.failCalls = null;
+    keychain.entries.set('rooster/home', JSON.stringify({ token: 'keychain', server: A.server }));
+    const before = keychain.state.calls;
+    expect(await store.load('home', 'file')).toEqual(A);
+    expect(keychain.state.calls).toBe(before);
+  });
+});
+
+describe('logout removes from the recorded store, confirmed or not at all', () => {
+  it('a failed keychain delete (ServiceUnknown after reads worked) is an error', async () => {
+    const keychain = fakeKeychain();
+    const store = new CredentialStore(dir, keychain.load);
+    await store.save('home', A);
+    keychain.state.failCalls = SERVICE_UNKNOWN;
+    await expect(store.remove('home', 'keychain')).rejects.toMatchObject({ where: 'keychain' });
+    keychain.state.failCalls = null;
+    expect(await store.load('home', 'keychain')).toEqual(A);
+  });
+
+  it.skipIf(asRoot)('a file that cannot be removed is an error naming the file', async () => {
+    const store = new CredentialStore(dir, async () => null);
+    await store.save('home', A);
+    chmodSync(join(dir, 'credentials.d'), 0o500);
+    try {
+      const error = await store.remove('home', 'file').catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(CredentialRemovalError);
+      expect((error as CredentialRemovalError).where).toBe(store.pathOf('home'));
+    } finally {
+      chmodSync(join(dir, 'credentials.d'), 0o700);
+    }
+  });
+
+  it('a removed or never stored login is confirmed', async () => {
+    const store = new CredentialStore(dir, async () => null);
+    await store.save('home', A);
+    await store.remove('home', 'file');
+    await store.remove('home', 'file');
+    expect(await store.load('home', 'file')).toBeUndefined();
+  });
+});
+
+describe('one file per profile', () => {
+  it('concurrent logins and logouts of different profiles leave each other intact', async () => {
+    const store = new CredentialStore(dir, async () => null);
+    const profiles = ['work', 'home', 'ci', 'a.b', '../x', 'with space'];
+    await Promise.all(profiles.map((p) => store.save(p, { token: `t-${p}`, server: A.server })));
+    await Promise.all([
+      store.remove('ci', 'file'),
+      store.save('work', { token: 't-work-2', server: A.server }),
+    ]);
+    for (const p of profiles) {
+      const expected =
+        p === 'ci' ? undefined : { token: p === 'work' ? 't-work-2' : `t-${p}`, server: A.server };
+      expect(await store.load(p, 'file'), p).toEqual(expected);
+    }
+    // Names never escape the directory.
+    expect(store.pathOf('../x').startsWith(join(dir, 'credentials.d'))).toBe(true);
+    expect(existsSync(join(dir, 'x'))).toBe(false);
+  });
+
+  it('moves the old shared credentials file to per-profile files, once', () => {
+    writeFileSync(
+      join(dir, 'credentials'),
+      '[profiles.home]\ntoken = "tok-h"\nserver = "https://h.example/sub"\nat = 3\n[profiles.work]\ntoken = "tok-w"\nserver = "https://w.example"\n[profiles.gone]\ndeleted = true\nat = 9\n',
+      { mode: 0o600 },
+    );
+    const store = new CredentialStore(dir, async () => null);
+    expect(store.migrateLegacy('home')).toEqual({ token: 'tok-h', server: 'https://h.example' });
+    expect(existsSync(join(dir, 'credentials'))).toBe(false);
+    expect(JSON.parse(readFileSync(store.pathOf('work'), 'utf8'))).toEqual({
+      token: 'tok-w',
+      server: 'https://w.example',
+    });
+    expect(existsSync(store.pathOf('gone'))).toBe(false);
+    expect(store.migrateLegacy('work')).toBeUndefined();
+  });
+});
+
+describe('the CLI with one store per profile', () => {
+  const META = { version: '1.1.0', gitSha: 'x', providers: [], features: {}, serverTime: 0 };
+
+  function harness(load: () => Promise<KeyringFactory | null>) {
+    const api = fakeApi({
+      'GET /api/v1/meta': META,
+      'GET /api/v1/me': ME,
+      'GET /api/v1/me/grants': [],
+    });
+    const cli = cliHarness({ loadKeyring: load }, { fetch: api.fetch });
+    const env = { ROOSTER_KEYRING: '' };
+    const run = (argv: string[], extra: Record<string, string> = {}, stdin?: string) =>
+      cli.run(argv, { env: { ...env, ...extra }, ...(stdin === undefined ? {} : { stdin }) });
+    const login = (profile = 'default') =>
+      run(
+        ['login', '--with-token', '--server', FAKE_ENV.ROOSTER_SERVER, '--profile', profile],
+        {},
+        'tok',
+      );
+    const configText = () =>
+      readFileSync(join(cli.home, 'config', 'rooster', 'config.toml'), 'utf8');
+    return { cli, api, run, login, configText };
+  }
+
+  it('a headless host (no Secret Service) logs in to the file; whoami and logout work', async () => {
+    const keychain = fakeKeychain();
+    keychain.state.failCalls = SERVICE_UNKNOWN;
+    const h = harness(keychain.load);
+    try {
+      const login = await h.login();
+      expect(login.code).toBe(0);
+      expect(login.stderr).toContain('No system keychain available');
+      expect(h.configText()).toContain('credential_store = "file"');
+      expect((await h.run(['whoami', '--quiet'])).stdout).toBe('ada@example.com\n');
+      const logout = await h.run(['logout']);
+      expect(logout.code).toBe(0);
+      expect(logout.stderr).toContain('Signed out');
+      expect(h.configText()).not.toContain('credential_store');
+      expect((await h.run(['whoami'])).code).toBe(3);
+    } finally {
+      h.cli.cleanup();
+    }
+  });
+
+  it('a keychain login that later locks fails closed and never uses a file login', async () => {
+    const keychain = fakeKeychain();
+    const h = harness(keychain.load);
+    try {
+      expect((await h.login()).code).toBe(0);
+      expect(h.configText()).toContain('credential_store = "keychain"');
+      // A stale file login for the same profile, as an old session might have left.
+      const dirPath = join(h.cli.home, 'config', 'rooster', 'credentials.d');
+      mkdirSync(dirPath, { recursive: true });
+      writeFileSync(
+        join(dirPath, 'default'),
+        JSON.stringify({ token: 'stale', server: FAKE_ENV.ROOSTER_SERVER }),
+      );
+      for (const message of [OBJECT_LOCKED, SOCKET_OUTAGE]) {
+        keychain.state.failCalls = message;
+        const whoami = await h.run(['whoami']);
+        expect(whoami.code, message).toBe(3);
+        expect(whoami.stderr, message).toContain('keychain');
+      }
+      expect(h.api.calls.filter((c) => c.path === '/api/v1/me')).toHaveLength(1);
+      keychain.state.failCalls = null;
+      expect((await h.run(['whoami', '--quiet'])).stdout).toBe('ada@example.com\n');
+    } finally {
+      h.cli.cleanup();
+    }
+  });
+
+  it('logout with a failed keychain delete exits 1, names the keychain and stays signed in', async () => {
+    const keychain = fakeKeychain();
+    const h = harness(keychain.load);
+    try {
+      expect((await h.login()).code).toBe(0);
+      // Reads work; only the delete fails (the Secret Service went away in between).
+      keychain.state.failDelete = SERVICE_UNKNOWN;
+      const logout = await h.run(['logout']);
+      expect(logout.code).toBe(1);
+      expect(logout.stderr).toContain('system keychain');
+      expect(logout.stderr).not.toContain('Signed out');
+      expect(h.configText()).toContain('credential_store = "keychain"');
+      expect((await h.run(['whoami', '--quiet'])).stdout).toBe('ada@example.com\n');
+    } finally {
+      h.cli.cleanup();
+    }
+  });
+
+  it.skipIf(asRoot)(
+    'logout with an unremovable credential file exits 1 naming the file',
+    async () => {
+      const h = harness(async () => null);
+      try {
+        expect((await h.login()).code).toBe(0);
+        const dirPath = join(h.cli.home, 'config', 'rooster', 'credentials.d');
+        chmodSync(dirPath, 0o500);
+        try {
+          const logout = await h.run(['logout']);
+          expect(logout.code).toBe(1);
+          expect(logout.stderr).toContain(join(dirPath, 'default'));
+          expect(logout.stderr).not.toContain('Signed out');
+        } finally {
+          chmodSync(dirPath, 0o700);
+        }
+        expect((await h.run(['whoami', '--quiet'])).stdout).toBe('ada@example.com\n');
+      } finally {
+        h.cli.cleanup();
+      }
+    },
+  );
+
+  it('a refusing keychain fails the login with the ROOSTER_KEYRING=off hint; off forces the file', async () => {
+    const keychain = fakeKeychain();
+    keychain.state.failCalls = OBJECT_LOCKED;
+    const h = harness(keychain.load);
+    try {
+      const refused = await h.login();
+      expect(refused.code).toBe(3);
+      expect(refused.stderr).toContain('ROOSTER_KEYRING=off');
+      expect(existsSync(join(h.cli.home, 'config', 'rooster', 'config.toml'))).toBe(false);
+
+      const before = keychain.state.calls;
+      const off = await h.run(
+        ['login', '--with-token', '--server', FAKE_ENV.ROOSTER_SERVER],
+        { ROOSTER_KEYRING: 'off' },
+        'tok',
+      );
+      expect(off.code).toBe(0);
+      expect(off.stderr).not.toContain('No system keychain');
+      expect(keychain.state.calls).toBe(before);
+      expect(h.configText()).toContain('credential_store = "file"');
+      expect((await h.run(['whoami', '--quiet'])).stdout).toBe('ada@example.com\n');
+    } finally {
+      h.cli.cleanup();
+    }
+  });
+
+  it('concurrent logins of two profiles leave both usable', async () => {
+    const h = harness(async () => null);
+    try {
+      const [a, b] = await Promise.all([h.login('work'), h.login('home')]);
+      expect([a.code, b.code]).toEqual([0, 0]);
+      for (const profile of ['work', 'home']) {
+        const who = await h.run(['whoami', '--quiet', '--profile', profile]);
+        expect(who.stdout, profile).toBe('ada@example.com\n');
+      }
+    } finally {
+      h.cli.cleanup();
+    }
+  });
+
+  it('migrates a login from the old shared credentials file', async () => {
+    const h = harness(async () => null);
+    try {
+      expect((await h.run(['config', 'set', 'server', FAKE_ENV.ROOSTER_SERVER])).code).toBe(0);
+      writeFileSync(
+        join(h.cli.home, 'config', 'rooster', 'credentials'),
+        `[profiles.default]\ntoken = "tok"\nserver = "${FAKE_ENV.ROOSTER_SERVER}"\nat = 1\n`,
+        { mode: 0o600 },
+      );
+      expect((await h.run(['whoami', '--quiet'])).stdout).toBe('ada@example.com\n');
+      expect(h.configText()).toContain('credential_store = "file"');
+      expect(existsSync(join(h.cli.home, 'config', 'rooster', 'credentials'))).toBe(false);
+    } finally {
+      h.cli.cleanup();
+    }
   });
 });
 
 describe('[P1] a stored login is only sent to its own server', () => {
   it('refuses ROOSTER_SERVER or a changed server setting with exit 3, sending nothing', async () => {
     const requests: string[] = [];
+    const api = fakeApi({ 'GET /api/v1/meta': {}, 'GET /api/v1/me': ME });
     const cli = cliHarness(
       {},
       {
         fetch: (async (input: Request) => {
           requests.push(new URL(input.url).origin);
-          return new Response('{}', { status: 500 });
+          return api.fetch(input);
         }) as typeof fetch,
       },
     );
     try {
-      const store = new LayeredSecretStore(
-        new FileSecretStore(join(cli.home, 'config', 'rooster')),
-        async () => null,
-        () => {},
-      );
-      await store.set('default', 'secret-token-of-a', 'https://a.example');
-      expect((await cli.run(['config', 'set', 'server', 'https://a.example'])).code).toBe(0);
+      const login = await cli.run(['login', '--with-token', '--server', 'https://a.example'], {
+        stdin: 'secret-token-of-a',
+      });
+      expect(login.code).toBe(0);
+      requests.length = 0;
 
       const viaEnv = await cli.run(['whoami'], {
         env: { ROOSTER_SERVER: 'https://attacker.example' },
@@ -229,469 +480,28 @@ describe('[P1] a stored login is only sent to its own server', () => {
 
       // An explicit ROOSTER_TOKEN is the user's choice of credential and server.
       await cli.run(['ls'], { env: { ROOSTER_TOKEN: 'explicit' } });
-      expect(requests).toEqual(['https://attacker.example']);
+      expect(requests[0]).toBe('https://attacker.example');
     } finally {
       cli.cleanup();
     }
   });
-});
 
-describe('[P2] a read racing a login returns a settled credential', () => {
-  it('re-reads both stores until they agree (gated keychain read)', async () => {
-    const keychain = fakeKeychain();
-    const time = clock();
-    const file = new FileSecretStore(dir);
-    const setup = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
-    await setup.set('home', 'A', 'https://a.example');
-    time.tick();
-    await new LayeredSecretStore(file, async () => null, vi.fn(), time.now).set(
-      'home',
-      'B',
-      'https://a.example',
-    );
-    time.tick();
-
-    // The reader's first keychain read sees A, then waits until released.
-    let release = () => {};
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let gated = true;
-    const factory = await keychain.factory();
-    const reader = new LayeredSecretStore(
-      file,
-      async () => (service: string, account: string) => {
-        const entry = factory(service, account);
-        return {
-          ...entry,
-          getPassword: async () => {
-            const value = await entry.getPassword();
-            if (gated) {
-              gated = false;
-              await gate;
-            }
-            return value;
-          },
-        };
-      },
-      vi.fn(),
-      time.now,
-    );
-    const read = reader.get('home');
-    for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
-    // Another process logs in (C to the keychain) and removes the file's B.
-    expect(await setup.set('home', 'C', 'https://a.example')).toBe('keychain');
-    expect(file.entry('home')).toBeUndefined();
-    release();
-    // Without the re-read the reader would pair keychain A with the now empty file.
-    expect(await read).toMatchObject({ token: 'C' });
-  });
-});
-
-describe('[P2] logout never reports success while the login stays usable', () => {
-  const asRoot = typeof process.getuid === 'function' && process.getuid() === 0;
-
-  it.skipIf(asRoot)('the store throws when the file entry cannot be removed', async () => {
-    const file = new FileSecretStore(dir);
-    const store = new LayeredSecretStore(file, async () => null, vi.fn());
-    await store.set('home', 'tok', 'https://a.example');
-    chmodSync(dir, 0o500);
+  it('a store and profile that disagree on the server (a racing login) give no login', async () => {
+    const api = fakeApi({ 'GET /api/v1/meta': {}, 'GET /api/v1/me': ME });
+    const cli = cliHarness({}, { fetch: api.fetch });
     try {
-      await expect(store.delete('home')).rejects.toBeInstanceOf(CredentialRemovalError);
-      expect(await store.get('home')).toMatchObject({ token: 'tok' });
-    } finally {
-      chmodSync(dir, 0o700);
-    }
-  });
-
-  it('a durable tombstone is a logout even when the keychain is locked', async () => {
-    const keychain = fakeKeychain();
-    const store = new LayeredSecretStore(new FileSecretStore(dir), keychain.factory, vi.fn());
-    await store.set('home', 'tok', 'https://a.example');
-    keychain.state.locked = true;
-    await store.delete('home');
-    keychain.state.locked = false;
-    expect(await store.get('home')).toBeUndefined();
-  });
-
-  it.skipIf(asRoot)(
-    'rooster logout exits non-zero with the path and never says signed out',
-    async () => {
-      const api = fakeApi({ 'GET /api/v1/me': ME, 'GET /api/v1/me/grants': [] });
-      const cli = cliHarness({}, { fetch: api.fetch });
-      const configDir = join(cli.home, 'config', 'rooster');
-      try {
-        expect((await cli.run(['config', 'set', 'server', FAKE_ENV.ROOSTER_SERVER])).code).toBe(0);
-        const store = new LayeredSecretStore(
-          new FileSecretStore(configDir),
-          async () => null,
-          () => {},
-        );
-        await store.set('default', 'tok', FAKE_ENV.ROOSTER_SERVER);
-        chmodSync(configDir, 0o500);
-        const out = await cli.run(['logout']);
-        expect(out.code).toBe(1);
-        expect(out.stderr).toContain(
-          `Couldn’t remove the stored credential at ${join(configDir, 'credentials')}`,
-        );
-        expect(out.stderr).not.toContain('Signed out');
-        // Still signed in, and it says so honestly.
-        expect((await cli.run(['whoami', '--quiet'])).stdout).toBe('ada@example.com\n');
-      } finally {
-        chmodSync(configDir, 0o700);
-        cli.cleanup();
-      }
-    },
-  );
-});
-
-describe('[P1] an unreadable keychain is unknown, never empty', () => {
-  it('a keychain that locks after the first read fails closed', async () => {
-    const keychain = fakeKeychain();
-    const store = new LayeredSecretStore(new FileSecretStore(dir), keychain.factory, vi.fn());
-    await store.set('home', 'tok', 'https://a.example');
-    let reads = 0;
-    const factory = await keychain.factory();
-    const locking = new LayeredSecretStore(
-      new FileSecretStore(dir),
-      async () => (service: string, account: string) => {
-        const entry = factory(service, account);
-        return {
-          ...entry,
-          getPassword: async () => {
-            reads += 1;
-            if (reads > 1) throw new Error('locked');
-            return entry.getPassword();
-          },
-        };
-      },
-      vi.fn(),
-    );
-    await expect(locking.get('home')).rejects.toBeInstanceOf(CredentialStoreUnavailable);
-  });
-
-  it('an older file credential is not used while the keychain is unreadable', async () => {
-    const keychain = fakeKeychain();
-    const time = clock();
-    const file = new FileSecretStore(dir);
-    const store = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
-    file.put('home', { token: 'old-file', server: 'https://a.example', at: 1 });
-    time.tick();
-    await store.set('home', 'newer', 'https://a.example');
-    // Removing the older file entry failed (say): both exist, the keychain is newer.
-    file.put('home', { token: 'old-file', server: 'https://a.example', at: 1 });
-    keychain.state.locked = true;
-    await expect(store.get('home')).rejects.toBeInstanceOf(CredentialStoreUnavailable);
-    keychain.state.locked = false;
-    expect(await store.get('home')).toMatchObject({ token: 'newer' });
-  });
-
-  it('no keychain at all (no module, ROOSTER_KEYRING=off) is known empty', async () => {
-    const file = new FileSecretStore(dir);
-    const store = new LayeredSecretStore(file, async () => null, vi.fn());
-    await store.set('home', 'tok', 'https://a.example');
-    expect(await store.get('home')).toMatchObject({ token: 'tok' });
-  });
-
-  it('rooster logout and whoami exit 3 naming the keychain, and never say "not signed in"', async () => {
-    const keychain = fakeKeychain();
-    const api = fakeApi({ 'GET /api/v1/me': ME, 'GET /api/v1/me/grants': [] });
-    const cli = cliHarness({ loadKeyring: keychain.factory }, { fetch: api.fetch });
-    const env = { ROOSTER_KEYRING: '' };
-    try {
-      expect((await cli.run(['config', 'set', 'server', FAKE_ENV.ROOSTER_SERVER])).code).toBe(0);
-      const store = new LayeredSecretStore(
-        new FileSecretStore(join(cli.home, 'config', 'rooster')),
-        keychain.factory,
-        () => {},
-      );
-      expect(await store.set('default', 'tok', FAKE_ENV.ROOSTER_SERVER)).toBe('keychain');
-      expect((await cli.run(['whoami', '--quiet'], { env })).stdout).toBe('ada@example.com\n');
-
-      keychain.state.locked = true;
-      const logout = await cli.run(['logout'], { env });
-      expect(logout.code).toBe(3);
-      expect(logout.stderr).toContain('keychain');
-      expect(logout.stderr).not.toContain('isn’t signed in');
-      expect(logout.stderr).not.toContain('Signed out');
-      expect((await cli.run(['whoami'], { env })).code).toBe(3);
-
-      keychain.state.locked = false;
-      expect((await cli.run(['whoami', '--quiet'], { env })).stdout).toBe('ada@example.com\n');
+      expect(
+        (
+          await cli.run(['login', '--with-token', '--server', 'https://a.example'], {
+            stdin: 'tok',
+          })
+        ).code,
+      ).toBe(0);
+      const store = new CredentialStore(join(cli.home, 'config', 'rooster'), async () => null);
+      await store.save('default', { token: 'tok-b', server: 'https://b.example' });
+      expect((await cli.run(['whoami'])).code).toBe(3);
     } finally {
       cli.cleanup();
     }
-  });
-});
-
-describe('[P2] reads that never settle fail closed', () => {
-  it('throws CredentialsChanging when every snapshot differs (another process keeps writing)', async () => {
-    const keychain = fakeKeychain();
-    const file = new FileSecretStore(dir);
-    let at = 1;
-    const factory = await keychain.factory();
-    const churning = new LayeredSecretStore(
-      file,
-      async () => (service: string, account: string) => ({
-        ...factory(service, account),
-        // Each read sees a newer login written in between.
-        getPassword: async () => {
-          at += 1;
-          return JSON.stringify({ token: `t${at}`, server: 'https://a.example', at });
-        },
-      }),
-      vi.fn(),
-    );
-    await expect(churning.get('home')).rejects.toBeInstanceOf(CredentialsChanging);
-  });
-
-  it('exits 5 with a retry hint from the CLI', async () => {
-    const keychain = fakeKeychain();
-    let at = 1;
-    const factory = await keychain.factory();
-    const cli = cliHarness({
-      loadKeyring: async () => (service: string, account: string) => ({
-        ...factory(service, account),
-        getPassword: async () => {
-          at += 1;
-          return JSON.stringify({ token: 't', server: 'https://rooster.test', at });
-        },
-      }),
-    });
-    try {
-      const out = await cli.run(['whoami'], {
-        env: { ROOSTER_KEYRING: '', ROOSTER_SERVER: 'https://rooster.test' },
-      });
-      expect(out.code).toBe(5);
-      expect(out.stderr).toContain('another rooster process');
-    } finally {
-      cli.cleanup();
-    }
-  });
-});
-
-describe('[P2] no usable platform store versus a refusing keychain', () => {
-  const META = { version: '1.1.0', gitSha: 'x', providers: [], features: {}, serverTime: 0 };
-  const NO_SERVICE =
-    'Platform secure storage failure: org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.secrets was not provided by any .service files';
-
-  /** A keyring whose backend fails the way `@napi-rs/keyring` does on a headless host. */
-  const broken =
-    (where: 'construct' | 'calls', message: string) =>
-    async () =>
-    (_service: string, _account: string) => {
-      if (where === 'construct') throw new Error(message);
-      const fail = async (): Promise<never> => {
-        throw new Error(message);
-      };
-      return { getPassword: fail, setPassword: fail, deletePassword: fail };
-    };
-
-  async function loginThenWhoami(loadKeyring: ReturnType<typeof broken>) {
-    const api = fakeApi({
-      'GET /api/v1/meta': META,
-      'GET /api/v1/me': ME,
-      'GET /api/v1/me/grants': [],
-    });
-    const cli = cliHarness({ loadKeyring }, { fetch: api.fetch });
-    const env = { ROOSTER_KEYRING: '' };
-    try {
-      const login = await cli.run(['login', '--with-token', '--server', FAKE_ENV.ROOSTER_SERVER], {
-        stdin: 'tok',
-        env,
-      });
-      const whoami = await cli.run(['whoami', '--quiet'], { env });
-      const logout = await cli.run(['logout'], { env });
-      const after = await cli.run(['whoami'], { env });
-      return { login, whoami, logout, after };
-    } finally {
-      cli.cleanup();
-    }
-  }
-
-  it.each([
-    ['the backend fails at every call (no Secret Service)', broken('calls', NO_SERVICE)],
-    [
-      'creating the entry fails (Linux keyutils without a session keyring)',
-      broken('construct', "Couldn't access platform storage: KeyRevoked"),
-    ],
-  ])('%s: login falls back to the file, and whoami and logout work', async (_name, loadKeyring) => {
-    const { login, whoami, logout, after } = await loginThenWhoami(loadKeyring);
-    expect(login.code).toBe(0);
-    expect(login.stderr).toContain('No system keychain available');
-    expect(whoami).toMatchObject({ code: 0, stdout: 'ada@example.com\n' });
-    expect(logout.code).toBe(0);
-    expect(logout.stderr).toContain('Signed out');
-    expect(after.code).toBe(3);
-  });
-
-  it('a keychain that refuses the write fails the login instead of storing an unusable one', async () => {
-    const { login, whoami } = await loginThenWhoami(
-      broken('calls', "Couldn't access platform secure storage: the keychain is locked"),
-    );
-    expect(login.code).toBe(3);
-    expect(login.stderr).toContain('ROOSTER_KEYRING=off');
-    expect(login.stderr).not.toContain('Signed in');
-    expect(whoami.code).toBe(3);
-  });
-
-  it('classifies only the allowlist as absent; refusals and unknown messages are unknown', () => {
-    const absent = [
-      NO_SERVICE,
-      'org.freedesktop.DBus.Error.NameHasNoOwner: Could not get owner of name',
-      'DBUS_SESSION_BUS_ADDRESS is not set',
-      'org.freedesktop.DBus.Error.NoServer: Failed to connect to socket /run/user/1000/bus',
-      'DBus error: org.freedesktop.DBus.Error.Spawn.ExecFailed',
-      'Platform not supported',
-    ];
-    for (const message of absent) {
-      expect(isStoreAbsent(new Error(message), 'call'), message).toBe(true);
-    }
-    // keyutils without a session keyring: absent only when creating the entry fails.
-    expect(
-      isStoreAbsent(new Error("Couldn't access platform storage: KeyRevoked"), 'construct'),
-    ).toBe(true);
-    expect(
-      isStoreAbsent(new Error("Couldn't access platform storage: KeyExpired"), 'construct'),
-    ).toBe(true);
-    expect(isStoreAbsent(new Error("Couldn't access platform storage: KeyRevoked"), 'call')).toBe(
-      false,
-    );
-    for (const message of [
-      'Secret Service: object locked',
-      'Secret Service: unlock prompt was dismissed',
-      'org.freedesktop.DBus.Error.AccessDenied: Rejected send message to org.freedesktop.secrets',
-      'Access is denied.',
-      'permission denied',
-      'org.freedesktop.DBus.Error.NoReply: Did not receive a reply',
-      'org.freedesktop.DBus.Error.Disconnected: Connection was disconnected',
-      'Operation timed out',
-      'Secret Service: something new',
-      "Couldn't access platform secure storage: the keychain is locked",
-      'User interaction is not allowed.',
-      'something else',
-    ]) {
-      expect(isStoreAbsent(new Error(message), 'call'), message).toBe(false);
-      expect(isStoreAbsent(new Error(message), 'construct'), message).toBe(false);
-    }
-  });
-});
-
-describe('[P1] round 6: the strict allowlist, with the exact messages', () => {
-  /** A keyring whose every call throws `message` (entries are created fine). */
-  const failingCalls = (message: string) => async () => () => {
-    const fail = async (): Promise<never> => {
-      throw new Error(message);
-    };
-    return { getPassword: fail, setPassword: fail, deletePassword: fail };
-  };
-
-  it.each([
-    'Secret Service: object locked',
-    'Secret Service: unlock prompt was dismissed',
-    'org.freedesktop.DBus.Error.AccessDenied: Rejected send message to org.freedesktop.secrets',
-  ])(
-    'an old file credential plus a keychain throwing "%s": get() fails closed',
-    async (message) => {
-      const file = new FileSecretStore(dir);
-      file.put('home', { token: 'old-file', server: 'https://a.example', at: 1 });
-      const store = new LayeredSecretStore(file, failingCalls(message), vi.fn());
-      await expect(store.get('home')).rejects.toBeInstanceOf(CredentialStoreUnavailable);
-    },
-  );
-
-  it('a constructor throwing "Access is denied." is unknown, not absent', async () => {
-    const file = new FileSecretStore(dir);
-    file.put('home', { token: 'old-file', server: 'https://a.example', at: 1 });
-    const store = new LayeredSecretStore(
-      file,
-      async () => () => {
-        throw new Error('Access is denied.');
-      },
-      vi.fn(),
-    );
-    await expect(store.get('home')).rejects.toBeInstanceOf(CredentialStoreUnavailable);
-    await expect(store.set('home', 'x', 'https://a.example')).rejects.toThrow('Access is denied.');
-  });
-
-  it('reads succeed, then deletePassword throws ServiceUnknown: logout leaves a tombstone that wins later', async () => {
-    const keychain = fakeKeychain();
-    const time = clock();
-    const file = new FileSecretStore(dir);
-    await new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now).set(
-      'home',
-      'tok',
-      'https://a.example',
-    );
-    time.tick();
-    const factory = await keychain.factory();
-    const noServiceOnDelete = new LayeredSecretStore(
-      file,
-      async () => (service: string, account: string) => ({
-        ...factory(service, account),
-        deletePassword: async () => {
-          throw new Error(
-            'org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.secrets was not provided by any .service files',
-          );
-        },
-      }),
-      vi.fn(),
-      time.now,
-    );
-    expect(await noServiceOnDelete.get('home')).toMatchObject({ token: 'tok' });
-    await noServiceOnDelete.delete('home');
-    // The keychain entry is still there; the tombstone outranks it.
-    expect(keychain.entries.has('rooster/home')).toBe(true);
-    expect(file.entry('home')).toMatchObject({ deleted: true });
-    // A later process, keychain fully working again, gets nothing.
-    time.tick();
-    expect(
-      await new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now).get('home'),
-    ).toBeUndefined();
-  });
-
-  it('gated cross-process read: A’s first read fails with ServiceUnknown, A re-probes and returns B’s login', async () => {
-    const keychain = fakeKeychain();
-    const time = clock();
-    const file = new FileSecretStore(dir);
-    let release = () => {};
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let first = true;
-    const factory = await keychain.factory();
-    const processA = new LayeredSecretStore(
-      file,
-      async () => (service: string, account: string) => {
-        const entry = factory(service, account);
-        return {
-          ...entry,
-          getPassword: async () => {
-            if (first) {
-              first = false;
-              await gate;
-              throw new Error(
-                'org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.secrets was not provided by any .service files',
-              );
-            }
-            return entry.getPassword();
-          },
-        };
-      },
-      vi.fn(),
-      time.now,
-    );
-    const read = processA.get('home');
-    for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
-    // Process B logs in to the (now available) keychain.
-    expect(
-      await new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now).set(
-        'home',
-        'from-B',
-        'https://a.example',
-      ),
-    ).toBe('keychain');
-    release();
-    expect(await read).toMatchObject({ token: 'from-B' });
   });
 });

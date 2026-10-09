@@ -14,6 +14,10 @@ export interface Profile {
   locale?: string;
   /** Who the stored credential belongs to, for display only. */
   user?: string;
+  /** Where this profile's login is stored (set by login, cleared by logout). */
+  credential_store?: 'keychain' | 'file';
+  /** The server origin the login was issued by; it is only ever sent there. */
+  credential_origin?: string;
 }
 
 export interface Config {
@@ -86,8 +90,11 @@ function asProfile(value: unknown): Profile {
   const out: Profile = {};
   if (value === null || typeof value !== 'object') return out;
   const record = value as Record<string, unknown>;
-  for (const key of [...PROFILE_KEYS, 'user'] as const) {
+  for (const key of [...PROFILE_KEYS, 'user', 'credential_origin'] as const) {
     if (typeof record[key] === 'string') out[key] = record[key];
+  }
+  if (record.credential_store === 'keychain' || record.credential_store === 'file') {
+    out.credential_store = record.credential_store;
   }
   return out;
 }
@@ -146,8 +153,12 @@ export class ConfigStore {
     this.cached = config;
   }
 
-  /** Applies `change` to one profile (created when missing) and saves. */
+  /**
+   * Applies `change` to one profile (created when missing) and saves atomically. Reads the
+   * file fresh first, so another process's change to another profile is kept.
+   */
   updateProfile(name: string, change: (profile: Profile) => Profile): Profile {
+    this.cached = undefined;
     const config = this.read();
     const next = change({ ...(config.profiles[name] ?? {}) });
     this.write({ ...config, profiles: { ...config.profiles, [name]: next } });

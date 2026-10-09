@@ -7,16 +7,11 @@ import { localeFromEnv, resolveLocale, t, withLocale } from './i18n.ts';
 import type { Io } from './io.ts';
 import { stripAnsi } from './output/color.ts';
 import { NO_GLOBALS, Runtime, withRuntime } from './runtime.ts';
-import {
-  CredentialStoreUnavailable,
-  CredentialsChanging,
-  KeychainRefused,
-  type loadKeyring,
-} from './secrets.ts';
+import { CredentialStoreUnavailable, KeychainRefused, type KeyringFactory } from './secrets.ts';
 
 export interface RunOptions {
   /** Tests replace the keychain. */
-  loadKeyring?: typeof loadKeyring;
+  loadKeyring?: () => Promise<KeyringFactory | null>;
 }
 
 /** citty's own argument errors (unknown command, missing positional) are usage errors. */
@@ -73,8 +68,6 @@ async function report(runtime: Runtime, error: unknown): Promise<ExitCode> {
     failure = new CliError(EXIT.auth, t('auth.keychainRefused', { reason: error.message }));
   } else if (error instanceof CredentialStoreUnavailable) {
     failure = new CliError(EXIT.auth, t('auth.keychainUnavailable'));
-  } else if (error instanceof CredentialsChanging) {
-    failure = new CliError(EXIT.conflict, t('auth.credentialsChanging'));
   } else if (error instanceof RoosterApiError) {
     failure = await describeApiError(runtime, error).catch(
       () => new CliError(EXIT.unexpected, error.message, error.code),

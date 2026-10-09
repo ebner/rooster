@@ -27,10 +27,11 @@ import { isLocale, setLocale, t } from './i18n.ts';
 import type { Io } from './io.ts';
 import { Output } from './output/output.ts';
 import {
-  FileSecretStore,
-  LayeredSecretStore,
+  CredentialStore,
+  type KeyringFactory,
   loadKeyring,
-  type SecretStore,
+  type StoredLogin,
+  type StoreKind,
   serverOrigin,
 } from './secrets.ts';
 import { StateStore } from './state.ts';
@@ -61,7 +62,9 @@ export const NO_GLOBALS: Globals = {
 export class Runtime {
   readonly config: ConfigStore;
   readonly state: StateStore;
-  readonly secrets: SecretStore;
+  readonly credentials: CredentialStore;
+  /** `ROOSTER_KEYRING=off`: logins go to a file and the keychain is never touched. */
+  readonly keyringOff: boolean;
   readonly out: Output;
   readonly cacheDir: string;
   /** `X-Rooster-Client-Id`: one per process (06 §1). */
@@ -77,24 +80,18 @@ export class Runtime {
   constructor(
     readonly io: Io,
     readonly globals: Globals,
-    options: { loadKeyring?: typeof loadKeyring } = {},
+    options: { loadKeyring?: () => Promise<KeyringFactory | null> } = {},
   ) {
     const dir = configDir(io.env, io.platform, io.homedir);
     this.config = new ConfigStore(dir);
     this.state = new StateStore(stateDir(io.env, io.platform, io.homedir));
     this.cacheDir = cacheDir(io.env, io.platform, io.homedir);
-    const file = new FileSecretStore(dir);
-    const keyringOff = ['0', 'off', 'false', 'no'].includes(
+    this.keyringOff = ['0', 'off', 'false', 'no'].includes(
       (io.env.ROOSTER_KEYRING ?? '').toLowerCase(),
     );
-    this.secrets = new LayeredSecretStore(
-      file,
-      keyringOff ? async () => null : (options.loadKeyring ?? loadKeyring),
-      () => {
-        if (this.state.takeKeychainNotice()) {
-          this.out.notice(t('auth.keychainFallback', { path: file.path }));
-        }
-      },
+    this.credentials = new CredentialStore(
+      dir,
+      this.keyringOff ? async () => null : (options.loadKeyring ?? loadKeyring),
     );
     this.out = new Output(io, globals);
   }
@@ -124,6 +121,30 @@ export class Runtime {
   }
 
   /**
+   * The profile's stored login, from the store recorded at login (`credential_store`), with
+   * a one-time move of logins from the old shared credentials file. Undefined when the
+   * profile has none; a recorded keychain that can't be read is an error, never a fallback.
+   */
+  async storedLogin(): Promise<{ login: StoredLogin; store: StoreKind } | undefined> {
+    const profile = this.profile;
+    if (profile.credential_store === undefined) {
+      const migrated = this.credentials.migrateLegacy(this.profileName);
+      if (migrated === undefined) return undefined;
+      this.config.updateProfile(this.profileName, (p) => ({
+        ...p,
+        credential_store: 'file',
+        credential_origin: migrated.server,
+      }));
+      return { login: migrated, store: 'file' };
+    }
+    const login = await this.credentials.load(this.profileName, profile.credential_store);
+    if (login === undefined) return undefined;
+    // The store and the profile must agree on the server (a login racing another one).
+    if (login.server !== profile.credential_origin) return undefined;
+    return { login, store: profile.credential_store };
+  }
+
+  /**
    * The token to send to `server()`: `ROOSTER_TOKEN` (explicit, 07 §2), else the profile's
    * stored login, but only when it was issued by that same server. A login is never sent to
    * another origin (`ROOSTER_SERVER` or a changed `server` setting): exit 3 instead.
@@ -131,16 +152,16 @@ export class Runtime {
   async token(): Promise<string | undefined> {
     const env = this.io.env.ROOSTER_TOKEN;
     if (env !== undefined && env !== '') return env.trim();
-    const credential = await this.secrets.get(this.profileName);
-    if (credential === undefined) return undefined;
+    const stored = await this.storedLogin();
+    if (stored === undefined) return undefined;
     const server = this.server();
-    if (credential.server !== serverOrigin(server)) {
+    if (stored.login.server !== serverOrigin(server)) {
       throw new CliError(
         EXIT.auth,
-        t('auth.otherServer', { stored: credential.server, server: serverOrigin(server) }),
+        t('auth.otherServer', { stored: stored.login.server, server: serverOrigin(server) }),
       );
     }
-    return credential.token;
+    return stored.login.token;
   }
 
   tokenFromEnv(): boolean {

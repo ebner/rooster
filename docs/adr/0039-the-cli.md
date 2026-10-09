@@ -23,7 +23,11 @@
    - truecolor where the terminal says so, else 256 colours, else basic ANSI picked by hue;
    - overdue is also marked with `!`;
    - colour is off for `NO_COLOR`, `--no-color`, `--json`, `TERM=dumb` and pipes; `FORCE_COLOR` overrides.
-7. **Secrets** go to the OS keychain (`@napi-rs/keyring`, loaded lazily, optional), otherwise a 0600 file with a one-time notice. `ROOSTER_KEYRING=off` forces the file. The compiled binaries always use the file, which keeps cross-compilation deterministic.
+7. **Secrets: one store per profile, chosen at login** (amended after the security review, ADR 0040).
+   - Login writes the OS keychain (`@napi-rs/keyring`, loaded lazily, optional) and reads it back. If the keychain is positively absent (a strict allowlist: no addon, no Secret Service or D-Bus session, no session keyring, unsupported platform), login uses a 0600 file under `credentials.d/<profile>` instead, with a one-time notice. A keychain that refuses (locked, denied, unreachable) fails the login with the `ROOSTER_KEYRING=off` hint.
+   - The profile records `credential_store` and the server origin. Reads use only that store and never fall back.
+   - Logout succeeds only when the delete is confirmed.
+   - The compiled binaries always use the file, which keeps cross-compilation deterministic.
 8. **Opening things is argv-only.** The browser opens only https URLs (http only for loopback) on the profile's server origin, through `xdg-open`, `open` or `rundll32 url.dll,FileProtocolHandler`, never a shell; anything else is printed. `$VISUAL`/`$EDITOR` is split into argv and run without a shell. User content is stripped of control and bidi characters before printing.
 9. **`logout`** revokes the current grant when it is a device login. A PAT is only forgotten locally, since CI may use it elsewhere; the CLI points to `rooster token revoke`.
 10. **Distribution.**

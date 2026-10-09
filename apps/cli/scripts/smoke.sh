@@ -66,4 +66,10 @@ echo "smoke: --version (with the server's)"
   echo "smoke: --version did not report the server" >&2
   exit 1
 }
+echo "smoke: logout"
+"${ROOSTER[@]}" logout
+if "${ROOSTER[@]}" whoami >/dev/null 2>&1; then
+  echo "smoke: still signed in after logout" >&2
+  exit 1
+fi
 echo "smoke: ok"

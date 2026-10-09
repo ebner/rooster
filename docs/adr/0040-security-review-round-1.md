@@ -33,7 +33,7 @@ An independent security review of Phases 6–8 (structured plus security-focused
    - Known gap: if the browser replaces a subscription without telling the worker about the old one, push stops on that device. Settings shows "off".
 5. **Secrets stay out of logs**: request logs redact `/unsubscribe/:token` as well as invite tokens.
 6. **The CLI binds credentials to their server origin**, and never sends a stored login to another `ROOSTER_SERVER`.
-   - The newest of the keychain and file credentials wins, with logout tombstones.
+   - Each profile has exactly one credential store, chosen at login and recorded with the origin. Reads never merge or fall back. A first design that merged keychain and file by newest-wins kept producing races in later review rounds and was replaced (ADR 0039 §7).
    - Descriptions are edited as `description.md` in a fresh 0700 directory.
    - Everything printed is stripped of control and escape sequences.
    - The completion scripts never expand server-provided or typed text.
