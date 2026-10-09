@@ -279,8 +279,11 @@ Register-ArgumentCompleter -Native -CommandName rooster -ScriptBlock {
     $words = $roosterCommands[$path]
   }
   # Server-provided names are quoted unless plain, so a $(...) inside a tag name never runs.
+  # PowerShell also ends single-quoted strings at typographic quotes; its own escaper doubles all.
   $words | Where-Object { $_.StartsWith($wordToComplete, [System.StringComparison]::Ordinal) } | ForEach-Object {
-    $text = if ($_ -match '^[\\w./:@#+-]+$') { $_ } else { "'" + ($_ -replace "'", "''") + "'" }
+    $text = if ($_ -match '^[\\w./:@#+-]+$') { $_ } else {
+      "'" + [System.Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($_) + "'"
+    }
     [System.Management.Automation.CompletionResult]::new($text, $_, 'ParameterValue', $_)
   }
 }

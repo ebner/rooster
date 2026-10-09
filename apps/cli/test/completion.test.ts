@@ -145,6 +145,10 @@ describe('zsh, fish and PowerShell', () => {
     expect(script).toContain('Register-ArgumentCompleter -Native -CommandName rooster');
     expect(script).toContain("'group rm' = @(");
     expect(script).toContain("'flag:--group' = 'dyn:groups'");
+    // Names are quoted with PowerShell's own escaper, which also doubles typographic quotes
+    // (‘ ’ ‚ ‛), so a name like a’$(x) can't end the string early.
+    expect(script).toContain('CodeGeneration]::EscapeSingleQuotedStringContent($_)');
+    expect(script).not.toContain(`-replace "'", "''"`);
     if (has('pwsh')) {
       writeFileSync(join(dir, 'rooster.ps1'), script);
       const check = spawnSync('pwsh', [
