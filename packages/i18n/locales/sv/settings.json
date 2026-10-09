@@ -37,7 +37,20 @@
     "justNow": "nyss",
     "revoke": "Logga ut",
     "revokeNamed": "Logga ut {name}",
-    "revoked": "Enheten har loggats ut"
+    "revoked": "Enheten har loggats ut",
+    "identities": {
+      "title": "Länkade identiteter",
+      "body": "Kontona du kan logga in i rooster med. Ta bort länken till ett du inte längre använder; du behåller alltid minst ett.",
+      "named": "{provider} ({email})",
+      "linked": "Länkad {date}",
+      "unlink": "Ta bort länk",
+      "unlinkNamed": "Ta bort länken till {name}",
+      "unlinkConfirm": "Ta bort länken till {name}? Du kan inte längre logga in med det.",
+      "unlinked": "Länken har tagits bort",
+      "lastHint": "Det är ditt enda sätt att logga in, så länken kan inte tas bort.",
+      "lastRefused": "Det är nu ditt enda sätt att logga in, så länken kan inte tas bort.",
+      "loadFailed": "Det gick inte att hämta dina länkade identiteter."
+    }
   },
   "org": {
     "title": "Organisationsinställningar",
@@ -312,7 +325,9 @@
       "writeGroups": "Grupper den får ändra i {org}",
       "writesNothing": "Den kan inte ändra något än. Välj var under ”Ändra”.",
       "summary": "Sammanfattning",
-      "readAllForWrite": "För att ändra allt här måste den också kunna läsa allt här."
+      "readAllForWrite": "För att ändra allt här måste den också kunna läsa allt här.",
+      "allowDelete": "Tillåt att uppgifter tas bort",
+      "allowDeleteHint": "Den kan flytta uppgifter till papperskorgen. Där kan du återställa dem i 30 dagar."
     },
     "issue": {
       "noScopes": "Välj minst en behörighet.",
@@ -325,7 +340,8 @@
       "year": "Om 1 år",
       "never": "Aldrig",
       "keep": "Behåll: {date}",
-      "keepNever": "Behåll: aldrig"
+      "keepNever": "Behåll: aldrig",
+      "session": "Bara den här sessionen"
     },
     "summary": {
       "allOrgsRead": "Kan läsa allt i alla dina organisationer, även dem du går med i senare.",
@@ -374,7 +390,10 @@
       "create": "Skapa token",
       "createFailed": "Det gick inte att skapa token.",
       "staleGroups": "{count, plural, one {# grupp finns inte längre och tas bort.} other {# grupper finns inte längre och tas bort.}}",
-      "staleOrgs": "{count, plural, one {Du har lämnat # organisation som den nämner; den tas bort.} other {Du har lämnat # organisationer som den nämner; de tas bort.}}"
+      "staleOrgs": "{count, plural, one {Du har lämnat # organisation som den nämner; den tas bort.} other {Du har lämnat # organisationer som den nämner; de tas bort.}}",
+      "sessionOnly": "Bara den här sessionen: upphör efter ett dygn utan användning",
+      "verified": "Verifierad",
+      "unverified": "Overifierad app"
     },
     "reveal": {
       "title": "{name} är klar",
@@ -397,7 +416,21 @@
       "deviceDenied": "Nekad",
       "apps": "Anslutna appar",
       "tokenCreated": "Token skapad (visas en gång)",
-      "empty": "Inget anslutet"
+      "empty": "Inget anslutet",
+      "consent": "OAuth-medgivande",
+      "consentVerified": "OAuth-medgivande: verifierad app",
+      "consentDynamic": "OAuth-medgivande: overifierad app (dynamiskt registrerad)",
+      "consentLoopback": "OAuth-medgivande: en app på den här datorn",
+      "consentStepUp": "OAuth-medgivande: utökad åtkomst med nya behörigheter, ber om att få ta bort",
+      "consentInvalid": "OAuth-medgivande: utgången eller ogiltig begäran",
+      "consentFailed": "OAuth-medgivande: kunde inte hämtas",
+      "consentLoading": "OAuth-medgivande: hämtar",
+      "consentLeaving": "OAuth-medgivande: tillåten, går tillbaka",
+      "deviceAdmin": "Godkänn CLI:t som administratör (rooster login --admin)",
+      "newTokenAdmin": "Ny token, som administratör",
+      "identities": "Länkade identiteter",
+      "identitiesLast": "Länkade identiteter: bara en kvar",
+      "identitiesConfirm": "Länkade identiteter: bekräfta borttagning av länk"
     }
   }
 }

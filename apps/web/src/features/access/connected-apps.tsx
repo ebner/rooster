@@ -1,5 +1,5 @@
 import type { Grant, GrantPatch, TokenCreate } from '@rooster/core/schemas';
-import { AppWindow, Copy, KeyRound, Plus, SquareTerminal } from 'lucide-react';
+import { AppWindow, Copy, KeyRound, type LucideIcon, Plus, SquareTerminal } from 'lucide-react';
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { Input } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
@@ -10,6 +10,13 @@ import { Button, iconStrokeWidth } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { inputVariants, TextField } from '../../ui/input';
 import { SettingsSection } from '../settings/settings-section';
+import {
+  cleanClientText,
+  clientName,
+  displayDomain,
+  httpsLogo,
+  isVerifiedClient,
+} from './client-display';
 import { ConstraintEditor } from './constraint-editor';
 import {
   ceilingForGrant,
@@ -66,6 +73,8 @@ export interface ConnectedAppsSectionProps {
   confirmOrgs?: (() => Promise<readonly GrantOrgOption[]>) | undefined;
   /** The grant being edited (or null), so the caller can confirm its orgs and groups. */
   onEditingChange?: ((grant: Grant | null) => void) | undefined;
+  /** Instance admin: new tokens may get the `admin` capability (ADR 0041/0042). */
+  isAdmin?: boolean | undefined;
 }
 
 const kindIcons = { pat: KeyRound, device: SquareTerminal, oauth: AppWindow } as const;
@@ -88,6 +97,7 @@ export function ConnectedAppsSection({
   confirmedOrgs,
   confirmOrgs,
   onEditingChange,
+  isAdmin = false,
 }: ConnectedAppsSectionProps) {
   const { t } = useTranslation('settings');
   const [mode, setMode] = useState<ConnectedAppsMode>(initialMode ?? { kind: 'idle' });
@@ -117,6 +127,7 @@ export function ConnectedAppsSection({
       {mode.kind === 'creating' && (
         <NewTokenForm
           orgs={orgs}
+          offerAdmin={isAdmin}
           prefs={prefs}
           now={now}
           onCancel={idle}
@@ -150,6 +161,7 @@ export function ConnectedAppsSection({
               onRevoke={onRevoke}
               confirmedOrgs={confirmedOrgs}
               confirmOrgs={confirmOrgs}
+              isAdmin={isAdmin}
             />
           ))}
         </ul>
@@ -169,11 +181,13 @@ function GrantRow({
   onRevoke,
   confirmedOrgs,
   confirmOrgs,
+  isAdmin,
 }: {
   grant: Grant;
   orgs: readonly GrantOrgOption[];
   confirmedOrgs: readonly GrantOrgOption[] | undefined;
   confirmOrgs: (() => Promise<readonly GrantOrgOption[]>) | undefined;
+  isAdmin: boolean;
   prefs: DisplayPrefs;
   now: number;
   mode: ConnectedAppsMode;
@@ -199,12 +213,17 @@ function GrantRow({
         : t('access.apps.lastUsed', {
             when: formatTimeAgo(grant.lastUsedAt, now, prefs.locale, t('security.justNow')),
           }),
-    grant.expiresAt === null
-      ? t('access.apps.neverExpires')
-      : expired
-        ? t('access.apps.expiredOn', { date: formatGrantDate(grant.expiresAt, prefs, now) })
-        : t('access.apps.expires', { date: formatGrantDate(grant.expiresAt, prefs, now) }),
+    grant.idleTimeoutMs !== null && !expired
+      ? t('access.apps.sessionOnly')
+      : grant.expiresAt === null
+        ? t('access.apps.neverExpires')
+        : expired
+          ? t('access.apps.expiredOn', { date: formatGrantDate(grant.expiresAt, prefs, now) })
+          : t('access.apps.expires', { date: formatGrantDate(grant.expiresAt, prefs, now) }),
   ];
+  const client = grant.kind === 'oauth' ? grant.client : null;
+  // An app's label starts as its client-supplied name, so it is cleaned like on consent.
+  const name = client ? cleanClientText(grant.label) || clientName(client) : grant.label;
 
   return (
     <li
@@ -213,19 +232,31 @@ function GrantRow({
     >
       <div className="flex flex-col gap-3 tablet:flex-row tablet:items-start">
         <div className="flex min-w-0 flex-1 gap-3">
-          <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-bg-muted text-text-secondary">
-            <Icon className="size-4" strokeWidth={iconStrokeWidth} aria-hidden />
-          </span>
+          <GrantIcon icon={Icon} logo={httpsLogo(client?.logoUri)} />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="truncate text-sm font-medium">{grant.label}</span>
+              <span className="truncate text-sm font-medium">{name}</span>
               <Chip>{t(`access.kind.${grant.kind}`)}</Chip>
+              {client &&
+                (isVerifiedClient(client) ? (
+                  <Chip color="green">{t('access.apps.verified')}</Chip>
+                ) : (
+                  <Chip color="amber">{t('access.apps.unverified')}</Chip>
+                ))}
               {grant.current && <Chip color="green">{t('security.thisDevice')}</Chip>}
               {expired && <Chip color="red">{t('access.apps.expired')}</Chip>}
               {grant.tokenPrefix && (
                 <span className="font-mono text-xs text-text-muted">{grant.tokenPrefix}…</span>
               )}
             </span>
+            {client && (
+              <span
+                className="truncate font-mono text-xs text-text-secondary"
+                data-testid="grant-domain"
+              >
+                {displayDomain(client.domain)}
+              </span>
+            )}
             <span className="text-sm text-text-secondary">
               {describeScopes(grant.scopes, t, prefs.locale)}
             </span>
@@ -241,7 +272,7 @@ function GrantRow({
               variant="ghost"
               size="sm"
               onPress={() => setMode({ kind: 'editing', id: grant.id })}
-              aria-label={t('access.apps.editNamed', { name: grant.label })}
+              aria-label={t('access.apps.editNamed', { name })}
             >
               {t('access.apps.edit')}
             </Button>
@@ -249,7 +280,7 @@ function GrantRow({
               variant="ghost"
               size="sm"
               onPress={() => setMode({ kind: 'confirming', id: grant.id })}
-              aria-label={t('access.apps.revokeNamed', { name: grant.label })}
+              aria-label={t('access.apps.revokeNamed', { name })}
             >
               {t('access.apps.revoke')}
             </Button>
@@ -259,13 +290,13 @@ function GrantRow({
       {confirming && (
         <InlinePanel onEscape={() => setMode({ kind: 'idle' })}>
           <fieldset
-            aria-label={t('access.apps.revokeNamed', { name: grant.label })}
+            aria-label={t('access.apps.revokeNamed', { name })}
             className="flex flex-col gap-3 rounded-md bg-bg-danger-subtle px-3 py-3 tablet:flex-row tablet:items-center"
           >
             <p className="flex-1 text-sm text-text-danger">
               {grant.current
-                ? t('access.apps.revokeCurrent', { name: grant.label })
-                : t('access.apps.revokeConfirm', { name: grant.label })}
+                ? t('access.apps.revokeCurrent', { name })
+                : t('access.apps.revokeConfirm', { name })}
             </p>
             <div className="flex gap-2">
               <Button
@@ -299,6 +330,7 @@ function GrantRow({
         <EditGrant
           grant={grant}
           orgs={orgs}
+          offerAdmin={isAdmin || grant.scopes.includes('admin')}
           confirmedOrgs={confirmedOrgs}
           confirmOrgs={confirmOrgs}
           prefs={prefs}
@@ -311,6 +343,27 @@ function GrantRow({
         />
       )}
     </li>
+  );
+}
+
+/** The app's own https logo, else the kind's icon (also when the logo fails to load). */
+function GrantIcon({ icon: Icon, logo }: { icon: LucideIcon; logo: string | null }) {
+  const [failed, setFailed] = useState(false);
+  if (logo && !failed) {
+    return (
+      <img
+        src={logo}
+        alt=""
+        className="size-8 shrink-0 rounded-full border border-border bg-bg-app object-contain"
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+  return (
+    <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-bg-muted text-text-secondary">
+      <Icon className="size-4" strokeWidth={iconStrokeWidth} aria-hidden />
+    </span>
   );
 }
 
@@ -331,6 +384,7 @@ function InlinePanel({ children, onEscape }: { children: ReactNode; onEscape: ()
 function EditGrant({
   grant,
   orgs,
+  offerAdmin,
   confirmedOrgs,
   confirmOrgs,
   prefs,
@@ -340,6 +394,8 @@ function EditGrant({
 }: {
   grant: Grant;
   orgs: readonly GrantOrgOption[];
+  /** Admins, or a grant that has it already (so it can be taken away). */
+  offerAdmin: boolean;
   confirmedOrgs: readonly GrantOrgOption[] | undefined;
   confirmOrgs: (() => Promise<readonly GrantOrgOption[]>) | undefined;
   prefs: DisplayPrefs;
@@ -405,6 +461,7 @@ function EditGrant({
           onChange={setEdited}
           orgs={orgs}
           ceiling={ceilingForGrant(grant)}
+          offerAdmin={offerAdmin}
           currentExpiresAt={grant.expiresAt}
           prefs={prefs}
           now={now}
@@ -442,6 +499,7 @@ function EditGrant({
 
 export function NewTokenForm({
   orgs,
+  offerAdmin = false,
   prefs,
   now,
   onCancel,
@@ -449,6 +507,8 @@ export function NewTokenForm({
   initialValue,
 }: {
   orgs: readonly GrantOrgOption[];
+  /** Instance admins only: the `admin` capability, unticked (ADR 0041/0042). */
+  offerAdmin?: boolean | undefined;
   prefs: DisplayPrefs;
   now: number;
   onCancel: () => void;
@@ -479,7 +539,14 @@ export function NewTokenForm({
         }}
         data-testid="new-token-form"
       >
-        <ConstraintEditor value={value} onChange={setValue} orgs={orgs} prefs={prefs} now={now}>
+        <ConstraintEditor
+          value={value}
+          onChange={setValue}
+          orgs={orgs}
+          offerAdmin={offerAdmin}
+          prefs={prefs}
+          now={now}
+        >
           <TextField
             label={t('access.apps.name')}
             description={t('access.apps.nameHint')}

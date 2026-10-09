@@ -94,6 +94,7 @@ function DeviceRoute() {
       key={`${state.kind}:${userCode ?? ''}`}
       state={state}
       account={me.data?.user.email ?? ''}
+      isAdmin={me.data?.user.isAdmin === true}
       orgs={orgs}
       prefs={prefs}
       now={Date.now()}

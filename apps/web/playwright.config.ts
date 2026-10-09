@@ -41,6 +41,9 @@ const serverEnv = {
   // AC-8.4: every /api/v1 response is checked against the OpenAPI document; the global
   // teardown (e2e/support/response-contract.ts) fails the run on any mismatch.
   ROOSTER_VALIDATE_RESPONSES: '1',
+  // WP 9.3: e2e can't serve a public https client metadata document (CIMD), so the consent
+  // spec registers its app dynamically.
+  ROOSTER_OAUTH_DCR: 'on',
   PORT: String(apiPort),
 };
 

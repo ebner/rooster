@@ -1,6 +1,6 @@
 import type { DeviceApprove, DeviceRequest } from '@rooster/core/schemas';
 import { CircleCheck, CircleX, SquareTerminal } from 'lucide-react';
-import { type ReactNode, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { Link } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
@@ -8,10 +8,11 @@ import type { DisplayPrefs } from '../../lib/format';
 import { Banner } from '../../ui/banner';
 import { Button, buttonVariants, iconStrokeWidth } from '../../ui/button';
 import { TextField } from '../../ui/input';
-import { Logo } from '../../ui/logo';
+import { ConsentActions, ConsentFrame } from './consent-frame';
 import { ConstraintEditor } from './constraint-editor';
 import {
   defaultDeviceValue,
+  deviceScopes,
   formatUserCode,
   type GrantOrgOption,
   type GrantValue,
@@ -33,6 +34,8 @@ export interface DevicePageProps {
   state: DevicePageState;
   /** Who is signed in, so the user approves for the right account. */
   account: string;
+  /** Instance admin: may grant the `admin` capability when the CLI asks for it. */
+  isAdmin?: boolean | undefined;
   orgs: readonly GrantOrgOption[];
   prefs: DisplayPrefs;
   now: number;
@@ -62,28 +65,6 @@ export function DevicePage(props: DevicePageProps) {
         <DoneStep {...props} state={state} />
       )}
     </ConsentFrame>
-  );
-}
-
-/** A focused page outside the app frame (like sign-in), with the logo; not a modal. */
-export function ConsentFrame({
-  children,
-  embedded = false,
-}: {
-  children: ReactNode;
-  embedded?: boolean | undefined;
-}) {
-  return (
-    <div
-      className={cn('flex flex-col bg-bg-subtle', embedded ? 'rounded-lg' : 'min-h-dvh pt-safe')}
-    >
-      <main className="flex flex-1 flex-col items-center gap-6 px-3 py-8 tablet:px-6 tablet:py-12">
-        <Logo size={32} />
-        <div className="flex w-full max-w-pane flex-col gap-6 rounded-lg border border-border bg-bg-elevated px-4 pt-6 shadow-sm tablet:px-8 tablet:pt-8">
-          {children}
-        </div>
-      </main>
-    </div>
   );
 }
 
@@ -142,6 +123,7 @@ function CodeStep({
 function RequestStep({
   request,
   account,
+  isAdmin,
   orgs,
   prefs,
   now,
@@ -151,8 +133,10 @@ function RequestStep({
 }: DevicePageProps & { request: DeviceRequest }) {
   const { t } = useTranslation('auth');
   const [value, setValue] = useState<GrantValue>(
-    () => initialValue ?? defaultDeviceValue(request.requestedScopes),
+    () => initialValue ?? defaultDeviceValue(request.requestedScopes, { isAdmin }),
   );
+  // `admin` only for instance admins (ADR 0042 §1): anyone else never sees it offered.
+  const offered = deviceScopes(request.requestedScopes, { isAdmin });
   const [pending, setPending] = useState<'approve' | 'deny' | null>(null);
   const titleId = useId();
   const blocked = grantIssues(value).length > 0;
@@ -197,34 +181,20 @@ function RequestStep({
         value={value}
         onChange={setValue}
         orgs={orgs}
-        ceiling={{ scopes: request.requestedScopes }}
+        ceiling={{ scopes: offered }}
+        offerAdmin={isAdmin}
+        deleteCheckbox
         prefs={prefs}
         now={now}
       />
-      <div className="sticky bottom-0 -mx-4 border-t border-border bg-bg-elevated px-4 pt-3 pb-safe tablet:-mx-8 tablet:px-8">
-        <div className="flex flex-col-reverse gap-2 pb-3 tablet:flex-row tablet:justify-end tablet:pb-6">
-          <Button
-            size="lg"
-            isLoading={pending === 'deny'}
-            isDisabled={pending === 'approve'}
-            onPress={() => void run('deny', onDeny)}
-            className="w-full tablet:w-auto"
-          >
-            {t('device.request.deny')}
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            size="lg"
-            isLoading={pending === 'approve'}
-            isDisabled={blocked || pending === 'deny'}
-            className="w-full tablet:w-auto"
-            data-testid="device-approve"
-          >
-            {t('device.request.approve')}
-          </Button>
-        </div>
-      </div>
+      <ConsentActions
+        approveLabel={t('device.request.approve')}
+        denyLabel={t('device.request.deny')}
+        pending={pending}
+        blocked={blocked}
+        onDeny={() => void run('deny', onDeny)}
+        data-testid="device"
+      />
     </form>
   );
 }

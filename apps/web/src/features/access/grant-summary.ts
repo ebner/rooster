@@ -1,6 +1,6 @@
 import {
+  ALL_GRANT_SCOPES,
   expandScopes,
-  GRANT_SCOPES,
   type GrantConstraints,
   type GrantScope,
 } from '@rooster/core/grants';
@@ -36,7 +36,7 @@ export function describeScopes(
   const seeImplied = [...expanded].some(
     (scope) => scope !== 'tasks:read' && expandScopes([scope]).has('tasks:read'),
   );
-  const labels = GRANT_SCOPES.filter(
+  const labels = ALL_GRANT_SCOPES.filter(
     (scope) => expanded.has(scope) && !(scope === 'tasks:read' && seeImplied),
   ).map((scope) => t(`access.scope.${scopeKeys[scope]}.short`));
   const sentence = listOf(labels, locale);

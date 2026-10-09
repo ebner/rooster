@@ -2,7 +2,7 @@ import type { Grant } from '@rooster/core/schemas';
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useDisplayPrefs, useRevokeSession, useSessions } from '../../data';
+import { ApiError, useDisplayPrefs, useMe, useRevokeSession, useSessions } from '../../data';
 import {
   useConfirmedGrantOrgs,
   useCreateToken,
@@ -11,7 +11,9 @@ import {
   useRevokeGrant,
   useUpdateGrant,
 } from '../../data/grants';
+import { useLinkedIdentities, useUnlinkIdentity } from '../../data/identities';
 import { ConnectedAppsSection } from '../../features/access/connected-apps';
+import { LinkedIdentitiesSection } from '../../features/settings/linked-identities';
 import { SecurityPage } from '../../features/settings/security-page';
 import { toast } from '../../ui/toast';
 
@@ -47,7 +49,34 @@ function SecurityRoute() {
           setPending(null);
         }
       }}
+      linkedIdentities={<LinkedIdentities now={now} />}
       connectedApps={<ConnectedApps now={now} />}
+    />
+  );
+}
+
+function LinkedIdentities({ now }: { now: number }) {
+  const { t } = useTranslation('settings');
+  const prefs = useDisplayPrefs();
+  const identities = useLinkedIdentities();
+  const unlink = useUnlinkIdentity();
+  return (
+    <LinkedIdentitiesSection
+      identities={identities.data}
+      error={identities.error}
+      prefs={prefs}
+      now={now}
+      onUnlink={async (id) => {
+        try {
+          await unlink.mutateAsync({ id });
+          toast({ message: t('security.identities.unlinked') });
+          return 'unlinked';
+        } catch (error) {
+          if (error instanceof ApiError && error.code === 'last_identity') return 'lastIdentity';
+          toast({ message: t('error.saveFailed'), tone: 'danger' });
+          return 'failed';
+        }
+      }}
     />
   );
 }
@@ -55,6 +84,7 @@ function SecurityRoute() {
 function ConnectedApps({ now }: { now: number }) {
   const { t } = useTranslation('settings');
   const prefs = useDisplayPrefs();
+  const me = useMe();
   const grants = useGrants();
   const orgs = useGrantOrgs();
   const createToken = useCreateToken();
@@ -82,6 +112,7 @@ function ConnectedApps({ now }: { now: number }) {
       confirmedOrgs={editing ? confirmed.orgs : undefined}
       confirmOrgs={confirmed.confirm}
       onEditingChange={setEditing}
+      isAdmin={me.data?.user.isAdmin === true}
       prefs={prefs}
       now={now}
       onCreateToken={(input) =>

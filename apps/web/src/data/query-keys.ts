@@ -20,4 +20,8 @@ export const queryKeys = {
   /** P6. The notification inbox (SSE `['notifications']`); the filter hangs below it. */
   notifications: (filter: 'all' | 'unread') => ['notifications', filter] as const,
   notificationPrefs: ['notification-prefs'] as const,
+  /** P9. The OAuth consent screen's request (11 §3.1), by the provider's signed query. */
+  oauthConsent: (oauthQuery: string) => ['oauth-consent', oauthQuery] as const,
+  /** P9. Settings → Security → Linked identities (FR-SET-3). */
+  identities: ['identities'] as const,
 };

@@ -37,7 +37,20 @@
     "justNow": "just now",
     "revoke": "Sign out",
     "revokeNamed": "Sign out {name}",
-    "revoked": "Device signed out"
+    "revoked": "Device signed out",
+    "identities": {
+      "title": "Linked identities",
+      "body": "The accounts you can sign in to rooster with. Unlink one you no longer use; you always keep at least one.",
+      "named": "{provider} ({email})",
+      "linked": "Linked {date}",
+      "unlink": "Unlink",
+      "unlinkNamed": "Unlink {name}",
+      "unlinkConfirm": "Unlink {name}? You can no longer sign in with it.",
+      "unlinked": "Identity unlinked",
+      "lastHint": "It’s your only way to sign in, so it can’t be unlinked.",
+      "lastRefused": "It’s now your only way to sign in, so it can’t be unlinked.",
+      "loadFailed": "Couldn’t load your linked identities."
+    }
   },
   "org": {
     "title": "Organisation settings",
@@ -312,7 +325,9 @@
       "writeGroups": "Groups it may change in {org}",
       "writesNothing": "It can’t change anything yet. Choose where under “Change”.",
       "summary": "Summary",
-      "readAllForWrite": "Changing everything here needs reading everything here."
+      "readAllForWrite": "Changing everything here needs reading everything here.",
+      "allowDelete": "Allow deleting tasks",
+      "allowDeleteHint": "It can move tasks to the trash. You can restore them from there for 30 days."
     },
     "issue": {
       "noScopes": "Choose at least one capability.",
@@ -325,7 +340,8 @@
       "year": "In 1 year",
       "never": "Never",
       "keep": "Keep: {date}",
-      "keepNever": "Keep: never"
+      "keepNever": "Keep: never",
+      "session": "This session only"
     },
     "summary": {
       "allOrgsRead": "Can read everything in all your organisations, including ones you join later.",
@@ -374,7 +390,10 @@
       "create": "Create token",
       "createFailed": "Couldn’t create the token.",
       "staleGroups": "{count, plural, one {# group no longer exists and will be removed.} other {# groups no longer exist and will be removed.}}",
-      "staleOrgs": "{count, plural, one {You left # organisation it names; it will be removed.} other {You left # organisations it names; they will be removed.}}"
+      "staleOrgs": "{count, plural, one {You left # organisation it names; it will be removed.} other {You left # organisations it names; they will be removed.}}",
+      "sessionOnly": "This session only: ends after a day unused",
+      "verified": "Verified",
+      "unverified": "Unverified app"
     },
     "reveal": {
       "title": "{name} is ready",
@@ -397,7 +416,21 @@
       "deviceDenied": "Denied",
       "apps": "Connected apps",
       "tokenCreated": "Token created (shown once)",
-      "empty": "Nothing connected"
+      "empty": "Nothing connected",
+      "consent": "OAuth consent screen",
+      "consentVerified": "OAuth consent: verified app",
+      "consentDynamic": "OAuth consent: unverified app (registered dynamically)",
+      "consentLoopback": "OAuth consent: an app on this computer",
+      "consentStepUp": "OAuth consent: step-up with new capabilities, deleting asked for",
+      "consentInvalid": "OAuth consent: expired or invalid request",
+      "consentFailed": "OAuth consent: couldn’t load",
+      "consentLoading": "OAuth consent: loading",
+      "consentLeaving": "OAuth consent: allowed, going back",
+      "deviceAdmin": "Approve the CLI as an admin (rooster login --admin)",
+      "newTokenAdmin": "New token, as an admin",
+      "identities": "Linked identities",
+      "identitiesLast": "Linked identities: only one left",
+      "identitiesConfirm": "Linked identities: confirm unlinking"
     }
   }
 }

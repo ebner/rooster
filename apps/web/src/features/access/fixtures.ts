@@ -1,4 +1,4 @@
-import type { Grant } from '@rooster/core/schemas';
+import type { Grant, LinkedIdentity, OAuthConsentRequest } from '@rooster/core/schemas';
 import { fixtureIds } from '../shell/fixtures';
 import type { GrantOrgOption } from './grant-model';
 
@@ -140,3 +140,114 @@ export function fixtureGrants(now: number): Grant[] {
 }
 
 export const fixtureUserCode = 'WDJBMJHT';
+
+const signedQuery =
+  'response_type=code&client_id=fixture&scope=tasks%3Aread&exp=1&ba_param=client_id&sig=fixture';
+
+/** OAuth consent requests (P9, 11 §3.1): one per state the kitchen sink and tests show. */
+export function fixtureConsentRequests(now: number): {
+  verified: OAuthConsentRequest;
+  dynamic: OAuthConsentRequest;
+  loopback: OAuthConsentRequest;
+  stepUp: OAuthConsentRequest;
+} {
+  const claude = fixtureGrants(now).find((grant) => grant.kind === 'oauth') ?? null;
+  return {
+    verified: {
+      oauthQuery: signedQuery,
+      clientId: 'https://claude.ai/oauth/mcp-client-metadata.json',
+      client: {
+        name: 'Claude',
+        domain: 'claude.ai',
+        logoUri: null,
+        clientUri: 'https://claude.ai',
+        verified: true,
+        dynamic: false,
+      },
+      redirectUri: 'https://claude.ai/api/mcp/auth_callback',
+      loopback: false,
+      resource: 'https://rooster.example.com/mcp',
+      requestedScopes: ['tasks:write'],
+      newScopes: [],
+      existing: null,
+      prefill: null,
+    },
+    dynamic: {
+      oauthQuery: signedQuery,
+      clientId: 'dcr_8f2a1c',
+      client: {
+        name: 'Task Helper\u202e (official)',
+        domain: 'tasks-helper.example.net',
+        logoUri: 'http://tasks-helper.example.net/logo.png',
+        clientUri: null,
+        verified: false,
+        dynamic: true,
+      },
+      redirectUri: 'https://tasks-helper.example.net/oauth/callback',
+      loopback: false,
+      resource: 'https://rooster.example.com/api/v1',
+      requestedScopes: ['tasks:read', 'notifications:read'],
+      newScopes: [],
+      existing: null,
+      prefill: null,
+    },
+    loopback: {
+      oauthQuery: signedQuery,
+      clientId: 'https://zed.dev/mcp/client.json',
+      client: {
+        name: 'Zed',
+        domain: 'zed.dev',
+        logoUri: null,
+        clientUri: 'https://zed.dev',
+        verified: false,
+        dynamic: false,
+      },
+      redirectUri: 'http://127.0.0.1:53682/callback',
+      loopback: true,
+      resource: 'https://rooster.example.com/mcp',
+      requestedScopes: ['tasks:write', 'comments:write'],
+      newScopes: [],
+      existing: null,
+      prefill: null,
+    },
+    stepUp: {
+      oauthQuery: signedQuery,
+      clientId: 'https://claude.ai/oauth/mcp-client-metadata.json',
+      client: {
+        name: 'Claude',
+        domain: 'claude.ai',
+        logoUri: null,
+        clientUri: 'https://claude.ai',
+        verified: true,
+        dynamic: false,
+      },
+      redirectUri: 'https://claude.ai/api/mcp/auth_callback',
+      loopback: false,
+      resource: 'https://rooster.example.com/mcp',
+      requestedScopes: ['tasks:write', 'comments:write', 'tasks:delete'],
+      newScopes: ['comments:write', 'tasks:delete'],
+      existing: claude,
+      prefill: null,
+    },
+  };
+}
+
+/** Linked sign-in identities (P9, FR-SET-3). */
+export function fixtureIdentities(now: number): LinkedIdentity[] {
+  return [
+    {
+      id: 'acc_google_1',
+      providerId: 'google',
+      providerName: 'Google',
+      email: 'jannik@example.com',
+      createdAt: now - 400 * day,
+    },
+    {
+      id: 'acc_oidc_1',
+      providerId: 'company-sso',
+      providerName: 'Company SSO',
+      email: 'jannik@company.example',
+      createdAt: now - 20 * day,
+    },
+  ];
+}

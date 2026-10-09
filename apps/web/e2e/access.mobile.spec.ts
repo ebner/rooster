@@ -52,11 +52,12 @@ test('AC-8.1 /device on a phone: sign in, check the code, narrow to Prio, approv
     `${code.user_code.slice(0, 4)}-${code.user_code.slice(4)}`,
   );
   // The CLI's request is the default and the ceiling: nothing beyond it is offered.
-  await expect(requestForm.getByRole('checkbox', { name: /Delete/ })).toBeChecked();
+  // Deleting is its own checkbox, ticked as the CLI asked (ADR 0042 §4).
+  await expect(requestForm.getByRole('checkbox', { name: /Allow deleting tasks/ })).toBeChecked();
   await expect(requestForm.getByRole('checkbox', { name: /Read notifications/ })).toHaveCount(0);
 
   // Narrow: only the personal org, writing only in Prio, without delete.
-  await requestForm.getByText('Delete', { exact: true }).tap();
+  await requestForm.getByText('Allow deleting tasks', { exact: true }).tap();
   await requestForm.getByText('All organisations', { exact: true }).tap();
   await requestForm
     .getByTestId(`write-${orgId}`)

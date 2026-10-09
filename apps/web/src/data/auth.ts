@@ -22,13 +22,23 @@ export interface SignInVariables {
   providerId: string;
   /** Where to land after the OAuth round trip; defaults to `/`. Untrusted input. */
   callbackUrl?: string;
+  /**
+   * An app's authorization that sent the browser to sign in (rooster's OAuth server, ADR
+   * 0041): the provider's signed query. better-auth verifies it and, once signed in, carries
+   * on with that authorization (the consent screen) instead of `callbackUrl`.
+   */
+  oauthQuery?: string;
 }
 
 /**
  * Starts the OAuth/OIDC flow and leaves the page. Rejected sign-ins come back on
  * `/not-invited?reason=…`, other provider errors on `/login?error=…`.
  */
-export async function startSignIn({ providerId, callbackUrl }: SignInVariables): Promise<void> {
+export async function startSignIn({
+  providerId,
+  callbackUrl,
+  oauthQuery,
+}: SignInVariables): Promise<void> {
   const callbackURL = safeRedirectPath(callbackUrl) ?? '/';
   const errorCallbackURL = '/login';
   const authClient = await loadAuthClient();
@@ -36,6 +46,9 @@ export async function startSignIn({ providerId, callbackUrl }: SignInVariables):
     provider: providerId,
     callbackURL,
     errorCallbackURL,
+    // The field better-auth's OAuth provider reads from any sign-in body (its client plugin
+    // adds it the same way); not in the social sign-in's own types.
+    ...(oauthQuery ? ({ oauth_query: oauthQuery } as Record<string, string>) : {}),
   });
   if (result.error) {
     throw new ApiError(result.error.code ?? 'sign_in_failed', result.error.status ?? 500);

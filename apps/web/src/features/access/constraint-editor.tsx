@@ -51,6 +51,16 @@ export interface ConstraintEditorProps {
   currentExpiresAt?: number | null | undefined;
   /** Hides the expiry select. */
   hideExpiry?: boolean | undefined;
+  /** Offers "This session only" (the OAuth consent screen, 11 §2.4). */
+  offerSessionOnly?: boolean | undefined;
+  /** Offers the `admin` capability: instance admins only (ADR 0041/0042). */
+  offerAdmin?: boolean | undefined;
+  /**
+   * The consent pages (`/oauth/consent`, `/device`): deleting is not one capability among
+   * others but its own "Allow deleting tasks" checkbox below them, shown only when the client
+   * asked for it (ADR 0041/0042 §4).
+   */
+  deleteCheckbox?: boolean | undefined;
   prefs: DisplayPrefs;
   now: number;
   /** Extra fields above the capabilities, e.g. a token name. */
@@ -71,6 +81,9 @@ export function ConstraintEditor({
   newScopes,
   currentExpiresAt,
   hideExpiry = false,
+  offerSessionOnly = false,
+  offerAdmin = false,
+  deleteCheckbox = false,
   prefs,
   now,
   children,
@@ -85,6 +98,10 @@ export function ConstraintEditor({
   const list = value.constraints.orgs;
   const allOrgs = list === 'all';
   const allOrgsAllowed = can(setAllOrgs(value, orgs, true));
+  const offered = offeredScopes(ceiling, { admin: offerAdmin });
+  const listed = deleteCheckbox ? offered.filter((scope) => scope !== 'tasks:delete') : offered;
+  const deleteOffered = deleteCheckbox && offered.includes('tasks:delete');
+  const deleteState = scopeState(value.scopes, 'tasks:delete');
 
   return (
     <div className="flex flex-col gap-6" {...(testId ? { 'data-testid': testId } : {})}>
@@ -94,7 +111,7 @@ export function ConstraintEditor({
         <legend id={scopesId} className="mb-1 text-base font-medium">
           {t('access.editor.capabilities')}
         </legend>
-        {offeredScopes(ceiling).map((scope) => {
+        {listed.map((scope) => {
           const state = scopeState(value.scopes, scope);
           const key = scopeKeys[scope];
           const next = toggleScope(value, scope, state === 'off', orgs);
@@ -127,6 +144,27 @@ export function ConstraintEditor({
           <IssueText>{t('access.issue.noScopes')}</IssueText>
         )}
       </fieldset>
+
+      {deleteOffered && (
+        <div className="rounded-md border border-border px-3 py-1.5">
+          <FormCheckbox
+            isSelected={deleteState !== 'off'}
+            isDisabled={!can(toggleScope(value, 'tasks:delete', deleteState === 'off', orgs))}
+            onChange={(on) => onChange(toggleScope(value, 'tasks:delete', on, orgs))}
+            description={t('access.editor.allowDeleteHint')}
+            data-testid="allow-delete"
+            aside={
+              newScopes?.includes('tasks:delete') && (
+                <span className="rounded-xs bg-bg-accent-subtle px-1.5 text-xs font-medium text-text">
+                  {t('access.editor.new')}
+                </span>
+              )
+            }
+          >
+            {t('access.editor.allowDelete')}
+          </FormCheckbox>
+        </div>
+      )}
 
       <fieldset aria-labelledby={whereId} className="flex flex-col gap-3">
         <legend id={whereId} className="mb-1 text-base font-medium">
@@ -181,6 +219,7 @@ export function ConstraintEditor({
       {!hideExpiry && (
         <ExpirySelect
           narrowOnly={Boolean(ceiling?.constraints)}
+          offerSessionOnly={offerSessionOnly}
           value={value.expiry}
           onChange={(expiry) => onChange(setExpiry(value, expiry))}
           currentExpiresAt={currentExpiresAt}
@@ -312,6 +351,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 function ExpirySelect({
   narrowOnly,
+  offerSessionOnly,
   value,
   onChange,
   currentExpiresAt,
@@ -320,6 +360,7 @@ function ExpirySelect({
 }: {
   /** Narrowing an app's grant: no expiry later than the current one (the server refuses it). */
   narrowOnly: boolean;
+  offerSessionOnly: boolean;
   value: ExpiryChoice;
   onChange: (value: ExpiryChoice) => void;
   currentExpiresAt: number | null | undefined;
@@ -327,8 +368,9 @@ function ExpirySelect({
   now: number;
 }) {
   const { t } = useTranslation('settings');
-  type Key = 'keep' | 'never' | `${(typeof EXPIRY_DAY_CHOICES)[number]}`;
+  type Key = 'keep' | 'never' | 'session' | `${(typeof EXPIRY_DAY_CHOICES)[number]}`;
   const options: { id: Key; label: string }[] = [
+    ...(offerSessionOnly ? [{ id: 'session' as const, label: t('access.expiry.session') }] : []),
     ...(currentExpiresAt !== undefined
       ? [
           {
@@ -356,7 +398,11 @@ function ExpirySelect({
       options={options}
       value={String(value) as Key}
       onChange={(key) =>
-        onChange(key === 'keep' || key === 'never' ? key : (Number(key) as ExpiryChoice))
+        onChange(
+          key === 'keep' || key === 'never' || key === 'session'
+            ? key
+            : (Number(key) as ExpiryChoice),
+        )
       }
       className="tablet:max-w-date-popover"
     />

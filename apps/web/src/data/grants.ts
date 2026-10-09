@@ -69,6 +69,14 @@ export function useCreateToken(): MutationResult<TokenCreate, TokenCreated> {
  * from the cached `['my-list', orgId]` (Inbox first), so they are usually there already.
  */
 export function useGrantOrgs(): GrantOrgOption[] {
+  return useGrantOrgsState().orgs;
+}
+
+/**
+ * `useGrantOrgs`, plus whether `/me` and every org's groups have settled (loaded or failed):
+ * the OAuth consent screen computes its least-privilege default (the personal Inbox) once.
+ */
+export function useGrantOrgsState(): { orgs: GrantOrgOption[]; ready: boolean } {
   const me = useMe();
   const pipeline = useListPipeline();
   const orgs = me.data?.orgs ?? [];
@@ -85,12 +93,16 @@ export function useGrantOrgs(): GrantOrgOption[] {
         })),
     })),
   });
-  return orgs.map((org, index) => ({
-    id: org.id,
-    name: org.name,
-    isPersonal: org.isPersonal,
-    groups: groups[index]?.data,
-  }));
+  return {
+    orgs: orgs.map((org, index) => ({
+      id: org.id,
+      name: org.name,
+      isPersonal: org.isPersonal,
+      groups: groups[index]?.data,
+    })),
+    ready:
+      me.data !== undefined && groups.every((query) => query.data !== undefined || query.isError),
+  };
 }
 
 /**

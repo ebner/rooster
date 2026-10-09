@@ -19,6 +19,7 @@ import { Route as AppInboxRouteImport } from './routes/_app/inbox'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as Char91_devChar93UiRouteImport } from './routes/[_dev]/ui'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
+import { Route as OauthConsentRouteImport } from './routes/oauth.consent'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings.index'
 import { Route as AppSettingsBehaviourRouteImport } from './routes/_app/settings.behaviour'
 import { Route as AppSettingsDataRouteImport } from './routes/_app/settings.data'
@@ -82,6 +83,11 @@ const Char91_devChar93UiRoute = Char91_devChar93UiRouteImport.update({
 const InviteTokenRoute = InviteTokenRouteImport.update({
   id: '/invite/$token',
   path: '/invite/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OauthConsentRoute = OauthConsentRouteImport.update({
+  id: '/oauth/consent',
+  path: '/oauth/consent',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
@@ -172,6 +178,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AppSettingsRouteWithChildren
   '/_dev/ui': typeof Char91_devChar93UiRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/oauth/consent': typeof OauthConsentRoute
   '/settings/behaviour': typeof AppSettingsBehaviourRoute
   '/settings/data': typeof AppSettingsDataRoute
   '/settings/notifications': typeof AppSettingsNotificationsRoute
@@ -197,6 +204,7 @@ export interface FileRoutesByTo {
   '/inbox': typeof AppInboxRoute
   '/_dev/ui': typeof Char91_devChar93UiRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/oauth/consent': typeof OauthConsentRoute
   '/settings/behaviour': typeof AppSettingsBehaviourRoute
   '/settings/data': typeof AppSettingsDataRoute
   '/settings/notifications': typeof AppSettingsNotificationsRoute
@@ -225,6 +233,7 @@ export interface FileRoutesById {
   '/_app/settings': typeof AppSettingsRouteWithChildren
   '/_dev/ui': typeof Char91_devChar93UiRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/oauth/consent': typeof OauthConsentRoute
   '/_app/settings/behaviour': typeof AppSettingsBehaviourRoute
   '/_app/settings/data': typeof AppSettingsDataRoute
   '/_app/settings/notifications': typeof AppSettingsNotificationsRoute
@@ -253,6 +262,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/_dev/ui'
     | '/invite/$token'
+    | '/oauth/consent'
     | '/settings/behaviour'
     | '/settings/data'
     | '/settings/notifications'
@@ -278,6 +288,7 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/_dev/ui'
     | '/invite/$token'
+    | '/oauth/consent'
     | '/settings/behaviour'
     | '/settings/data'
     | '/settings/notifications'
@@ -305,6 +316,7 @@ export interface FileRouteTypes {
     | '/_app/settings'
     | '/_dev/ui'
     | '/invite/$token'
+    | '/oauth/consent'
     | '/_app/settings/behaviour'
     | '/_app/settings/data'
     | '/_app/settings/notifications'
@@ -330,6 +342,7 @@ export interface RootRouteChildren {
   NotInvitedRoute: typeof NotInvitedRoute
   Char91_devChar93UiRoute: typeof Char91_devChar93UiRoute
   InviteTokenRoute: typeof InviteTokenRoute
+  OauthConsentRoute: typeof OauthConsentRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -402,6 +415,13 @@ declare module '@tanstack/react-router' {
       path: '/invite/$token'
       fullPath: '/invite/$token'
       preLoaderRoute: typeof InviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oauth/consent': {
+      id: '/oauth/consent'
+      path: '/oauth/consent'
+      fullPath: '/oauth/consent'
+      preLoaderRoute: typeof OauthConsentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/settings/': {
@@ -583,6 +603,7 @@ const rootRouteChildren: RootRouteChildren = {
   NotInvitedRoute: NotInvitedRoute,
   Char91_devChar93UiRoute: Char91_devChar93UiRoute,
   InviteTokenRoute: InviteTokenRoute,
+  OauthConsentRoute: OauthConsentRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

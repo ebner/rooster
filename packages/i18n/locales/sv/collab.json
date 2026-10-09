@@ -53,6 +53,7 @@
       "tui": "via terminalappen",
       "mcp": "via en AI-assistent",
       "pat": "via en åtkomsttoken",
+      "oauth": "via en app",
       "import": "via import"
     }
   },

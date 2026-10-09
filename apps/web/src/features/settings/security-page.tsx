@@ -15,7 +15,9 @@ export interface SecurityPageProps {
   pendingSessionId?: string | null | undefined;
   prefs: Pick<DisplayPrefs, 'locale'>;
   now: number;
-  /** Settings → Connected apps (11 §3.2), below the sessions. */
+  /** Linked sign-in identities (FR-SET-3), below the sessions. */
+  linkedIdentities?: ReactNode;
+  /** Settings → Connected apps (11 §3.2), last. */
   connectedApps?: ReactNode;
 }
 
@@ -23,7 +25,7 @@ const deviceIcons = { desktop: Monitor, mobile: Smartphone, tablet: Tablet } as 
 
 /**
  * FR-AUTH-4 / FR-SET-3: active sessions (revoking signs that browser out on its next request),
- * then Connected apps.
+ * the linked sign-in identities, then Connected apps.
  */
 export function SecurityPage({
   sessions,
@@ -31,6 +33,7 @@ export function SecurityPage({
   pendingSessionId,
   prefs,
   now,
+  linkedIdentities,
   connectedApps,
 }: SecurityPageProps) {
   const { t } = useTranslation('settings');
@@ -91,6 +94,7 @@ export function SecurityPage({
           })}
         </ul>
       </SettingsSection>
+      {linkedIdentities}
       {connectedApps}
     </div>
   );

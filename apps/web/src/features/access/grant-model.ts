@@ -1,15 +1,25 @@
 import {
+  ADMIN_SCOPE,
+  ALL_GRANT_SCOPES,
   expandScopes,
   GRANT_SCOPES,
   type GrantConstraints,
   type GrantScope,
   isNarrowing,
   minimalScopes,
+  OAUTH_EXCLUDED_SCOPES,
   type OrgGrant,
   type ReadAccess,
   type WriteAccess,
 } from '@rooster/core/grants';
-import type { DeviceApprove, Grant, GrantPatch, TokenCreate } from '@rooster/core/schemas';
+import type {
+  DeviceApprove,
+  Grant,
+  GrantPatch,
+  OAuthConsentDecision,
+  OAuthConsentRequest,
+  TokenCreate,
+} from '@rooster/core/schemas';
 
 /**
  * The constraint editor's model (11 §2–3): pure functions over the contract shapes, so the
@@ -34,13 +44,17 @@ export interface GrantOrgOption {
 
 /** The expiry select (11 §2.4). Mirrors `EXPIRY_DAYS` in `@rooster/core/schemas` (zod-free here). */
 export const EXPIRY_DAY_CHOICES = [7, 30, 90, 365] as const;
-export type ExpiryChoice = (typeof EXPIRY_DAY_CHOICES)[number] | 'never' | 'keep';
+/**
+ * `session`: "This session only", the idle timeout of an OAuth grant (11 §2.4, ADR 0041),
+ * offered on the consent screen only.
+ */
+export type ExpiryChoice = (typeof EXPIRY_DAY_CHOICES)[number] | 'never' | 'keep' | 'session';
 
 export interface GrantValue {
   /** What the user ticked; implied scopes are added on display and dropped on send. */
   scopes: readonly GrantScope[];
   constraints: GrantConstraints;
-  /** Days from now, `never`, or `keep` (editing an existing grant only). */
+  /** Days from now, `never`, `keep` (editing an existing grant only) or `session` (consent). */
   expiry: ExpiryChoice;
 }
 
@@ -58,11 +72,18 @@ export function hasWriteScope(scopes: Iterable<GrantScope>): boolean {
   return WRITE_SCOPES.some((scope) => expanded.has(scope));
 }
 
-/** The scopes the editor offers: all of them, or those within the ceiling. */
-export function offeredScopes(ceiling?: GrantCeiling): GrantScope[] {
-  if (!ceiling?.scopes) return [...GRANT_SCOPES];
+/**
+ * The scopes the editor offers: all of them, or those within the ceiling. `admin` only with
+ * `admin: true`, which callers set for instance admins only (ADR 0041/0042).
+ */
+export function offeredScopes(
+  ceiling?: GrantCeiling,
+  options: { admin?: boolean | undefined } = {},
+): GrantScope[] {
+  const base: readonly GrantScope[] = options.admin ? ALL_GRANT_SCOPES : GRANT_SCOPES;
+  if (!ceiling?.scopes) return [...base];
   const allowed = expandScopes(ceiling.scopes);
-  return GRANT_SCOPES.filter((scope) => allowed.has(scope));
+  return base.filter((scope) => allowed.has(scope));
 }
 
 export type ScopeState = 'off' | 'on' | 'implied';
@@ -338,6 +359,7 @@ export function normalizeConstraints(
 }
 
 function expiresInDays(expiry: ExpiryChoice): { expiresInDays?: number } {
+  // `never`, `keep` and `session` send no day count.
   return typeof expiry === 'number' ? { expiresInDays: expiry } : {};
 }
 
@@ -391,13 +413,118 @@ export function defaultTokenValue(orgs: readonly GrantOrgOption[]): GrantValue {
   };
 }
 
-/** `/device`: what the CLI asked for, everywhere, no expiry (07 §2: the user's own terminal). */
-export function defaultDeviceValue(requested: readonly GrantScope[]): GrantValue {
+/**
+ * `/device`: what the CLI asked for, everywhere, no expiry (07 §2: the user's own terminal).
+ * "Delete" starts as requested (ADR 0042 §4: asked for explicitly in the terminal). `admin`
+ * only for instance admins; for anyone else the server drops it, so the page never shows it.
+ */
+export function defaultDeviceValue(
+  requested: readonly GrantScope[],
+  options: { isAdmin?: boolean | undefined } = {},
+): GrantValue {
+  const scopes = deviceScopes(requested, options);
   return {
-    scopes: minimalScopes(requested.length > 0 ? requested : ['tasks:read']),
+    scopes: minimalScopes(scopes.length > 0 ? scopes : ['tasks:read']),
     constraints: { orgs: 'all' },
     expiry: 'never',
   };
+}
+
+/** The scopes the `/device` page may offer: the request, without `admin` for non-admins. */
+export function deviceScopes(
+  requested: readonly GrantScope[],
+  options: { isAdmin?: boolean | undefined } = {},
+): GrantScope[] {
+  return requested.filter((scope) => scope !== ADMIN_SCOPE || options.isAdmin === true);
+}
+
+// ---------------------------------------------------------------------------------------------
+// OAuth consent (11 §3.1, ADR 0041/0042)
+// ---------------------------------------------------------------------------------------------
+
+/** The OAuth default expiry (11 §2.4: 90 days for OAuth clients). */
+export const OAUTH_DEFAULT_EXPIRY = 90 satisfies ExpiryChoice;
+
+/**
+ * What the consent screen may offer: the requested scopes, never `admin` (ADR 0041), which
+ * the server already leaves out; filtered here too so a server slip can't put it on screen.
+ */
+export function consentScopes(request: Pick<OAuthConsentRequest, 'requestedScopes'>): GrantScope[] {
+  return request.requestedScopes.filter((scope) => !OAUTH_EXCLUDED_SCOPES.includes(scope));
+}
+
+/**
+ * The ceiling of the consent editor: the requested scopes, and the client's
+ * `authorization_details`, which pre-fill the screen and may only be narrowed (11 §2.2).
+ */
+export function consentCeiling(
+  request: Pick<OAuthConsentRequest, 'requestedScopes' | 'prefill'>,
+): GrantCeiling {
+  return {
+    scopes: consentScopes(request),
+    ...(request.prefill ? { constraints: request.prefill as GrantConstraints } : {}),
+  };
+}
+
+/**
+ * The consent screen's starting point, least privilege first (11 §3.1):
+ * - Scopes: what the client asked for, but "Allow deleting tasks" unticked (ADR 0041/0042):
+ *   only a step-up of a grant that already deletes keeps it ticked, since the user allowed it
+ *   before and `existing` is the user's own earlier choice.
+ * - Where: `prefill` (the client's `authorization_details`), else the existing grant on
+ *   step-up, else every current org (never `"all"`): read everything, write nothing, or the
+ *   personal org's Inbox only when the client may write.
+ * - Expiry: "This session only" again on a step-up of such a grant, else 90 days.
+ *
+ * `orgs` must have the personal org's groups loaded, or the write default stays "nothing".
+ */
+export function defaultConsentValue(
+  request: Pick<OAuthConsentRequest, 'requestedScopes' | 'prefill' | 'existing'>,
+  orgs: readonly GrantOrgOption[],
+): GrantValue {
+  const requested = consentScopes(request);
+  const keepDelete = request.existing?.scopes.includes('tasks:delete') === true;
+  const expanded = [...expandScopes(requested)].filter(
+    (scope) => keepDelete || scope !== 'tasks:delete',
+  );
+  const scopes = minimalScopes(expanded.length > 0 ? expanded : ['tasks:read']);
+  const expiry: ExpiryChoice = request.existing?.idleTimeoutMs ? 'session' : OAUTH_DEFAULT_EXPIRY;
+  const existing = request.existing?.constraints as GrantConstraints | undefined;
+  const prefill = request.prefill as GrantConstraints | null;
+
+  if (prefill) {
+    // Step-up within what the client pre-filled keeps the user's earlier narrowing.
+    const start = existing && isNarrowing(prefill, existing) ? existing : prefill;
+    return withWriteImpliesRead({ scopes, constraints: start, expiry });
+  }
+  if (existing) return withWriteImpliesRead({ scopes, constraints: existing, expiry });
+
+  const personal = orgs.find((org) => org.isPersonal);
+  const inbox = inboxOf(personal);
+  const writes = hasWriteScope(scopes);
+  return {
+    scopes,
+    constraints: {
+      orgs: orgs.map((org) => ({
+        orgId: org.id,
+        read: 'all',
+        write: writes && org.id === personal?.id && inbox ? { groups: [inbox] } : 'none',
+      })),
+    },
+    expiry,
+  };
+}
+
+/** `POST /oauth/consent` with Allow. */
+export function toConsentDecision(value: GrantValue, oauthQuery: string): OAuthConsentDecision {
+  const { scopes, constraints, expiresInDays: days } = toGrantInput(value);
+  return {
+    accept: true,
+    oauthQuery,
+    scopes,
+    constraints,
+    ...(value.expiry === 'session' ? { sessionOnly: true } : days ? { expiresInDays: days } : {}),
+  } as OAuthConsentDecision;
 }
 
 /** Editing an existing grant. */

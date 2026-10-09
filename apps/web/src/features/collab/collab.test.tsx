@@ -1,3 +1,4 @@
+import { groupActivity } from '@rooster/core/activity';
 import { formatMention } from '@rooster/core/mentions';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { useRef } from 'react';
@@ -6,9 +7,10 @@ import { useKeymap } from '../../use-keymap';
 import { sampleDateContext } from '../dates/fixtures';
 import { fixtureIds, fixtureMe } from '../shell/fixtures';
 import { Sidebar } from '../shell/sidebar';
+import { ActivityFeed } from './activity-feed';
 import { CommentBody } from './comment-body';
 import { CommentComposer, type CommentComposerHandle } from './comment-composer';
-import { fixtureCandidates, fixtureNotifications } from './fixtures';
+import { fixtureCandidates, fixtureFeed, fixtureNotifications, fixturePeople } from './fixtures';
 import { StaticInboxNav } from './inbox-nav';
 import { InboxPage, type InboxPageProps } from './inbox-page';
 
@@ -37,6 +39,32 @@ describe('CommentBody (FR-COL-3)', () => {
     const body = formatMention('Old name', fixtureIds.anna);
     render(<CommentBody body={body} nameOf={() => 'Anna Lindqvist'} />);
     expect(screen.getByText('@Anna Lindqvist')).toBeTruthy();
+  });
+});
+
+describe('ActivityFeed via (06 §1, 11 §2.3)', () => {
+  test('a change made through an OAuth app reads "via an app"', () => {
+    const dateCtx = sampleDateContext('en');
+    const feed = fixtureFeed(dateCtx.nowMs).map((item) =>
+      item.kind === 'activity' && item.activity.via === 'cli'
+        ? { ...item, activity: { ...item.activity, via: 'oauth' as const } }
+        : item,
+    );
+    render(
+      <ActivityFeed
+        entries={groupActivity(feed)}
+        viewerId={fixtureIds.jannik}
+        person={(id) => fixturePeople[id]}
+        pending={new Set()}
+        now={dateCtx.nowMs}
+        locale="en"
+        dateCtx={dateCtx}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/via an app/)).toBeTruthy();
+    expect(screen.queryByText(/via the CLI/)).toBeNull();
   });
 });
 

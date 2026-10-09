@@ -40,7 +40,7 @@ export interface ActivityFeedProps {
 }
 
 /** Shown after the time for work that came from elsewhere than the web app. */
-const viaShown = ['cli', 'tui', 'mcp', 'pat', 'import'] as const;
+const viaShown = ['cli', 'tui', 'mcp', 'pat', 'oauth', 'import'] as const;
 type ShownVia = (typeof viaShown)[number];
 const isShownVia = (via: ActivityVia): via is ShownVia =>
   (viaShown as readonly string[]).includes(via);

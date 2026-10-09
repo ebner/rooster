@@ -3,15 +3,27 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DisplayPrefs } from '../../lib/format';
 import { Group, Section } from '../dev-ui/layout';
-import { ConnectedAppsSection } from './connected-apps';
+import { LinkedIdentitiesSection } from '../settings/linked-identities';
+import { ConnectedAppsSection, NewTokenForm } from './connected-apps';
+import { ConsentPage, type ConsentPageState } from './consent-page';
 import { ConstraintEditor } from './constraint-editor';
 import { DevicePage, type DevicePageState } from './device-page';
-import { fixtureGrantOrgs, fixtureGrants, fixtureGroupIds, fixtureUserCode } from './fixtures';
+import {
+  fixtureConsentRequests,
+  fixtureGrantOrgs,
+  fixtureGrants,
+  fixtureGroupIds,
+  fixtureIdentities,
+  fixtureUserCode,
+} from './fixtures';
 import { ceilingForGrant, defaultTokenValue, type GrantValue, valueFromGrant } from './grant-model';
 
 const noop = async () => undefined;
 
-/** Kitchen-sink entries for agent access (P8, WP 8.2): the editor, `/device`, Connected apps. */
+/**
+ * Kitchen-sink entries for agent access (P8 WP 8.2, P9 WP 9.3/9.6): the editor, `/device`,
+ * the OAuth consent screen, Connected apps and the linked sign-in identities.
+ */
 export function AccessKitchenSection() {
   const { t, i18n } = useTranslation('settings');
   const locale = isLocale(i18n.language) ? i18n.language : 'en';
@@ -65,6 +77,22 @@ export function AccessKitchenSection() {
     [t('access.dev.deviceDenied'), { kind: 'denied', clientName: request.clientName }],
   ];
   const created = grants[1];
+  const consent = useMemo(() => fixtureConsentRequests(now), [now]);
+  const consentStates: [string, ConsentPageState][] = [
+    [t('access.dev.consentVerified'), { kind: 'request', request: consent.verified }],
+    [t('access.dev.consentDynamic'), { kind: 'request', request: consent.dynamic }],
+    [t('access.dev.consentLoopback'), { kind: 'request', request: consent.loopback }],
+    [t('access.dev.consentStepUp'), { kind: 'request', request: consent.stepUp }],
+    [t('access.dev.consentInvalid'), { kind: 'invalid' }],
+    [t('access.dev.consentFailed'), { kind: 'failed' }],
+    [t('access.dev.consentLoading'), { kind: 'loading' }],
+    [
+      t('access.dev.consentLeaving'),
+      { kind: 'leaving', accepted: true, clientName: consent.verified.client.name },
+    ],
+  ];
+  const identities = useMemo(() => fixtureIdentities(now), [now]);
+  const unlinked = async () => 'unlinked' as const;
 
   return (
     <Section id="access" title={t('access.dev.section')}>
@@ -112,6 +140,90 @@ export function AccessKitchenSection() {
             <figcaption className="text-xs text-text-muted">{label}</figcaption>
           </figure>
         ))}
+      </Group>
+      <Group title={t('access.dev.deviceAdmin')} className="block">
+        <div className="max-w-pane">
+          <DevicePage
+            state={{
+              kind: 'request',
+              request: { ...request, requestedScopes: ['tasks:write', 'admin'] },
+            }}
+            account="jannik@example.com"
+            isAdmin
+            orgs={orgs}
+            prefs={prefs}
+            now={now}
+            onSubmitCode={() => undefined}
+            onApprove={noop}
+            onDeny={noop}
+            homeHref="#access"
+            embedded
+          />
+        </div>
+      </Group>
+      <Group title={t('access.dev.consent')} className="grid gap-6 desktop:grid-cols-2">
+        {consentStates.map(([label, state]) => (
+          <figure key={label} className="flex flex-col gap-2">
+            <ConsentPage
+              state={state}
+              account="jannik@example.com"
+              orgs={orgs}
+              prefs={prefs}
+              now={now}
+              onAllow={noop}
+              onDeny={noop}
+              onRetry={() => undefined}
+              homeHref="#access"
+              embedded
+            />
+            <figcaption className="text-xs text-text-muted">{label}</figcaption>
+          </figure>
+        ))}
+      </Group>
+      <Group title={t('access.dev.newTokenAdmin')} className="block">
+        <div className="max-w-pane-max">
+          <NewTokenForm
+            orgs={orgs}
+            offerAdmin
+            prefs={prefs}
+            now={now}
+            onCancel={() => undefined}
+            onCreate={noop}
+          />
+        </div>
+      </Group>
+      <Group title={t('access.dev.identities')} className="grid gap-6 desktop:grid-cols-3">
+        <div className="max-w-pane-max">
+          <LinkedIdentitiesSection
+            identities={identities}
+            prefs={prefs}
+            now={now}
+            onUnlink={unlinked}
+          />
+        </div>
+        <figure className="flex max-w-pane-max flex-col gap-2">
+          <LinkedIdentitiesSection
+            identities={identities.slice(0, 1)}
+            prefs={prefs}
+            now={now}
+            onUnlink={async () => 'lastIdentity' as const}
+          />
+          <figcaption className="text-xs text-text-muted">
+            {t('access.dev.identitiesLast')}
+          </figcaption>
+        </figure>
+        <figure className="flex max-w-pane-max flex-col gap-2">
+          <LinkedIdentitiesSection
+            identities={identities}
+            prefs={prefs}
+            now={now}
+            onUnlink={unlinked}
+            initialConfirmingId={identities[1]?.id}
+          />
+          <figcaption className="text-xs text-text-muted">
+            {t('access.dev.identitiesConfirm')}
+          </figcaption>
+        </figure>
       </Group>
       <Group title={t('access.dev.apps')} className="block">
         <div className="max-w-pane-max">
