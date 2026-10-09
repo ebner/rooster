@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { commentSchema } from './collab.ts';
 import { idSchema, timestampSchema } from './common.ts';
 import { groupSchema, taskSchema } from './list.ts';
 import { tagSchema } from './tags.ts';
@@ -21,6 +22,11 @@ export const exportTaskSchema = taskSchema.extend({
   description: z.string(),
 });
 
+/** P6. A live comment on an exported task, with its author's current name. */
+export const exportCommentSchema = commentSchema.extend({
+  authorName: z.string(),
+});
+
 export const orgExportSchema = z.object({
   format: z.literal('rooster-export'),
   version: z.literal(1),
@@ -37,11 +43,12 @@ export const orgExportSchema = z.object({
    * parent in subtask order.
    */
   tasks: z.array(exportTaskSchema),
-  /** Reserved for comments (Phase 6); always empty in v1.0. */
-  comments: z.array(z.never()),
+  /** P6. The live comments of the exported tasks, oldest first per task, in task order. */
+  comments: z.array(exportCommentSchema),
 });
 
 export type ExportFormat = z.infer<typeof exportFormatSchema>;
 export type ExportQuery = z.infer<typeof exportQuerySchema>;
 export type ExportTask = z.infer<typeof exportTaskSchema>;
+export type ExportComment = z.infer<typeof exportCommentSchema>;
 export type OrgExport = z.infer<typeof orgExportSchema>;

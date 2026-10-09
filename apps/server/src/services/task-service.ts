@@ -1,4 +1,5 @@
 import {
+  findAssigneeToken,
   findDateInTitle,
   findGroupToken,
   stripBackticks,
@@ -31,9 +32,23 @@ import {
   type TrashPage,
 } from '@rooster/core/schemas';
 import { inSmartView, selectView } from '@rooster/core/views';
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  type SQL,
+  sql,
+} from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import {
+  member,
   organization,
   placement,
   tag as tagTable,
@@ -46,6 +61,12 @@ import {
 import type { DomainEventType } from '../events/bus.ts';
 import { AppError } from '../lib/errors.ts';
 import {
+  type ActivityDraft,
+  type ActivityScope,
+  type ActivityService,
+  viaOf,
+} from './activity-service.ts';
+import {
   type Actor,
   emitAfterCommit,
   immediate,
@@ -53,7 +74,9 @@ import {
   type ServiceDeps,
   type Tx,
 } from './context.ts';
+import { compareText, decodeCursor, encodeCursor } from './cursor.ts';
 import {
+  isSharedOrg,
   memberIds,
   mergeReach,
   qk,
@@ -62,6 +85,7 @@ import {
   taskAudiences,
   taskReach,
 } from './event-audience.ts';
+import type { FollowerService } from './follower-service.ts';
 import { listGroups } from './group-service.ts';
 import {
   ancestorsOf,
@@ -70,6 +94,7 @@ import {
   descendantsOf,
   type GroupRow,
   inboxOf,
+  isMember,
   liveTasksById,
   loadTaskExtras,
   type PlacementRow,
@@ -90,6 +115,7 @@ import {
   toGroupDto,
   toTaskDto,
 } from './list-access.ts';
+import type { NotificationDraft, NotificationService } from './notification-service.ts';
 import type { OrderingService, OrderTarget } from './ordering-service.ts';
 import { requireMembership } from './org-access.ts';
 import type { MemberRemovalStep } from './org-service.ts';
@@ -147,23 +173,6 @@ function hasDue(input: object): boolean {
   return DUE_KEYS.some((k) => k in input && (input as Record<string, unknown>)[k] !== undefined);
 }
 
-function encodeCursor(value: unknown): string {
-  return Buffer.from(JSON.stringify(value)).toString('base64url');
-}
-
-function decodeCursor<T>(cursor: string | undefined, check: (v: unknown) => v is T): T | null {
-  if (cursor === undefined) return null;
-  try {
-    const value = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as unknown;
-    if (check(value)) return value;
-  } catch {
-    // Reported below.
-  }
-  throw new AppError('validation_failed', 422, 'Invalid cursor.', [
-    { path: 'cursor', message: 'Pass back nextCursor unchanged' },
-  ]);
-}
-
 const isTrashCursor = (v: unknown): v is [number, string] =>
   Array.isArray(v) && typeof v[0] === 'number' && typeof v[1] === 'string';
 const invalidParent = (detail: string) =>
@@ -192,6 +201,24 @@ export const expansionRemovalStep: MemberRemovalStep = (tx, { orgId, userId }) =
   }
 };
 
+/** The collaboration services every task write feeds (P6). */
+export interface TaskCollab {
+  activity: ActivityService;
+  followers: FollowerService;
+  notifications: NotificationService;
+}
+
+type DueSnapshot = { dueDate: string | null; dueTime: string | null } | null;
+
+/** The due unit as shown in activity and notifications: the date and time, or null. */
+const dueSnapshot = (row: Pick<TaskRow, 'dueDate' | 'dueTime'>): DueSnapshot =>
+  row.dueDate === null ? null : { dueDate: row.dueDate, dueTime: row.dueTime };
+
+const invalidAssignee = (message: string) =>
+  new AppError('validation_failed', 422, 'The assignee must be a member of the organisation.', [
+    { path: 'assigneeId', message },
+  ]);
+
 /** Tasks (FR-TASK, 05 §4.3) and the actor's list reads. Authorisation is org membership. */
 export class TaskService {
   constructor(
@@ -199,6 +226,7 @@ export class TaskService {
     private readonly placements: PlacementService,
     private readonly ordering: OrderingService,
     private readonly search: SearchService,
+    private readonly collab: TaskCollab,
   ) {}
 
   private now(): number {
@@ -216,7 +244,13 @@ export class TaskService {
     type: DomainEventType,
     orgId: string,
     taskIds: readonly string[],
-    options: { before?: TaskReach; trash?: boolean; tags?: boolean } = {},
+    options: {
+      before?: TaskReach;
+      trash?: boolean;
+      tags?: boolean;
+      /** Tasks whose activity feed changed (`['activity', id]`). */
+      activity?: readonly string[];
+    } = {},
   ): void {
     const after = taskReach(tx, taskIds);
     const reach = options.before === undefined ? after : mergeReach(options.before, after);
@@ -225,6 +259,7 @@ export class TaskService {
       actorId: actor.userId,
       reach,
       trash: options.trash === true,
+      activity: options.activity ?? [],
     });
     if (options.tags === true) {
       audiences.push({ org: orgId, userIds: memberIds(tx, orgId), keys: [qk.tags(orgId)] });
@@ -259,12 +294,14 @@ export class TaskService {
   // --- create -------------------------------------------------------------------------------
 
   /**
-   * Creates a task. A top-level task is assigned to the actor and placed in their list: in
-   * `groupId` (default the Inbox) at the intent; without any intent it goes to the top of the
-   * Inbox, or the end of a named group. With `parentId` it is a subtask (same org, depth ≤ 5)
-   * assigned to the parent's assignee, placed among its siblings at the intent (default: the
-   * end). A repeated create with the same client `id` and content returns the existing task;
-   * the same `id` with other content is `409 id_conflict`.
+   * Creates a task. A top-level task is assigned to the actor by default and placed in their
+   * list: in `groupId` (default the Inbox) at the intent; without any intent it goes to the
+   * top of the Inbox, or the end of a named group. Another member as `assigneeId` puts it at
+   * the top of THEIR Inbox (the group and intents are ignored); `null` leaves it unassigned,
+   * without a placement. With `parentId` it is a subtask (same org, depth ≤ 5) assigned to
+   * the parent's assignee unless `assigneeId` says otherwise, placed among its siblings at
+   * the intent (default: the end). A repeated create with the same client `id` and content
+   * returns the existing task; the same `id` with other content is `409 id_conflict`.
    */
   create(actor: Actor, orgRef: string, input: TaskCreate, meta?: OpMeta): Task {
     return immediate(this.deps.db, (tx) => {
@@ -296,11 +333,19 @@ export class TaskService {
         input.parentId === undefined
           ? null
           : this.requireParent(tx, actor, org.id, input.parentId, null);
+      // A subtask belongs to whoever owns its parent by default, so it stays inside the
+      // parent's row instead of becoming an orphan (05 §4.1).
+      const assigneeId =
+        fields.assigneeId === undefined
+          ? parent === null
+            ? actor.userId
+            : parent.assigneeId
+          : this.requireAssignee(tx, actor, org, fields.assigneeId);
       const intent: OrderingIntent = {};
       if ('afterId' in input) intent.afterId = input.afterId ?? null;
       if ('beforeId' in input) intent.beforeId = input.beforeId ?? null;
       const group =
-        parent !== null
+        parent !== null || assigneeId !== actor.userId
           ? null
           : fields.groupId === undefined
             ? inboxOf(tx, actor.userId, org.id)
@@ -325,9 +370,7 @@ export class TaskService {
               ),
         title: fields.title,
         description,
-        // A subtask belongs to whoever owns its parent, so it stays inside the parent's row
-        // instead of becoming an orphan (05 §4.1).
-        assigneeId: parent === null ? actor.userId : parent.assigneeId,
+        assigneeId,
         createdBy: actor.userId,
         ...due,
         now,
@@ -338,11 +381,79 @@ export class TaskService {
         [row.id],
         group === null ? undefined : { userId: actor.userId, group, intent },
       );
+      const activity = this.recordCreated(tx, actor, meta, row, parent, {
+        chosen: fields.assigneeId !== undefined,
+      });
       this.emit(tx, actor, 'task.created', org.id, [row.id], {
         tags: (input.tagNames?.length ?? 0) > 0,
+        activity,
       });
       return taskDtoFor(tx, actor.userId, row);
     });
+  }
+
+  /**
+   * The collaboration side of a new task (P6): `created`, `subtask_added` on the parent, and
+   * the creator and assignee as followers. When the creator `chosen` someone else as the
+   * assignee, also `assigned` and its notification; a subtask that merely inherits its
+   * parent's assignee stays inside that person's row and is not announced. Returns the
+   * tasks whose activity feed changed.
+   */
+  private recordCreated(
+    tx: Tx,
+    actor: Actor,
+    meta: OpMeta | undefined,
+    row: TaskRow,
+    parent: TaskRow | null,
+    assignee: { chosen: boolean },
+  ): string[] {
+    const scope = this.scope(actor, meta);
+    const { activity, followers, notifications } = this.collab;
+    activity.record(tx, row, scope, { type: 'created', data: {} });
+    if (assignee.chosen && row.assigneeId !== null && row.assigneeId !== actor.userId) {
+      activity.record(tx, row, scope, {
+        type: 'assigned',
+        data: { from: null, to: row.assigneeId },
+      });
+      notifications.notify(tx, [this.assignedDraft(actor, row, row.assigneeId)]);
+    }
+    if (parent !== null) {
+      activity.record(tx, parent, scope, {
+        type: 'subtask_added',
+        data: { subtaskId: row.id, title: row.title },
+      });
+    }
+    followers.autoFollow(tx, row, [actor.userId, row.assigneeId]);
+    return parent === null ? [row.id] : [row.id, parent.id];
+  }
+
+  private scope(actor: Actor, meta: OpMeta | undefined): ActivityScope {
+    return { actorId: actor.userId, via: viaOf(meta?.client) };
+  }
+
+  private assignedDraft(actor: Actor, row: TaskRow, userId: string): NotificationDraft {
+    return { userId, orgId: row.orgId, type: 'assigned', taskId: row.id, actorId: actor.userId };
+  }
+
+  /**
+   * A valid assignee for a task in `org` (FR-COL-1/2): a member of the org, or null
+   * (unassigned). A personal org accepts only the actor. Anything else is `422
+   * validation_failed` on `assigneeId`.
+   */
+  private requireAssignee(
+    tx: Tx,
+    actor: Actor,
+    org: { id: string; isPersonal: boolean },
+    assigneeId: string | null,
+  ): string | null {
+    if (assigneeId === actor.userId) return assigneeId;
+    if (org.isPersonal) {
+      throw invalidAssignee('Only you can be assigned in your personal organisation');
+    }
+    if (assigneeId !== null && !isMember(tx, assigneeId, org.id)) {
+      throw invalidAssignee('Not a member of this organisation');
+    }
+    return assigneeId;
   }
 
   /** Inserts a task row with the next org sequence number and fresh clocks. */
@@ -484,6 +595,13 @@ export class TaskService {
       }
     }
     const result: TaskCreate = { ...input, ...(groupId === undefined ? {} : { groupId }) };
+    if (input.assigneeId === undefined) {
+      const token = this.findAssigneeToken(tx, actor, orgId, title);
+      if (token !== null) {
+        result.assigneeId = token.userId;
+        title = `${title.slice(0, token.start)} ${title.slice(token.end)}`;
+      }
+    }
     const date = hasDue(input)
       ? null
       : findDateInTitle(title, {
@@ -509,6 +627,30 @@ export class TaskService {
     return result;
   }
 
+  /**
+   * `parse: true`: an `@member` token assigns the task (06 §2.4), read by the same core
+   * parser the web uses (`findAssigneeToken`: the last token, followed by nothing but a date
+   * phrase; a whole name or email local part, else a unique prefix; `@me` is the actor). An
+   * ambiguous or unknown token stays in the title.
+   */
+  private findAssigneeToken(
+    tx: Tx,
+    actor: Actor,
+    orgId: string,
+    title: string,
+  ): { userId: string; start: number; end: number } | null {
+    if (!title.includes('@')) return null;
+    const members = tx
+      .select({ userId: user.id, name: user.name, email: user.email })
+      .from(member)
+      .innerJoin(user, eq(user.id, member.userId))
+      .where(eq(member.organizationId, orgId))
+      .all();
+    const token = findAssigneeToken(title, members, actor.userId);
+    if (token === null || token.userId === null) return null;
+    return { userId: token.userId, start: token.start, end: token.end };
+  }
+
   // --- edits --------------------------------------------------------------------------------
 
   /** Live (not deleted) task the actor may edit. */
@@ -523,7 +665,8 @@ export class TaskService {
    * older than its clock. The due unit (with the start date) is one field, and so is the
    * parent (`parent_id` with `subtask_position`, 05 §4.4). Skipped fields are listed in
    * `ignoredFields`. Re-parenting appends to the new parent's subtasks; `parentId: null`
-   * makes the task top-level, which places it at the top of its assignee's Inbox.
+   * makes the task top-level, which places it at the top of its assignee's Inbox. A new
+   * assignee (LWW key `assignee`) gets the task at the top of their Inbox (05 §4.1).
    */
   patch(actor: Actor, taskId: string, input: TaskPatch, meta: OpMeta): TaskPatchResult {
     return immediate(this.deps.db, (tx) => {
@@ -539,12 +682,14 @@ export class TaskService {
     input: TaskPatch,
     meta: OpMeta,
   ): TaskPatchResult {
+    const old = { ...row };
     const clock = parseClock(row.fieldClock);
     const changes: Partial<TaskRow> = {};
     const ignoredFields: string[] = [];
     let applied = false;
+    const reassigning = input.assigneeId !== undefined && input.assigneeId !== row.assigneeId;
     const before =
-      input.parentId !== undefined && input.parentId !== row.parentId
+      (input.parentId !== undefined && input.parentId !== row.parentId) || reassigning
         ? taskReach(tx, [row.id])
         : undefined;
     const apply = (key: string, fields: string[], set: () => void) => {
@@ -591,6 +736,19 @@ export class TaskService {
         reparented = true;
       });
     }
+    let reassigned = false;
+    if (input.assigneeId !== undefined && reassigning) {
+      const assigneeId = this.requireAssignee(
+        tx,
+        actor,
+        this.orgOf(tx, row.orgId),
+        input.assigneeId,
+      );
+      apply('assignee', ['assigneeId'], () => {
+        changes.assigneeId = assigneeId;
+        reassigned = true;
+      });
+    }
     if (applied) {
       const next = { ...changes, fieldClock: JSON.stringify(clock), updatedAt: this.now() };
       tx.update(task).set(next).where(eq(task.id, row.id)).run();
@@ -599,11 +757,79 @@ export class TaskService {
         indexTasks(tx, [row.id]);
       }
     }
-    if (reparented) this.placements.reconcilePlacements(tx, [row.id]);
+    if (reparented || reassigned) this.placements.reconcilePlacements(tx, [row.id]);
     if (applied) {
-      this.emit(tx, actor, 'task.updated', row.orgId, [row.id], before ? { before } : {});
+      const activity = this.recordChanges(tx, actor, meta, old, row);
+      this.emit(tx, actor, 'task.updated', row.orgId, [row.id], {
+        ...(before ? { before } : {}),
+        activity,
+      });
     }
     return { task: taskDtoFor(tx, actor.userId, row), ignoredFields };
+  }
+
+  private orgOf(tx: Tx, orgId: string): { id: string; isPersonal: boolean } {
+    const org = tx
+      .select({ id: organization.id, isPersonal: organization.isPersonal })
+      .from(organization)
+      .where(eq(organization.id, orgId))
+      .get();
+    if (org === undefined) throw taskNotFound();
+    return org;
+  }
+
+  /**
+   * Activity, follows and notifications for a patch (P6), from the values that actually
+   * changed: an unchanged value writes nothing. Returns the tasks whose feed changed.
+   */
+  private recordChanges(tx: Tx, actor: Actor, meta: OpMeta, old: TaskRow, row: TaskRow): string[] {
+    const scope = this.scope(actor, meta);
+    const { activity, followers, notifications } = this.collab;
+    const entries: ActivityDraft[] = [];
+    const drafts: NotificationDraft[] = [];
+    const feeds = new Set<string>();
+    if (old.title !== row.title) {
+      entries.push({ type: 'renamed', data: { from: old.title, to: row.title } });
+    }
+    if (old.description !== row.description) {
+      entries.push({ type: 'description_edited', data: {} });
+    }
+    const assigned = old.assigneeId !== row.assigneeId;
+    if (assigned) {
+      entries.push({ type: 'assigned', data: { from: old.assigneeId, to: row.assigneeId } });
+      followers.autoFollow(tx, row, [row.assigneeId]);
+      if (row.assigneeId !== null) drafts.push(this.assignedDraft(actor, row, row.assigneeId));
+    }
+    if (old.dueDate !== row.dueDate || old.dueTime !== row.dueTime) {
+      const from = dueSnapshot(old);
+      const to = dueSnapshot(row);
+      entries.push({ type: 'due_changed', data: { from, to } });
+      // A new assignee hears about the task through `assigned`, which shows the date.
+      if (row.assigneeId !== null && !assigned) {
+        drafts.push({
+          userId: row.assigneeId,
+          orgId: row.orgId,
+          type: 'due_changed',
+          taskId: row.id,
+          actorId: actor.userId,
+          data: { from, to },
+        });
+      }
+    }
+    if (old.parentId !== row.parentId) {
+      entries.push({ type: 'moved_parent', data: { from: old.parentId, to: row.parentId } });
+      if (row.parentId !== null) {
+        activity.record(tx, { id: row.parentId, orgId: row.orgId }, scope, {
+          type: 'subtask_added',
+          data: { subtaskId: row.id, title: row.title },
+        });
+        feeds.add(row.parentId);
+      }
+    }
+    for (const entry of entries) activity.record(tx, row, scope, entry);
+    if (entries.length > 0) feeds.add(row.id);
+    notifications.notify(tx, drafts);
+    return [...feeds];
   }
 
   /** Completes or reopens (LWW key `completed`). The placement is kept (05 §4.1). */
@@ -629,6 +855,7 @@ export class TaskService {
       fieldClock: JSON.stringify(clock),
       updatedAt: this.now(),
     };
+    const wasCompleted = row.completedAt !== null;
     if (completed && row.completedAt === null) {
       // The edit time is when the user completed it, which matters for offline replays.
       changes.completedAt = meta.editTime;
@@ -639,7 +866,27 @@ export class TaskService {
     }
     tx.update(task).set(changes).where(eq(task.id, row.id)).run();
     Object.assign(row, changes);
-    this.emit(tx, actor, 'task.completed', row.orgId, [row.id]);
+    const changed = completed !== wasCompleted;
+    if (changed) {
+      this.collab.activity.record(tx, row, this.scope(actor, meta), {
+        type: completed ? 'completed' : 'reopened',
+        data: {},
+      });
+      if (completed) {
+        this.collab.notifications.notify(tx, [
+          {
+            userId: row.createdBy,
+            orgId: row.orgId,
+            type: 'completed',
+            taskId: row.id,
+            actorId: actor.userId,
+          },
+        ]);
+      }
+    }
+    this.emit(tx, actor, 'task.completed', row.orgId, [row.id], {
+      activity: changed ? [row.id] : [],
+    });
   }
 
   /**
@@ -718,7 +965,11 @@ export class TaskService {
       .where(and(inArray(placement.taskId, ids), isNotNull(taskGroup.deletedAt)))
       .all();
     for (const p of orphaned) this.placements.rehomeToInbox(tx, p.userId, p.orgId, [p.taskId]);
-    this.emit(tx, actor, 'task.restored', row.orgId, [row.id], { trash: true });
+    this.collab.activity.record(tx, row, this.scope(actor, meta), { type: 'restored', data: {} });
+    this.emit(tx, actor, 'task.restored', row.orgId, [row.id], {
+      trash: true,
+      activity: [row.id],
+    });
   }
 
   /** Hard delete, only from Trash. Placements and subtasks go with it (FK cascade). */
@@ -852,6 +1103,15 @@ export class TaskService {
               this.applyPatch(tx, actor, this.requireLive(tx, actor, id), patch, meta);
               break;
             }
+            case 'assign':
+              this.applyPatch(
+                tx,
+                actor,
+                this.requireLive(tx, actor, id),
+                { assigneeId: op.args.assigneeId },
+                meta,
+              );
+              break;
           }
         });
         return { id, ok: true };
@@ -932,7 +1192,7 @@ export class TaskService {
    * copy directly below the original among its siblings. A repeated call with the same `id`
    * returns the copy.
    */
-  duplicate(actor: Actor, taskId: string, input: TaskDuplicate, _meta?: OpMeta): Task {
+  duplicate(actor: Actor, taskId: string, input: TaskDuplicate, meta?: OpMeta): Task {
     return immediate(this.deps.db, (tx) => {
       const source = this.requireLive(tx, actor, taskId);
       if (input.id !== undefined) {
@@ -949,6 +1209,7 @@ export class TaskService {
       }
       const now = this.now();
       const parent = source.parentId === null ? null : this.reload(tx, source.parentId);
+      const copies: [TaskRow, TaskRow | null][] = [];
       const copyOf = (
         from: TaskRow,
         id: string,
@@ -980,6 +1241,7 @@ export class TaskService {
           .all()
           .map((t) => t.tagId);
         attachTags(tx, row.id, tags, now);
+        copies.push([row, under]);
         return row;
       };
       const top = copyOf(
@@ -1017,7 +1279,13 @@ export class TaskService {
         }
       }
       this.placements.reconcilePlacements(tx, [top.id], target);
-      this.emit(tx, actor, 'task.created', top.orgId, [top.id]);
+      // Only the top copy is news to its parent; copied subtasks arrive with their copy.
+      const feeds = copies.flatMap(([row, under]) =>
+        this.recordCreated(tx, actor, meta, row, row.id === top.id ? under : null, {
+          chosen: false,
+        }),
+      );
+      this.emit(tx, actor, 'task.created', top.orgId, [top.id], { activity: feeds });
       return taskDtoFor(tx, actor.userId, top);
     });
   }
@@ -1078,7 +1346,9 @@ export class TaskService {
         parentChain: ancestorsOf(tx, row)
           .reverse()
           .map((a) => ({ id: a.id, title: a.title })),
-        followers: [],
+        followers: isSharedOrg(tx, row.orgId)
+          ? this.collab.followers.activeFollowers(tx, row.id)
+          : [],
       };
     });
   }
@@ -1207,14 +1477,14 @@ export class TaskService {
    * The general task query (06 §2.3) for the CLI and MCP. `my` (and any `groupId`) lists my
    * list in order. The smart views use the shared core selector (`selectView`), so they hold
    * exactly the tasks, in the order, the web shows: dates in the actor's timezone, sections
-   * flattened in display order. `q` narrows any view with the search grammar (terms through
+   * flattened in display order. `everyone` (shared orgs) lists the org's task rows of every
+   * assignee (`everyoneRows`). `q` narrows any view with the search grammar (terms through
    * the FTS index, filters through the shared matcher).
    */
   query(actor: Actor, orgRef: string, query: TaskQuery): TaskPage {
     return immediate(this.deps.db, (tx) => {
       const { org } = requireMembership(tx, actor.userId, orgRef);
       const view = query.view ?? 'my';
-      if (view === 'everyone') throw new AppError('not_implemented', 501, 'view=everyone');
       const completed = query.completed ?? 'false';
       const limit = query.limit ?? PAGE_LIMIT_DEFAULT;
       const offset = decodeCursor(query.cursor, isOffsetCursor)?.o ?? 0;
@@ -1224,13 +1494,20 @@ export class TaskService {
       const nowMs = this.now();
       const due = { today: todayIn(viewerTz, nowMs), nowMs, viewerTz };
 
+      if (view === 'everyone' && query.groupId !== undefined) {
+        throw new AppError('validation_failed', 422, 'groupId applies to my list only.', [
+          { path: 'groupId', message: 'Not allowed with view=everyone' },
+        ]);
+      }
       const groupFilter =
         query.groupId === undefined
           ? undefined
           : requireOwnGroup(tx, actor.userId, query.groupId, { orgId: org.id }).id;
       const groups = listGroups(tx, actor.userId, org.id);
       let rows: { task: TaskRow; place: PlacementRow | null }[];
-      if (view === 'my' || groupFilter !== undefined) {
+      if (view === 'everyone') {
+        rows = this.everyoneRows(tx, actor, org, query);
+      } else if (view === 'my' || groupFilter !== undefined) {
         rows = tx
           .select({ task, place: placement })
           .from(placement)
@@ -1297,6 +1574,9 @@ export class TaskService {
           const has = tagged?.get(t.id);
           if (wantedTags.some((id) => id === null || has?.has(id) !== true)) return false;
         }
+        if (query.hasDue !== undefined && (t.dueDate !== null) !== (query.hasDue === 'true')) {
+          return false;
+        }
         const done = t.completedAt !== null;
         if (completed === 'false' && done) return false;
         if (completed === 'true' && !done) return false;
@@ -1320,6 +1600,74 @@ export class TaskService {
         nextCursor: offset + limit < filtered.length ? encodeCursor({ o: offset + limit }) : null,
       };
     });
+  }
+
+  /**
+   * Everyone's tasks (FR-VIEW-2), shared orgs only (`409 personal_org`). A task is a row iff
+   * it is top-level or its assignee differs from its parent's (the placement rule of 05 §4.1,
+   * with "no assignee" as a value): an unassigned subtask of an unassigned parent shows only
+   * under its parent. `assignee` (repeatable, OR) narrows by `me`, a user ID or `none`;
+   * `any` (the default) keeps everyone. Sorted by due date (no date last; timed before
+   * untimed on a day), then created date, then ID; the placement in each DTO is the actor's.
+   */
+  private everyoneRows(
+    tx: Tx,
+    actor: Actor,
+    org: { id: string; isPersonal: boolean },
+    query: TaskQuery,
+  ): { task: TaskRow; place: PlacementRow | null }[] {
+    if (org.isPersonal) {
+      throw new AppError(
+        'personal_org',
+        409,
+        "Everyone's tasks exists only in shared organisations.",
+      );
+    }
+    const wanted = query.assignee === undefined ? ['any'] : [query.assignee].flat();
+    let assigneeFilter: SQL | undefined;
+    if (!wanted.includes('any')) {
+      const ids = [
+        ...new Set(wanted.filter((v) => v !== 'none').map((v) => (v === 'me' ? actor.userId : v))),
+      ];
+      assigneeFilter = or(
+        ...(wanted.includes('none') ? [isNull(task.assigneeId)] : []),
+        ...(ids.length > 0 ? [inArray(task.assigneeId, ids)] : []),
+      );
+    }
+    const completed = query.completed ?? 'false';
+    const parent = alias(task, 'parent');
+    const rows = tx
+      .select({ task })
+      .from(task)
+      .leftJoin(parent, eq(parent.id, task.parentId))
+      .where(
+        and(
+          eq(task.orgId, org.id),
+          isNull(task.deletedAt),
+          or(isNull(task.parentId), sql`${parent.assigneeId} IS NOT ${task.assigneeId}`),
+          assigneeFilter,
+          completed === 'false' ? isNull(task.completedAt) : undefined,
+          completed === 'true' ? isNotNull(task.completedAt) : undefined,
+        ),
+      )
+      .all()
+      .map((r) => r.task);
+    // The same order as the web's `compareRows` (`@rooster/core/everyone`).
+    rows.sort(
+      (a, b) =>
+        (a.dueDate === null ? 1 : 0) - (b.dueDate === null ? 1 : 0) ||
+        compareText(a.dueDate ?? '', b.dueDate ?? '') ||
+        (a.dueTime === null ? 1 : 0) - (b.dueTime === null ? 1 : 0) ||
+        compareText(a.dueTime ?? '', b.dueTime ?? '') ||
+        a.createdAt - b.createdAt ||
+        compareText(a.id, b.id),
+    );
+    const places = placementsFor(
+      tx,
+      actor.userId,
+      rows.map((r) => r.id),
+    );
+    return rows.map((t) => ({ task: t, place: places.get(t.id) ?? null }));
   }
 
   /** `?q=`: keeps the rows matching the search query (06 §2.3), in their order. */

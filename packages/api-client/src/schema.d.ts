@@ -818,6 +818,168 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The merged feed of comments and activity, paged back in time
+         * @description The first page holds the newest items; `items` are oldest first within a page, and `nextCursor` continues with OLDER items (null at the start of the feed). `filter=comments` leaves out activity entries. Deleted comments are left out.
+         */
+        get: operations["getTaskActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Comment on a task; mentions are written `@[Name](user:<id>)`
+         * @description The commenter and every mentioned member follow the task. Mentioned members get a `mention` notification, the other followers a `comment` one. A repeated create with the same `id` and body returns the comment; another body is `409 id_conflict`.
+         */
+        post: operations["createComment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete my comment (author only); restorable for 30 days */
+        delete: operations["deleteComment"];
+        options?: never;
+        head?: never;
+        /** Edit my comment (author only); sets editedAt */
+        patch: operations["updateComment"];
+        trace?: never;
+    };
+    "/api/v1/comments/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Undo the delete of my comment (author only) */
+        post: operations["restoreComment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{id}/followers/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Follow a task (shared orgs only) */
+        put: operations["followTask"];
+        post?: never;
+        /** Unfollow a task; automatic following no longer adds me back */
+        delete: operations["unfollowTask"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My notifications across orgs, newest first, with the unread count */
+        get: operations["listNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark notifications read: `{ids}` or `{all: true}` */
+        post: operations["markNotificationsRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/unread": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark notifications unread: `{ids}` or `{all: true}` */
+        post: operations["markNotificationsUnread"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/notification-prefs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The notification preference matrix (every type × channel; default on) */
+        get: operations["getNotificationPrefs"];
+        /** Set cells of the matrix; only the `inapp` channel until Phase 7 */
+        put: operations["updateNotificationPrefs"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/events": {
         parameters: {
             query?: never;
@@ -826,7 +988,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Server-Sent Events: hello, invalidations and heartbeats
+         * Server-Sent Events: hello, invalidations, notifications and heartbeats
          * @description A `text/event-stream` (04 §4.5). Every message has `event:`, `data:` (JSON) and a
          *     monotonic `id:` (per server process; there is no replay, so `Last-Event-ID` is ignored and
          *     clients refetch their active queries after a reconnect).
@@ -837,6 +999,9 @@ export interface paths {
          *       to invalidate verbatim. Only the affected users receive it. `origin` is the
          *       `X-Rooster-Client-Id` of the request that caused it, sent only to that user (null for
          *       everyone else). Bursts within ~50 ms are coalesced.
+         *     - `notification`: [`SseNotification`](#/components/schemas/SseNotification), only to the
+         *       recipient: the unread count, with a preview of a new notification (null when only the
+         *       count changed, e.g. after marking read on another device). Not coalesced.
          *     - `: ping` comment every 25 s.
          *
          *     The stream ends on sign-out, session revoke, user deactivation and server shutdown. A
@@ -865,6 +1030,17 @@ export interface components {
             org: string | null;
             keys: string[][];
             origin: string | null;
+        };
+        SseNotification: {
+            unreadCount: number;
+            notification: {
+                id: string;
+                orgId: string;
+                type: string;
+                taskId: string | null;
+                actorName: string | null;
+                title: string | null;
+            } | null;
         };
         Problem: {
             type: string;
@@ -1385,7 +1561,7 @@ export interface components {
             groups: components["schemas"]["Group"][];
             tags: components["schemas"]["Tag"][];
             tasks: components["schemas"]["ExportTask"][];
-            comments: unknown[];
+            comments: components["schemas"]["ExportComment"][];
         };
         ExportTask: {
             id: string;
@@ -1415,6 +1591,244 @@ export interface components {
             updatedAt: number;
             deletedAt?: number;
             deletedBy?: string;
+        };
+        ExportComment: {
+            id: string;
+            taskId: string;
+            authorId: string;
+            body: string;
+            createdAt: number;
+            editedAt: number | null;
+            authorName: string;
+        };
+        ActivityPage: {
+            items: ({
+                /** @enum {string} */
+                kind: "comment";
+                comment: components["schemas"]["Comment"];
+            } | {
+                /** @enum {string} */
+                kind: "activity";
+                activity: components["schemas"]["Activity"];
+            })[];
+            nextCursor: string | null;
+        };
+        Comment: {
+            id: string;
+            taskId: string;
+            authorId: string;
+            body: string;
+            createdAt: number;
+            editedAt: number | null;
+        };
+        Activity: {
+            id: string;
+            taskId: string;
+            actorId: string | null;
+            /** @enum {string} */
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            createdAt: number;
+            /** @enum {string} */
+            type: "created";
+            data: Record<string, never>;
+        } | {
+            id: string;
+            taskId: string;
+            actorId: string | null;
+            /** @enum {string} */
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            createdAt: number;
+            /** @enum {string} */
+            type: "renamed";
+            data: {
+                from: string;
+                to: string;
+            };
+        } | {
+            id: string;
+            taskId: string;
+            actorId: string | null;
+            /** @enum {string} */
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            createdAt: number;
+            /** @enum {string} */
+            type: "due_changed";
+            data: {
+                from: {
+                    dueDate: string | null;
+                    dueTime: string | null;
+                } | null;
+                to: {
+                    dueDate: string | null;
+                    dueTime: string | null;
+                } | null;
+            };
+        } | {
+            id: string;
+            taskId: string;
+            actorId: string | null;
+            /** @enum {string} */
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            createdAt: number;
+            /** @enum {string} */
+            type: "assigned";
+            data: {
+                from: string | null;
+                to: string | null;
+            };
+        } | {
+            id: string;
+            taskId: string;
+            actorId: string | null;
+            /** @enum {string} */
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            createdAt: number;
+            /** @enum {string} */
+            type: "completed";
+            data: Record<string, never>;
+        } | {
+            id: string;
+            taskId: string;
+            actorId: string | null;
+            /** @enum {string} */
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            createdAt: number;
+            /** @enum {string} */
+            type: "reopened";
+            data: Record<string, never>;
+        } | {
+            id: string;
+            taskId: string;
+            actorId: string | null;
+            /** @enum {string} */
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            createdAt: number;
+            /** @enum {string} */
+            type: "description_edited";
+            data: Record<string, never>;
+        } | {
+            id: string;
+            taskId: string;
+            actorId: string | null;
+            /** @enum {string} */
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            createdAt: number;
+            /** @enum {string} */
+            type: "subtask_added";
+            data: {
+                subtaskId: string;
+                title: string;
+            };
+        } | {
+            id: string;
+            taskId: string;
+            actorId: string | null;
+            /** @enum {string} */
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            createdAt: number;
+            /** @enum {string} */
+            type: "moved_parent";
+            data: {
+                from: string | null;
+                to: string | null;
+            };
+        } | {
+            id: string;
+            taskId: string;
+            actorId: string | null;
+            /** @enum {string} */
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            createdAt: number;
+            /** @enum {string} */
+            type: "restored";
+            data: Record<string, never>;
+        } | {
+            id: string;
+            taskId: string;
+            actorId: string | null;
+            /** @enum {string} */
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "import" | "system";
+            createdAt: number;
+            /** @enum {string} */
+            type: "attachment_added";
+            data: {
+                attachmentId: string;
+                filename: string;
+            };
+        };
+        CommentCreate: {
+            id?: string;
+            body: string;
+        };
+        CommentPatch: {
+            body: string;
+        };
+        FollowState: {
+            followers: string[];
+        };
+        NotificationPage: {
+            items: components["schemas"]["Notification"][];
+            nextCursor: string | null;
+            unreadCount: number;
+        };
+        Notification: {
+            id: string;
+            orgId: string;
+            orgSlug: string;
+            /** @enum {string} */
+            type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted";
+            task: {
+                id: string;
+                seq: number | null;
+                title: string;
+            } | null;
+            actor: {
+                id: string;
+                name: string;
+                image: string | null;
+            } | null;
+            data: {
+                commentId?: string;
+                excerpt?: string;
+                from?: {
+                    dueDate: string | null;
+                    dueTime: string | null;
+                } | null;
+                to?: {
+                    dueDate: string | null;
+                    dueTime: string | null;
+                } | null;
+                userId?: string;
+            };
+            readAt: number | null;
+            createdAt: number;
+        };
+        NotificationMarkResult: {
+            unreadCount: number;
+        };
+        NotificationMark: {
+            ids: string[];
+        } | {
+            /** @enum {boolean} */
+            all: true;
+        };
+        NotificationPrefs: {
+            prefs: {
+                /** @enum {string} */
+                type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted";
+                /** @enum {string} */
+                channel: "inapp" | "push" | "email";
+                enabled: boolean;
+            }[];
+        };
+        NotificationPrefsPut: {
+            prefs: {
+                /** @enum {string} */
+                type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted";
+                /** @enum {string} */
+                channel: "inapp" | "push" | "email";
+                enabled: boolean;
+            }[];
         };
     };
     responses: never;
@@ -5617,6 +6031,914 @@ export interface operations {
             };
             /** @description Not found, or not a member (existence is never revealed) */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getTaskActivity: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+                filter?: "all" | "comments";
+            };
+            header?: never;
+            path: {
+                /** @description Task ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the feed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityPage"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Task ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommentCreate"];
+            };
+        };
+        responses: {
+            /** @description The comment */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Comment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Comment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommentPatch"];
+            };
+        };
+        responses: {
+            /** @description The comment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    restoreComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Comment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The comment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    followTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Task ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The active followers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowState"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    unfollowTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Task ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The active followers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowState"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listNotifications: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+                unread?: "true" | "false";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of notifications */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPage"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    markNotificationsRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationMark"];
+            };
+        };
+        responses: {
+            /** @description The new unread count */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationMarkResult"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    markNotificationsUnread: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationMark"];
+            };
+        };
+        responses: {
+            /** @description The new unread count */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationMarkResult"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getNotificationPrefs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The matrix */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPrefs"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateNotificationPrefs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPrefsPut"];
+            };
+        };
+        responses: {
+            /** @description The whole matrix */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPrefs"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON */
+            415: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -50,6 +50,9 @@ interface Fixture {
   subtaskId: string;
   tagId: string;
   otherTagId: string;
+  /** The owner's comment on `taskId`, and a deleted one. */
+  commentId: string;
+  deletedCommentId: string;
   backupName: string;
   jars: Record<Exclude<ActorKind, 'anonymous' | 'readOnlyPat'>, CookieJar>;
   sessions: Record<Exclude<ActorKind, 'anonymous' | 'readOnlyPat'>, string>;
@@ -363,6 +366,59 @@ const ROWS: Record<string, Row> = {
     request: () => ({ path: '/api/v1/admin/search/reindex' }),
     expect: adminOnly(200),
   },
+  // Phase 6: collaboration (06 §2.6). Comments are written by any member and changed only
+  // by their author (the owner here); notifications and prefs are the caller's own.
+  'GET /api/v1/tasks/{id}/activity': {
+    request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/activity` }),
+    expect: orgScoped(200, 200),
+  },
+  'POST /api/v1/tasks/{id}/comments': {
+    request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/comments`, body: { body: 'Hi' } }),
+    expect: orgScoped(201, 201),
+  },
+  'PATCH /api/v1/comments/{id}': {
+    request: (f) => ({ path: `/api/v1/comments/${f.commentId}`, body: { body: 'Edited' } }),
+    expect: orgScoped(403, 200),
+  },
+  'DELETE /api/v1/comments/{id}': {
+    request: (f) => ({ path: `/api/v1/comments/${f.commentId}` }),
+    expect: orgScoped(403, 204),
+  },
+  'POST /api/v1/comments/{id}/restore': {
+    request: (f) => ({ path: `/api/v1/comments/${f.deletedCommentId}/restore` }),
+    expect: orgScoped(403, 200),
+  },
+  'PUT /api/v1/tasks/{id}/followers/me': {
+    request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/followers/me` }),
+    expect: orgScoped(200, 200),
+  },
+  'DELETE /api/v1/tasks/{id}/followers/me': {
+    request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/followers/me` }),
+    expect: orgScoped(200, 200),
+  },
+  'GET /api/v1/notifications': {
+    request: () => ({ path: '/api/v1/notifications' }),
+    expect: signedIn(200),
+  },
+  'POST /api/v1/notifications/read': {
+    request: () => ({ path: '/api/v1/notifications/read', body: { all: true } }),
+    expect: signedIn(200),
+  },
+  'POST /api/v1/notifications/unread': {
+    request: () => ({ path: '/api/v1/notifications/unread', body: { all: true } }),
+    expect: signedIn(200),
+  },
+  'GET /api/v1/me/notification-prefs': {
+    request: () => ({ path: '/api/v1/me/notification-prefs' }),
+    expect: signedIn(200),
+  },
+  'PUT /api/v1/me/notification-prefs': {
+    request: () => ({
+      path: '/api/v1/me/notification-prefs',
+      body: { prefs: [{ type: 'comment', channel: 'inapp', enabled: false }] },
+    }),
+    expect: signedIn(200),
+  },
 };
 
 const dataDirs: (() => void)[] = [];
@@ -420,6 +476,10 @@ function fixture(): Fixture {
   app.services.tags.setOnTask(ownerActor, task.id, tag.id, true);
   const subtask = tasks.create(ownerActor, org.id, { title: 'Subtask', parentId: task.id });
   tasks.create(ownerActor, org.id, { title: 'Sibling', parentId: task.id });
+  const { comments } = app.services;
+  const comment = comments.create(ownerActor, task.id, { body: 'Comment' });
+  const deletedComment = comments.create(ownerActor, task.id, { body: 'Deleted' });
+  comments.remove(ownerActor, deletedComment.id);
 
   // A disabled user whose session somehow survived must still be rejected.
   db.orm.update(user).set({ disabledAt: Date.now() }).where(eq(user.id, disabled.userId)).run();
@@ -447,6 +507,8 @@ function fixture(): Fixture {
     subtaskId: subtask.id,
     tagId: tag.id,
     otherTagId: otherTag.id,
+    commentId: comment.id,
+    deletedCommentId: deletedComment.id,
     backupName: backup.name,
     jars: {
       owner: owner.jar,

@@ -138,8 +138,9 @@ describe('GET /api/v1/events', () => {
     await settle();
     expect(sa.invalidations).toHaveLength(1);
     expect(sa.invalidations[0]).toMatchObject({ org: org.id, origin: null });
-    expect(new Set(sa.keys)).toEqual(new Set([`my-list/${org.id}`, `task/${task.id}`]));
-    expect(sb.keys).toEqual([`task/${task.id}`]);
+    const shared = [`task/${task.id}`, `everyone/${org.id}`, `activity/${task.id}`];
+    expect(new Set(sa.keys)).toEqual(new Set([`my-list/${org.id}`, ...shared]));
+    expect(new Set(sb.keys)).toEqual(new Set(shared));
     expect(sc.invalidations).toEqual([]);
 
     // B (a member, not the assignee) completes it: the assignee's list and B's own list.
@@ -206,7 +207,7 @@ describe('GET /api/v1/events', () => {
     await settle();
     for (const s of [sa, sb]) {
       expect(new Set(s.keys)).toEqual(
-        new Set([`tags/${org.id}`, `my-list/${org.id}`, `task/${task.id}`]),
+        new Set([`tags/${org.id}`, `my-list/${org.id}`, `task/${task.id}`, `everyone/${org.id}`]),
       );
     }
     expect(sc.invalidations).toEqual([]);
@@ -225,7 +226,11 @@ describe('GET /api/v1/events', () => {
     expect(sa.invalidations).toHaveLength(1);
     expect(sa.invalidations[0]?.origin).toBe('tab-1');
     expect(new Set(sa.keys)).toEqual(
-      new Set([`my-list/${org.id}`, ...ids.map((id) => `task/${id}`)]),
+      new Set([
+        `my-list/${org.id}`,
+        `everyone/${org.id}`,
+        ...ids.flatMap((id) => [`task/${id}`, `activity/${id}`]),
+      ]),
     );
 
     // Two origins within one window stay separate, so each tab can skip its own.
@@ -247,7 +252,9 @@ describe('GET /api/v1/events', () => {
     await sb.waitFor(1);
     await sa.waitFor(1);
     await settle();
-    expect(new Set(sb.keys)).toEqual(new Set(['orgs', 'me', `org-members/${org.id}`]));
+    expect(new Set(sb.keys)).toEqual(
+      new Set(['orgs', 'me', `org-members/${org.id}`, 'notifications']),
+    );
     expect(sa.keys).toContain(`org-members/${org.id}`);
 
     const { url } = await a.ok<{ url: string }>(

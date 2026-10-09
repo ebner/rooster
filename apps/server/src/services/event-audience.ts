@@ -1,5 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import { member, placement, task } from '../db/schema/index.ts';
+import { member, organization, placement, task } from '../db/schema/index.ts';
 import type { Audience, QueryKey } from '../events/bus.ts';
 import type { Tx } from './context.ts';
 import { chunked } from './list-access.ts';
@@ -12,9 +12,22 @@ export const qk = {
   trash: (orgId: string): QueryKey => ['trash', orgId],
   orgMembers: (orgId: string): QueryKey => ['org-members', orgId],
   orgInvites: (orgId: string): QueryKey => ['org-invites', orgId],
+  everyone: (orgId: string): QueryKey => ['everyone', orgId],
+  activity: (taskId: string): QueryKey => ['activity', taskId],
+  notifications: ['notifications'] as QueryKey,
   me: ['me'] as QueryKey,
   orgs: ['orgs'] as QueryKey,
 } as const;
+
+/** Whether the org is a shared one (Everyone's tasks, followers and activity keys exist). */
+export function isSharedOrg(tx: Tx, orgId: string): boolean {
+  const row = tx
+    .select({ isPersonal: organization.isPersonal })
+    .from(organization)
+    .where(eq(organization.id, orgId))
+    .get();
+  return row !== undefined && !row.isPersonal;
+}
 
 /** Every member of the org (any role). */
 export function memberIds(tx: Tx, orgId: string): string[] {
@@ -113,19 +126,29 @@ export function mergeReach(a: TaskReach, b: TaskReach): TaskReach {
 /**
  * The audiences of a task change (04 §4.5): `['my-list', org]` to the actor and every user
  * whose list can render the tasks; `['task', id]` for the whole family (plus `['trash', org]`
- * when Trash changed) to every member of the org. Non-members never appear.
+ * when Trash changed, and `['everyone', org]` in a shared org) to every member of the org.
+ * `activity` adds `['activity', id]` of those tasks (their feed changed). Non-members never
+ * appear.
  */
 export function taskAudiences(
   tx: Tx,
-  input: { orgId: string; actorId: string; reach: TaskReach; trash?: boolean },
+  input: {
+    orgId: string;
+    actorId: string | null;
+    reach: TaskReach;
+    trash?: boolean;
+    activity?: readonly string[];
+  },
 ): Audience[] {
   const members = memberIds(tx, input.orgId);
   const memberSet = new Set(members);
-  const listUsers = [...new Set([input.actorId, ...input.reach.listUsers])].filter((u) =>
-    memberSet.has(u),
-  );
+  const listUsers = [
+    ...new Set([...(input.actorId === null ? [] : [input.actorId]), ...input.reach.listUsers]),
+  ].filter((u) => memberSet.has(u));
   const keys = [...input.reach.taskIds].map(qk.task);
   if (input.trash === true) keys.push(qk.trash(input.orgId));
+  if (isSharedOrg(tx, input.orgId)) keys.push(qk.everyone(input.orgId));
+  for (const id of input.activity ?? []) keys.push(qk.activity(id));
   return [
     { org: input.orgId, userIds: listUsers, keys: [qk.myList(input.orgId)] },
     { org: input.orgId, userIds: members, keys },

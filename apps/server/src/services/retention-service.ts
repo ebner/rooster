@@ -1,7 +1,8 @@
 import { and, asc, eq, inArray, isNotNull, lt } from 'drizzle-orm';
-import { placement, task, taskGroup, verification } from '../db/schema/index.ts';
+import { comment, placement, task, taskGroup, verification } from '../db/schema/index.ts';
 import { immediate, type ServiceDeps } from './context.ts';
 import type { IdempotencyStore } from './idempotency-store.ts';
+import type { NotificationService } from './notification-service.ts';
 import type { PlacementService } from './placement-service.ts';
 import { pruneIndex } from './search-index.ts';
 
@@ -11,20 +12,24 @@ export const TRASH_RETENTION_MS = 30 * 86_400_000;
 export interface PurgeReport {
   tasks: number;
   groups: number;
+  comments: number;
+  notifications: number;
   idempotency: number;
   verifications: number;
 }
 
 /**
- * The daily purge job (04 §4.6): Trash older than 30 days, expired idempotency keys, and
- * expired better-auth `verification` rows (OAuth state and PKCE verifiers that abandoned
- * sign-ins leave behind).
+ * The daily purge job (04 §4.6): Trash older than 30 days (tasks, groups and deleted
+ * comments), read notifications older than 90 days, expired idempotency keys, and expired
+ * better-auth `verification` rows (OAuth state and PKCE verifiers that abandoned sign-ins
+ * leave behind).
  */
 export class RetentionService {
   constructor(
     private readonly deps: ServiceDeps,
     private readonly placements: PlacementService,
     private readonly idempotency: IdempotencyStore,
+    private readonly notifications: NotificationService,
   ) {}
 
   /**
@@ -68,7 +73,13 @@ export class RetentionService {
           )
           .run();
       }
-      return { tasks, groups: groups.length };
+      // Deleted comments are not in the search index, so nothing needs reindexing.
+      const comments = tx
+        .delete(comment)
+        .where(and(isNotNull(comment.deletedAt), lt(comment.deletedAt, cutoff)))
+        .run().changes;
+      const notifications = this.notifications.purgeRead(tx, now);
+      return { tasks, groups: groups.length, comments, notifications };
     });
     const verifications = this.deps.db.orm
       .delete(verification)

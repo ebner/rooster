@@ -19,7 +19,7 @@ import {
   type ServiceDeps,
   type Tx,
 } from './context.ts';
-import { memberIds, qk, taskAudiences, taskReach } from './event-audience.ts';
+import { isSharedOrg, memberIds, qk, taskAudiences, taskReach } from './event-audience.ts';
 import { isMember, requireTask, type TaskRow, taskDeleted, taskDtoFor } from './list-access.ts';
 import { requireMembership } from './org-access.ts';
 
@@ -213,7 +213,8 @@ export class TagService {
 
   /**
    * Tag changes go to every member (04 §4.5): `['tags', org]`, `['my-list', org]` (chips), and
-   * `['task', id]` for each task whose tag set changed.
+   * `['task', id]` for each task whose tag set changed (plus `['everyone', org]` in a shared
+   * org when there are any).
    */
   private emit(
     tx: Tx,
@@ -232,7 +233,12 @@ export class TagService {
         {
           org: orgId,
           userIds: memberIds(tx, orgId),
-          keys: [qk.tags(orgId), qk.myList(orgId), ...taskIds.map(qk.task)],
+          keys: [
+            qk.tags(orgId),
+            qk.myList(orgId),
+            ...taskIds.map(qk.task),
+            ...(taskIds.length > 0 && isSharedOrg(tx, orgId) ? [qk.everyone(orgId)] : []),
+          ],
         },
       ],
     });

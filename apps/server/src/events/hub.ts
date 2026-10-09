@@ -197,6 +197,11 @@ export class SseHub {
         }
       }
     }
+    for (const message of event.direct ?? []) {
+      for (const conn of this.byUser.get(message.userId) ?? []) {
+        if (!conn.closed) conn.sink.write(frame(message.event, this.nextId(), message.data));
+      }
+    }
     if (event.type === 'session.ended') {
       for (const sessionId of event.subjects) this.closeWhere((c) => c.sessionId === sessionId);
     } else if (event.type === 'user.disabled') {

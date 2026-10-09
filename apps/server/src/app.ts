@@ -22,6 +22,7 @@ import { requestMeta } from './lib/request-meta.ts';
 import { DOCS_PATH, securityHeaders } from './lib/security-headers.ts';
 import { webApp } from './lib/web-app.ts';
 import { registerAdminRoutes } from './routes/admin.ts';
+import { registerCollabRoutes } from './routes/collab.ts';
 import { registerEventRoutes } from './routes/events.ts';
 import { registerExportRoutes } from './routes/export.ts';
 import { registerGroupRoutes } from './routes/groups.ts';
@@ -135,6 +136,7 @@ export function createApp(deps: AppDeps): App {
   registerTagRoutes(app, services);
   registerSearchRoutes(app, services);
   registerExportRoutes(app, services);
+  registerCollabRoutes(app, services);
   registerEventRoutes(app, { hub, services });
 
   app.openAPIRegistry.register('Problem', ProblemSchema);

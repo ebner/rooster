@@ -1,6 +1,14 @@
 import type { Group, Task } from '@rooster/core/schemas';
 import { and, asc, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
-import { member, organization, placement, task, taskGroup, taskTag } from '../db/schema/index.ts';
+import {
+  comment,
+  member,
+  organization,
+  placement,
+  task,
+  taskGroup,
+  taskTag,
+} from '../db/schema/index.ts';
 import { AppError } from '../lib/errors.ts';
 import type { Tx } from './context.ts';
 import type { OrderDomain } from './ordering-service.ts';
@@ -195,18 +203,23 @@ export function chunked<T>(items: readonly T[], size = IN_CHUNK): T[][] {
   return out;
 }
 
-/** Derived TaskDTO fields loaded per batch: tag IDs in add order and subtask counts. */
+/**
+ * Derived TaskDTO fields loaded per batch: tag IDs in add order, subtask counts and live
+ * comment counts.
+ */
 export interface TaskExtras {
   tagIds: Map<string, string[]>;
   counts: Map<string, { subtasks: number; subtasksDone: number }>;
+  comments: Map<string, number>;
 }
 
 /**
- * Tags (ordered by `added_at`, then insertion) and direct live subtask counts of `taskIds`
- * (FR-TASK-10). Completing a subtask counts it as done; deleted subtasks do not count.
+ * Tags (ordered by `added_at`, then insertion), direct live subtask counts (FR-TASK-10) and
+ * live comment counts of `taskIds`. Completing a subtask counts it as done; deleted subtasks
+ * and comments do not count.
  */
 export function loadTaskExtras(tx: Tx, taskIds: readonly string[]): TaskExtras {
-  const extras: TaskExtras = { tagIds: new Map(), counts: new Map() };
+  const extras: TaskExtras = { tagIds: new Map(), counts: new Map(), comments: new Map() };
   for (const ids of chunked([...new Set(taskIds)])) {
     const tags = tx
       .select({ taskId: taskTag.taskId, tagId: taskTag.tagId })
@@ -233,6 +246,14 @@ export function loadTaskExtras(tx: Tx, taskIds: readonly string[]): TaskExtras {
       if (c.parentId !== null) {
         extras.counts.set(c.parentId, { subtasks: c.subtasks, subtasksDone: c.subtasksDone });
       }
+    }
+    for (const c of tx
+      .select({ taskId: comment.taskId, n: sql<number>`count(*)` })
+      .from(comment)
+      .where(and(inArray(comment.taskId, ids), isNull(comment.deletedAt)))
+      .groupBy(comment.taskId)
+      .all()) {
+      extras.comments.set(c.taskId, c.n);
     }
   }
   return extras;
@@ -262,11 +283,11 @@ export function toTaskDto(
     startDate: row.startDate,
     completedAt: row.completedAt,
     tagIds: [...(extras?.tagIds.get(row.id) ?? [])],
-    // Comments (P6) and attachments (P10) do not exist yet.
+    // Attachments (P10) do not exist yet.
     counts: {
       subtasks: counts?.subtasks ?? 0,
       subtasksDone: counts?.subtasksDone ?? 0,
-      comments: 0,
+      comments: extras?.comments.get(row.id) ?? 0,
       attachments: 0,
     },
     placement: place === null ? null : { groupId: place.groupId, position: place.position },

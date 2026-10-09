@@ -1,11 +1,14 @@
 import { todayIn } from '@rooster/core/dates';
+import { mentionsToPlain } from '@rooster/core/mentions';
 import { compareKeys } from '@rooster/core/ordering';
-import type { ExportTask, OrgExport, Tag } from '@rooster/core/schemas';
+import type { ExportComment, ExportTask, OrgExport, Tag } from '@rooster/core/schemas';
 import { and, asc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
-import { placement, tag as tagTable, task, taskGroup, user } from '../db/schema/index.ts';
+import { comment, placement, tag as tagTable, task, taskGroup, user } from '../db/schema/index.ts';
+import { toCommentDto } from './comment-service.ts';
 import { type Actor, immediate, type ServiceDeps } from './context.ts';
 import { listGroups } from './group-service.ts';
 import {
+  chunked,
   loadTaskExtras,
   placementsFor,
   type TaskRow,
@@ -31,7 +34,8 @@ export class ExportService {
   /**
    * My groups in order; my placed tasks (open and completed, not deleted) in group order and
    * position, each followed depth-first by its live subtasks (any assignee) in sibling
-   * order; and the org tags those tasks carry. Members only (404 otherwise).
+   * order; the org tags those tasks carry; and the live comments on those tasks (in task
+   * order, oldest first per task). Members only (404 otherwise).
    */
   exportOrg(actor: Actor, orgRef: string): OrgExportFile {
     return immediate(this.deps.db, (tx) => {
@@ -104,6 +108,23 @@ export class ExportService {
               .orderBy(asc(tagTable.createdAt), asc(tagTable.id))
               .all()
               .map(toTagDto);
+      const order = new Map(ids.map((id, i) => [id, i]));
+      const comments: ExportComment[] = chunked(ids)
+        .flatMap((chunk) =>
+          tx
+            .select({ row: comment, authorName: user.name })
+            .from(comment)
+            .innerJoin(user, eq(user.id, comment.authorId))
+            .where(and(inArray(comment.taskId, chunk), isNull(comment.deletedAt)))
+            .all(),
+        )
+        .sort(
+          (a, b) =>
+            (order.get(a.row.taskId) ?? 0) - (order.get(b.row.taskId) ?? 0) ||
+            a.row.createdAt - b.row.createdAt ||
+            compareKeys(a.row.id, b.row.id),
+        )
+        .map((c) => ({ ...toCommentDto(c.row), authorName: c.authorName }));
       const now = this.deps.clock();
       return {
         data: {
@@ -115,7 +136,7 @@ export class ExportService {
           groups: groups.map(toGroupDto),
           tags,
           tasks,
-          comments: [],
+          comments,
         },
         fileStem: `rooster-${org.slug}-${todayIn(me?.timezone ?? 'UTC', now)}`,
       };
@@ -126,11 +147,18 @@ export class ExportService {
 /**
  * The Markdown rendering of an export (ADR 0012): `# Org`, then `## Group` per group in
  * order (empty ones too), tasks as checklist items with the due unit and `#tag`s, subtasks
- * nested two spaces deeper, and the description as an indented paragraph under its task.
- * Deterministic: the same export always renders the same text.
+ * nested two spaces deeper, the description as an indented paragraph under its task, and
+ * its comments as indented quotes (author, UTC date, mentions as `@Name`). Deterministic:
+ * the same export always renders the same text.
  */
 export function renderExportMarkdown(data: OrgExport): string {
   const tagNames = new Map(data.tags.map((t) => [t.id, t.name]));
+  const commentsOf = new Map<string, ExportComment[]>();
+  for (const c of data.comments) {
+    const list = commentsOf.get(c.taskId);
+    if (list === undefined) commentsOf.set(c.taskId, [c]);
+    else list.push(c);
+  }
   const byParent = new Map<string, ExportTask[]>();
   const byGroup = new Map<string, ExportTask[]>();
   for (const t of data.tasks) {
@@ -167,6 +195,14 @@ export function renderExportMarkdown(data: OrgExport): string {
       lines.push('');
       for (const text of description.split('\n')) {
         lines.push(text.trim() === '' ? '' : `${indent}  ${text}`);
+      }
+      lines.push('');
+    }
+    for (const c of commentsOf.get(t.id) ?? []) {
+      const day = new Date(c.createdAt).toISOString().slice(0, 10);
+      lines.push('', `${indent}  > **${c.authorName}** (${day}):`);
+      for (const text of mentionsToPlain(c.body).trim().split('\n')) {
+        lines.push(`${indent}  > ${text}`.trimEnd());
       }
       lines.push('');
     }

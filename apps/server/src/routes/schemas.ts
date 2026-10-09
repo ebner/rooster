@@ -1,4 +1,6 @@
 import {
+  activityPageSchema,
+  activitySchema,
   adminUserPatchSchema,
   adminUserSchema,
   allowlistCreateSchema,
@@ -6,7 +8,12 @@ import {
   backupSchema,
   bulkOpSchema,
   bulkResultSchema,
+  commentCreateSchema,
+  commentPatchSchema,
+  commentSchema,
+  exportCommentSchema,
   exportTaskSchema,
+  followStateSchema,
   groupCreateResultSchema,
   groupCreateSchema,
   groupDeleteSchema,
@@ -23,6 +30,12 @@ import {
   mePatchSchema,
   meSchema,
   myListSchema,
+  notificationMarkResultSchema,
+  notificationMarkSchema,
+  notificationPageSchema,
+  notificationPrefsPutSchema,
+  notificationPrefsSchema,
+  notificationSchema,
   orgCreateSchema,
   orgDeleteSchema,
   orgExportSchema,
@@ -152,6 +165,7 @@ export const TagMergeSchema = named(tagMergeSchema, 'TagMerge');
 export const SearchHitSchema = named(searchHitSchema.extend({ task: TaskSchema }), 'SearchHit');
 export const SearchResultSchema = named(z.array(SearchHitSchema), 'SearchResult');
 export const ReindexResultSchema = named(reindexResultSchema, 'ReindexResult');
+export const ExportCommentSchema = named(exportCommentSchema, 'ExportComment');
 export const ExportTaskSchema = named(
   exportTaskSchema.extend({ placement: PlacementSchema.nullable() }),
   'ExportTask',
@@ -161,8 +175,37 @@ export const OrgExportSchema = named(
     groups: z.array(GroupSchema),
     tags: z.array(TagSchema),
     tasks: z.array(ExportTaskSchema),
-    // Always empty in v1.0 (comments arrive in Phase 6); `never` has no OpenAPI form.
-    comments: z.array(z.never()).max(0).openapi({ type: 'array', maxItems: 0, items: {} }),
+    comments: z.array(ExportCommentSchema),
   }),
   'OrgExport',
 );
+
+// Phase 6: collaboration (06 §2.6, ADR 0028).
+export const CommentSchema = named(commentSchema, 'Comment');
+export const CommentCreateSchema = named(commentCreateSchema, 'CommentCreate');
+export const CommentPatchSchema = named(commentPatchSchema, 'CommentPatch');
+export const ActivitySchema = named(activitySchema, 'Activity');
+export const ActivityPageSchema = named(
+  activityPageSchema.extend({
+    items: z.array(
+      z.discriminatedUnion('kind', [
+        z.object({ kind: z.literal('comment'), comment: CommentSchema }),
+        z.object({ kind: z.literal('activity'), activity: ActivitySchema }),
+      ]),
+    ),
+  }),
+  'ActivityPage',
+);
+export const FollowStateSchema = named(followStateSchema, 'FollowState');
+export const NotificationSchema = named(notificationSchema, 'Notification');
+export const NotificationPageSchema = named(
+  notificationPageSchema.extend({ items: z.array(NotificationSchema) }),
+  'NotificationPage',
+);
+export const NotificationMarkSchema = named(notificationMarkSchema, 'NotificationMark');
+export const NotificationMarkResultSchema = named(
+  notificationMarkResultSchema,
+  'NotificationMarkResult',
+);
+export const NotificationPrefsSchema = named(notificationPrefsSchema, 'NotificationPrefs');
+export const NotificationPrefsPutSchema = named(notificationPrefsPutSchema, 'NotificationPrefsPut');

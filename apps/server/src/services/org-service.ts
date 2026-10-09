@@ -70,8 +70,15 @@ const MAX_SLUG_ATTEMPTS = 1000;
  */
 export type MemberRemovalStep = (tx: Tx, input: { orgId: string; userId: string }) => void;
 
+/** Runs inside the transaction in which a user joined an org through an invite. */
+export type MemberJoinedHook = (
+  tx: Tx,
+  input: { orgId: string; userId: string; inviterId: string | null },
+) => void;
+
 export interface OrgServiceOptions {
   memberRemovalSteps?: readonly MemberRemovalStep[];
+  onMemberJoined?: MemberJoinedHook;
 }
 
 const personalOrgConflict = () =>
@@ -163,12 +170,14 @@ function toInvitePreview(invite: ResolvedInvite, now: number): InvitePreview {
 /** Organisations, members and invites (04 §4.2). All authorisation happens here. */
 export class OrgService {
   private readonly removalSteps: readonly MemberRemovalStep[];
+  private readonly onMemberJoined: MemberJoinedHook | undefined;
 
   constructor(
     private readonly deps: ServiceDeps,
     options: OrgServiceOptions = {},
   ) {
     this.removalSteps = options.memberRemovalSteps ?? [];
+    this.onMemberJoined = options.onMemberJoined;
   }
 
   private now(): number {
@@ -445,6 +454,7 @@ export class OrgService {
               orgId: org.id,
               actorId: actor.userId,
               reach: taskReach(tx, unassigned),
+              activity: unassigned,
             });
       this.emit(tx, 'member.removed', {
         orgId: org.id,
@@ -453,6 +463,8 @@ export class OrgService {
         audiences: [
           { org: org.id, userIds: membersBefore, keys: [qk.orgMembers(org.id)] },
           selfAudience(userId, org.id, [qk.orgs, qk.me]),
+          // Their notifications from this org were deleted.
+          selfAudience(userId, null, [qk.notifications]),
           ...tasks,
         ],
       });
@@ -711,6 +723,11 @@ export class OrgService {
     const joined = this.join(tx, invite.org, userId, inviteRole(invite));
     consumeInvite(tx, invite);
     const orgId = invite.org.id;
+    this.onMemberJoined?.(tx, {
+      orgId,
+      userId,
+      inviterId: invite.kind === 'email' ? invite.row.inviterId : invite.row.createdBy,
+    });
     this.emit(tx, 'member.joined', {
       orgId,
       actorId: userId,

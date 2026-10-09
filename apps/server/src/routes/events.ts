@@ -1,5 +1,10 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi';
-import { SSE_HEARTBEAT_MS, sseHelloSchema, sseInvalidateSchema } from '@rooster/core/schemas';
+import {
+  SSE_HEARTBEAT_MS,
+  sseHelloSchema,
+  sseInvalidateSchema,
+  sseNotificationSchema,
+} from '@rooster/core/schemas';
 import { streamSSE } from 'hono/streaming';
 import { SSE_MAX_PER_SESSION, SSE_MAX_PER_USER, type SseHub } from '../events/hub.ts';
 import type { AppEnv } from '../lib/context.ts';
@@ -10,6 +15,7 @@ import { actorOf, problems } from './common.ts';
 
 export const SseHelloSchema = named(sseHelloSchema, 'SseHello');
 export const SseInvalidateSchema = named(sseInvalidateSchema, 'SseInvalidate');
+export const SseNotificationSchema = named(sseNotificationSchema, 'SseNotification');
 
 const STREAM_DESCRIPTION = [
   'A `text/event-stream` (04 §4.5). Every message has `event:`, `data:` (JSON) and a',
@@ -22,6 +28,9 @@ const STREAM_DESCRIPTION = [
   '  to invalidate verbatim. Only the affected users receive it. `origin` is the',
   '  `X-Rooster-Client-Id` of the request that caused it, sent only to that user (null for',
   '  everyone else). Bursts within ~50 ms are coalesced.',
+  '- `notification`: [`SseNotification`](#/components/schemas/SseNotification), only to the',
+  '  recipient: the unread count, with a preview of a new notification (null when only the',
+  '  count changed, e.g. after marking read on another device). Not coalesced.',
   `- \`: ping\` comment every ${SSE_HEARTBEAT_MS / 1000} s.`,
   '',
   'The stream ends on sign-out, session revoke, user deactivation and server shutdown. A',
@@ -34,7 +43,7 @@ const eventsRoute = createRoute({
   path: '/api/v1/events',
   tags: ['events'],
   operationId: 'streamEvents',
-  summary: 'Server-Sent Events: hello, invalidations and heartbeats',
+  summary: 'Server-Sent Events: hello, invalidations, notifications and heartbeats',
   description: STREAM_DESCRIPTION,
   responses: {
     200: {
@@ -61,6 +70,7 @@ export function registerEventRoutes(
   const { hub, services } = deps;
   app.openAPIRegistry.register('SseHello', SseHelloSchema);
   app.openAPIRegistry.register('SseInvalidate', SseInvalidateSchema);
+  app.openAPIRegistry.register('SseNotification', SseNotificationSchema);
 
   app.openapi(eventsRoute, (c) => {
     const actor = actorOf(c);

@@ -14,6 +14,7 @@ export interface Audience {
   keys: readonly QueryKey[];
 }
 
+/** Domain events (04 §4.5). */
 export type DomainEventType =
   | 'task.created'
   | 'task.updated'
@@ -23,6 +24,13 @@ export type DomainEventType =
   | 'task.restored'
   | 'task.purged'
   | 'task.expanded'
+  | 'task.followed'
+  | 'comment.created'
+  | 'comment.updated'
+  | 'comment.deleted'
+  | 'comment.restored'
+  | 'notification.created'
+  | 'notification.read'
   | 'group.created'
   | 'group.updated'
   | 'group.moved'
@@ -59,6 +67,17 @@ export interface DomainEvent {
   subjects: readonly string[];
   /** Resolved inside the emitting transaction, so membership is exactly as committed. */
   audiences: readonly Audience[];
+  /**
+   * Messages for one user's streams other than invalidations, such as `notification`
+   * (the unread count plus a preview). Sent as they are, never coalesced.
+   */
+  direct?: readonly DirectMessage[];
+}
+
+export interface DirectMessage {
+  userId: string;
+  event: 'notification';
+  data: unknown;
 }
 
 export type DomainEventListener = (event: DomainEvent) => void;
