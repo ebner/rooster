@@ -153,7 +153,7 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
 
 ## Status
 - **Current phase:** Phase 6 (collaboration) is next. P8 (CLI, PATs) may start in parallel (09).
-- **Latest release:** 1.0.2 (phone sync takeover, drag preview, pinned phone frame, update chip; ADRs 0018–0021).
+- **Latest release:** 1.1.0 (amber accent, new brand and app icon, larger desktop UI, description indicator, Ctrl+click links, pre-update backups on every version change; ADRs 0022–0027).
 - **Last completed phase:** Phase 5, smart views, search, palette, export and Trash (2026-10-06), released as **v1.0.0**. AC-5.1 to AC-5.3 pass on desktop and the phone projects. ADRs 0012 to 0016 record the decisions; ADR 0016 relaxed the initial-bundle budget to 450 KB.
 - **Backlog:** `docs/spec/09-phases.md` §Backlog. Do not build an item unless it is scheduled.
 - **E2E:** never run two Playwright suites at once; they share ports 9400, 3181, 5181 and 3182.
