@@ -147,19 +147,17 @@ export class LayeredSecretStore implements SecretStore {
     }
   }
 
+  /**
+   * The newest of keychain and file. Reads never delete: a cleanup here could race with a
+   * login in another process and erase it. A stale entry is harmless, since it always loses
+   * on time, and the next login or logout replaces or clears it.
+   */
   async get(profile: string): Promise<Credential | undefined> {
     const fromKeychain = await this.keychainEntry(profile);
     const keychain = fromKeychain === 'unavailable' ? undefined : fromKeychain;
     const file = this.file.entry(profile);
-    const keychainWins = keychain !== undefined && (file === undefined || keychain.at > file.at);
-    const winner = keychainWins ? keychain : file;
-    // Tidy the stale side, best effort; correctness never depends on it.
-    if (keychainWins && file !== undefined) this.tryRemoveFile(profile);
-    if (!keychainWins && file !== undefined && keychain !== undefined) {
-      if (await this.tryDeleteKeychain(profile)) {
-        if (!isCredential(file)) this.tryRemoveFile(profile);
-      }
-    }
+    const winner =
+      keychain !== undefined && (file === undefined || keychain.at > file.at) ? keychain : file;
     return isCredential(winner) ? winner : undefined;
   }
 
@@ -184,8 +182,9 @@ export class LayeredSecretStore implements SecretStore {
       const keychain = await this.keychain(profile);
       if (keychain !== null) {
         await keychain.setPassword(JSON.stringify(credential));
-        // An older file entry is outranked anyway; remove it so the secret isn't kept twice.
-        this.tryRemoveFile(profile);
+        // An older file entry is outranked anyway; remove it so the secret isn't kept twice,
+        // but never one written since by another process.
+        this.tryRemoveFileOlderThan(profile, credential.at);
         return 'keychain';
       }
     } catch {
@@ -199,7 +198,7 @@ export class LayeredSecretStore implements SecretStore {
   async delete(profile: string): Promise<void> {
     const at = await this.nextAt(profile);
     const cleared = await this.tryDeleteKeychain(profile);
-    if (cleared) this.file.remove(profile);
+    if (cleared) this.tryRemoveFileOlderThan(profile, at);
     // The keychain may still hold an older login: a tombstone outranks it until it can go.
     else this.file.put(profile, { deleted: true, at });
   }
@@ -216,9 +215,10 @@ export class LayeredSecretStore implements SecretStore {
     }
   }
 
-  private tryRemoveFile(profile: string): void {
+  private tryRemoveFileOlderThan(profile: string, at: number): void {
     try {
-      this.file.remove(profile);
+      const entry = this.file.entry(profile);
+      if (entry !== undefined && entry.at < at) this.file.remove(profile);
     } catch {
       // A read-only home: the newer entry still wins on every read.
     }

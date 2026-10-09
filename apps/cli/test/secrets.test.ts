@@ -79,21 +79,63 @@ describe('credential storage (07 §2)', () => {
   it('[P2] a login written to the file while the keychain was locked beats the older keychain entry', async () => {
     const keychain = fakeKeychain();
     const time = clock();
-    const store = new LayeredSecretStore(
-      new FileSecretStore(dir),
-      keychain.factory,
-      vi.fn(),
-      time.now,
-    );
+    const file = new FileSecretStore(dir);
+    const store = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
     await store.set('home', 'old', 'https://a.example');
     time.tick();
     keychain.state.locked = true;
     expect(await store.set('home', 'new', 'https://a.example')).toBe('file');
     keychain.state.locked = false;
     expect(await store.get('home')).toMatchObject({ token: 'new' });
-    // The stale keychain entry was cleared on that read.
-    expect(keychain.entries.has('rooster/home')).toBe(false);
+    // Reads never delete: the stale keychain entry stays until the next login or logout.
+    expect(keychain.entries.has('rooster/home')).toBe(true);
     expect(await store.get('home')).toMatchObject({ token: 'new' });
+    await store.set('home', 'newest', 'https://a.example');
+    expect(await store.get('home')).toMatchObject({ token: 'newest' });
+    expect(file.entry('home')).toBeUndefined();
+  });
+
+  it('[P2] a read never erases a login that happens while it runs (interleaving)', async () => {
+    const keychain = fakeKeychain();
+    const time = clock();
+    const file = new FileSecretStore(dir);
+    const store = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
+    // A stale keychain login (T1) and a newer fallback login in the file (T2).
+    await store.set('home', 't1', 'https://a.example');
+    time.tick();
+    keychain.state.locked = true;
+    await store.set('home', 't2', 'https://a.example');
+    keychain.state.locked = false;
+    time.tick();
+    // Every keychain delete waits until released, so the reader can be caught mid-cleanup.
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const factory = await keychain.factory();
+    const gated = new LayeredSecretStore(
+      file,
+      async () => (service: string, account: string) => {
+        const entry = factory(service, account);
+        return {
+          ...entry,
+          deletePassword: async () => {
+            await gate;
+            return entry.deletePassword();
+          },
+        };
+      },
+      vi.fn(),
+      time.now,
+    );
+    const reader = gated.get('home');
+    for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
+    // Another process logs in meanwhile: keychain T3, file entry removed.
+    const writer = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
+    expect(await writer.set('home', 't3', 'https://a.example')).toBe('keychain');
+    release();
+    expect(await reader).toMatchObject({ token: 't2' });
+    expect(await store.get('home')).toMatchObject({ token: 't3' });
   });
 
   it('[P2] a logout while the keychain is locked is not undone when it unlocks', async () => {
@@ -108,7 +150,9 @@ describe('credential storage (07 §2)', () => {
     expect(await store.get('home')).toBeUndefined();
     keychain.state.locked = false;
     expect(await store.get('home')).toBeUndefined();
-    // Unlocked, the read removes both the keychain entry and the tombstone.
+    expect(await store.get('home')).toBeUndefined();
+    // The next logout, with the keychain unlocked, clears both.
+    await store.delete('home');
     expect(keychain.entries.has('rooster/home')).toBe(false);
     expect(file.entry('home')).toBeUndefined();
   });

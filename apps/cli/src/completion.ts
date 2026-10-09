@@ -88,6 +88,102 @@ function shellWords(list: readonly string[]): string {
   return list.join(' ');
 }
 
+/** Flags that take a value (their value word is skipped when finding the command path). */
+const VALUE_FLAGS = [
+  '--org',
+  '--profile',
+  '--group',
+  '--tag',
+  '--move-to',
+  '--after',
+  '--before',
+  '--color',
+  '--scope',
+  '--write-group',
+  '--due',
+  '--time',
+  '--start',
+  '--assign',
+  '--desc',
+  '--desc-file',
+  '--title',
+  '--parent',
+  '--server',
+  '--expires',
+] as const;
+
+/**
+ * Bash helpers. Written with `@{` for `${` (and no backticks) so the code reads as bash; nothing
+ * here ever evaluates a word: decoding is plain parameter expansion.
+ */
+const BASH_HELPERS = String.raw`_rooster_values() {
+  COMPREPLY=($(compgen -W "$1" -- "$cur"))
+}
+# A word as bash will pass it: quotes removed and backslash escapes resolved, without any
+# expansion. A complete word ('my work', "my \"work\"", my\ work) decodes whole; the unfinished
+# word being completed decodes up to where it stops ('Some -> Some).
+_rooster_word() {
+  local s="$1" out="" c q="" next bt=$'\x60'
+  while [[ -n "$s" ]]; do
+    c="@{s:0:1}"
+    s="@{s:1}"
+    if [[ -z "$q" ]]; then
+      case "$c" in
+        "'" | '"') q="$c" ;;
+        '\')
+          if [[ -n "$s" ]]; then
+            out+="@{s:0:1}"
+            s="@{s:1}"
+          fi ;;
+        *) out+="$c" ;;
+      esac
+    elif [[ "$q" == "'" ]]; then
+      if [[ "$c" == "'" ]]; then q=""; else out+="$c"; fi
+    elif [[ "$c" == '"' ]]; then
+      q=""
+    elif [[ "$c" == '\' && -n "$s" ]]; then
+      next="@{s:0:1}"
+      if [[ "$next" == '"' || "$next" == '\' || "$next" == '$' || "$next" == "$bt" ]]; then
+        out+="$next"
+        s="@{s:1}"
+      else
+        out+="$c"
+      fi
+    else
+      out+="$c"
+    fi
+  done
+  printf '%s' "$out"
+}
+# A candidate as text to insert, in the quoting the user opened: inside '…' (a ' becomes '\''),
+# inside "…" (\ " $ and backtick escaped), or unquoted with printf %q.
+_rooster_quote() {
+  local v="$1" bs='\' sq="'" dq='"' dl='$' bt=$'\x60'
+  case "$cur" in
+    "'"*)
+      v=@{v//"$sq"/"$sq$bs$sq$sq"}
+      printf "'%s'" "$v" ;;
+    '"'*)
+      v=@{v//"$bs"/"$bs$bs"}
+      v=@{v//"$dq"/"$bs$dq"}
+      v=@{v//"$dl"/"$bs$dl"}
+      v=@{v//"$bt"/"$bs$bt"}
+      printf '"%s"' "$v" ;;
+    *) printf '%q' "$v" ;;
+  esac
+}
+# Group and tag names come from the server, where any org member can name them: never let the
+# shell expand them (compgen -W runs command substitution), and insert them quoted.
+# --profile and --org from the command line are passed on as separate arguments.
+_rooster_dynamic() {
+  local line raw
+  raw="$(_rooster_word "$cur")"
+  COMPREPLY=()
+  while IFS= read -r line; do
+    [[ "$line" == "$raw"* ]] && COMPREPLY+=("$(_rooster_quote "$line")")
+  done < <(rooster __complete "$1" "@{globals[@]}" 2>/dev/null)
+}`.replaceAll('@{', '${');
+
 function bashScript(entries: readonly CompletionEntry[]): string {
   const cases = entries
     .map((e) => {
@@ -108,56 +204,29 @@ function bashScript(entries: readonly CompletionEntry[]): string {
     .map((s) => `    "${s.when.slice(4)}") ${valueBash(s.words)}; return ;;`)
     .join('\n');
   return `# rooster completion for bash (rooster completion bash)
-_rooster_values() {
-  COMPREPLY=($(compgen -W "$1" -- "$cur"))
-}
-# The word being completed as the shell will read it: one level of backslash escaping (or an
-# opening quote) removed, so a second Tab after inserting 'alpha\\,b' still matches 'alpha,b1'.
-# Pure parameter expansion: nothing in the word is ever evaluated.
-_rooster_unquote() {
-  local s="$1" out="" c
-  if [[ "$s" == "'"* ]]; then
-    printf '%s' "\${s:1}"
-    return
-  fi
-  [[ "$s" == '"'* ]] && s="\${s:1}"
-  while [[ -n "$s" ]]; do
-    c="\${s:0:1}"
-    s="\${s:1}"
-    if [[ "$c" == "\\\\" && -n "$s" ]]; then
-      c="\${s:0:1}"
-      s="\${s:1}"
-    fi
-    out+="$c"
-  done
-  printf '%s' "$out"
-}
-# Group and tag names come from the server, where any org member can name them: never let the
-# shell expand them (compgen -W runs command substitution), and insert them shell-quoted.
-# --profile and --org from the command line are passed on as separate arguments.
-_rooster_dynamic() {
-  local line raw
-  raw="$(_rooster_unquote "$cur")"
-  COMPREPLY=()
-  while IFS= read -r line; do
-    [[ "$line" == "$raw"* ]] && COMPREPLY+=("$(printf '%q' "$line")")
-  done < <(rooster __complete "$1" "\${globals[@]}" 2>/dev/null)
-}
+${BASH_HELPERS}
 _rooster() {
   local cur prev path="" i w words
   local -a globals=()
   cur="\${COMP_WORDS[COMP_CWORD]}"
   prev="\${COMP_WORDS[COMP_CWORD-1]}"
+  # The default COMP_WORDBREAKS splits --org=acme into --org, =, acme.
+  if [[ "$cur" == "=" ]]; then
+    cur=""
+  elif [[ "$prev" == "=" ]] && ((COMP_CWORD >= 2)); then
+    prev="\${COMP_WORDS[COMP_CWORD-2]}"
+  fi
   for ((i = 1; i < COMP_CWORD; i++)); do
     w="\${COMP_WORDS[i]}"
     case "$w" in
-      --org|--profile)
-        if ((i + 1 < COMP_CWORD)); then
-          globals+=("$w" "$(_rooster_unquote "\${COMP_WORDS[i+1]}")")
+      ${VALUE_FLAGS.join(' | ')})
+        # The value is the next word, or the one after an "=" word.
+        if [[ "\${COMP_WORDS[i+1]}" == "=" ]]; then ((i++)); fi
+        if ((i + 1 < COMP_CWORD)) && [[ "$w" == --org || "$w" == --profile ]]; then
+          globals+=("$w" "$(_rooster_word "\${COMP_WORDS[i+1]}")")
         fi
         ((i++)) ;;
-      --org=*|--profile=*) globals+=("$(_rooster_unquote "$w")") ;;
-      --group|--tag|--move-to|--after|--before|--color|--scope|--write-group|--due|--time|--start|--assign|--desc|--desc-file|--title|--parent|--server|--expires) ((i++)) ;;
+      --org=* | --profile=*) globals+=("$(_rooster_word "$w")") ;;
       -*) ;;
       *) case " $(_rooster_subs "$path") " in
            *" $w "*) path="\${path:+$path }$w" ;;

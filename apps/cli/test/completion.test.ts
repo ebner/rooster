@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -152,9 +152,19 @@ describe('[P2] bash after a partial completion', () => {
     expect(completeWith(stub, ['rooster', 'ls', '--tag', 'Some\\ g'])).toEqual(['Some\\ group']);
   });
 
-  it('accepts a word the user opened with a quote', () => {
-    expect(completeWith(stub, ['rooster', 'ls', '--tag', "'Some g"])).toEqual(['Some\\ group']);
-    expect(completeWith(stub, ['rooster', 'ls', '--tag', '"alpha,b1'])).toEqual(['alpha\\,b1']);
+  it('[P2] inserts in the quote context the user opened', () => {
+    expect(completeWith(stub, ['rooster', 'ls', '--tag', "'Some g"])).toEqual(["'Some group'"]);
+    expect(completeWith(stub, ['rooster', 'ls', '--tag', '"alpha,b1'])).toEqual(['"alpha,b1"']);
+    expect(completeWith(stub, ['rooster', 'ls', '--tag', 'Some'])).toEqual(['Some\\ group']);
+  });
+
+  it('[P2] escapes for each quote context', () => {
+    const hostile = `rooster() { printf '%s\\n' "it's" 'a"b$c\`d\\e'; }`;
+    expect(completeWith(hostile, ['rooster', 'ls', '--tag', "'it"])).toEqual(["'it'\\''s'"]);
+    expect(completeWith(hostile, ['rooster', 'ls', '--tag', '"a'])).toEqual([
+      '"a\\"b\\$c\\`d\\\\e"',
+    ]);
+    expect(completeWith(hostile, ['rooster', 'ls', '--tag', 'a'])).toEqual(['a\\"b\\$c\\`d\\\\e']);
   });
 
   it('never evaluates the typed word', () => {
@@ -202,6 +212,41 @@ describe('[P2] --profile and --org reach rooster __complete', () => {
       '--org',
       '\\$\\(touch\\ pwned\\)',
     ]);
+  });
+
+  it('[P2] reassembles --org = acme (COMP_WORDBREAKS) and decodes quoted values', () => {
+    // As bash splits: rooster --profile 'my work' ls --org=acme --profile="x \"y\"" --tag <Tab>
+    expect(
+      completeWith(echo, [
+        'rooster',
+        '--profile',
+        "'my work'",
+        'ls',
+        '--org',
+        '=',
+        'acme',
+        '--profile',
+        '=',
+        '"x \\"y\\""',
+        '--tag',
+        '',
+      ]),
+    ).toEqual([
+      '__complete',
+      'tags',
+      '--profile',
+      'my\\ work',
+      '--org',
+      'acme',
+      '--profile',
+      'x\\ \\"y\\"',
+    ]);
+  });
+
+  it('[P2] completes the value after --org= and --group=', () => {
+    expect(completeWith(echo, ['rooster', 'ls', '--org', '='])).toEqual(['__complete', 'orgs']);
+    const names = `rooster() { printf '%s\\n' Prio Later; }`;
+    expect(completeWith(names, ['rooster', 'mv', '42', '--group', '=', 'P'])).toEqual(['Prio']);
   });
 
   it('the value being completed is not forwarded', () => {
@@ -268,5 +313,92 @@ describe('zsh, fish and PowerShell', () => {
       ]);
       expect(check.status).toBe(0);
     }
+  });
+});
+
+/**
+ * Real readline in an interactive bash (util-linux `script` provides the terminal): types a
+ * line, presses Tab after each part, then dumps the edited line through a key binding.
+ */
+const hasScript = spawnSync('script', ['-V'], { encoding: 'utf8' }).stdout?.includes('util-linux');
+
+function typeAndComplete(parts: string[]): { line: string; args: string[]; files: string[] } {
+  const work = mkdtempSync(join(tmpdir(), 'rooster-readline-'));
+  try {
+    writeFileSync(join(work, 'rooster.bash'), completionScript('bash', entries));
+    writeFileSync(
+      join(work, 'setup.bash'),
+      [
+        'source rooster.bash',
+        `rooster() { if [ "$1" = __complete ]; then printf '%s\\n' "$@" > args.out; printf '%s\\n' 'Some group' "it's" 'a"b$c' 'alpha,b1' 'alpha,b2'; fi; }`,
+        `bind -x '"\\C-t": printf "%s" "$READLINE_LINE" > line.out'`,
+      ].join('\n'),
+    );
+    const keys = parts.map((part) => `printf '%s\\t' ${shellQuote(part)}; sleep 0.4;`).join(' ');
+    // Ctrl-T dumps the line; Ctrl-U clears it so it is never run (Ctrl-C does not reach readline).
+    const driver = `(printf 'source setup.bash\\n'; sleep 0.5; ${keys} printf '\\024'; sleep 0.4; printf '\\025exit\\n') | script -qfc "bash --norc --noprofile -i" /dev/null > /dev/null 2>&1`;
+    execFileSync('bash', ['-c', driver], { cwd: work, timeout: 20_000 });
+    const read = (name: string) => {
+      try {
+        return readFileSync(join(work, name), 'utf8');
+      } catch {
+        return '';
+      }
+    };
+    return {
+      line: read('line.out'),
+      args: read('args.out')
+        .split('\n')
+        .filter((l) => l !== ''),
+      files: readdirSync(work).sort(),
+    };
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+describe.skipIf(!hasScript)('bash completion in a real interactive shell (readline)', () => {
+  it('inserts in the quote context the user opened', () => {
+    expect(typeAndComplete(["rooster ls --group 'Som"]).line).toBe(
+      "rooster ls --group 'Some group' ",
+    );
+    expect(typeAndComplete(['rooster ls --group "Som']).line).toBe(
+      'rooster ls --group "Some group" ',
+    );
+    expect(typeAndComplete(['rooster ls --group Som']).line).toBe(
+      'rooster ls --group Some\\ group ',
+    );
+    expect(typeAndComplete(["rooster ls --group 'it"]).line).toBe("rooster ls --group 'it'\\''s' ");
+    expect(typeAndComplete(['rooster ls --group "a\\"']).line).toBe(
+      'rooster ls --group "a\\"b\\$c" ',
+    );
+  });
+
+  it('completes again after a partial completion (al<Tab>1<Tab>)', () => {
+    expect(typeAndComplete(['rooster ls --group al']).line).toBe('rooster ls --group alpha\\,b');
+    expect(typeAndComplete(['rooster ls --group al', '1']).line).toBe(
+      'rooster ls --group alpha\\,b1 ',
+    );
+    expect(typeAndComplete(["rooster ls --group 'alpha,b", '2']).line).toBe(
+      "rooster ls --group 'alpha,b2' ",
+    );
+  });
+
+  it('forwards --profile and --org, quoted or with =, as separate arguments', () => {
+    const { args, line } = typeAndComplete([
+      `rooster --profile 'my work' --org=acme ls --group Som`,
+    ]);
+    expect(line).toBe(`rooster --profile 'my work' --org=acme ls --group Some\\ group `);
+    expect(args).toEqual(['__complete', 'groups', '--profile', 'my work', '--org', 'acme']);
+  });
+
+  it('never runs anything from a name or the typed word', () => {
+    const { line, files } = typeAndComplete(['rooster ls --group $(touch pwned)']);
+    expect(line).toBe('rooster ls --group $(touch pwned)');
+    expect(files).not.toContain('pwned');
   });
 });
