@@ -10,7 +10,7 @@ import type { AddGroupRow, AddRow, AddSubtaskRow, HintRow } from './model/rows';
 
 const addClass = cn(
   'flex w-full cursor-default items-center rounded-sm text-start text-base text-text-muted max-tablet:text-md',
-  'transition-colors duration-(--dur-fast) hover:text-text-secondary',
+  'transition-colors duration-(--dur-fast) hover:bg-bg-subtle hover:text-text-secondary',
   'focus-visible:-outline-offset-2',
 );
 

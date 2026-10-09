@@ -239,7 +239,7 @@ Height 44 px, top margin 24 px (except the first), `--text-group`.
 - The header sticks to the top of the scroll container (`position: sticky`) while its group is in view, with a background equal to the app background.
 
 ### 3.3 AddRow ("+ Add task" / "+ Add group" / "+ Add subtask")
-The same height and left alignment as the title text. `plus` icon plus text in `--color-text-muted`. On hover, the text becomes `--color-text-secondary`. Clicking it turns it into a draft TaskRow.
+The same height and left alignment as the title text. `plus` icon plus text in `--color-text-muted`. On hover, the row gets the `--color-bg-subtle` background (like a task row or a ghost button) and the text becomes `--color-text-secondary`. Clicking it turns it into a draft TaskRow.
 
 ### 3.4 DateCell and DatePopover
 See 02 §7.
