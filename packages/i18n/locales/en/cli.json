@@ -296,7 +296,9 @@
     "notRooster": "{server} doesn’t look like a rooster server.",
     "keychainFallback": "No system keychain available; the credential is stored in {path} (readable only by you).",
     "storedInFile": "Credential stored in the credentials file.",
-    "otherServer": "This profile’s login is for {stored}, not {server}. Run rooster login --server {server} (or use another --profile)."
+    "otherServer": "This profile’s login is for {stored}, not {server}. Run rooster login --server {server} (or use another --profile).",
+    "keychainUnavailable": "The system keychain can’t be read (it may be locked), so this command won’t guess which stored login is current. Unlock the keychain and try again, or set ROOSTER_KEYRING=off to use only the credentials file.",
+    "credentialsChanging": "The stored credentials are being changed by another rooster process; try again."
   },
   "login": {
     "arg": {

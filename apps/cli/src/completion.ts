@@ -440,16 +440,19 @@ Register-ArgumentCompleter -Native -CommandName rooster -ScriptBlock {
   } else {
     $words = $roosterCommands[$path]
   }
-  # Server-provided names are quoted unless plain, so a $(...) inside a tag name never runs.
-  # PowerShell also ends single-quoted strings at typographic quotes; its own escaper doubles all.
   # Only a plain word or an open single-quoted one ('Som) is completed; any other quoting
   # (double quotes, mixed or closed quotes, $, backtick) is declined. The inserted value
-  # replaces the whole word and is quoted on its own.
+  # replaces the whole word.
   $prefix = $wordToComplete
   if ($prefix -match '^[''‘’‚‛][^''‘’‚‛]*$') { $prefix = $prefix.Substring(1) }
   elseif ($prefix -match '[''‘’‚‛"“”„$\`]') { return }
+  $opened = $prefix -ne $wordToComplete
+  # A value goes in bare only when nothing in it is special to PowerShell, at the start of a
+  # word too (# comment, @ splatting, $ variable, - parameter); otherwise, and always after an
+  # opened quote, it is single-quoted with PowerShell's own escaper (which also doubles the
+  # typographic quotes that end such strings).
   $words | Where-Object { $_.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object {
-    $text = if ($_ -match '^[\\w./:@#+-]+$') { $_ } else {
+    $text = if (-not $opened -and $_ -cmatch '^[A-Za-z0-9_./][A-Za-z0-9_./:@#+-]*$') { $_ } else {
       "'" + [System.Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($_) + "'"
     }
     [System.Management.Automation.CompletionResult]::new($text, $_, 'ParameterValue', $_)

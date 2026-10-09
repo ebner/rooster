@@ -274,6 +274,40 @@ describe('[P1] PowerShell declines quoting it cannot model', () => {
   });
 });
 
+describe('[P2] PowerShell inserts names bare only when nothing in them is special', () => {
+  const ps = () => completionScript('powershell', entries);
+  const bare = () => {
+    const match = /\$_ -cmatch '([^']+)'/.exec(ps());
+    return new RegExp(match?.[1] ?? '^$');
+  };
+
+  it('quotes names starting with #, @, $, - or containing a backtick', () => {
+    for (const name of [
+      '#finance',
+      '@args',
+      '$x',
+      '-flag',
+      '--org',
+      'a`b',
+      'a b',
+      'Ärende',
+      "it's",
+      'a;b',
+      '(x)',
+    ]) {
+      expect(bare().test(name), name).toBe(false);
+    }
+    for (const name of ['Prio', 'q4/plan', 'v1.2', 'a#b', 'x@y', 'a-b', '_x', './x']) {
+      expect(bare().test(name), name).toBe(true);
+    }
+  });
+
+  it('always quotes after the user opened a quote', () => {
+    expect(ps()).toContain('$opened = $prefix -ne $wordToComplete');
+    expect(ps()).toContain('if (-not $opened -and $_ -cmatch');
+  });
+});
+
 describe('[P2] PowerShell matching', () => {
   it('is case-insensitive, like PowerShell itself', () => {
     const ps = completionScript('powershell', entries);

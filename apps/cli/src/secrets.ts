@@ -27,6 +27,26 @@ function isTombstoneAtLeast(entry: Entry | undefined, at: number): boolean {
   return entry !== undefined && 'deleted' in entry && entry.at >= at;
 }
 
+/**
+ * The keychain could not be read (locked, or its service is down), so whether it holds a
+ * newer login is unknown. Reads fail closed rather than guess; retryable once it unlocks,
+ * or with `ROOSTER_KEYRING=off` to use only the credentials file.
+ */
+export class CredentialStoreUnavailable extends Error {
+  constructor() {
+    super('The system keychain could not be read.');
+    this.name = 'CredentialStoreUnavailable';
+  }
+}
+
+/** Keychain and file kept changing while being read (another rooster process); retryable. */
+export class CredentialsChanging extends Error {
+  constructor() {
+    super('Credentials are being changed by another rooster process.');
+    this.name = 'CredentialsChanging';
+  }
+}
+
 /** A logout that could not make the stored login unusable locally. */
 export class CredentialRemovalError extends Error {
   constructor(
@@ -48,6 +68,8 @@ export interface SecretStore {
 const SERVICE = 'rooster';
 /** Snapshot re-reads before a credential read settles (see `get`). */
 const READ_ATTEMPTS = 5;
+/** A keychain that exists but could not be read. */
+const UNKNOWN: unique symbol = Symbol('unknown');
 
 interface KeyringEntry {
   getPassword(): Promise<string | undefined>;
@@ -146,21 +168,31 @@ export class LayeredSecretStore implements SecretStore {
     return this.keyring.then((factory) => (factory === null ? null : factory(SERVICE, profile)));
   }
 
-  /** The keychain's entry; `undefined` when empty, `'unavailable'` when it can't be read. */
-  private async keychainEntry(profile: string): Promise<Entry | undefined | 'unavailable'> {
+  /**
+   * The keychain's entry: `undefined` when it holds none, or when there is no keychain at all
+   * (no native module, `ROOSTER_KEYRING=off`); `UNKNOWN` when a keychain exists but could
+   * not be read. Unknown is never treated as empty.
+   */
+  private async keychainEntry(profile: string): Promise<Entry | undefined | typeof UNKNOWN> {
+    let keychain: KeyringEntry | null;
     try {
-      const keychain = await this.keychain(profile);
-      if (keychain === null) return 'unavailable';
-      const raw = await keychain.getPassword();
-      if (raw === undefined || raw === null || raw === '') return undefined;
-      try {
-        return parseEntry(JSON.parse(raw));
-      } catch {
-        // Not ours (or an unbound token): never sent anywhere.
-        return undefined;
-      }
+      keychain = await this.keychain(profile);
     } catch {
-      return 'unavailable';
+      return UNKNOWN;
+    }
+    if (keychain === null) return undefined;
+    let raw: string | undefined | null;
+    try {
+      raw = await keychain.getPassword();
+    } catch {
+      return UNKNOWN;
+    }
+    if (raw === undefined || raw === null || raw === '') return undefined;
+    try {
+      return parseEntry(JSON.parse(raw));
+    } catch {
+      // Not ours (or an unbound token): never sent anywhere.
+      return undefined;
     }
   }
 
@@ -170,27 +202,35 @@ export class LayeredSecretStore implements SecretStore {
    * on time, and the next login or logout replaces or clears it.
    *
    * The two stores can't be read atomically, so a login in another process between the two
-   * reads could yield an obsolete pair. Both are read again until two snapshots agree
-   * (bounded); the newest entry of a stable snapshot wins.
+   * reads could yield an obsolete pair: both are read again until two consecutive snapshots
+   * agree. Fails closed: `CredentialsChanging` when they never settle, and
+   * `CredentialStoreUnavailable` when the settled keychain state is unknown.
    */
   async get(profile: string): Promise<Credential | undefined> {
     let snapshot = await this.snapshot(profile);
-    for (let attempt = 0; attempt < READ_ATTEMPTS; attempt++) {
+    let settled = false;
+    for (let attempt = 0; attempt < READ_ATTEMPTS && !settled; attempt++) {
       const again = await this.snapshot(profile);
-      if (again.key === snapshot.key) break;
+      settled = again.key === snapshot.key;
       snapshot = again;
     }
+    if (!settled) throw new CredentialsChanging();
     const { keychain, file } = snapshot;
+    if (keychain === UNKNOWN) throw new CredentialStoreUnavailable();
     const winner =
       keychain !== undefined && (file === undefined || keychain.at > file.at) ? keychain : file;
     return isCredential(winner) ? winner : undefined;
   }
 
-  private async snapshot(profile: string) {
-    const fromKeychain = await this.keychainEntry(profile);
-    const keychain = fromKeychain === 'unavailable' ? undefined : fromKeychain;
+  private async snapshot(profile: string): Promise<{
+    keychain: Entry | undefined | typeof UNKNOWN;
+    file: Entry | undefined;
+    key: string;
+  }> {
+    const keychain = await this.keychainEntry(profile);
     const file = this.file.entry(profile);
-    return { keychain, file, key: JSON.stringify([fromKeychain ?? null, file ?? null]) };
+    const key = JSON.stringify([keychain === UNKNOWN ? '?' : (keychain ?? null), file ?? null]);
+    return { keychain, file, key };
   }
 
   /** A write time newer than anything stored, even with a clock that went backwards. */
@@ -198,7 +238,7 @@ export class LayeredSecretStore implements SecretStore {
     const keychain = await this.keychainEntry(profile);
     const file = this.file.entry(profile);
     const latest = Math.max(
-      keychain === 'unavailable' || keychain === undefined ? 0 : keychain.at,
+      keychain === UNKNOWN || keychain === undefined ? 0 : keychain.at,
       file?.at ?? 0,
     );
     return Math.max(this.now(), latest + 1);

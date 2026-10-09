@@ -296,7 +296,9 @@
     "notRooster": "{server} ser inte ut att vara en rooster-server.",
     "keychainFallback": "Ingen nyckelring finns tillgänglig; inloggningen sparas i {path} (bara läsbar för dig).",
     "storedInFile": "Inloggningen sparades i credentials-filen.",
-    "otherServer": "Profilens inloggning gäller {stored}, inte {server}. Kör rooster login --server {server} (eller använd en annan --profile)."
+    "otherServer": "Profilens inloggning gäller {stored}, inte {server}. Kör rooster login --server {server} (eller använd en annan --profile).",
+    "keychainUnavailable": "Systemets nyckelring går inte att läsa (den kan vara låst), så kommandot gissar inte vilken sparad inloggning som gäller. Lås upp nyckelringen och försök igen, eller sätt ROOSTER_KEYRING=off för att bara använda credentials-filen.",
+    "credentialsChanging": "De sparade inloggningarna ändras av en annan rooster-process; försök igen."
   },
   "login": {
     "arg": {

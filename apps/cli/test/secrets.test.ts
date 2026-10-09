@@ -2,7 +2,13 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CredentialRemovalError, FileSecretStore, LayeredSecretStore } from '../src/secrets.ts';
+import {
+  CredentialRemovalError,
+  CredentialStoreUnavailable,
+  CredentialsChanging,
+  FileSecretStore,
+  LayeredSecretStore,
+} from '../src/secrets.ts';
 import { FAKE_ENV, fakeApi, ME } from './support/fake-api.ts';
 import { cliHarness } from './support/fake-io.ts';
 
@@ -148,7 +154,8 @@ describe('credential storage (07 §2)', () => {
     time.tick();
     keychain.state.locked = true;
     await store.delete('home');
-    expect(await store.get('home')).toBeUndefined();
+    // Locked, the keychain's state is unknown: reads fail closed rather than guess.
+    await expect(store.get('home')).rejects.toBeInstanceOf(CredentialStoreUnavailable);
     keychain.state.locked = false;
     expect(await store.get('home')).toBeUndefined();
     expect(await store.get('home')).toBeUndefined();
@@ -292,6 +299,7 @@ describe('[P2] logout never reports success while the login stays usable', () =>
     await store.set('home', 'tok', 'https://a.example');
     keychain.state.locked = true;
     await store.delete('home');
+    keychain.state.locked = false;
     expect(await store.get('home')).toBeUndefined();
   });
 
@@ -324,4 +332,129 @@ describe('[P2] logout never reports success while the login stays usable', () =>
       }
     },
   );
+});
+
+describe('[P1] an unreadable keychain is unknown, never empty', () => {
+  it('a keychain that locks after the first read fails closed', async () => {
+    const keychain = fakeKeychain();
+    const store = new LayeredSecretStore(new FileSecretStore(dir), keychain.factory, vi.fn());
+    await store.set('home', 'tok', 'https://a.example');
+    let reads = 0;
+    const factory = await keychain.factory();
+    const locking = new LayeredSecretStore(
+      new FileSecretStore(dir),
+      async () => (service: string, account: string) => {
+        const entry = factory(service, account);
+        return {
+          ...entry,
+          getPassword: async () => {
+            reads += 1;
+            if (reads > 1) throw new Error('locked');
+            return entry.getPassword();
+          },
+        };
+      },
+      vi.fn(),
+    );
+    await expect(locking.get('home')).rejects.toBeInstanceOf(CredentialStoreUnavailable);
+  });
+
+  it('an older file credential is not used while the keychain is unreadable', async () => {
+    const keychain = fakeKeychain();
+    const time = clock();
+    const file = new FileSecretStore(dir);
+    const store = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
+    file.put('home', { token: 'old-file', server: 'https://a.example', at: 1 });
+    time.tick();
+    await store.set('home', 'newer', 'https://a.example');
+    // Removing the older file entry failed (say): both exist, the keychain is newer.
+    file.put('home', { token: 'old-file', server: 'https://a.example', at: 1 });
+    keychain.state.locked = true;
+    await expect(store.get('home')).rejects.toBeInstanceOf(CredentialStoreUnavailable);
+    keychain.state.locked = false;
+    expect(await store.get('home')).toMatchObject({ token: 'newer' });
+  });
+
+  it('no keychain at all (no module, ROOSTER_KEYRING=off) is known empty', async () => {
+    const file = new FileSecretStore(dir);
+    const store = new LayeredSecretStore(file, async () => null, vi.fn());
+    await store.set('home', 'tok', 'https://a.example');
+    expect(await store.get('home')).toMatchObject({ token: 'tok' });
+  });
+
+  it('rooster logout and whoami exit 3 naming the keychain, and never say "not signed in"', async () => {
+    const keychain = fakeKeychain();
+    const api = fakeApi({ 'GET /api/v1/me': ME, 'GET /api/v1/me/grants': [] });
+    const cli = cliHarness({ loadKeyring: keychain.factory }, { fetch: api.fetch });
+    const env = { ROOSTER_KEYRING: '' };
+    try {
+      expect((await cli.run(['config', 'set', 'server', FAKE_ENV.ROOSTER_SERVER])).code).toBe(0);
+      const store = new LayeredSecretStore(
+        new FileSecretStore(join(cli.home, 'config', 'rooster')),
+        keychain.factory,
+        () => {},
+      );
+      expect(await store.set('default', 'tok', FAKE_ENV.ROOSTER_SERVER)).toBe('keychain');
+      expect((await cli.run(['whoami', '--quiet'], { env })).stdout).toBe('ada@example.com\n');
+
+      keychain.state.locked = true;
+      const logout = await cli.run(['logout'], { env });
+      expect(logout.code).toBe(3);
+      expect(logout.stderr).toContain('keychain');
+      expect(logout.stderr).not.toContain('isn’t signed in');
+      expect(logout.stderr).not.toContain('Signed out');
+      expect((await cli.run(['whoami'], { env })).code).toBe(3);
+
+      keychain.state.locked = false;
+      expect((await cli.run(['whoami', '--quiet'], { env })).stdout).toBe('ada@example.com\n');
+    } finally {
+      cli.cleanup();
+    }
+  });
+});
+
+describe('[P2] reads that never settle fail closed', () => {
+  it('throws CredentialsChanging when every snapshot differs (another process keeps writing)', async () => {
+    const keychain = fakeKeychain();
+    const file = new FileSecretStore(dir);
+    let at = 1;
+    const factory = await keychain.factory();
+    const churning = new LayeredSecretStore(
+      file,
+      async () => (service: string, account: string) => ({
+        ...factory(service, account),
+        // Each read sees a newer login written in between.
+        getPassword: async () => {
+          at += 1;
+          return JSON.stringify({ token: `t${at}`, server: 'https://a.example', at });
+        },
+      }),
+      vi.fn(),
+    );
+    await expect(churning.get('home')).rejects.toBeInstanceOf(CredentialsChanging);
+  });
+
+  it('exits 5 with a retry hint from the CLI', async () => {
+    const keychain = fakeKeychain();
+    let at = 1;
+    const factory = await keychain.factory();
+    const cli = cliHarness({
+      loadKeyring: async () => (service: string, account: string) => ({
+        ...factory(service, account),
+        getPassword: async () => {
+          at += 1;
+          return JSON.stringify({ token: 't', server: 'https://rooster.test', at });
+        },
+      }),
+    });
+    try {
+      const out = await cli.run(['whoami'], {
+        env: { ROOSTER_KEYRING: '', ROOSTER_SERVER: 'https://rooster.test' },
+      });
+      expect(out.code).toBe(5);
+      expect(out.stderr).toContain('another rooster process');
+    } finally {
+      cli.cleanup();
+    }
+  });
 });
