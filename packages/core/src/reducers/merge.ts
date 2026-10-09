@@ -91,6 +91,11 @@ export function mergeResponse(state: ListState, op: ListOpSpec, response: unknow
     case 'task.removeTag':
       return isTask(response) ? { state: putTask(state, response), refetch: false } : keep;
     case 'task.expanded':
+    case 'task.follow':
+    case 'comment.create':
+    case 'comment.patch':
+    case 'comment.delete':
+    case 'comment.restore':
     case 'tag.create':
     case 'task.delete':
     case 'group.delete':

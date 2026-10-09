@@ -5,6 +5,7 @@ import {
   ListChecks,
   type LucideIcon,
   Sun,
+  Users,
 } from 'lucide-react';
 import type { Org } from '../../data/types';
 import type { OrgViewId } from './paths';
@@ -28,6 +29,7 @@ export const sidebarViews: readonly SidebarViewDefinition[] = [
   { id: 'week', icon: CalendarRange },
   { id: 'overdue', icon: CircleAlert, badge: 'danger' },
   { id: 'nodate', icon: CalendarOff },
+  { id: 'everyone', icon: Users, sharedOnly: true },
 ];
 
 export function viewsFor(org: Pick<Org, 'isPersonal'>): readonly SidebarViewDefinition[] {

@@ -27,7 +27,14 @@ export interface ActionContext {
 }
 
 /** Org views that need an org to go to (the current one, else the first). */
-const orgViews = new Set<ShortcutId>(['goMyTasks', 'goToday', 'goWeek', 'goOverdue', 'goNoDate']);
+const orgViews = new Set<ShortcutId>([
+  'goMyTasks',
+  'goToday',
+  'goWeek',
+  'goOverdue',
+  'goNoDate',
+  'goEveryone',
+]);
 
 function visible(id: PaletteCommandId, ctx: ActionContext): boolean {
   switch (paletteGroupOf(id)) {

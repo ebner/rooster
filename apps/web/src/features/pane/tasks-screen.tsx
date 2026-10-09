@@ -187,7 +187,7 @@ export function TasksScreen({
               userId={userId}
               label={title}
               pane={pane}
-              view={view === 'my' ? undefined : view}
+              view={view === 'my' || view === 'everyone' ? undefined : view}
             />
           </ViewBody>
         </>

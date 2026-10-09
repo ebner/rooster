@@ -61,6 +61,12 @@ export function inverseOf(op: ListOpSpec, before: ListState, ctx: ApplyContext):
     case 'tag.create':
       // A tag created on the way stays; undo removes it from the task instead.
       return [];
+    case 'task.follow':
+    case 'comment.create':
+    case 'comment.patch':
+    case 'comment.delete':
+    case 'comment.restore':
+      return [];
     case 'group.create': {
       if (before.groups[id] || before.deletedGroups[id]) return [];
       const after = applyOp(before, op, ctx);
@@ -263,6 +269,8 @@ function inverseBulk(
       );
     case 'move':
       return restorePlacements(before, applyOp(before, listOps.bulk(orgId, op), ctx), op.ids, ctx);
+    case 'assign':
+      return [];
     case 'setDue': {
       // One bulk op per distinct previous due unit.
       const byUnit = new Map<string, { due: Due; ids: string[] }>();

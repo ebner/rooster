@@ -1078,6 +1078,7 @@ export class TaskService {
         parentChain: ancestorsOf(tx, row)
           .reverse()
           .map((a) => ({ id: a.id, title: a.title })),
+        followers: [],
       };
     });
   }
@@ -1213,6 +1214,7 @@ export class TaskService {
     return immediate(this.deps.db, (tx) => {
       const { org } = requireMembership(tx, actor.userId, orgRef);
       const view = query.view ?? 'my';
+      if (view === 'everyone') throw new AppError('not_implemented', 501, 'view=everyone');
       const completed = query.completed ?? 'false';
       const limit = query.limit ?? PAGE_LIMIT_DEFAULT;
       const offset = decodeCursor(query.cursor, isOffsetCursor)?.o ?? 0;

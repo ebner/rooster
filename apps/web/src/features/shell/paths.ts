@@ -1,9 +1,9 @@
 import type { Org } from '../../data/types';
 
-/** Views a sidebar org section can link to (02 §2). P6 appends everyone. */
-export type OrgViewId = 'my' | 'today' | 'week' | 'overdue' | 'nodate';
+/** Views a sidebar org section can link to (02 §2). `everyone` is for shared orgs only. */
+export type OrgViewId = 'my' | 'today' | 'week' | 'overdue' | 'nodate' | 'everyone';
 
-export type SettingsSection = 'profile' | 'behaviour' | 'security' | 'data';
+export type SettingsSection = 'profile' | 'behaviour' | 'notifications' | 'security' | 'data';
 
 /** The personal org is addressed by the `personal` alias (05 §2), giving stable URLs. */
 export function orgUrlSlug(org: Pick<Org, 'isPersonal' | 'slug'>): string {
@@ -20,4 +20,6 @@ export const paths = {
   orgInvites: (slug: string) => `/o/${slug}/settings#invites`,
   settings: (section: SettingsSection) => `/settings/${section}`,
   admin: '/admin',
+  /** The notification inbox (P6, FR-NOT-1): one list across every org. */
+  inbox: '/inbox',
 } as const;

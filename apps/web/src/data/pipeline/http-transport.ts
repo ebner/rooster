@@ -120,6 +120,12 @@ function request(op: ListOp, orgId: string, signal?: AbortSignal): Promise<Fetch
       });
     case 'group.restore':
       return api.POST('/api/v1/groups/{id}/restore', { params: { path: { id } }, ...init });
+    case 'task.follow':
+    case 'comment.create':
+    case 'comment.patch':
+    case 'comment.delete':
+    case 'comment.restore':
+      return Promise.reject(new Error(`${op.kind}: the P6 routes are not wired yet`));
   }
 }
 

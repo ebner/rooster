@@ -1191,6 +1191,7 @@ export interface components {
             parentId?: string;
             tagIds?: string[];
             tagNames?: string[];
+            assigneeId?: string | null;
             parse?: boolean;
         };
         TaskPatchResult: {
@@ -1205,6 +1206,7 @@ export interface components {
             dueTz?: string | null;
             startDate?: string | null;
             parentId?: string | null;
+            assigneeId?: string | null;
         };
         TaskMoveResult: {
             placement: components["schemas"]["Placement"];
@@ -1277,6 +1279,13 @@ export interface components {
                 dueTz?: string | null;
                 startDate?: string | null;
             };
+        } | {
+            /** @enum {string} */
+            op: "assign";
+            ids: string[];
+            args: {
+                assigneeId: string | null;
+            };
         };
         TaskDetail: {
             id: string;
@@ -1311,6 +1320,7 @@ export interface components {
                 id: string;
                 title: string;
             }[];
+            followers: string[];
         };
         SubtaskReorderResult: {
             subtaskPosition: string;
@@ -3750,12 +3760,14 @@ export interface operations {
             query?: {
                 limit?: number;
                 cursor?: string;
-                view?: "my" | "today" | "week" | "overdue" | "nodate";
+                view?: "my" | "today" | "week" | "overdue" | "nodate" | "everyone";
                 groupId?: string;
                 completed?: "false" | "true" | "any";
                 dueFrom?: string;
                 dueTo?: string;
                 tag?: string | string[];
+                assignee?: ("me" | "none" | "any") | string | (("me" | "none" | "any") | string)[];
+                hasDue?: "true" | "false";
                 q?: string;
             };
             header?: never;

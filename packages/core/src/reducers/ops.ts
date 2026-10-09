@@ -1,3 +1,4 @@
+import type { CommentPatch } from '../schemas/collab.ts';
 import type {
   BulkOp,
   GroupCreate,
@@ -23,12 +24,15 @@ export type GroupCreateBody = GroupCreate & { id: string };
 /** POST /tasks/:id/duplicate with the copy's client id. */
 export type TaskDuplicateBody = { id: string; includeSubtasks: boolean };
 export type TagCreateBody = TagCreate & { id: string };
+/** P6. POST /tasks/:taskId/comments with the comment's client id. */
+export type CommentCreateBody = { id: string; body: string };
 
 /**
  * One list mutation, before the pipeline stamps it (04 §6.2). Each kind is exactly one HTTP
- * request; `payload` is the request body, except for `task.expanded` (PUT or DELETE) and
- * `task.addTag`/`task.removeTag` (the tag id is part of the path). `entityId` is the task,
- * group or tag id (the org id for bulk ops).
+ * request; `payload` is the request body, except for `task.expanded` and `task.follow` (PUT or
+ * DELETE) and `task.addTag`/`task.removeTag` (the tag id is part of the path). `entityId` is
+ * the task, group, tag or comment id (the org id for bulk ops); comment ops on an existing
+ * comment also carry its `taskId`, which locates the `['activity', taskId]` cache.
  */
 export type ListOpSpec =
   | { kind: 'task.create'; entityId: string; payload: TaskCreateBody }
@@ -43,6 +47,11 @@ export type ListOpSpec =
   | { kind: 'task.expanded'; entityId: string; payload: { expanded: boolean } }
   | { kind: 'task.addTag'; entityId: string; payload: { tagId: string } }
   | { kind: 'task.removeTag'; entityId: string; payload: { tagId: string } }
+  | { kind: 'task.follow'; entityId: string; payload: { following: boolean } }
+  | { kind: 'comment.create'; entityId: string; payload: CommentCreateBody }
+  | { kind: 'comment.patch'; entityId: string; taskId: string; payload: CommentPatch }
+  | { kind: 'comment.delete'; entityId: string; taskId: string; payload: Empty }
+  | { kind: 'comment.restore'; entityId: string; taskId: string; payload: Empty }
   | { kind: 'tag.create'; entityId: string; payload: TagCreateBody }
   | { kind: 'group.create'; entityId: string; payload: GroupCreateBody }
   | { kind: 'group.patch'; entityId: string; payload: GroupPatch }
@@ -119,6 +128,36 @@ export const listOps = {
     kind: 'task.removeTag',
     entityId: id,
     payload: { tagId },
+  }),
+  /** P6. PUT (follow) or DELETE (unfollow = muted) /tasks/:id/followers/me. */
+  setFollowing: (taskId: string, following: boolean): ListOpSpec => ({
+    kind: 'task.follow',
+    entityId: taskId,
+    payload: { following },
+  }),
+  /** P6. `entityId` is the TASK (the comment id is in the payload, as the route has it). */
+  createComment: (taskId: string, payload: CommentCreateBody): ListOpSpec => ({
+    kind: 'comment.create',
+    entityId: taskId,
+    payload,
+  }),
+  patchComment: (commentId: string, taskId: string, payload: CommentPatch): ListOpSpec => ({
+    kind: 'comment.patch',
+    entityId: commentId,
+    taskId,
+    payload,
+  }),
+  deleteComment: (commentId: string, taskId: string): ListOpSpec => ({
+    kind: 'comment.delete',
+    entityId: commentId,
+    taskId,
+    payload: {},
+  }),
+  restoreComment: (commentId: string, taskId: string): ListOpSpec => ({
+    kind: 'comment.restore',
+    entityId: commentId,
+    taskId,
+    payload: {},
   }),
   createTag: (payload: TagCreateBody): ListOpSpec => ({
     kind: 'tag.create',

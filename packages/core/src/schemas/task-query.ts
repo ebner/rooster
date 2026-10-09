@@ -9,6 +9,7 @@ import { taskSchema } from './list.ts';
 
 export const PAGE_LIMIT_DEFAULT = 50;
 const tagFilterValue = z.string().min(1).max(64);
+const assigneeFilterValue = z.union([z.enum(['me', 'none', 'any']), idSchema]);
 export const PAGE_LIMIT_MAX = 200;
 
 export const pageQuerySchema = z.object({
@@ -23,12 +24,14 @@ export const myListQuerySchema = z.object({
 });
 
 /**
- * `my`: my list. `today`: due today or earlier. `week`: due within the next 7 days
+ * `everyone` (P6, FR-VIEW-2): every task in the org regardless of assignee, sorted by due date
+ * (no date last), then created date; combine with `assignee` and `hasDue`. Shared orgs only
+ * (`409 personal_org` in a personal org). The other views: `my`: my list. `today`: due today or earlier. `week`: due within the next 7 days
  * (today … today + 6). `overdue`: past due (a timed due counts once its instant passed).
  * `nodate`: no due date. Dates are evaluated in the actor's timezone; every view except
- * `my` covers the tasks assigned to the actor. `everyone` arrives in Phase 6.
+ * `my` and `everyone` covers the tasks assigned to the actor.
  */
-export const TASK_VIEWS = ['my', 'today', 'week', 'overdue', 'nodate'] as const;
+export const TASK_VIEWS = ['my', 'today', 'week', 'overdue', 'nodate', 'everyone'] as const;
 export const taskViewSchema = z.enum(TASK_VIEWS);
 
 export const taskCompletedFilterSchema = z.enum(['false', 'true', 'any']);
@@ -46,6 +49,13 @@ export const taskQuerySchema = pageQuerySchema.extend({
    * tag ID, or else a tag name (case-insensitive). An unknown tag matches nothing.
    */
   tag: z.union([tagFilterValue, z.array(tagFilterValue).max(20)]).optional(),
+  /**
+   * P6. Repeatable, OR-combined: `me`, a member's user ID, `none` (unassigned) or `any`.
+   * Default `any` for `view=everyone`; the other views are always the actor's.
+   */
+  assignee: z.union([assigneeFilterValue, z.array(assigneeFilterValue).max(50)]).optional(),
+  /** P6. `true`: only tasks with a due date; `false`: only tasks without. */
+  hasDue: z.enum(['true', 'false']).optional(),
   /** P5. Full-text query in the `parseSearchQuery` grammar (`@rooster/core/search`). */
   q: z.string().trim().min(1).max(200).optional(),
 });

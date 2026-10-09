@@ -29,12 +29,14 @@ import { SyncPill } from '../../ui/sync-pill';
 import { TaskCheckbox } from '../../ui/task-checkbox';
 import { ToastView, toast } from '../../ui/toast';
 import { Tooltip, tooltipSurface } from '../../ui/tooltip';
+import { CollabKitchenSection } from '../collab/kitchen-sink-section';
 import { DatesSection } from '../dates/kitchen-sink-section';
 import { EditorSection } from '../editor/kitchen-sink-section';
 import { ListSection } from '../list/kitchen-sink-section';
 import { LanguageSwitch } from '../locale/language-switch';
 import { PaletteKitchenSection } from '../palette/kitchen-sink-section';
 import { PaneSection } from '../pane/kitchen-sink-section';
+import { PeopleKitchenSection } from '../people/kitchen-sink-section';
 import { PwaKitchenSection } from '../pwa/kitchen-sink-section';
 import { MobileKitchenSection } from '../shell/mobile-kitchen-section';
 import { TagsKitchenSection } from '../tags/kitchen-sink-section';
@@ -768,6 +770,8 @@ export function KitchenSink() {
         <MobileKitchenSection />
         <ViewsKitchenSection />
         <PaletteKitchenSection />
+        <PeopleKitchenSection />
+        <CollabKitchenSection />
       </main>
     </div>
   );

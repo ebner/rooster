@@ -77,6 +77,13 @@ export function applyOp(state: ListState, op: ListOpSpec, ctx: ApplyContext): Li
     case 'tag.create':
       // Tags live in their own cache (['tags', orgId]); the list state holds only tag ids.
       return state;
+    case 'task.follow':
+    case 'comment.create':
+    case 'comment.patch':
+    case 'comment.delete':
+    case 'comment.restore':
+      // Followers and comments live in the detail and activity caches, not in the list.
+      return state;
     case 'group.create':
       return createGroup(state, op.payload);
     case 'group.patch': {
@@ -544,6 +551,8 @@ function applyBulk(state: ListState, op: BulkOp, now: number, userId: string): L
     case 'addTag':
     case 'removeTag':
       return tagTasks(state, op.ids, op.args.tagId, op.op === 'addTag');
+    case 'assign':
+      return state;
   }
 }
 

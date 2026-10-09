@@ -179,6 +179,12 @@ export const taskCreateSchema = orderingIntentSchema
     tagIds: z.array(idSchema).max(50).optional(),
     /** P3. Tag names to attach; unknown names are created with the next palette colour. */
     tagNames: z.array(z.string().min(1).max(40)).max(50).optional(),
+    /**
+     * P6. Default: the actor. Another member puts the task at the top of THEIR Inbox (05 §4.1;
+     * `groupId` and intents are then ignored); null creates it unassigned (no placement).
+     * Personal orgs accept only the actor.
+     */
+    assigneeId: idSchema.nullable().optional(),
     /** CLI/MCP: run the NL parser on the title server-side (06 §2.4). */
     parse: z.boolean().optional(),
   })
@@ -198,6 +204,11 @@ export const taskPatchSchema = z
      * depth > 5 → 422), null makes it top-level (placed at the top of the assignee's Inbox).
      */
     parentId: idSchema.nullable().optional(),
+    /**
+     * P6 (FR-COL-1/2). An org member or null (unassigned). LWW key `assignee`. A changed
+     * assignee moves the placement to the top of the new assignee's Inbox (05 §4.1).
+     */
+    assigneeId: idSchema.nullable().optional(),
   })
   .refine(dueConsistent, { error: DUE_ERROR, path: ['dueTime'] })
   .refine((v) => Object.values(v).some((x) => x !== undefined), { error: 'Nothing to update' });
@@ -238,6 +249,12 @@ export const bulkOpSchema = z.discriminatedUnion('op', [
     ids: bulkIds,
     args: z.object(dueFields).refine(dueConsistent, { error: DUE_ERROR }),
   }),
+  /** P6. Same semantics as `PATCH {assigneeId}` per task. */
+  z.object({
+    op: z.literal('assign'),
+    ids: bulkIds,
+    args: z.object({ assigneeId: idSchema.nullable() }),
+  }),
 ]);
 
 export const bulkResultSchema = z.object({
@@ -251,6 +268,8 @@ export const taskDetailSchema = taskSchema.extend({
   subtasks: z.array(taskSchema),
   /** Ancestors from the root down to the direct parent. */
   parentChain: z.array(z.object({ id: idSchema, title: z.string() })),
+  /** P6. Active (unmuted) followers, in follow order (FR-COL-4). Empty in personal orgs. */
+  followers: z.array(idSchema),
 });
 
 /** P3. POST /tasks/:id/reorder — among subtask siblings. */

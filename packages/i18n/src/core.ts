@@ -34,6 +34,9 @@ export const namespaces = [
   'mobile',
   'views',
   'palette',
+  'people',
+  'collab',
+  'inbox',
 ] as const;
 export type Namespace = (typeof namespaces)[number];
 export const defaultNamespace: Namespace = 'common';

@@ -25,6 +25,7 @@ function toDetail(detail: TaskDetail, state: ListState): TaskDetail {
     description: task.description ?? detail.description,
     subtasks: childrenOf(state, detail.id),
     parentChain: detail.parentChain,
+    followers: detail.followers,
   };
 }
 

@@ -11,7 +11,8 @@
     "today": "Today",
     "week": "Next 7 days",
     "overdue": "Overdue",
-    "nodate": "No date"
+    "nodate": "No date",
+    "everyone": "Everyone's tasks"
   },
   "org": {
     "menu": "{name} options",

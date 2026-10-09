@@ -25,7 +25,8 @@ describe('task query schemas', () => {
     expect(
       taskQuerySchema.parse({ view: 'overdue', completed: 'any', dueFrom: '2026-10-01' }),
     ).toEqual({ view: 'overdue', completed: 'any', dueFrom: '2026-10-01' });
-    expect(taskQuerySchema.safeParse({ view: 'everyone' }).success).toBe(false);
+    expect(taskQuerySchema.safeParse({ view: 'everyone' }).success).toBe(true);
+    expect(taskQuerySchema.safeParse({ view: 'all' }).success).toBe(false);
     expect(taskQuerySchema.safeParse({ dueTo: '2026-02-30' }).success).toBe(false);
     expect(taskPageSchema.parse({ items: [], nextCursor: null })).toEqual({
       items: [],

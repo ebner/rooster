@@ -11,7 +11,8 @@
     "today": "Idag",
     "week": "Kommande 7 dagar",
     "overdue": "Försenade",
-    "nodate": "Utan datum"
+    "nodate": "Utan datum",
+    "everyone": "Allas uppgifter"
   },
   "org": {
     "menu": "Alternativ för {name}",

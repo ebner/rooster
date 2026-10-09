@@ -55,7 +55,8 @@
       "today": "Idag",
       "week": "7 dagar",
       "overdue": "Försenade",
-      "nodate": "Utan datum"
+      "nodate": "Utan datum",
+      "everyone": "Alla"
     }
   },
   "nav": {

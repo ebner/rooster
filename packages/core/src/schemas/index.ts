@@ -1,5 +1,6 @@
 export * from './admin.ts';
 export * from './backup.ts';
+export * from './collab.ts';
 export * from './common.ts';
 export * from './events.ts';
 export * from './export.ts';

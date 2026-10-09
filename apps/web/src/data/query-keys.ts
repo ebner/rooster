@@ -13,4 +13,11 @@ export const queryKeys = {
   search: (scope: string, q: string) => ['search', scope, q] as const,
   /** SSE invalidates `['trash', orgId]` (04 §4.5); the pages hang below it. */
   trash: (orgId: string) => ['trash', orgId] as const,
+  /** P6. SSE invalidates `['everyone', orgId]`; the filter variants hang below it. */
+  everyone: (orgId: string, filters: string) => ['everyone', orgId, filters] as const,
+  /** P6. The task's comment and activity feed (SSE `['activity', taskId]`). */
+  activity: (taskId: string) => ['activity', taskId] as const,
+  /** P6. The notification inbox (SSE `['notifications']`); the filter hangs below it. */
+  notifications: (filter: 'all' | 'unread') => ['notifications', filter] as const,
+  notificationPrefs: ['notification-prefs'] as const,
 };

@@ -14,16 +14,19 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as NotInvitedRouteImport } from './routes/not-invited'
 import { Route as AppAdminRouteImport } from './routes/_app/admin'
+import { Route as AppInboxRouteImport } from './routes/_app/inbox'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as Char91_devChar93UiRouteImport } from './routes/[_dev]/ui'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings.index'
 import { Route as AppSettingsBehaviourRouteImport } from './routes/_app/settings.behaviour'
 import { Route as AppSettingsDataRouteImport } from './routes/_app/settings.data'
+import { Route as AppSettingsNotificationsRouteImport } from './routes/_app/settings.notifications'
 import { Route as AppSettingsProfileRouteImport } from './routes/_app/settings.profile'
 import { Route as AppSettingsSecurityRouteImport } from './routes/_app/settings.security'
 import { Route as AppOOrgSlugTasksRouteImport } from './routes/_app/o.$orgSlug._tasks'
 import { Route as AppOOrgSlugSettingsRouteImport } from './routes/_app/o.$orgSlug.settings'
+import { Route as AppOOrgSlugTasksEveryoneRouteImport } from './routes/_app/o.$orgSlug._tasks.everyone'
 import { Route as AppOOrgSlugTasksMyRouteImport } from './routes/_app/o.$orgSlug._tasks.my'
 import { Route as AppOOrgSlugTasksNodateRouteImport } from './routes/_app/o.$orgSlug._tasks.nodate'
 import { Route as AppOOrgSlugTasksOverdueRouteImport } from './routes/_app/o.$orgSlug._tasks.overdue'
@@ -53,6 +56,11 @@ const NotInvitedRoute = NotInvitedRouteImport.update({
 const AppAdminRoute = AppAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppInboxRoute = AppInboxRouteImport.update({
+  id: '/inbox',
+  path: '/inbox',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -85,6 +93,12 @@ const AppSettingsDataRoute = AppSettingsDataRouteImport.update({
   path: '/data',
   getParentRoute: () => AppSettingsRoute,
 } as any)
+const AppSettingsNotificationsRoute =
+  AppSettingsNotificationsRouteImport.update({
+    id: '/notifications',
+    path: '/notifications',
+    getParentRoute: () => AppSettingsRoute,
+  } as any)
 const AppSettingsProfileRoute = AppSettingsProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -105,6 +119,12 @@ const AppOOrgSlugSettingsRoute = AppOOrgSlugSettingsRouteImport.update({
   path: '/o/$orgSlug/settings',
   getParentRoute: () => AppRoute,
 } as any)
+const AppOOrgSlugTasksEveryoneRoute =
+  AppOOrgSlugTasksEveryoneRouteImport.update({
+    id: '/everyone',
+    path: '/everyone',
+    getParentRoute: () => AppOOrgSlugTasksRoute,
+  } as any)
 const AppOOrgSlugTasksMyRoute = AppOOrgSlugTasksMyRouteImport.update({
   id: '/my',
   path: '/my',
@@ -141,16 +161,19 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/not-invited': typeof NotInvitedRoute
   '/admin': typeof AppAdminRoute
+  '/inbox': typeof AppInboxRoute
   '/settings': typeof AppSettingsRouteWithChildren
   '/_dev/ui': typeof Char91_devChar93UiRoute
   '/invite/$token': typeof InviteTokenRoute
   '/settings/behaviour': typeof AppSettingsBehaviourRoute
   '/settings/data': typeof AppSettingsDataRoute
+  '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/security': typeof AppSettingsSecurityRoute
   '/settings/': typeof AppSettingsIndexRoute
   '/o/$orgSlug': typeof AppOOrgSlugTasksRouteWithChildren
   '/o/$orgSlug/settings': typeof AppOOrgSlugSettingsRoute
+  '/o/$orgSlug/everyone': typeof AppOOrgSlugTasksEveryoneRoute
   '/o/$orgSlug/my': typeof AppOOrgSlugTasksMyRoute
   '/o/$orgSlug/nodate': typeof AppOOrgSlugTasksNodateRoute
   '/o/$orgSlug/overdue': typeof AppOOrgSlugTasksOverdueRoute
@@ -163,15 +186,18 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/not-invited': typeof NotInvitedRoute
   '/admin': typeof AppAdminRoute
+  '/inbox': typeof AppInboxRoute
   '/_dev/ui': typeof Char91_devChar93UiRoute
   '/invite/$token': typeof InviteTokenRoute
   '/settings/behaviour': typeof AppSettingsBehaviourRoute
   '/settings/data': typeof AppSettingsDataRoute
+  '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/security': typeof AppSettingsSecurityRoute
   '/settings': typeof AppSettingsIndexRoute
   '/o/$orgSlug': typeof AppOOrgSlugTasksRouteWithChildren
   '/o/$orgSlug/settings': typeof AppOOrgSlugSettingsRoute
+  '/o/$orgSlug/everyone': typeof AppOOrgSlugTasksEveryoneRoute
   '/o/$orgSlug/my': typeof AppOOrgSlugTasksMyRoute
   '/o/$orgSlug/nodate': typeof AppOOrgSlugTasksNodateRoute
   '/o/$orgSlug/overdue': typeof AppOOrgSlugTasksOverdueRoute
@@ -186,16 +212,19 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/not-invited': typeof NotInvitedRoute
   '/_app/admin': typeof AppAdminRoute
+  '/_app/inbox': typeof AppInboxRoute
   '/_app/settings': typeof AppSettingsRouteWithChildren
   '/_dev/ui': typeof Char91_devChar93UiRoute
   '/invite/$token': typeof InviteTokenRoute
   '/_app/settings/behaviour': typeof AppSettingsBehaviourRoute
   '/_app/settings/data': typeof AppSettingsDataRoute
+  '/_app/settings/notifications': typeof AppSettingsNotificationsRoute
   '/_app/settings/profile': typeof AppSettingsProfileRoute
   '/_app/settings/security': typeof AppSettingsSecurityRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
   '/_app/o/$orgSlug/_tasks': typeof AppOOrgSlugTasksRouteWithChildren
   '/_app/o/$orgSlug/settings': typeof AppOOrgSlugSettingsRoute
+  '/_app/o/$orgSlug/_tasks/everyone': typeof AppOOrgSlugTasksEveryoneRoute
   '/_app/o/$orgSlug/_tasks/my': typeof AppOOrgSlugTasksMyRoute
   '/_app/o/$orgSlug/_tasks/nodate': typeof AppOOrgSlugTasksNodateRoute
   '/_app/o/$orgSlug/_tasks/overdue': typeof AppOOrgSlugTasksOverdueRoute
@@ -210,16 +239,19 @@ export interface FileRouteTypes {
     | '/login'
     | '/not-invited'
     | '/admin'
+    | '/inbox'
     | '/settings'
     | '/_dev/ui'
     | '/invite/$token'
     | '/settings/behaviour'
     | '/settings/data'
+    | '/settings/notifications'
     | '/settings/profile'
     | '/settings/security'
     | '/settings/'
     | '/o/$orgSlug'
     | '/o/$orgSlug/settings'
+    | '/o/$orgSlug/everyone'
     | '/o/$orgSlug/my'
     | '/o/$orgSlug/nodate'
     | '/o/$orgSlug/overdue'
@@ -232,15 +264,18 @@ export interface FileRouteTypes {
     | '/login'
     | '/not-invited'
     | '/admin'
+    | '/inbox'
     | '/_dev/ui'
     | '/invite/$token'
     | '/settings/behaviour'
     | '/settings/data'
+    | '/settings/notifications'
     | '/settings/profile'
     | '/settings/security'
     | '/settings'
     | '/o/$orgSlug'
     | '/o/$orgSlug/settings'
+    | '/o/$orgSlug/everyone'
     | '/o/$orgSlug/my'
     | '/o/$orgSlug/nodate'
     | '/o/$orgSlug/overdue'
@@ -254,16 +289,19 @@ export interface FileRouteTypes {
     | '/login'
     | '/not-invited'
     | '/_app/admin'
+    | '/_app/inbox'
     | '/_app/settings'
     | '/_dev/ui'
     | '/invite/$token'
     | '/_app/settings/behaviour'
     | '/_app/settings/data'
+    | '/_app/settings/notifications'
     | '/_app/settings/profile'
     | '/_app/settings/security'
     | '/_app/settings/'
     | '/_app/o/$orgSlug/_tasks'
     | '/_app/o/$orgSlug/settings'
+    | '/_app/o/$orgSlug/_tasks/everyone'
     | '/_app/o/$orgSlug/_tasks/my'
     | '/_app/o/$orgSlug/_tasks/nodate'
     | '/_app/o/$orgSlug/_tasks/overdue'
@@ -318,6 +356,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/inbox': {
+      id: '/_app/inbox'
+      path: '/inbox'
+      fullPath: '/inbox'
+      preLoaderRoute: typeof AppInboxRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/settings': {
       id: '/_app/settings'
       path: '/settings'
@@ -360,6 +405,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsDataRouteImport
       parentRoute: typeof AppSettingsRoute
     }
+    '/_app/settings/notifications': {
+      id: '/_app/settings/notifications'
+      path: '/notifications'
+      fullPath: '/settings/notifications'
+      preLoaderRoute: typeof AppSettingsNotificationsRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
     '/_app/settings/profile': {
       id: '/_app/settings/profile'
       path: '/profile'
@@ -387,6 +439,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/o/$orgSlug/settings'
       preLoaderRoute: typeof AppOOrgSlugSettingsRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_app/o/$orgSlug/_tasks/everyone': {
+      id: '/_app/o/$orgSlug/_tasks/everyone'
+      path: '/everyone'
+      fullPath: '/o/$orgSlug/everyone'
+      preLoaderRoute: typeof AppOOrgSlugTasksEveryoneRouteImport
+      parentRoute: typeof AppOOrgSlugTasksRoute
     }
     '/_app/o/$orgSlug/_tasks/my': {
       id: '/_app/o/$orgSlug/_tasks/my'
@@ -436,6 +495,7 @@ declare module '@tanstack/react-router' {
 interface AppSettingsRouteChildren {
   AppSettingsBehaviourRoute: typeof AppSettingsBehaviourRoute
   AppSettingsDataRoute: typeof AppSettingsDataRoute
+  AppSettingsNotificationsRoute: typeof AppSettingsNotificationsRoute
   AppSettingsProfileRoute: typeof AppSettingsProfileRoute
   AppSettingsSecurityRoute: typeof AppSettingsSecurityRoute
   AppSettingsIndexRoute: typeof AppSettingsIndexRoute
@@ -444,6 +504,7 @@ interface AppSettingsRouteChildren {
 const AppSettingsRouteChildren: AppSettingsRouteChildren = {
   AppSettingsBehaviourRoute: AppSettingsBehaviourRoute,
   AppSettingsDataRoute: AppSettingsDataRoute,
+  AppSettingsNotificationsRoute: AppSettingsNotificationsRoute,
   AppSettingsProfileRoute: AppSettingsProfileRoute,
   AppSettingsSecurityRoute: AppSettingsSecurityRoute,
   AppSettingsIndexRoute: AppSettingsIndexRoute,
@@ -454,6 +515,7 @@ const AppSettingsRouteWithChildren = AppSettingsRoute._addFileChildren(
 )
 
 interface AppOOrgSlugTasksRouteChildren {
+  AppOOrgSlugTasksEveryoneRoute: typeof AppOOrgSlugTasksEveryoneRoute
   AppOOrgSlugTasksMyRoute: typeof AppOOrgSlugTasksMyRoute
   AppOOrgSlugTasksNodateRoute: typeof AppOOrgSlugTasksNodateRoute
   AppOOrgSlugTasksOverdueRoute: typeof AppOOrgSlugTasksOverdueRoute
@@ -463,6 +525,7 @@ interface AppOOrgSlugTasksRouteChildren {
 }
 
 const AppOOrgSlugTasksRouteChildren: AppOOrgSlugTasksRouteChildren = {
+  AppOOrgSlugTasksEveryoneRoute: AppOOrgSlugTasksEveryoneRoute,
   AppOOrgSlugTasksMyRoute: AppOOrgSlugTasksMyRoute,
   AppOOrgSlugTasksNodateRoute: AppOOrgSlugTasksNodateRoute,
   AppOOrgSlugTasksOverdueRoute: AppOOrgSlugTasksOverdueRoute,
@@ -476,6 +539,7 @@ const AppOOrgSlugTasksRouteWithChildren =
 
 interface AppRouteChildren {
   AppAdminRoute: typeof AppAdminRoute
+  AppInboxRoute: typeof AppInboxRoute
   AppSettingsRoute: typeof AppSettingsRouteWithChildren
   AppOOrgSlugTasksRoute: typeof AppOOrgSlugTasksRouteWithChildren
   AppOOrgSlugSettingsRoute: typeof AppOOrgSlugSettingsRoute
@@ -483,6 +547,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppAdminRoute: AppAdminRoute,
+  AppInboxRoute: AppInboxRoute,
   AppSettingsRoute: AppSettingsRouteWithChildren,
   AppOOrgSlugTasksRoute: AppOOrgSlugTasksRouteWithChildren,
   AppOOrgSlugSettingsRoute: AppOOrgSlugSettingsRoute,

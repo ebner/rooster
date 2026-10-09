@@ -55,7 +55,8 @@
       "today": "Today",
       "week": "7 days",
       "overdue": "Overdue",
-      "nodate": "No date"
+      "nodate": "No date",
+      "everyone": "Everyone"
     }
   },
   "nav": {

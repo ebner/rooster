@@ -82,6 +82,8 @@ export const keymap = {
   goWeek: { keys: ['G W'], scope: 'navigate', section: 'general', palette: 'navigation' },
   goOverdue: { keys: ['G O'], scope: 'navigate', section: 'general', palette: 'navigation' },
   goNoDate: { keys: ['G N'], scope: 'navigate', section: 'general', palette: 'navigation' },
+  goEveryone: { keys: ['G E'], scope: 'navigate', section: 'general', palette: 'navigation' },
+  goInbox: { keys: ['G I'], scope: 'navigate', section: 'general', palette: 'navigation' },
   focusSearch: { keys: ['/'], scope: 'navigate', section: 'general' },
 
   // Navigate (single keys).
@@ -105,6 +107,8 @@ export const keymap = {
   deleteNavigate: { keys: ['Delete', 'Backspace'], scope: 'navigate', section: 'editing' },
   addSubtaskNavigate: { keys: ['S'], scope: 'navigate', section: 'editing' },
   tagPickerNavigate: { keys: ['T', '#'], scope: 'navigate', section: 'editing' },
+  assignNavigate: { keys: ['A'], scope: 'navigate', section: 'editing' },
+  commentNavigate: { keys: ['C'], scope: 'navigate', section: 'pane' },
   openPane: { keys: ['O'], scope: 'navigate', section: 'pane' },
   peekPane: { keys: ['Space'], scope: 'navigate', section: 'pane' },
 
@@ -150,6 +154,8 @@ export const keymap = {
   openPaneFocus: { keys: ['Tab+Enter'], scope: 'list', section: 'pane', palette: 'task' },
   paneFullScreen: { keys: ['Tab+X'], scope: 'list', section: 'pane' },
   focusDescription: { keys: ['Tab+R'], scope: 'list', section: 'pane' },
+  assign: { keys: ['Tab+A'], scope: 'list', section: 'editing', palette: 'task' },
+  focusComment: { keys: ['Tab+C'], scope: 'list', section: 'pane', palette: 'task' },
   renameGroup: { keys: ['F2'], scope: 'navigate', section: 'groups' },
 
   // Keyboard drag on a focused handle (02 §5).

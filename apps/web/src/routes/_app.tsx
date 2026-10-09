@@ -91,6 +91,10 @@ function AppLayout() {
     goWeek: () => goTo('week'),
     goOverdue: () => goTo('overdue'),
     goNoDate: () => goTo('nodate'),
+    goEveryone: () => goTo('everyone'),
+    goInbox: () => {
+      void navigate({ href: paths.inbox });
+    },
     goSettings: () => {
       void navigate({ to: '/settings' });
     },

@@ -1584,6 +1584,13 @@
             },
             "maxItems": 50
           },
+          "assigneeId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
           "parse": {
             "type": "boolean"
           }
@@ -1649,6 +1656,13 @@
             ]
           },
           "parentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "assigneeId": {
             "type": [
               "string",
               "null"
@@ -2027,6 +2041,46 @@
               "ids",
               "args"
             ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": [
+                  "assign"
+                ]
+              },
+              "ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "minItems": 1,
+                "maxItems": 200
+              },
+              "args": {
+                "type": "object",
+                "properties": {
+                  "assigneeId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                  }
+                },
+                "required": [
+                  "assigneeId"
+                ]
+              }
+            },
+            "required": [
+              "op",
+              "ids",
+              "args"
+            ]
           }
         ]
       },
@@ -2193,6 +2247,13 @@
                 "title"
               ]
             }
+          },
+          "followers": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
           }
         },
         "required": [
@@ -2217,7 +2278,8 @@
           "createdAt",
           "updatedAt",
           "subtasks",
-          "parentChain"
+          "parentChain",
+          "followers"
         ]
       },
       "SubtaskReorderResult": {
@@ -5603,7 +5665,8 @@
                 "today",
                 "week",
                 "overdue",
-                "nodate"
+                "nodate",
+                "everyone"
               ]
             },
             "required": false,
@@ -5669,6 +5732,59 @@
             },
             "required": false,
             "name": "tag",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "me",
+                    "none",
+                    "any"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "me",
+                          "none",
+                          "any"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                      }
+                    ]
+                  },
+                  "maxItems": 50
+                }
+              ]
+            },
+            "required": false,
+            "name": "assignee",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "required": false,
+            "name": "hasDue",
             "in": "query"
           },
           {

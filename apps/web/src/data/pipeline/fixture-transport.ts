@@ -212,6 +212,7 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
           parentChain: ancestorsOf(state, taskId)
             .reverse()
             .map((t) => ({ id: t.id, title: t.title })),
+          followers: [],
         };
         return structuredClone(detail);
       }

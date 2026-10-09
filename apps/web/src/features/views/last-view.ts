@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { OrgViewId } from '../shell/paths';
 
-const listViews: readonly string[] = ['my', 'today', 'week', 'overdue', 'nodate'];
+const listViews: readonly string[] = ['my', 'today', 'week', 'overdue', 'nodate', 'everyone'];
 
 /** The list view a path shows (`/o/:slug/<view>`), or null (the pane, settings, …). */
 export function viewOfPath(pathname: string): OrgViewId | null {

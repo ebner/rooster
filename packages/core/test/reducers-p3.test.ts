@@ -446,6 +446,7 @@ describe('task detail reducers', () => {
       description: 'Notes',
       subtasks: childrenOf(state, 'p'),
       parentChain: [],
+      followers: [],
     };
   };
 

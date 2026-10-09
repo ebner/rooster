@@ -15,6 +15,8 @@ export const BULK_MAX = 200;
  */
 export const SUBTASK_DEPTH_MAX = 5;
 export const TAG_NAME_MAX = 40;
+/** P6. 05 §3 `comment.body`. */
+export const COMMENT_BODY_MAX = 20_000;
 
 /**
  * Snippet highlight markers (Unicode private use area). The server wraps every matched term in
