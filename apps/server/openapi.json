@@ -359,6 +359,13 @@
           },
           "digestTime": {
             "type": "string"
+          },
+          "emailMode": {
+            "type": "string",
+            "enum": [
+              "immediate",
+              "batch"
+            ]
           }
         },
         "required": [
@@ -367,7 +374,8 @@
           "swipeLeft",
           "swipeRight",
           "reminderTime",
-          "digestTime"
+          "digestTime",
+          "emailMode"
         ]
       },
       "Org": {
@@ -520,6 +528,13 @@
               },
               "digestTime": {
                 "type": "string"
+              },
+              "emailMode": {
+                "type": "string",
+                "enum": [
+                  "immediate",
+                  "batch"
+                ]
               }
             }
           }
@@ -845,6 +860,9 @@
           "expiresAt": {
             "type": "integer",
             "minimum": 0
+          },
+          "emailed": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -3975,7 +3993,9 @@
                     "mention",
                     "completed",
                     "due_changed",
-                    "invite_accepted"
+                    "invite_accepted",
+                    "digest",
+                    "due_reminder"
                   ]
                 },
                 "channel": {
@@ -4018,7 +4038,9 @@
                     "mention",
                     "completed",
                     "due_changed",
-                    "invite_accepted"
+                    "invite_accepted",
+                    "digest",
+                    "due_reminder"
                   ]
                 },
                 "channel": {
@@ -4040,7 +4062,7 @@
               ]
             },
             "minItems": 1,
-            "maxItems": 18
+            "maxItems": 20
           }
         },
         "required": [

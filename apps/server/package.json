@@ -15,6 +15,7 @@
   "dependencies": {
     "@hono/node-server": "catalog:",
     "@hono/zod-openapi": "catalog:",
+    "@react-email/render": "catalog:",
     "@rooster/core": "workspace:*",
     "@rooster/i18n": "workspace:*",
     "@scalar/hono-api-reference": "catalog:",
@@ -23,13 +24,20 @@
     "croner": "catalog:",
     "drizzle-orm": "catalog:",
     "hono": "catalog:",
+    "nodemailer": "catalog:",
     "pino": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "web-push": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@scalar/api-reference": "catalog:",
     "@types/better-sqlite3": "catalog:",
     "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@types/web-push": "catalog:",
     "drizzle-kit": "catalog:",
     "oauth2-mock-server": "catalog:",
     "tsdown": "catalog:",

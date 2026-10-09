@@ -43,6 +43,8 @@ export const prefsSchema = z.object({
   swipeRight: swipeActionSchema,
   reminderTime: timeSchema,
   digestTime: timeSchema,
+  /** P7 (FR-NOT-3): notification emails at once, or batched every 15 minutes. */
+  emailMode: z.enum(['immediate', 'batch']),
 });
 
 export const prefsPatchSchema = prefsSchema.partial();

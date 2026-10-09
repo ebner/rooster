@@ -1,5 +1,10 @@
 import { z } from 'zod';
 import { COMMENT_BODY_MAX } from '../limits.ts';
+import {
+  isPrefCell,
+  NOTIFICATION_PREF_CELLS,
+  NOTIFICATION_PREF_TYPES,
+} from '../notification-prefs.ts';
 import { idSchema, isoDateSchema, timeSchema, timestampSchema } from './common.ts';
 import { pageQuerySchema } from './task-query.ts';
 
@@ -210,23 +215,29 @@ export const notificationMarkSchema = z.union([
 ]);
 export const notificationMarkResultSchema = z.object({ unreadCount: z.int().nonnegative() });
 
-export const notificationPrefSchema = z.object({
-  type: notificationTypeSchema,
-  channel: notificationChannelSchema,
-  enabled: z.boolean(),
-});
+/** P7: the matrix rows are the events plus `digest` (email) and `due_reminder` (push). */
+export const notificationPrefTypeSchema = z.enum(NOTIFICATION_PREF_TYPES);
+
+export const notificationPrefSchema = z
+  .object({
+    type: notificationPrefTypeSchema,
+    channel: notificationChannelSchema,
+    enabled: z.boolean(),
+  })
+  .refine((cell) => isPrefCell(cell.type, cell.channel), {
+    error: 'No such cell (the digest is email only, the due reminder push only)',
+    path: ['channel'],
+  });
 
 /**
  * GET/PUT /me/notification-prefs: the event × channel matrix (FR-NOT-4). GET returns every
- * cell with defaults applied (all on); PUT takes any subset of cells. Phase 6 accepts only the
- * `inapp` channel (`422` for others until P7). Reminder and digest times live in `/me` prefs.
+ * cell (`NOTIFICATION_PREF_CELLS`) with defaults applied (`defaultPrefEnabled`, ADR 0033);
+ * PUT takes any subset of cells. Reminder and digest times and the email mode live in `/me`
+ * prefs.
  */
 export const notificationPrefsSchema = z.object({ prefs: z.array(notificationPrefSchema) });
 export const notificationPrefsPutSchema = z.object({
-  prefs: z
-    .array(notificationPrefSchema)
-    .min(1)
-    .max(NOTIFICATION_TYPES.length * 3),
+  prefs: z.array(notificationPrefSchema).min(1).max(NOTIFICATION_PREF_CELLS.length),
 });
 
 export type CommentBody = z.infer<typeof commentBodySchema>;
@@ -248,6 +259,7 @@ export type NotificationQuery = z.infer<typeof notificationQuerySchema>;
 export type NotificationPage = z.infer<typeof notificationPageSchema>;
 export type NotificationMark = z.infer<typeof notificationMarkSchema>;
 export type NotificationMarkResult = z.infer<typeof notificationMarkResultSchema>;
+export type NotificationPrefTypeValue = z.infer<typeof notificationPrefTypeSchema>;
 export type NotificationPref = z.infer<typeof notificationPrefSchema>;
 export type NotificationPrefs = z.infer<typeof notificationPrefsSchema>;
 export type NotificationPrefsPut = z.infer<typeof notificationPrefsPutSchema>;

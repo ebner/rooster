@@ -35,6 +35,10 @@ catalog:
   croner: 10.0.1
   better-auth: 1.7.7
   oauth2-mock-server: 9.2.0
+  web-push: 3.6.7                # P7 Web Push (VAPID), 04 §2
+  '@types/web-push': 3.6.4
+  nodemailer: 10.0.16             # P7 email over SMTP, 04 §2 (ships its own types)
+  '@react-email/render': 2.1.0   # P7 email templates: React to HTML + plain text, 04 §2 (the components package is deprecated)
   # web
   react: 19.3.0
   react-dom: 19.3.0

@@ -35,4 +35,5 @@ export const DEFAULT_PREFS: Prefs = {
   swipeRight: 'complete',
   reminderTime: '08:00',
   digestTime: '07:00',
+  emailMode: 'batch',
 };

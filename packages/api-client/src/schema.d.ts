@@ -1095,6 +1095,8 @@ export interface components {
             swipeRight: "complete" | "date" | "move" | "delete" | "none";
             reminderTime: string;
             digestTime: string;
+            /** @enum {string} */
+            emailMode: "immediate" | "batch";
         };
         Org: {
             id: string;
@@ -1128,6 +1130,8 @@ export interface components {
                 swipeRight?: "complete" | "date" | "move" | "delete" | "none";
                 reminderTime?: string;
                 digestTime?: string;
+                /** @enum {string} */
+                emailMode?: "immediate" | "batch";
             };
         };
         Session: {
@@ -1200,6 +1204,7 @@ export interface components {
             kind: "email" | "link";
             url: string;
             expiresAt: number;
+            emailed?: boolean;
         };
         InviteCreate: {
             /** Format: email */
@@ -1815,7 +1820,7 @@ export interface components {
         NotificationPrefs: {
             prefs: {
                 /** @enum {string} */
-                type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted";
+                type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted" | "digest" | "due_reminder";
                 /** @enum {string} */
                 channel: "inapp" | "push" | "email";
                 enabled: boolean;
@@ -1824,7 +1829,7 @@ export interface components {
         NotificationPrefsPut: {
             prefs: {
                 /** @enum {string} */
-                type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted";
+                type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted" | "digest" | "due_reminder";
                 /** @enum {string} */
                 channel: "inapp" | "push" | "email";
                 enabled: boolean;

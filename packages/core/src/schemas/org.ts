@@ -168,6 +168,8 @@ export const inviteCreatedSchema = z.object({
   /** `${BASE_URL}/invite/<token>`. Link tokens are stored hashed, so this is shown once. */
   url: z.string(),
   expiresAt: timestampSchema,
+  /** P7: true when an invite email went out (SMTP configured); otherwise copy `url`. */
+  emailed: z.boolean().optional(),
 });
 
 /** An open invite, as listed in org settings. */

@@ -7,6 +7,7 @@ import enDev from '../locales/en/dev.json' with { type: 'json' };
 import enEditor from '../locales/en/editor.json' with { type: 'json' };
 import enInbox from '../locales/en/inbox.json' with { type: 'json' };
 import enList from '../locales/en/list.json' with { type: 'json' };
+import enMail from '../locales/en/mail.json' with { type: 'json' };
 import enMobile from '../locales/en/mobile.json' with { type: 'json' };
 import enPalette from '../locales/en/palette.json' with { type: 'json' };
 import enPane from '../locales/en/pane.json' with { type: 'json' };
@@ -37,4 +38,5 @@ export const en = {
   people: enPeople,
   collab: enCollab,
   inbox: enInbox,
+  mail: enMail,
 } as const;

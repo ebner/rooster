@@ -37,6 +37,7 @@ export const namespaces = [
   'people',
   'collab',
   'inbox',
+  'mail',
 ] as const;
 export type Namespace = (typeof namespaces)[number];
 export const defaultNamespace: Namespace = 'common';

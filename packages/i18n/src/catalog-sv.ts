@@ -7,6 +7,7 @@ import svDev from '../locales/sv/dev.json' with { type: 'json' };
 import svEditor from '../locales/sv/editor.json' with { type: 'json' };
 import svInbox from '../locales/sv/inbox.json' with { type: 'json' };
 import svList from '../locales/sv/list.json' with { type: 'json' };
+import svMail from '../locales/sv/mail.json' with { type: 'json' };
 import svMobile from '../locales/sv/mobile.json' with { type: 'json' };
 import svPalette from '../locales/sv/palette.json' with { type: 'json' };
 import svPane from '../locales/sv/pane.json' with { type: 'json' };
@@ -37,4 +38,5 @@ export const sv = {
   people: svPeople,
   collab: svCollab,
   inbox: svInbox,
+  mail: svMail,
 } as const;
