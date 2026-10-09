@@ -215,9 +215,9 @@ function tabs(ctx: Ctx): string {
 function caret(input: LineInput, style: Style = {}): Seg[] {
   const chars = [...input.value];
   return [
-    seg(chars.slice(0, input.cursor).join(''), style),
+    seg(clean(chars.slice(0, input.cursor).join('')), style),
     seg('▏', accent),
-    seg(chars.slice(input.cursor).join(''), style),
+    seg(clean(chars.slice(input.cursor).join('')), style),
   ];
 }
 

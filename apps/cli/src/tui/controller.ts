@@ -1088,7 +1088,9 @@ export class TuiController {
       if (selected?.kind === 'group') this.toggleOpen(selected.collapsed);
       return;
     }
-    const title = line.task.title;
+    // The edit buffer is drawn to the terminal, so it starts from the cleaned title; an
+    // unchanged buffer still compares equal and sends nothing.
+    const title = clean(line.task.title).replace(/\s+/g, ' ');
     this.set({
       mode: { kind: 'edit', taskId: line.task.id, input: lineInput(title), original: title },
     });
