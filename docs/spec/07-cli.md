@@ -70,7 +70,7 @@ Global flags: `--org <slug>`, `--profile <name>`, `--json`, `--quiet` (IDs only)
 | `rooster token create <name> [--scope tasks:read,…] [--org <slug>] [--group <org>/<name>]… [--write-group <org>/<name>]… [--expires 90d\|never]` / `ls` / `revoke <id>` | PATs with a grant (11 §2). The default is `tasks:read` for 90 days. `--read-only` is an alias for `--scope tasks:read`. `create` works from a device login only (not from a PAT), and the token must be a subset of that login's grant (ADR 0037). `revoke` revokes the current grant; others need the browser. |
 | `rooster apps ls` / `rooster apps revoke <id>` | Connected apps (every grant: PATs, devices, OAuth clients; 11 §3.2). |
 | `rooster mcp [--read-only] [--profile agent]` | Starts the MCP server on stdio (§6), using the profile's grant. |
-| `rooster mcp setup [--client claude-code\|claude-desktop\|cursor\|print] [--profile agent] [--allow-delete]` | Creates a dedicated agent profile through the device flow (its own, narrower grant; 11 §5.1) and writes or prints the MCP client config. |
+| `rooster mcp setup [--client claude-code\|claude-desktop\|cursor\|print] [--profile agent] [--allow-delete] [--relogin] [--yes]` | Creates a dedicated agent profile through the device flow (its own, narrower grant; 11 §5.1) and writes or prints the MCP client config. |
 | `rooster skill print` / `rooster skill install [--target claude\|agents] [--project]` | Prints or installs the rooster agent skill (`SKILL.md`, 11 §6.2). |
 | `rooster completion bash\|zsh\|fish\|powershell` | Shell completions, including dynamic completion of group and tag names (cached for 60 s). |
 | `rooster admin reindex` | Rebuilds the search index (`POST /admin/search/reindex`). Needs a login or PAT with the `admin` capability, which only instance admins can grant (ADR 0041). P9. |
@@ -141,7 +141,7 @@ Built with **Ink 8**. It is a full-screen, keyboard-only mini rooster.
 
 ## 6. MCP server (`rooster mcp`, P9)
 
-- `@modelcontextprotocol/sdk` (v2, protocol 2026-07-28). The tools live in `packages/mcp` and are served two ways (11 §5):
+- The MCP TypeScript SDK v2 (`@modelcontextprotocol/server`, protocol 2026-07-28; ADR 0042). The tools live in `packages/mcp` and are served two ways (11 §5):
   - **stdio:** `rooster mcp`, authenticated with the profile's grant. `rooster mcp setup` creates a dedicated `agent` profile, so an agent doesn't inherit the user's full CLI access.
   - **Remote:** `https://<host>/mcp` on the server (Streamable HTTP), with OAuth 2.1 (11 §4), scope step-up and discovery documents (11 §6).
 - Each tool takes an optional `org` slug, defaulting to the profile org (stdio) or the user's first org (remote). The grant's constraints apply to every call (11 §2.3).
