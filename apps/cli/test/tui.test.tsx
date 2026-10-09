@@ -577,3 +577,201 @@ describe('TUI: live updates and failures', () => {
     expect(quit).toBe(true);
   });
 });
+
+/** A fetch for the TUI that can delay or lose answers to matching requests. */
+function controlledFetch(rules: {
+  delay?: (request: Request) => number;
+  lose?: (request: Request) => boolean;
+  offline?: () => boolean;
+}): typeof fetch {
+  return (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init);
+    if (rules.offline?.()) throw new TypeError('fetch failed');
+    const ms = rules.delay?.(request) ?? 0;
+    if (ms > 0) await new Promise((resolve) => setTimeout(resolve, ms));
+    const response = await globalThis.fetch(request);
+    if (rules.lose?.(request)) throw new TypeError('connection reset');
+    return response;
+  }) as typeof fetch;
+}
+
+const isWrite = (request: Request, path: RegExp) =>
+  request.method !== 'GET' && path.test(new URL(request.url).pathname);
+
+async function sharedOrg(user: TestUser): Promise<string> {
+  const slug = `acme-${seq}`;
+  const { status } = await user.api('POST', '/api/v1/orgs', { name: 'Acme', slug });
+  expect(status).toBe(201);
+  return slug;
+}
+
+describe('TUI: review round 1', () => {
+  it('the details follow the selection when it moves on its own (a completed row leaves)', async () => {
+    const { user, cli } = await setup();
+    const [first, second] = await addTasks(user, 'First', 'Second');
+    const t = await tui(cli);
+    await t.waitFor((f) => f.includes('Second'));
+    await t.press('o');
+    await t.waitFor((f) => /│ #\d+ ○ First/.test(f));
+    await t.press('x');
+    // After the completion hold the row leaves, the selection moves to Second: so do the details.
+    await t.waitFor((f) => /│ #\d+ ○ Second/.test(f), 4_000);
+    const state = t.session.controller.getState();
+    expect(state.selected).toBe(second?.id);
+    expect(state.detail?.taskId).toBe(second?.id);
+    expect(first?.id).not.toBe(second?.id);
+  });
+
+  it('r sends a change whose answer was lost with the same Idempotency-Key: no duplicate', async () => {
+    const { user, cli } = await setup();
+    let lose = true;
+    const t = await tui(cli, {
+      io: {
+        fetch: controlledFetch({
+          lose: (r) => {
+            const hit = lose && isWrite(r, /\/orgs\/[^/]+\/tasks$/);
+            if (hit) lose = false;
+            return hit;
+          },
+        }),
+      },
+    });
+    await t.waitFor((f) => f.includes('synced'));
+    await t.press('n');
+    await t.type('Only once');
+    await t.press(KEY.esc);
+    await t.waitFor((f) => f.includes('Couldn’t save'));
+    await t.press('r');
+    await t.waitFor((f) => f.includes('○ Only once') && !f.includes('Couldn’t save'));
+    const list = await eventually(
+      () => myList(user),
+      (l) => l.tasks.some((x) => x.title === 'Only once'),
+    );
+    expect(list.tasks.filter((x) => x.title === 'Only once')).toHaveLength(1);
+  });
+
+  it('typing on while a draft is saved goes into the next draft, not into shortcuts', async () => {
+    const { user, cli } = await setup();
+    const t = await tui(cli, {
+      io: {
+        fetch: controlledFetch({ delay: (r) => (isWrite(r, /\/orgs\/[^/]+\/tasks$/) ? 400 : 0) }),
+      },
+    });
+    await t.waitFor((f) => f.includes('synced'));
+    let quit = false;
+    t.session.controller.attach({ exit: () => (quit = true) });
+    await t.press('n');
+    await t.type('Slow one');
+    await t.press(KEY.enter);
+    // Typed before the first save returns; contains q, which would quit in Navigate mode.
+    await t.type('quick next');
+    await t.press(KEY.esc);
+    await t.waitFor((f) => f.includes('○ Slow one') && f.includes('○ quick next'), 4_000);
+    expect(quit).toBe(false);
+    // From the first header (Today: the empty Inbox is hidden), at the top of that group.
+    expect(
+      await eventually(
+        () => titlesIn(user, 'Today'),
+        (v) => v.length === 2,
+      ),
+    ).toEqual(['Slow one', 'quick next']);
+  });
+
+  it('pickers and the title editor show over the full-screen details', async () => {
+    const { user, cli } = await setup();
+    await addTask(user, { title: 'Detailed', description: 'Some text' });
+    const t = await tui(cli);
+    await t.waitFor((f) => f.includes('Detailed'));
+    await t.press('o');
+    await t.waitFor((f) => f.includes('Some text'));
+    await t.press('d');
+    await t.waitFor((f) => f.includes('Date ▏') && !f.includes('Some text'));
+    await t.press(KEY.esc);
+    await t.waitFor((f) => f.includes('Some text'));
+    await t.press(KEY.enter);
+    await t.waitFor((f) => f.includes('Detailed▏'));
+    await t.press(KEY.esc);
+    await t.waitFor((f) => f.includes('Some text'));
+  });
+
+  it('stale search answers are dropped after Esc, a newer search or an org switch', async () => {
+    const { user, cli } = await setup();
+    await sharedOrg(user);
+    await addTasks(user, 'Alpha report', 'Beta notes');
+    const t = await tui(cli, {
+      io: {
+        fetch: controlledFetch({
+          delay: (r) => (new URL(r.url).pathname === '/api/v1/search' ? 500 : 0),
+        }),
+      },
+    });
+    await t.waitFor((f) => f.includes('Beta notes'));
+    // Esc while the search is on its way: it never comes back.
+    await t.press('/');
+    await t.type('alpha');
+    await t.press(KEY.enter, KEY.esc);
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    expect(t.session.controller.getState().view).toBe('my');
+    expect(t.frame()).toContain('Beta notes');
+    // An org switch while a search is on its way: Acme shows, without Personal's results.
+    await t.press('/');
+    await t.type('alpha');
+    await t.press(KEY.enter, '2');
+    await t.waitFor((f) => f.includes('rooster ─ Acme'));
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    expect(t.session.controller.getState().view).toBe('my');
+    expect(t.frame()).not.toContain('Alpha report');
+  });
+
+  it('adding from the header of a group collapsed in an earlier session opens the group', async () => {
+    const { user, cli } = await setup();
+    const today = (await myList(user)).groups.find((g) => g.name === 'Today');
+    await user.api('PATCH', `/api/v1/groups/${today?.id}`, { collapsed: true });
+    const t = await tui(cli);
+    await t.waitFor((f) => f.includes('› ▸ Today (0)'));
+    await t.press('n');
+    await t.type('Visible');
+    await t.press(KEY.esc);
+    await t.waitFor((f) => f.includes('▾ Today (1)') && f.includes('○ Visible'));
+  });
+
+  it('a change answered after an org switch leaves no undo in the new org', async () => {
+    const { user, cli } = await setup();
+    await sharedOrg(user);
+    const [task] = await addTasks(user, 'Alpha');
+    const t = await tui(cli, {
+      io: {
+        fetch: controlledFetch({ delay: (r) => (isWrite(r, /\/complete$/) ? 400 : 0) }),
+      },
+    });
+    await t.waitFor((f) => f.includes('Alpha'));
+    await t.press('x', '2');
+    await t.waitFor((f) => f.includes('rooster ─ Acme'));
+    const completedAt = async () =>
+      (await user.api<TaskJson>('GET', `/api/v1/tasks/${task?.id}`)).data.completedAt;
+    expect(await eventually(completedAt, (v) => v !== null)).not.toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await t.press('u');
+    await t.waitFor((f) => f.includes('Nothing to undo'));
+    expect(await completedAt()).not.toBeNull();
+  });
+
+  it('a change that failed in one org is not retried by r in another', async () => {
+    const { user, cli } = await setup();
+    await sharedOrg(user);
+    const [task] = await addTasks(user, 'Alpha');
+    let offline = false;
+    const t = await tui(cli, { io: { fetch: controlledFetch({ offline: () => offline }) } });
+    await t.waitFor((f) => f.includes('Alpha') && f.includes('● synced'));
+    offline = true;
+    await t.press('x');
+    await t.waitFor((f) => f.includes('Couldn’t save'));
+    offline = false;
+    await t.press('2');
+    await t.waitFor((f) => f.includes('rooster ─ Acme'));
+    await t.press('r');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const { data } = await user.api<TaskJson>('GET', `/api/v1/tasks/${task?.id}`);
+    expect(data.completedAt).toBeNull();
+  });
+});

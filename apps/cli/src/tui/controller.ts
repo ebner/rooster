@@ -21,6 +21,7 @@ import { clean } from '../output/color.ts';
 import { type DateContext, dateContext } from '../output/format.ts';
 import { type Runtime, withRuntime } from '../runtime.ts';
 import type { TuiTranslate } from './i18n.ts';
+import { type MutationIdentity, mutationIdentity, withMutationIdentity } from './idempotency.ts';
 import { editLine, type LineInput, lineInput } from './input.ts';
 import { type CommandId, commandFor, GO_KEYS, GO_TIMEOUT_MS, type KeyInfo } from './keymap.ts';
 import {
@@ -181,6 +182,16 @@ export class TuiController {
   private closed = false;
   /** Set by a view or org switch: select the first task unless the selected one is shown. */
   private preferFirst = false;
+  /**
+   * Bumped by every org switch: late answers of changes sent in the previous org neither fill
+   * the undo stack nor leave a retry behind here.
+   */
+  private orgGeneration = 0;
+  /** Bumped by every search and by leaving search: older answers are dropped. */
+  private searchGeneration = 0;
+  private searchInFlight = false;
+  /** Keys typed while a draft is being saved; replayed once it is (or dropped if it fails). */
+  private typeahead: { input: string; key: KeyInfo }[] | null = null;
 
   constructor(private readonly deps: ControllerDeps) {
     this.setTimer =
@@ -267,6 +278,29 @@ export class TuiController {
         : keepSelection(lines, s.selected, previous);
     this.preferFirst = false;
     this.state = { ...s, dates, lines, counts: counts(s.list, s.me.id, dates), selected };
+    this.syncDetail();
+  }
+
+  /**
+   * The details always show the selected task (D-29): when the selection moves on its own (a
+   * completed row leaving, a refresh), they follow, so `x` or Delete never act on a task other
+   * than the one shown. With no task selected they close.
+   */
+  private syncDetail(): void {
+    const { detail, lines, selected } = this.state;
+    if (detail === null) return;
+    const line = lines.find((l) => l.key === selected);
+    if (line === undefined) {
+      this.state = { ...this.state, detail: null };
+      return;
+    }
+    if (line.kind !== 'task' || line.task.id === detail.taskId) return;
+    const taskId = line.task.id;
+    this.state = {
+      ...this.state,
+      detail: { taskId, task: null, activity: null, error: null, scroll: 0 },
+    };
+    queueMicrotask(() => void this.loadDetail(taskId));
   }
 
   private expandedIds(list: ListState): string[] {
@@ -446,9 +480,10 @@ export class TuiController {
         this.refreshAgain = false;
         const epoch = this.epoch;
         const org = this.state.org;
+        const query = this.state.search?.query ?? null;
         let data: Awaited<ReturnType<TuiController['fetchAll']>>;
         try {
-          data = await this.fetchAll(org, this.state.view, this.state.search?.query ?? null);
+          data = await this.fetchAll(org, this.state.view, query);
         } catch (error) {
           this.fail(error);
           return;
@@ -465,7 +500,7 @@ export class TuiController {
             tags: data.tags,
             members: data.members,
             everyone: data.everyone,
-            ...(data.hits === null || this.state.search === null
+            ...(data.hits === null || this.state.search?.query !== query
               ? {}
               : { search: { ...this.state.search, hits: data.hits } }),
           },
@@ -595,6 +630,8 @@ export class TuiController {
 
   private touchTask(task: Task): void {
     const s = this.state;
+    // A late answer from the org shown before a switch.
+    if (task.orgId !== s.org.id) return;
     const patch: Partial<TuiState> = {};
     if (s.list !== null && (s.list.tasks[task.id] !== undefined || task.placement !== null)) {
       patch.list = { ...s.list, tasks: { ...s.list.tasks, [task.id]: task } };
@@ -661,15 +698,21 @@ export class TuiController {
       onSuccess?: () => void;
       /** Shown at once and taken back if the server refuses (or can't be reached). */
       local?: { apply: () => void; revert: () => void };
+      /** The change's Idempotency-Keys and edit time, the same on every retry. */
+      identity?: MutationIdentity;
     } = {},
   ): Promise<boolean> {
+    const identity = options.identity ?? mutationIdentity(this.deps.now());
+    const generation = this.orgGeneration;
+    const current = () => generation === this.orgGeneration && !this.closed;
     this.inFlight += 1;
     this.epoch += 1;
     this.set({ saving: this.inFlight });
     options.local?.apply();
     let offline = false;
     try {
-      await this.ctx(exec);
+      await this.ctx(() => withMutationIdentity(identity, exec));
+      if (!current()) return true;
       this.failed = null;
       options.onSuccess?.();
       if (options.done !== undefined) {
@@ -684,10 +727,12 @@ export class TuiController {
       } else if (this.state.message?.retry) this.set({ message: null });
       return true;
     } catch (error) {
+      if (!current()) return false;
       options.local?.revert();
       offline = isNetwork(error);
       const text = await this.describe(error);
-      this.failed = () => this.mutate(exec, options).then(() => {});
+      if (!current()) return false;
+      this.failed = () => this.mutate(exec, { ...options, identity }).then(() => {});
       this.set({
         message: { text: this.t('error.save', { message: text }), tone: 'error', retry: true },
         ...(isNetwork(error) ? { connection: 'offline' as const } : {}),
@@ -803,6 +848,10 @@ export class TuiController {
     if (this.closed) return;
     if (key.ctrl && input === 'c') {
       this.quit();
+      return;
+    }
+    if (this.typeahead !== null) {
+      this.typeahead.push({ input, key });
       return;
     }
     const mode = this.state.mode;
@@ -954,6 +1003,11 @@ export class TuiController {
   }
 
   private escape(): void {
+    // Esc also takes back a search still on its way.
+    if (this.searchInFlight) {
+      this.searchGeneration += 1;
+      this.searchInFlight = false;
+    }
     if (this.state.message !== null) {
       this.set({ message: null });
       this.failed = null;
@@ -984,6 +1038,7 @@ export class TuiController {
       return;
     }
     const needsFetch = view === 'everyone' && this.state.everyone === null;
+    this.searchGeneration += 1;
     this.preferFirst = true;
     this.set({ view, listView: view, search: null, mode: { kind: 'navigate' } }, true);
     if (needsFetch || view === 'everyone') await this.refresh();
@@ -991,6 +1046,11 @@ export class TuiController {
 
   async switchOrg(org: Org): Promise<void> {
     if (org.id === this.state.org.id) return;
+    this.orgGeneration += 1;
+    this.searchGeneration += 1;
+    // A change that failed in the other org is not retried here.
+    this.failed = null;
+    this.typeahead = null;
     const view = this.state.view === 'everyone' && org.isPersonal ? 'my' : this.state.listView;
     this.collapsed.clear();
     this.expanded.clear();
@@ -1024,16 +1084,7 @@ export class TuiController {
     const line = this.selectedLine();
     if (line?.kind === 'group') {
       if (line.collapsed === !open) return;
-      this.collapsed.set(line.group.id, !open);
-      this.set({}, true);
-      void this.persist(() =>
-        unwrap(
-          this.api.PATCH('/api/v1/groups/{id}', {
-            params: { path: { id: line.group.id } },
-            body: { collapsed: !open },
-          }),
-        ),
-      );
+      this.setCollapsed(line.group.id, !open);
       return;
     }
     if (line?.kind !== 'task') return;
@@ -1049,6 +1100,19 @@ export class TuiController {
     }
     if (this.state.view !== 'my' || !line.hasChildren || line.expanded === open) return;
     this.setExpanded(line.task.id, open);
+  }
+
+  private setCollapsed(groupId: string, collapsed: boolean): void {
+    this.collapsed.set(groupId, collapsed);
+    this.set({}, true);
+    void this.persist(() =>
+      unwrap(
+        this.api.PATCH('/api/v1/groups/{id}', {
+          params: { path: { id: groupId } },
+          body: { collapsed },
+        }),
+      ),
+    );
   }
 
   private setExpanded(taskId: string, open: boolean): void {
@@ -1105,9 +1169,10 @@ export class TuiController {
     }
     const target = createTarget(s.view, s.lines, s.list, s.selected, where);
     if (target === null) return;
-    if (target.expandGroup !== undefined && this.collapsed.get(target.expandGroup)) {
-      this.collapsed.set(target.expandGroup, false);
-      this.derive();
+    const group = target.expandGroup === undefined ? undefined : s.list.groups[target.expandGroup];
+    if (group !== undefined && (this.collapsed.get(group.id) ?? group.collapsed)) {
+      // The new row shows in its group: open it, as the web does, for this and later sessions.
+      this.setCollapsed(group.id, false);
     }
     if (target.expandTask !== undefined && !this.expandedIds(s.list).includes(target.expandTask)) {
       // The new subtask shows under its parent, as on the web (Tab+S expands the parent).
@@ -1149,11 +1214,28 @@ export class TuiController {
       return;
     }
     if (title === '') return;
-    void this.create(mode.target, title, result.kind === 'submit');
+    // Typing on while the task is saved goes into the next draft, never into shortcuts.
+    this.typeahead = [];
+    void this.create(mode.target, title, result.kind === 'submit').then((ok) =>
+      this.flushTypeahead(ok),
+    );
   }
 
-  private async create(target: CreateTarget, title: string, again: boolean): Promise<void> {
+  /**
+   * Replays the keys typed while a draft was saved: into the next draft (Enter), or as
+   * commands after Esc. When the save failed they are dropped, since in Navigate mode a typed
+   * title would run as shortcuts (`q` quits).
+   */
+  private flushTypeahead(saved: boolean): void {
+    const keys = this.typeahead ?? [];
+    this.typeahead = null;
+    if (!saved) return;
+    for (const { input, key } of keys) this.key(input, key);
+  }
+
+  private async create(target: CreateTarget, title: string, again: boolean): Promise<boolean> {
     const orgId = this.state.org.id;
+    const generation = this.orgGeneration;
     let created: Task | undefined;
     const ok = await this.mutate(
       async () => {
@@ -1164,7 +1246,7 @@ export class TuiController {
           }),
         );
         this.touchTask(created);
-        this.select(created.id);
+        if (generation === this.orgGeneration) this.select(created.id);
       },
       {
         onSuccess: () => {
@@ -1177,12 +1259,14 @@ export class TuiController {
         },
       },
     );
-    if (!ok || !again || created === undefined || this.state.mode.kind !== 'navigate') return;
+    if (!ok || generation !== this.orgGeneration) return false;
+    if (!again || created === undefined || this.state.mode.kind !== 'navigate') return true;
     // Rapid entry: the next draft goes below the task just added (02 §3.4).
     const s = this.state;
-    if (s.list === null) return;
+    if (s.list === null) return true;
     const next = createTarget(s.view, s.lines, s.list, created.id, 'below');
     if (next !== null) this.set({ mode: { kind: 'draft', target: next, input: lineInput() } });
+    return true;
   }
 
   // ------------------------------------------------------------------------------------------
@@ -1560,6 +1644,7 @@ export class TuiController {
     }
     if (result.kind === 'cancel') {
       this.clearTimer(this.searchTimer);
+      this.searchGeneration += 1;
       this.set({ mode: { kind: 'navigate' } });
       if (this.state.view === 'search') void this.setView(this.state.listView);
       return;
@@ -1573,18 +1658,25 @@ export class TuiController {
 
   private async search(query: string): Promise<void> {
     const q = query.trim();
+    const generation = ++this.searchGeneration;
     if (q === '') {
       if (this.state.view === 'search') {
         this.set({ view: this.state.listView, search: null }, true);
       }
       return;
     }
+    const orgId = this.state.org.id;
+    this.searchInFlight = true;
     try {
-      const hits = await this.ctx(() => this.fetchSearch(this.state.org.id, q));
+      const hits = await this.ctx(() => this.fetchSearch(orgId, q)).finally(() => {
+        if (generation === this.searchGeneration) this.searchInFlight = false;
+      });
+      // A newer search, leaving search (Esc, a view) or another org made this answer stale.
+      if (generation !== this.searchGeneration || orgId !== this.state.org.id) return;
       this.preferFirst = true;
       this.set({ view: 'search', search: { query: q, hits } }, true);
     } catch (error) {
-      this.fail(error);
+      if (generation === this.searchGeneration) this.fail(error);
     }
   }
 

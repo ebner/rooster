@@ -7,4 +7,5 @@ const devtools = {
   initialize(): void {},
   connectToDevTools(): void {},
 };
+// biome-ignore lint/style/noDefaultExport: it replaces a package whose default export Ink imports.
 export default devtools;

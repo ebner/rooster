@@ -9,6 +9,7 @@ import { CLI_VERSION } from '../version.ts';
 import { TuiApp } from './app.tsx';
 import { TuiController } from './controller.ts';
 import { collabTranslator, tuiTranslator } from './i18n.ts';
+import { stampRequest } from './idempotency.ts';
 import { SseClient } from './sse.ts';
 
 /** `X-Rooster-Client` for the TUI: activity entries say "via the terminal app". */
@@ -40,7 +41,11 @@ export async function createSession(runtime: Runtime): Promise<TuiSession> {
     token,
     clientName: TUI_CLIENT_NAME,
     clientId,
-    fetch: cliFetch({ io: runtime.io, verbose: false, server }),
+    fetch: (() => {
+      const send = cliFetch({ io: runtime.io, verbose: false, server });
+      // A change sent again with `r` reuses its Idempotency-Key and edit time.
+      return (request: Request) => send(stampRequest(request));
+    })(),
   });
   let suspend: ((run: () => Promise<void>) => Promise<void>) | null = null;
   const controller = new TuiController({

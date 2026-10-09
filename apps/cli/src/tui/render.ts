@@ -31,6 +31,8 @@ export const SPLIT_MIN_COLUMNS = 120;
 /** Below this the frame cannot be drawn; a one-line notice says so. */
 export const MIN_COLUMNS = 30;
 export const MIN_ROWS = 8;
+/** Modes that type into the list (title, draft, pickers); they show over narrow details. */
+const EDITING: ReadonlySet<Mode['kind']> = new Set(['edit', 'draft', 'date', 'tag', 'group']);
 /** Rows of a picker's option list. */
 const PICKER_ROWS = 8;
 
@@ -80,7 +82,9 @@ export function renderFrame(input: FrameContext): Frame {
   let top = input.top;
   if (input.state.mode.kind === 'help') {
     body = helpBody(ctx, input.state.mode.scroll, bodyRows);
-  } else if (detail !== null && !split) {
+  } else if (detail !== null && !split && !EDITING.has(input.state.mode.kind)) {
+    // Full-screen details give way while a row is edited or a picker is open: the input
+    // must be visible where it goes.
     body = detailBody(ctx, detail, ctx.inner, bodyRows);
   } else {
     const list = listBody(ctx, listWidth, bodyRows);
