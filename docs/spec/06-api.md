@@ -73,6 +73,7 @@
 | Method & path | Description | P |
 |---|---|---|
 | POST `/orgs/:orgId/tasks` | Create. Body: `{id?, title, description?, dueDate?, dueTime?, dueTz?, startDate?, assigneeId? (default: me), parentId?, groupId?, beforeId?, afterId?, tagIds?, tagNames?, parse?: boolean}`. With `parse:true` the server runs the NL parser on the title (`#tags`, `@member`, `>Group`, dates) using the actor's locale, timezone and week start. The CLI and MCP use this; the web parses client-side and sends structured fields. → `201 TaskDTO`. | 2 |
+| GET `/tasks/resolve?ref=&org=&deleted=` | P8. Resolves a CLI/MCP task ref (07 §3): `42` (seq, with `org`), `acme#42`, or a UUID prefix of at least 8 hex characters across the actor's orgs. → `TaskDTO`; `404` when not found or not readable; `409 ambiguous_ref` with `candidates` (≤ 10). `deleted=true` also matches Trash. | 8 |
 | GET `/tasks/:id` | Full task: `TaskDTO & {description, subtasks: TaskDTO[], tags, followers (P6), attachments (P10), parentChain: [{id,title}]}`. | 3 |
 | PATCH `/tasks/:id` | Partial: `{title?, description?, dueDate?, dueTime?, dueTz?, startDate?, assigneeId?, parentId?, recurrence?, recurrenceBasis?}` → `{task, ignoredFields}`. | 2 |
 | POST `/tasks/:id/move` | Placement move for the actor: `{groupId, beforeId?, afterId?}` → `{placement}`. `404` if the task isn't in the actor's list. | 2 |
