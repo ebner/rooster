@@ -40,7 +40,7 @@ async function printGrants(runtime: Runtime, grants: readonly Grant[]): Promise<
     );
     const facts = [
       t(`grant.kind.${grant.kind}`),
-      ...(grant.tokenPrefix === null ? [] : [`${grant.tokenPrefix}…`]),
+      ...(grant.tokenPrefix === null ? [] : [`${clean(grant.tokenPrefix)}…`]),
       scopeSummary(grant.scopes),
     ];
     out.line(`    ${facts.join(' · ')}`);

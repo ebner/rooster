@@ -111,23 +111,53 @@ function bashScript(entries: readonly CompletionEntry[]): string {
 _rooster_values() {
   COMPREPLY=($(compgen -W "$1" -- "$cur"))
 }
+# The word being completed as the shell will read it: one level of backslash escaping (or an
+# opening quote) removed, so a second Tab after inserting 'alpha\\,b' still matches 'alpha,b1'.
+# Pure parameter expansion: nothing in the word is ever evaluated.
+_rooster_unquote() {
+  local s="$1" out="" c
+  if [[ "$s" == "'"* ]]; then
+    printf '%s' "\${s:1}"
+    return
+  fi
+  [[ "$s" == '"'* ]] && s="\${s:1}"
+  while [[ -n "$s" ]]; do
+    c="\${s:0:1}"
+    s="\${s:1}"
+    if [[ "$c" == "\\\\" && -n "$s" ]]; then
+      c="\${s:0:1}"
+      s="\${s:1}"
+    fi
+    out+="$c"
+  done
+  printf '%s' "$out"
+}
 # Group and tag names come from the server, where any org member can name them: never let the
 # shell expand them (compgen -W runs command substitution), and insert them shell-quoted.
+# --profile and --org from the command line are passed on as separate arguments.
 _rooster_dynamic() {
-  local line
+  local line raw
+  raw="$(_rooster_unquote "$cur")"
   COMPREPLY=()
   while IFS= read -r line; do
-    [[ "$line" == "$cur"* ]] && COMPREPLY+=("$(printf '%q' "$line")")
-  done < <(rooster __complete "$1" 2>/dev/null)
+    [[ "$line" == "$raw"* ]] && COMPREPLY+=("$(printf '%q' "$line")")
+  done < <(rooster __complete "$1" "\${globals[@]}" 2>/dev/null)
 }
 _rooster() {
   local cur prev path="" i w words
+  local -a globals=()
   cur="\${COMP_WORDS[COMP_CWORD]}"
   prev="\${COMP_WORDS[COMP_CWORD-1]}"
   for ((i = 1; i < COMP_CWORD; i++)); do
     w="\${COMP_WORDS[i]}"
     case "$w" in
-      --org|--profile|--group|--tag|--move-to|--after|--before|--color|--scope|--write-group|--due|--time|--start|--assign|--desc|--desc-file|--title|--parent|--server|--expires) ((i++)) ;;
+      --org|--profile)
+        if ((i + 1 < COMP_CWORD)); then
+          globals+=("$w" "$(_rooster_unquote "\${COMP_WORDS[i+1]}")")
+        fi
+        ((i++)) ;;
+      --org=*|--profile=*) globals+=("$(_rooster_unquote "$w")") ;;
+      --group|--tag|--move-to|--after|--before|--color|--scope|--write-group|--due|--time|--start|--assign|--desc|--desc-file|--title|--parent|--server|--expires) ((i++)) ;;
       -*) ;;
       *) case " $(_rooster_subs "$path") " in
            *" $w "*) path="\${path:+$path }$w" ;;
@@ -197,6 +227,24 @@ function fishScript(entries: readonly CompletionEntry[]): string {
     '    end',
     '    string join " " $path',
     'end',
+    '# --profile and --org from the command line, one argument per line, for rooster __complete.',
+    'function __rooster_globals',
+    '    set -l tokens (commandline -opc)',
+    '    set -l n (count $tokens)',
+    '    set -l i 2',
+    '    while test $i -le $n',
+    '        switch $tokens[$i]',
+    '            case --profile --org',
+    '                if test $i -lt $n',
+    '                    string join \\n -- $tokens[$i] $tokens[(math $i + 1)]',
+    '                    set i (math $i + 1)',
+    '                end',
+    "            case '--profile=*' '--org=*'",
+    '                string join \\n -- $tokens[$i]',
+    '        end',
+    '        set i (math $i + 1)',
+    '    end',
+    'end',
     'function __rooster_at',
     '    test (__rooster_path) = "$argv[1]"',
     'end',
@@ -212,7 +260,7 @@ function fishScript(entries: readonly CompletionEntry[]): string {
   for (const flag of GLOBAL_FLAGS) lines.push(`complete -c rooster -l ${flag.slice(2)}`);
   for (const source of VALUE_SOURCES) {
     const words = source.words.startsWith('dyn:')
-      ? `'(rooster __complete ${source.words.slice(4)} 2>/dev/null)'`
+      ? `'(rooster __complete ${source.words.slice(4)} (__rooster_globals) 2>/dev/null)'`
       : source.words === 'none'
         ? null
         : `'${source.words.slice(5)}'`;
@@ -255,8 +303,18 @@ ${values}
 $roosterValueFlags = @('--org','--profile','--group','--tag','--move-to','--after','--before','--color','--scope','--write-group','--due','--time','--start','--assign','--desc','--desc-file','--title','--parent','--server','--expires')
 Register-ArgumentCompleter -Native -CommandName rooster -ScriptBlock {
   param($wordToComplete, $commandAst, $cursorPosition)
-  $tokens = @($commandAst.CommandElements | Select-Object -Skip 1 | ForEach-Object { $_.ToString() })
+  # Unquoted values ('my profile' → my profile); other elements as written.
+  $tokens = @($commandAst.CommandElements | Select-Object -Skip 1 | ForEach-Object {
+    if ($_ -is [System.Management.Automation.Language.StringConstantExpressionAst]) { $_.Value } else { $_.ToString() }
+  })
   if ($wordToComplete -ne '' -and $tokens.Count -gt 0) { $tokens = $tokens[0..($tokens.Count - 2)] }
+  # --profile and --org are passed on to rooster __complete as separate arguments.
+  $extra = @()
+  for ($i = 0; $i -lt $tokens.Count; $i++) {
+    $tok = $tokens[$i]
+    if (($tok -ceq '--profile' -or $tok -ceq '--org') -and $i + 1 -lt $tokens.Count) { $extra += @($tok, $tokens[$i + 1]); $i++ }
+    elseif ($tok -clike '--profile=*' -or $tok -clike '--org=*') { $extra += $tok }
+  }
   $path = ''
   $prev = ''
   $skip = $false
@@ -273,14 +331,14 @@ Register-ArgumentCompleter -Native -CommandName rooster -ScriptBlock {
   elseif ($roosterValues.ContainsKey("flag:$prev")) { $source = $roosterValues["flag:$prev"] }
   elseif (-not $wordToComplete.StartsWith('-') -and $roosterValues.ContainsKey("pos:$path")) { $source = $roosterValues["pos:$path"] }
   if ($source -ne $null) {
-    if ($source.StartsWith('dyn:')) { $words = @(& rooster __complete $source.Substring(4) 2>$null) }
+    if ($source.StartsWith('dyn:')) { $words = @(& rooster __complete $source.Substring(4) @extra 2>$null) }
     else { $words = $source.Substring(5).Split(' ') }
   } else {
     $words = $roosterCommands[$path]
   }
   # Server-provided names are quoted unless plain, so a $(...) inside a tag name never runs.
   # PowerShell also ends single-quoted strings at typographic quotes; its own escaper doubles all.
-  $words | Where-Object { $_.StartsWith($wordToComplete, [System.StringComparison]::Ordinal) } | ForEach-Object {
+  $words | Where-Object { $_.StartsWith($wordToComplete, [System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object {
     $text = if ($_ -match '^[\\w./:@#+-]+$') { $_ } else {
       "'" + [System.Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($_) + "'"
     }

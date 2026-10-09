@@ -295,7 +295,8 @@
     "sessionInvalid": "The stored credential was rejected (expired or revoked). Run rooster login.",
     "notRooster": "{server} doesn’t look like a rooster server.",
     "keychainFallback": "No system keychain available; the credential is stored in {path} (readable only by you).",
-    "storedInFile": "Credential stored in the credentials file."
+    "storedInFile": "Credential stored in the credentials file.",
+    "otherServer": "This profile’s login is for {stored}, not {server}. Run rooster login --server {server} (or use another --profile)."
   },
   "login": {
     "arg": {

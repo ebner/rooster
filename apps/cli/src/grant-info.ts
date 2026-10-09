@@ -69,8 +69,7 @@ export async function buildConstraints(
   if (flags.orgs.length === 0 && flags.readGroups.length === 0 && flags.writeGroups.length === 0) {
     return { orgs: 'all' };
   }
-  const writes =
-    expandScopes(scopes).has('tasks:write') || expandScopes(scopes).has('groups:write');
+  const writes = writesTasks(scopes);
   const byOrg = new Map<
     string,
     { read: Set<string> | 'all'; write: Set<string> | 'all' | 'none' }
@@ -107,6 +106,16 @@ export async function buildConstraints(
     return { orgId, read, write };
   });
   return { orgs };
+}
+
+/**
+ * Whether a grant with these scopes changes things in an org, so its default write constraint
+ * there is `all` rather than `none`. Commenting writes to the org's tasks too (11 §2.1), and
+ * group changes are org-wide writes.
+ */
+export function writesTasks(scopes: Iterable<GrantScope>): boolean {
+  const expanded = expandScopes(scopes);
+  return (['tasks:write', 'comments:write', 'groups:write'] as const).some((s) => expanded.has(s));
 }
 
 /** A group of the user's list by exact name, then case-insensitive, then unique prefix. */

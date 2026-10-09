@@ -62,7 +62,14 @@ export function applyDueFlags(
   nowMs: number,
 ): DueUnit | null {
   if (flags.due === undefined && flags.time === undefined && flags.start === undefined) return null;
-  const next: DueUnit = { ...current };
+  // Only the four fields of the due unit: `current` may be a whole task, whose other fields
+  // (title, description) must never ride along into a patch.
+  const next: DueUnit = {
+    dueDate: current.dueDate,
+    dueTime: current.dueTime,
+    dueTz: current.dueTz,
+    startDate: current.startDate,
+  };
   if (flags.due !== undefined) {
     if (isNone(flags.due)) return { dueDate: null, dueTime: null, dueTz: null, startDate: null };
     const parsed = parseDateFlag(flags.due, me, nowMs, '--due');

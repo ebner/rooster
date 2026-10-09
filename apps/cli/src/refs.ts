@@ -12,8 +12,12 @@ export type Ref =
 
 const SEQ_RE = /^#?(\d{1,7})$/;
 const ORG_SEQ_RE = /^([a-z0-9][a-z0-9-]{1,38})#(\d{1,12})$/;
-// A UUID prefix: at least 8 hex characters, dashes allowed where a UUID has them.
-const PREFIX_RE = /^[0-9a-f]{8}(?:-[0-9a-f]{0,4}){0,3}(?:-[0-9a-f]{0,12})?$/i;
+/** What the server's resolver takes as an ID prefix: 8–32 hex digits, dashes anywhere. */
+function isIdPrefix(text: string): boolean {
+  if (!/^[0-9a-f-]+$/i.test(text)) return false;
+  const hex = text.replace(/-/g, '');
+  return hex.length >= 8 && hex.length <= 32;
+}
 
 /**
  * `42`, `personal#42`, a UUID prefix of 8+ hex characters, or `@last`. Up to seven bare
@@ -27,7 +31,7 @@ export function parseRef(input: string): Ref {
   if (seq) return { kind: 'seq', seq: Number(seq[1]), org: null };
   const orgSeq = ORG_SEQ_RE.exec(text);
   if (orgSeq) return { kind: 'seq', seq: Number(orgSeq[2]), org: orgSeq[1] ?? null };
-  if (PREFIX_RE.test(text)) return { kind: 'prefix', prefix: text.toLowerCase() };
+  if (isIdPrefix(text)) return { kind: 'prefix', prefix: text.toLowerCase() };
   throw new CliError(EXIT.usage, t('ref.invalid', { ref: input }));
 }
 

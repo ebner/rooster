@@ -1,14 +1,12 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { findGroupToken, matchMembers } from '@rooster/core/dates';
 import { defineCommand } from 'citty';
 import { type Org, type RoosterClient, type Task, type TaskDetail, unwrap } from '../api.ts';
 import { applyDueFlags, type DueFlags, isNone } from '../dates.ts';
+import { editText } from '../editor.ts';
 import { CliError, EXIT } from '../errors.ts';
 import { findGroup } from '../grant-info.ts';
 import { t } from '../i18n.ts';
-import { splitCommand } from '../launch.ts';
 import { clean, paint } from '../output/color.ts';
 import { renderRows, toRow } from '../output/format.ts';
 import { renderMarkdown } from '../output/markdown.ts';
@@ -261,7 +259,7 @@ export const showCommand = defineCommand({
     for (const line of head) out.line(line);
 
     const fields: [string, string][] = [];
-    if (org !== undefined) fields.push([t('show.org'), `${clean(org.name)} (${org.slug})`]);
+    if (org !== undefined) fields.push([t('show.org'), `${clean(org.name)} (${clean(org.slug)})`]);
     if (task.placement !== null) {
       const group = (await runtime.groups(task.orgId)).find(
         (g) => g.id === task.placement?.groupId,
@@ -337,25 +335,6 @@ export const showCommand = defineCommand({
   },
 });
 
-async function editInEditor(runtime: Runtime, task: TaskDetail): Promise<string | undefined> {
-  const editor = splitCommand(
-    runtime.io.env.VISUAL ||
-      runtime.io.env.EDITOR ||
-      (runtime.io.platform === 'win32' ? 'notepad' : 'vi'),
-  );
-  const dir = mkdtempSync(join(tmpdir(), 'rooster-'));
-  const file = join(dir, `task-${task.seq ?? task.id.slice(0, 8)}.md`);
-  try {
-    writeFileSync(file, task.description, { mode: 0o600 });
-    const code = await runtime.io.runEditor(editor, file);
-    if (code !== 0) throw new CliError(EXIT.unexpected, t('edit.editorFailed', { code }));
-    const text = readFileSync(file, 'utf8');
-    return text === task.description ? undefined : text;
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
-
 export const editCommand = defineCommand({
   meta: () => ({ name: 'edit', description: t('cmd.edit') }),
   args: () => ({
@@ -386,7 +365,7 @@ export const editCommand = defineCommand({
     if (due !== null) Object.assign(patch, due);
     const description =
       args.editor === true
-        ? await editInEditor(runtime, task)
+        ? await editText(runtime.io, task.description)
         : await readDescription(runtime, args.desc, args['desc-file']);
     if (description !== undefined) patch.description = description;
     const assign = str(args.assign);
@@ -496,7 +475,13 @@ export const mvCommand = defineCommand({
       if (previous !== null) intent = { afterId: previous };
       else if (beforeRef !== undefined && anchor !== undefined) intent = { beforeId: anchor.id };
       else if (args.bottom === true) intent = { afterId: null, beforeId: null };
-      else if (top !== null && top !== task.id) intent = { afterId: null, beforeId: top };
+      else if (top !== null && top === task.id) {
+        // Already first: a move without an intent would send it to the end of the group.
+        moved.push(task);
+        previous = task.id;
+        continue;
+      } else if (top !== null) intent = { afterId: null, beforeId: top };
+      // An empty group: the task becomes its only entry.
       else intent = {};
       const result = await unwrap(
         api.POST('/api/v1/tasks/{id}/move', {

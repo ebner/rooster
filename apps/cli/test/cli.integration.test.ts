@@ -255,12 +255,17 @@ describe('refs, output and the other commands against a real server', () => {
         '--title',
         'Buy oat milk',
         '--due',
-        'none',
+        '2031-06-01',
       ]);
       expect(edit.code).toBe(0);
       const edited = (await user.api<TaskJson>('GET', `/api/v1/tasks/${created.id}`)).data;
+      // [P2] the title and the due date change together (the due patch once reverted the title).
       expect(edited.title).toBe('Buy oat milk');
-      expect(edited.dueDate).toBeNull();
+      expect(edited.dueDate).toBe('2031-06-01');
+      expect((await cli.run(['edit', String(created.seq), '--due', 'none'])).code).toBe(0);
+      const cleared = (await user.api<TaskJson>('GET', `/api/v1/tasks/${created.id}`)).data;
+      expect(cleared.title).toBe('Buy oat milk');
+      expect(cleared.dueDate).toBeNull();
 
       expect((await cli.run(['comment', String(created.seq), 'On', 'my', 'way'])).code).toBe(0);
       const search = await cli.run(['search', '--json', 'oat']);
@@ -455,6 +460,39 @@ describe('edit --editor', () => {
       expect(calls[0]?.before).toBe('old text');
       const { data } = await user.api<{ description: string }>('GET', `/api/v1/tasks/${task.id}`);
       expect(data.description).toBe('## Notes\n\n- [ ] call back\n');
+    } finally {
+      cli.cleanup();
+    }
+  });
+});
+
+describe('[P2] mv --top', () => {
+  it('leaves a task that is already first where it is (an empty intent meant the end)', async () => {
+    const user = await server.user('mvtop@example.com', 'Jo');
+    const { token } = await user.token({ scopes: ['tasks:write'], name: 'mv' });
+    const cli = await signedIn(token);
+    try {
+      const add = async (title: string) =>
+        JSON.parse((await cli.run(['add', '--json', title, '--group', 'Prio'])).stdout) as TaskJson;
+      await add('Second');
+      const first = await add('First');
+      const order = async () => {
+        const list = await myList(user);
+        const prio = list.groups.find((g) => g.name === 'Prio')?.id;
+        return list.tasks
+          .filter((t) => t.placement?.groupId === prio)
+          .sort((a, b) => {
+            const pa = (a.placement as unknown as { position: string }).position;
+            const pb = (b.placement as unknown as { position: string }).position;
+            return pa < pb ? -1 : pa > pb ? 1 : 0;
+          })
+          .map((t) => t.title);
+      };
+      expect(await order()).toEqual(['First', 'Second']);
+      expect((await cli.run(['mv', String(first.seq), '--group', 'Prio'])).code).toBe(0);
+      expect(await order()).toEqual(['First', 'Second']);
+      expect((await cli.run(['mv', String(first.seq), '--group', 'Prio', '--top'])).code).toBe(0);
+      expect(await order()).toEqual(['First', 'Second']);
     } finally {
       cli.cleanup();
     }

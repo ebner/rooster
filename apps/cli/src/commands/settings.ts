@@ -21,7 +21,7 @@ const orgLs = defineCommand({
     const width = Math.max(...me.orgs.map((o) => o.slug.length));
     for (const org of me.orgs) {
       if (out.quiet) {
-        out.line(org.slug);
+        out.line(clean(org.slug));
         continue;
       }
       const marker = org.id === current?.id ? paint('*', styles.accent, out.level) : ' ';
@@ -31,7 +31,7 @@ const orgLs = defineCommand({
       ];
       const suffix =
         notes.length === 0 ? '' : `  ${paint(notes.join(', '), styles.muted, out.level)}`;
-      out.line(`${marker} ${org.slug.padEnd(width)}  ${clean(org.name)}${suffix}`);
+      out.line(`${marker} ${clean(org.slug).padEnd(width)}  ${clean(org.name)}${suffix}`);
     }
   },
 });

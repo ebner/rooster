@@ -14,6 +14,16 @@ describe('parseRef (07 §3)', () => {
     expect(parseRef('@last')).toEqual({ kind: 'last' });
   });
 
+  it('[P2] accepts every prefix the server accepts: 8–32 hex digits, dashes optional', () => {
+    expect(parseRef('0192-f3a0')).toEqual({ kind: 'prefix', prefix: '0192-f3a0' });
+    expect(parseRef('0192f3a01b2c7000')).toEqual({ kind: 'prefix', prefix: '0192f3a01b2c7000' });
+    expect(parseRef('01a120a6bd437061881a8e8a7414e095')).toMatchObject({ kind: 'prefix' });
+    expect(parseRef('01a120a6-bd43-7061-881a-8e8a7414e095')).toMatchObject({ kind: 'prefix' });
+    expect(parseRef('0192f3a0-1b2c-7')).toMatchObject({ kind: 'prefix' });
+    expect(() => parseRef('01a120a6bd437061881a8e8a7414e0951')).toThrow(CliError);
+    expect(() => parseRef('0192-f3a')).toThrow(CliError);
+  });
+
   it('reads eight or more bare digits as an ID prefix, like the server', () => {
     expect(parseRef('1234567')).toEqual({ kind: 'seq', seq: 1234567, org: null });
     expect(parseRef('12345678')).toEqual({ kind: 'prefix', prefix: '12345678' });

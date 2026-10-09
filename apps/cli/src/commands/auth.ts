@@ -109,7 +109,7 @@ async function finishLogin(
     throw error;
   }
   const profileName = runtime.profileName;
-  const where = await runtime.secrets.set(profileName, token);
+  const where = await runtime.secrets.set(profileName, token, server);
   const previous = runtime.profile;
   const wanted = orgFlag ?? (previous.server === server ? previous.org : undefined);
   const org =
@@ -268,7 +268,7 @@ export const whoamiCommand = defineCommand({
       return;
     }
     if (out.quiet) {
-      out.line(me.email);
+      out.line(clean(me.email));
       return;
     }
     const rows: [string, string][] = [
@@ -290,7 +290,7 @@ export const whoamiCommand = defineCommand({
     } else if (runtime.tokenFromEnv()) {
       rows.push([t('whoami.access'), t('whoami.envToken')]);
     }
-    out.line(`${paint(clean(me.name), styles.heading, out.level)} <${me.email}>`);
+    out.line(`${paint(clean(me.name), styles.heading, out.level)} <${clean(me.email)}>`);
     const width = Math.max(...rows.map(([k]) => k.length));
     for (const [key, value] of rows) {
       out.line(`  ${paint(key.padEnd(width), styles.muted, out.level)}  ${value}`);
@@ -303,7 +303,9 @@ export async function printVersion(runtime: Runtime): Promise<void> {
   const { out } = runtime;
   const server = runtime.serverOrNull();
   let serverVersion: string | null = null;
-  if (server !== null && (await runtime.token()) !== undefined) {
+  // A login for another server only means no server version here, not an error.
+  const token = server === null ? undefined : await runtime.token().catch(() => undefined);
+  if (server !== null && token !== undefined) {
     serverVersion = await fetchMeta(runtime, server)
       .then((meta) => meta.version)
       .catch(() => null);

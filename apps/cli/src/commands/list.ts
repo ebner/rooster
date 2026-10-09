@@ -159,6 +159,22 @@ async function listMy(runtime: Runtime, org: Org, flags: ListFlags): Promise<Org
   return { org, view: 'my', groups, tasks, sections };
 }
 
+/**
+ * The rows of a view without `--subtasks`. A subtask shows only through its parent's ▸
+ * progress when both are in the view and share an assignee; one assigned to someone else is
+ * a row of its own (D-05, Everyone's tasks), and so is one whose parent is not in the view.
+ */
+export function viewRows<T extends Pick<Task, 'id' | 'parentId' | 'assigneeId'>>(
+  tasks: readonly T[],
+): T[] {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  return tasks.filter((task) => {
+    if (task.parentId === null) return true;
+    const parent = byId.get(task.parentId);
+    return parent === undefined || parent.assigneeId !== task.assigneeId;
+  });
+}
+
 /** A smart view or Everyone's tasks, sectioned like the web (02 §10). */
 async function listView(
   runtime: Runtime,
@@ -176,13 +192,8 @@ async function listView(
   const groupId =
     flags.group === undefined ? undefined : (await findGroup(runtime, org.id, flags.group)).id;
   const all = await queryTasks(runtime, org, view, flags, groupId);
-  const ids = new Set(all.map((task) => task.id));
   const byId = new Map(all.map((task) => [task.id, task]));
-  // Without --subtasks a subtask shows only through its parent's ▸ progress, unless the
-  // parent is not in the view (then it is a row of its own, as on the web).
-  const tasks = flags.subtasks
-    ? all
-    : all.filter((task) => task.parentId === null || !ids.has(task.parentId));
+  const tasks = flags.subtasks ? all : viewRows(all);
   const members =
     view === 'everyone' ? new Map((await runtime.members(org.id)).map((m) => [m.userId, m])) : null;
   const row = (task: Task) => {

@@ -1,6 +1,6 @@
 import type { Io } from '../io.ts';
 import type { Globals } from '../runtime.ts';
-import { type ColorLevel, colorLevel, paint, type Style } from './color.ts';
+import { type ColorLevel, clean, colorLevel, paint, type Style } from './color.ts';
 import { styles } from './theme.ts';
 
 /** Where commands print: stdout for results, stderr for notices and errors. */
@@ -46,15 +46,15 @@ export class Output {
   /** A human message on stderr (never mixed into piped results), muted by `--quiet`. */
   notice(text: string): void {
     if (this.globals.quiet) return;
-    this.io.stderr.write(`${text}\n`);
+    this.io.stderr.write(`${clean(text)}\n`);
   }
 
   /** A warning on stderr, also with `--quiet`. */
   warn(text: string): void {
-    this.io.stderr.write(`${paint('rooster:', styles.warning, this.errLevel)} ${text}\n`);
+    this.io.stderr.write(`${paint('rooster:', styles.warning, this.errLevel)} ${clean(text)}\n`);
   }
 
   error(text: string): void {
-    this.io.stderr.write(`${paint('rooster:', styles.danger, this.errLevel)} ${text}\n`);
+    this.io.stderr.write(`${paint('rooster:', styles.danger, this.errLevel)} ${clean(text)}\n`);
   }
 }

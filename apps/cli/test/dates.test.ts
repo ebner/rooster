@@ -70,3 +70,18 @@ describe('due flags (hard rule 5: floating dates stay strings)', () => {
     expect(parseTimeFlag('7.05')).toBe('07:05');
   });
 });
+
+describe('[P2] the due patch carries the due unit only', () => {
+  it('never spreads the rest of the task into it (edit --title X --due Y kept the old title)', () => {
+    const task = {
+      ...none,
+      id: 't1',
+      title: 'Old title',
+      description: 'old',
+      dueDate: '2026-10-12',
+    };
+    const patch = applyDueFlags(task, { due: '2026-10-20' }, me, now);
+    expect(patch).toEqual({ dueDate: '2026-10-20', dueTime: null, dueTz: null, startDate: null });
+    expect(Object.keys(patch ?? {}).sort()).toEqual(['dueDate', 'dueTime', 'dueTz', 'startDate']);
+  });
+});

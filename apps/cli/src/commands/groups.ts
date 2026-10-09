@@ -183,7 +183,8 @@ const rm = defineCommand({
     const deleteTasks = args['delete-tasks'] === true;
     if (moveTo !== undefined && deleteTasks) throw new CliError(EXIT.usage, t('group.rmBoth'));
     needs(deleteTasks ? 'tasks:delete' : 'groups:write');
-    const list = await runtime.myList(org.id);
+    // Every task the server counts: open, and completed however long ago.
+    const list = await runtime.myList(org.id, true);
     const count = list.tasks.filter((task) => task.placement?.groupId === group.id).length;
     if (count > 0 && moveTo === undefined && !deleteTasks) {
       throw new CliError(EXIT.conflict, t('group.notEmpty', { name: clean(group.name), count }));
@@ -195,12 +196,13 @@ const rm = defineCommand({
     await unwrap(
       (await runtime.api()).DELETE('/api/v1/groups/{id}', {
         params: { path: { id: group.id } },
+        // The explicit choice always goes along: the server, not this count, decides emptiness.
         body:
-          count === 0
-            ? {}
-            : target !== undefined
-              ? { moveTasksTo: target.id }
-              : { deleteTasks: true },
+          target !== undefined
+            ? { moveTasksTo: target.id }
+            : deleteTasks
+              ? { deleteTasks: true }
+              : {},
       }),
     );
     if (runtime.out.json) runtime.out.data({ id: group.id, deleted: true });

@@ -116,6 +116,116 @@ describe('bash with hostile names', () => {
   });
 });
 
+/** Runs the bash completion with `stub` as the `rooster` command. */
+function completeWith(stub: string, words: string[], cwd?: string): string[] {
+  const script = join(dir, 'with-stub.bash');
+  writeFileSync(script, completionScript('bash', entries));
+  const program = `
+    ${cwd === undefined ? '' : `cd ${JSON.stringify(cwd)}`}
+    source ${JSON.stringify(script)}
+    ${stub}
+    COMP_WORDS=(${words.map((w) => `'${w.replace(/'/g, `'\\''`)}'`).join(' ')})
+    COMP_CWORD=${words.length - 1}
+    _rooster
+    printf '%s\\n' "\${COMPREPLY[@]}"
+  `;
+  return execFileSync('bash', ['-c', program], { encoding: 'utf8' })
+    .split('\n')
+    .filter((l) => l !== '');
+}
+
+describe('[P2] bash after a partial completion', () => {
+  const stub = `rooster() { printf '%s\\n' 'alpha,b1' 'alpha,b2' 'Some group' 'beta'; }`;
+
+  it('matches the escaped word bash inserted on the first Tab (al<Tab>b<Tab>)', () => {
+    // First Tab: both candidates, quoted; bash inserts their common prefix alpha\,b.
+    expect(completeWith(stub, ['rooster', 'ls', '--tag', 'al'])).toEqual([
+      'alpha\\,b1',
+      'alpha\\,b2',
+    ]);
+    // Second Tab: the word is now the escaped prefix.
+    expect(completeWith(stub, ['rooster', 'ls', '--tag', 'alpha\\,b'])).toEqual([
+      'alpha\\,b1',
+      'alpha\\,b2',
+    ]);
+    expect(completeWith(stub, ['rooster', 'ls', '--tag', 'alpha\\,b2'])).toEqual(['alpha\\,b2']);
+    expect(completeWith(stub, ['rooster', 'ls', '--tag', 'Some\\ g'])).toEqual(['Some\\ group']);
+  });
+
+  it('accepts a word the user opened with a quote', () => {
+    expect(completeWith(stub, ['rooster', 'ls', '--tag', "'Some g"])).toEqual(['Some\\ group']);
+    expect(completeWith(stub, ['rooster', 'ls', '--tag', '"alpha,b1'])).toEqual(['alpha\\,b1']);
+  });
+
+  it('never evaluates the typed word', () => {
+    const work = mkdtempSync(join(tmpdir(), 'rooster-pwn-'));
+    completeWith(stub, ['rooster', 'ls', '--tag', '$(touch pwned)'], work);
+    completeWith(stub, ['rooster', 'ls', '--tag', '`touch pwned2`'], work);
+    const listing = execFileSync('ls', ['-A', work], { encoding: 'utf8' });
+    rmSync(work, { recursive: true, force: true });
+    expect(listing).toBe('');
+  });
+});
+
+describe('[P2] --profile and --org reach rooster __complete', () => {
+  // The stub echoes its arguments back as candidates, one per line.
+  const echo = `rooster() { printf '%s\\n' "$@"; }`;
+
+  it('bash passes them as separate arguments, unevaluated', () => {
+    const work = mkdtempSync(join(tmpdir(), 'rooster-pwn-'));
+    const args = completeWith(
+      echo,
+      [
+        'rooster',
+        '--profile',
+        'my\\ work',
+        'mv',
+        '42',
+        '--org=acme',
+        '--org',
+        '$(touch pwned)',
+        '--group',
+        '',
+      ],
+      work,
+    );
+    const listing = execFileSync('ls', ['-A', work], { encoding: 'utf8' });
+    rmSync(work, { recursive: true, force: true });
+    expect(listing).toBe('');
+    // printf %q quoting of: __complete groups --profile 'my work' --org=acme --org '$(touch pwned)'
+    expect(args).toEqual([
+      '__complete',
+      'groups',
+      '--profile',
+      'my\\ work',
+      '--org=acme',
+      '--org',
+      '\\$\\(touch\\ pwned\\)',
+    ]);
+  });
+
+  it('the value being completed is not forwarded', () => {
+    expect(completeWith(echo, ['rooster', 'ls', '--org', ''])).toEqual(['__complete', 'orgs']);
+  });
+
+  it('fish and PowerShell forward them too', () => {
+    const fish = completionScript('fish', entries);
+    expect(fish).toContain('function __rooster_globals');
+    expect(fish).toContain("-a '(rooster __complete groups (__rooster_globals) 2>/dev/null)'");
+    const ps = completionScript('powershell', entries);
+    expect(ps).toContain('& rooster __complete $source.Substring(4) @extra');
+    expect(ps).toContain("$tok -ceq '--profile' -or $tok -ceq '--org'");
+  });
+});
+
+describe('[P2] PowerShell matching', () => {
+  it('is case-insensitive, like PowerShell itself', () => {
+    const ps = completionScript('powershell', entries);
+    expect(ps).toContain('[System.StringComparison]::OrdinalIgnoreCase');
+    expect(ps).not.toContain('[System.StringComparison]::Ordinal)');
+  });
+});
+
 describe('zsh, fish and PowerShell', () => {
   it('zsh reuses the bash completion through bashcompinit', () => {
     const script = completionScript('zsh', entries);
@@ -131,7 +241,7 @@ describe('zsh, fish and PowerShell', () => {
     const script = completionScript('fish', entries);
     expect(script).toContain('complete -c rooster -n "__rooster_at \'\'" -a group');
     expect(script).toContain(
-      "complete -c rooster -l group -x -a '(rooster __complete groups 2>/dev/null)'",
+      "complete -c rooster -l group -x -a '(rooster __complete groups (__rooster_globals) 2>/dev/null)'",
     );
     expect(script).toContain('complete -c rooster -n "__rooster_at \'add\'" -l due');
     if (has('fish')) {

@@ -1,0 +1,176 @@
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FileSecretStore, LayeredSecretStore } from '../src/secrets.ts';
+import { cliHarness } from './support/fake-io.ts';
+
+let dir: string;
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), 'rooster-secrets-'));
+});
+afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+/** A keychain that can be locked and unlocked, like a desktop session's. */
+function fakeKeychain() {
+  const entries = new Map<string, string>();
+  const state = { locked: false };
+  const guard = () => {
+    if (state.locked) throw new Error('locked');
+  };
+  const factory = async () => (service: string, account: string) => ({
+    getPassword: async () => {
+      guard();
+      return entries.get(`${service}/${account}`);
+    },
+    setPassword: async (p: string) => {
+      guard();
+      entries.set(`${service}/${account}`, p);
+    },
+    deletePassword: async () => {
+      guard();
+      return entries.delete(`${service}/${account}`);
+    },
+  });
+  return { entries, state, factory };
+}
+
+function clock(start = 1_000) {
+  let now = start;
+  return { now: () => now, tick: (ms = 1_000) => (now += ms) };
+}
+
+describe('credential storage (07 §2)', () => {
+  it('the file fallback is mode 0600, per profile, bound to the server origin', async () => {
+    const notice = vi.fn();
+    const store = new LayeredSecretStore(new FileSecretStore(dir), async () => null, notice);
+    expect(await store.set('home', 'tok-1', 'https://a.example/sub')).toBe('file');
+    expect(await store.set('work', 'tok-2', 'https://b.example')).toBe('file');
+    const path = join(dir, 'credentials');
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(await store.get('home')).toMatchObject({ token: 'tok-1', server: 'https://a.example' });
+    await store.delete('home');
+    expect(await store.get('home')).toBeUndefined();
+    expect(await store.get('work')).toMatchObject({ token: 'tok-2' });
+    expect(notice).toHaveBeenCalledTimes(2);
+    expect(readFileSync(path, 'utf8')).not.toContain('tok-1');
+  });
+
+  it('uses the keychain when it works and keeps no copy in the file', async () => {
+    const keychain = fakeKeychain();
+    const file = new FileSecretStore(dir);
+    const store = new LayeredSecretStore(file, keychain.factory, vi.fn());
+    expect(await store.set('home', 'tok', 'https://a.example')).toBe('keychain');
+    expect(JSON.parse(keychain.entries.get('rooster/home') ?? '{}')).toMatchObject({
+      token: 'tok',
+      server: 'https://a.example',
+    });
+    expect(file.entry('home')).toBeUndefined();
+    expect(await store.get('home')).toMatchObject({ token: 'tok' });
+  });
+
+  it('a raw (unbound) keychain token is never used', async () => {
+    const keychain = fakeKeychain();
+    keychain.entries.set('rooster/home', 'rooster_pat_old');
+    const store = new LayeredSecretStore(new FileSecretStore(dir), keychain.factory, vi.fn());
+    expect(await store.get('home')).toBeUndefined();
+  });
+
+  it('[P2] a login written to the file while the keychain was locked beats the older keychain entry', async () => {
+    const keychain = fakeKeychain();
+    const time = clock();
+    const store = new LayeredSecretStore(
+      new FileSecretStore(dir),
+      keychain.factory,
+      vi.fn(),
+      time.now,
+    );
+    await store.set('home', 'old', 'https://a.example');
+    time.tick();
+    keychain.state.locked = true;
+    expect(await store.set('home', 'new', 'https://a.example')).toBe('file');
+    keychain.state.locked = false;
+    expect(await store.get('home')).toMatchObject({ token: 'new' });
+    // The stale keychain entry was cleared on that read.
+    expect(keychain.entries.has('rooster/home')).toBe(false);
+    expect(await store.get('home')).toMatchObject({ token: 'new' });
+  });
+
+  it('[P2] a logout while the keychain is locked is not undone when it unlocks', async () => {
+    const keychain = fakeKeychain();
+    const time = clock();
+    const file = new FileSecretStore(dir);
+    const store = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
+    await store.set('home', 'tok', 'https://a.example');
+    time.tick();
+    keychain.state.locked = true;
+    await store.delete('home');
+    expect(await store.get('home')).toBeUndefined();
+    keychain.state.locked = false;
+    expect(await store.get('home')).toBeUndefined();
+    // Unlocked, the read removes both the keychain entry and the tombstone.
+    expect(keychain.entries.has('rooster/home')).toBe(false);
+    expect(file.entry('home')).toBeUndefined();
+  });
+
+  it('[P2] a newer keychain login beats an older file entry, even with a clock that went back', async () => {
+    const keychain = fakeKeychain();
+    const time = clock(50_000);
+    const file = new FileSecretStore(dir);
+    const store = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
+    keychain.state.locked = true;
+    await store.set('home', 'from-file', 'https://a.example');
+    keychain.state.locked = false;
+    time.tick(-20_000);
+    expect(await store.set('home', 'from-keychain', 'https://a.example')).toBe('keychain');
+    expect(await store.get('home')).toMatchObject({ token: 'from-keychain' });
+  });
+
+  it('ignores a corrupt credentials file instead of crashing', async () => {
+    writeFileSync(join(dir, 'credentials'), '[[[', { mode: 0o600 });
+    const store = new LayeredSecretStore(new FileSecretStore(dir), async () => null, vi.fn());
+    expect(await store.get('home')).toBeUndefined();
+  });
+});
+
+describe('[P1] a stored login is only sent to its own server', () => {
+  it('refuses ROOSTER_SERVER or a changed server setting with exit 3, sending nothing', async () => {
+    const requests: string[] = [];
+    const cli = cliHarness(
+      {},
+      {
+        fetch: (async (input: Request) => {
+          requests.push(new URL(input.url).origin);
+          return new Response('{}', { status: 500 });
+        }) as typeof fetch,
+      },
+    );
+    try {
+      const store = new LayeredSecretStore(
+        new FileSecretStore(join(cli.home, 'config', 'rooster')),
+        async () => null,
+        () => {},
+      );
+      await store.set('default', 'secret-token-of-a', 'https://a.example');
+      expect((await cli.run(['config', 'set', 'server', 'https://a.example'])).code).toBe(0);
+
+      const viaEnv = await cli.run(['whoami'], {
+        env: { ROOSTER_SERVER: 'https://attacker.example' },
+      });
+      expect(viaEnv.code).toBe(3);
+      expect(viaEnv.stderr).toContain('https://a.example');
+      expect(viaEnv.stderr).toContain('rooster login --server https://attacker.example');
+
+      expect((await cli.run(['config', 'set', 'server', 'https://attacker.example'])).code).toBe(0);
+      expect((await cli.run(['ls'])).code).toBe(3);
+      expect((await cli.run(['--version'])).code).toBe(0);
+      expect(requests).toEqual([]);
+
+      // An explicit ROOSTER_TOKEN is the user's choice of credential and server.
+      await cli.run(['ls'], { env: { ROOSTER_TOKEN: 'explicit' } });
+      expect(requests).toEqual(['https://attacker.example']);
+    } finally {
+      cli.cleanup();
+    }
+  });
+});

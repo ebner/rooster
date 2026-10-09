@@ -26,7 +26,13 @@ import { CliError, EXIT } from './errors.ts';
 import { isLocale, setLocale, t } from './i18n.ts';
 import type { Io } from './io.ts';
 import { Output } from './output/output.ts';
-import { FileSecretStore, LayeredSecretStore, loadKeyring, type SecretStore } from './secrets.ts';
+import {
+  FileSecretStore,
+  LayeredSecretStore,
+  loadKeyring,
+  type SecretStore,
+  serverOrigin,
+} from './secrets.ts';
 import { StateStore } from './state.ts';
 
 /** Resolves to the caller's personal org wherever an org is accepted (05 §2). */
@@ -117,11 +123,24 @@ export class Runtime {
     return server;
   }
 
-  /** `ROOSTER_TOKEN` (a PAT) wins over the stored credential (07 §2). */
+  /**
+   * The token to send to `server()`: `ROOSTER_TOKEN` (explicit, 07 §2), else the profile's
+   * stored login, but only when it was issued by that same server. A login is never sent to
+   * another origin (`ROOSTER_SERVER` or a changed `server` setting): exit 3 instead.
+   */
   async token(): Promise<string | undefined> {
     const env = this.io.env.ROOSTER_TOKEN;
     if (env !== undefined && env !== '') return env.trim();
-    return this.secrets.get(this.profileName);
+    const credential = await this.secrets.get(this.profileName);
+    if (credential === undefined) return undefined;
+    const server = this.server();
+    if (credential.server !== serverOrigin(server)) {
+      throw new CliError(
+        EXIT.auth,
+        t('auth.otherServer', { stored: credential.server, server: serverOrigin(server) }),
+      );
+    }
+    return credential.token;
   }
 
   tokenFromEnv(): boolean {
