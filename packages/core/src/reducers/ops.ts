@@ -75,6 +75,28 @@ export interface ReducerContext {
   userId: string;
 }
 
+/**
+ * Every task and comment ID an op changes: the entity, the copy of a duplicate, the tasks of a
+ * bulk op, and both the comment and its task for comment ops (the task's comment count). The
+ * pipeline uses it to tell whether an entity still has a queued op.
+ */
+export function opEntityIds(op: ListOpSpec): string[] {
+  switch (op.kind) {
+    case 'task.bulk':
+      return [...op.payload.ids];
+    case 'task.duplicate':
+      return [op.entityId, op.payload.id];
+    case 'comment.create':
+      return [op.payload.id, op.entityId];
+    case 'comment.patch':
+    case 'comment.delete':
+    case 'comment.restore':
+      return [op.entityId, op.taskId];
+    default:
+      return [op.entityId];
+  }
+}
+
 /** Constructors keep call sites short and payloads exactly the request bodies. */
 export const listOps = {
   createTask: (payload: TaskCreateBody): ListOpSpec => ({

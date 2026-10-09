@@ -23,8 +23,15 @@ export function inverseOf(op: ListOpSpec, before: ListState, ctx: ApplyContext):
       return before.tasks[id] || before.deletedTasks[id] ? [] : [listOps.deleteTask(id)];
     case 'task.patch': {
       const fields = inversePatch(before, id, op.payload);
-      if (op.payload.parentId === undefined) return fields;
-      return [...fields, ...inverseReparent(before, applyOp(before, op, ctx), id)];
+      const after = applyOp(before, op, ctx);
+      const undo =
+        op.payload.parentId === undefined
+          ? fields
+          : [...fields, ...inverseReparent(before, after, id)];
+      if (op.payload.assigneeId === undefined) return undo;
+      // The re-parent inverse already moves the task itself back.
+      const moved = op.payload.parentId === undefined ? [id] : [];
+      return [...undo, ...restoreAssigned(before, after, undo, moved, [id], ctx)];
     }
     case 'task.complete': {
       const task = before.tasks[id];
@@ -61,11 +68,15 @@ export function inverseOf(op: ListOpSpec, before: ListState, ctx: ApplyContext):
     case 'tag.create':
       // A tag created on the way stays; undo removes it from the task instead.
       return [];
-    case 'task.follow':
     case 'comment.create':
-    case 'comment.patch':
+      return [listOps.deleteComment(op.payload.id, id)];
     case 'comment.delete':
+      return [listOps.restoreComment(id, op.taskId)];
     case 'comment.restore':
+      return [listOps.deleteComment(id, op.taskId)];
+    case 'task.follow':
+    case 'comment.patch':
+      // The previous follow state and comment body live outside the list: the caller knows them.
       return [];
     case 'group.create': {
       if (before.groups[id] || before.deletedGroups[id]) return [];
@@ -145,6 +156,9 @@ function inversePatch(before: ListState, id: string, p: TaskPatch): ListOpSpec[]
     ...(p.description === undefined || p.description === task.description
       ? {}
       : { description: task.description ?? '' }),
+    ...(p.assigneeId === undefined || p.assigneeId === task.assigneeId
+      ? {}
+      : { assigneeId: task.assigneeId }),
     ...(touchesDue(p) && !sameDue(task, p)
       ? {
           dueDate: task.dueDate,
@@ -269,8 +283,23 @@ function inverseBulk(
       );
     case 'move':
       return restorePlacements(before, applyOp(before, listOps.bulk(orgId, op), ctx), op.ids, ctx);
-    case 'assign':
-      return [];
+    case 'assign': {
+      // One bulk op per distinct previous assignee, then the rows back where they were.
+      const byAssignee = new Map<string | null, string[]>();
+      for (const i of op.ids) {
+        const task = before.tasks[i];
+        if (!task || task.assigneeId === op.args.assigneeId) continue;
+        byAssignee.set(task.assigneeId, [...(byAssignee.get(task.assigneeId) ?? []), i]);
+      }
+      const undo = [...byAssignee].flatMap(([assigneeId, ids]) =>
+        chunks(ids).map((part) =>
+          listOps.bulk(orgId, { op: 'assign', ids: part, args: { assigneeId } }),
+        ),
+      );
+      const after = applyOp(before, listOps.bulk(orgId, op), ctx);
+      const changed = [...byAssignee.values()].flat();
+      return [...undo, ...restoreAssigned(before, after, undo, changed, changed, ctx)];
+    }
     case 'setDue': {
       // One bulk op per distinct previous due unit.
       const byUnit = new Map<string, { due: Due; ids: string[] }>();
@@ -309,6 +338,24 @@ function inverseBulk(
       );
     }
   }
+}
+
+/**
+ * After the inverse assignment ops, the reconcile has put the rows that come back (the tasks
+ * in `moved`, and orphan children of `assigned` that regain a row) at the top of the Inbox:
+ * moves put them back at their exact place (02 §3.7), as undo of a group delete does.
+ */
+function restoreAssigned(
+  before: ListState,
+  after: ListState,
+  undo: readonly ListOpSpec[],
+  moved: readonly string[],
+  assigned: readonly string[],
+  ctx: ApplyContext,
+): ListOpSpec[] {
+  const undone = undo.reduce((state, op) => applyOp(state, op, ctx), after);
+  const children = assigned.flatMap((id) => childrenOf(before, id).map((t) => t.id));
+  return restorePlacements(before, undone, [...moved, ...children], ctx);
 }
 
 /**

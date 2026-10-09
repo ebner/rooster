@@ -180,9 +180,9 @@ export const taskCreateSchema = orderingIntentSchema
     /** P3. Tag names to attach; unknown names are created with the next palette colour. */
     tagNames: z.array(z.string().min(1).max(40)).max(50).optional(),
     /**
-     * P6. Default: the actor. Another member puts the task at the top of THEIR Inbox (05 §4.1;
-     * `groupId` and intents are then ignored); null creates it unassigned (no placement).
-     * Personal orgs accept only the actor.
+     * P6. Default: the actor (a subtask: its parent's assignee). Another member puts the task
+     * at the top of THEIR Inbox (05 §4.1; `groupId` and intents are then ignored); null creates
+     * it unassigned (no placement). Personal orgs accept only the actor.
      */
     assigneeId: idSchema.nullable().optional(),
     /** CLI/MCP: run the NL parser on the title server-side (06 §2.4). */

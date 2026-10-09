@@ -3,11 +3,13 @@ export { applyOpToDetail, detailState, mergeDetailResponse } from './detail.ts';
 export { inverseOf, inverseOfSequence, restorePlacements } from './inverse.ts';
 export { type MergeResult, mergeResponse } from './merge.ts';
 export {
+  type CommentCreateBody,
   type GroupCreateBody,
   type ListOp,
   type ListOpKind,
   type ListOpSpec,
   listOps,
+  opEntityIds,
   type ReducerContext,
   type TagCreateBody,
   type TaskCreateBody,

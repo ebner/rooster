@@ -50,7 +50,10 @@ export function applyOp(state: ListState, op: ListOpSpec, ctx: ApplyContext): Li
     case 'task.create':
       return createTask(state, op.payload, ctx);
     case 'task.patch': {
-      const patched = patchTasks(state, [op.entityId], op.payload, ctx.now);
+      let patched = patchTasks(state, [op.entityId], op.payload, ctx.now);
+      if (op.payload.assigneeId !== undefined) {
+        patched = assignTasks(patched, [op.entityId], op.payload.assigneeId, ctx);
+      }
       return op.payload.parentId === undefined
         ? patched
         : reparent(patched, op.entityId, op.payload.parentId, ctx);
@@ -64,7 +67,7 @@ export function applyOp(state: ListState, op: ListOpSpec, ctx: ApplyContext): Li
     case 'task.move':
       return moveTasks(state, [op.entityId], op.payload);
     case 'task.bulk':
-      return applyBulk(state, op.payload, ctx.now, ctx.userId);
+      return applyBulk(state, op.payload, ctx);
     case 'task.reorder':
       return reorderSubtask(state, op.entityId, op.payload);
     case 'task.duplicate':
@@ -78,12 +81,15 @@ export function applyOp(state: ListState, op: ListOpSpec, ctx: ApplyContext): Li
       // Tags live in their own cache (['tags', orgId]); the list state holds only tag ids.
       return state;
     case 'task.follow':
-    case 'comment.create':
     case 'comment.patch':
-    case 'comment.delete':
-    case 'comment.restore':
-      // Followers and comments live in the detail and activity caches, not in the list.
+      // Followers and comments live in the detail and activity caches; the list holds counts.
       return state;
+    case 'comment.create':
+      return countComment(state, op.entityId, 1);
+    case 'comment.delete':
+      return countComment(state, op.taskId, -1);
+    case 'comment.restore':
+      return countComment(state, op.taskId, 1);
     case 'group.create':
       return createGroup(state, op.payload);
     case 'group.patch': {
@@ -125,6 +131,9 @@ const hasText = (description: string | undefined) =>
 function createTask(state: ListState, p: TaskCreateBody, ctx: ApplyContext): ListState {
   if (state.tasks[p.id] || state.deletedTasks[p.id]) return state;
   if (p.parentId !== undefined) return createSubtask(state, p, p.parentId, ctx);
+  const assigneeId = p.assigneeId === undefined ? ctx.userId : p.assigneeId;
+  // 05 §4.1: someone else's task (or an unassigned one) has no row in my list.
+  if (assigneeId !== ctx.userId) return withTask(state, newTask(state, p, assigneeId, null, ctx));
   const groupId = p.groupId && state.groups[p.groupId] ? p.groupId : inboxOf(state)?.id;
   if (!groupId) return state;
   const siblings = placedKeyed(tasksInGroup(state, groupId));
@@ -133,7 +142,18 @@ function createTask(state: ListState, p: TaskCreateBody, ctx: ApplyContext): Lis
   const [position = generateKeyBetween(null, null)] = toInboxTop
     ? [generateKeyBetween(null, siblings[0]?.position ?? null)]
     : keysForIntent(siblings, p);
-  const task: Task = {
+  return withTask(state, newTask(state, p, ctx.userId, { groupId, position }, ctx));
+}
+
+/** A fresh top-level task as the server creates it. */
+function newTask(
+  state: ListState,
+  p: TaskCreateBody,
+  assigneeId: string | null,
+  placement: Task['placement'],
+  ctx: ApplyContext,
+): Task {
+  return {
     id: p.id,
     orgId: state.orgId,
     seq: null,
@@ -142,25 +162,25 @@ function createTask(state: ListState, p: TaskCreateBody, ctx: ApplyContext): Lis
     title: p.title,
     ...(p.description === undefined ? {} : { description: p.description }),
     hasDescription: hasText(p.description),
-    assigneeId: ctx.userId,
+    assigneeId,
     createdBy: ctx.userId,
     ...dueUnit(p),
     completedAt: null,
     tagIds: uniqueIds(p.tagIds ?? []),
     counts: noCounts(),
-    placement: { groupId, position },
+    placement,
     createdAt: ctx.now,
     updatedAt: ctx.now,
   };
-  return withTask(state, task);
 }
 
 const uniqueIds = (ids: readonly string[]) => [...new Set(ids)];
 
 /**
  * A subtask (P3): ordered among its siblings by the intent (end without one), assigned like its
- * parent, so it never needs a placement of its own (05 §4.1). Over-deep nesting is rejected by
- * the server (422); the optimistic state then never shows it.
+ * parent unless the create names an assignee (P6). One of mine under someone else's parent is
+ * an orphan and gets its own row at the top of the Inbox (05 §4.1). Over-deep nesting is
+ * rejected by the server (422); the optimistic state then never shows it.
  */
 function createSubtask(
   state: ListState,
@@ -176,25 +196,12 @@ function createSubtask(
     beforeId: p.beforeId ?? null,
   });
   const task: Task = {
-    id: p.id,
-    orgId: state.orgId,
-    seq: null,
+    ...newTask(state, p, p.assigneeId === undefined ? parent.assigneeId : p.assigneeId, null, ctx),
     parentId,
     subtaskPosition,
-    title: p.title,
-    ...(p.description === undefined ? {} : { description: p.description }),
-    hasDescription: hasText(p.description),
-    assigneeId: parent.assigneeId,
-    createdBy: ctx.userId,
-    ...dueUnit(p),
-    completedAt: null,
-    tagIds: uniqueIds(p.tagIds ?? []),
-    counts: noCounts(),
-    placement: null,
-    createdAt: ctx.now,
-    updatedAt: ctx.now,
   };
-  return adjustCounts(withTask(state, task), parentId, 1, 0);
+  const placed = needsPlacement(task, parent, ctx.userId) ? { placement: inboxTop(state) } : {};
+  return adjustCounts(withTask(state, { ...task, ...placed }), parentId, 1, 0);
 }
 
 /** Keeps a parent's `subtasks`/`subtasksDone` counters in step with its children. */
@@ -228,6 +235,45 @@ function inboxTop(state: ListState): Task['placement'] {
   if (!inbox) return null;
   const first = tasksInGroup(state, inbox.id)[0]?.placement?.position ?? null;
   return { groupId: inbox.id, position: generateKeyBetween(null, first) };
+}
+
+/**
+ * Assignment (P6, FR-COL-1/2) with the 05 §4.1 reconcile seen from my list: a task assigned
+ * away from me loses its row; one assigned to me gets a new row at the top of my Inbox. Its
+ * direct children are reconciled too, since their row depends on the parent's assignee (an
+ * orphan subtask row appears or disappears). Tasks that leave the list stay in the state
+ * without a placement; the row model only renders placed tasks and their subtrees.
+ */
+function assignTasks(
+  state: ListState,
+  ids: readonly string[],
+  assigneeId: string | null,
+  ctx: ApplyContext,
+): ListState {
+  let next = state;
+  for (const id of ids) {
+    const task = next.tasks[id];
+    if (!task || task.assigneeId === assigneeId) continue;
+    const parent = task.parentId === null ? undefined : next.tasks[task.parentId];
+    const assigned: Task = { ...task, assigneeId, updatedAt: ctx.now };
+    // A changed assignee always means a new placement (the old one was someone else's).
+    const placement = needsPlacement(assigned, parent, ctx.userId) ? inboxTop(next) : null;
+    next = withTask(next, { ...assigned, placement });
+    for (const child of childrenOf(next, id)) {
+      const needs = needsPlacement(child, next.tasks[id], ctx.userId);
+      if (needs === (child.placement !== null)) continue;
+      next = withTask(next, { ...child, placement: needs ? inboxTop(next) : null });
+    }
+  }
+  return next;
+}
+
+/** `counts.comments` follows comment creates, deletes and restores (the row's indicator). */
+function countComment(state: ListState, taskId: string, delta: number): ListState {
+  const task = state.tasks[taskId];
+  if (!task) return state;
+  const comments = Math.max(0, task.counts.comments + delta);
+  return withTask(state, { ...task, counts: { ...task.counts, comments } });
 }
 
 /**
@@ -534,7 +580,8 @@ function moveTasks(state: ListState, ids: readonly string[], args: TaskMove): Li
   return { ...state, tasks };
 }
 
-function applyBulk(state: ListState, op: BulkOp, now: number, userId: string): ListState {
+function applyBulk(state: ListState, op: BulkOp, ctx: ApplyContext): ListState {
+  const { now, userId } = ctx;
   switch (op.op) {
     case 'complete':
       return completeTasks(state, op.ids, true, now);
@@ -552,7 +599,7 @@ function applyBulk(state: ListState, op: BulkOp, now: number, userId: string): L
     case 'removeTag':
       return tagTasks(state, op.ids, op.args.tagId, op.op === 'addTag');
     case 'assign':
-      return state;
+      return assignTasks(state, op.ids, op.args.assigneeId, ctx);
   }
 }
 

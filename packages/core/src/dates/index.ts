@@ -44,8 +44,14 @@ export {
   type TitleDateMatch,
 } from './parse.ts';
 export {
+  type AssigneeCandidate,
+  type AssigneeTokenMatch,
+  assigneeTokenAt,
+  findAssigneeToken,
   findGroupToken,
   type GroupTokenMatch,
+  type MemberMatch,
+  matchMembers,
   stripBackticks,
   stripTitleMatch,
 } from './tokens.ts';

@@ -39,7 +39,14 @@ export function mergeResponse(state: ListState, op: ListOpSpec, response: unknow
     case 'task.patch': {
       const r = response as Partial<TaskPatchResult> | undefined;
       if (!isTask(r?.task)) return keep;
-      return { state: putTask(state, r.task), refetch: (r.ignoredFields?.length ?? 0) > 0 };
+      // A task assigned to me from outside my list (Everyone's tasks) joins it with the
+      // server's placement; its subtasks, and the children whose rows the reconcile changed,
+      // only a refetch brings.
+      const assigned = op.payload.assigneeId !== undefined;
+      return {
+        state: putTask(state, r.task, assigned && r.task.placement !== null),
+        refetch: assigned || (r.ignoredFields?.length ?? 0) > 0,
+      };
     }
     case 'task.complete': {
       const r = response as Partial<TaskCompleteResult> | undefined;
@@ -55,8 +62,10 @@ export function mergeResponse(state: ListState, op: ListOpSpec, response: unknow
     }
     case 'task.bulk': {
       const results = (response as Partial<BulkResult> | undefined)?.results ?? [];
-      // Bulk results carry no keys; a move or any failure needs the server's view.
-      return { state, refetch: op.payload.op === 'move' || results.some((r) => !r.ok) };
+      // Bulk results carry no keys; a move, an assignment (new rows) or any failure needs the
+      // server's view.
+      const placing = op.payload.op === 'move' || op.payload.op === 'assign';
+      return { state, refetch: placing || results.some((r) => !r.ok) };
     }
     case 'group.create': {
       const r = response as Partial<GroupCreateResult> | undefined;

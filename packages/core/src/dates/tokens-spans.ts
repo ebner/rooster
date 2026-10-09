@@ -5,10 +5,11 @@ export interface Span {
 }
 
 const ESCAPE_RE = /`[^`]*`/g;
-// `#tag`, `@name`, `>Group` and `>"Quoted group"`, each starting a whitespace-separated word.
-// `@` must be followed by a letter so `@ 9am` / `@9am` stay time phrases.
-const INLINE_TOKEN_RE = /(?<=^|\s)(?:#\S+|@\p{L}\S*|>"[^"\n]*"|>\S+)/gu;
-const TITLE_TAIL_RE = /^(?:\s+(?:#\S+|@\p{L}\S*|>"[^"\n]*"|>\S+))*\s*$/u;
+// `#tag`, `@name`, `@"Quoted name"`, `>Group` and `>"Quoted group"`, each starting a
+// whitespace-separated word. `@` must be followed by a letter (or a quote) so `@ 9am` / `@9am`
+// stay time phrases.
+const INLINE_TOKEN_RE = /(?<=^|\s)(?:#\S+|@\p{L}\S*|@"[^"\n]*"|>"[^"\n]*"|>\S+)/gu;
+const TITLE_TAIL_RE = /^(?:\s+(?:#\S+|@\p{L}\S*|@"[^"\n]*"|>"[^"\n]*"|>\S+))*\s*$/u;
 
 function spansOf(re: RegExp, text: string): Span[] {
   return [...text.matchAll(re)].map((m) => ({ start: m.index, end: m.index + m[0].length }));
