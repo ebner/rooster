@@ -55,9 +55,9 @@ On boot, the server:
 | `ROOSTER_TRUST_PROXY` | | `false` | Honour `X-Forwarded-For` and `X-Forwarded-Proto`. Set this behind a reverse proxy. |
 | `ROOSTER_TRUSTED_PROXY_HOPS` | | `1` | With `ROOSTER_TRUST_PROXY`: the client IP is this many entries from the right of `X-Forwarded-For` (one per trusted proxy). |
 | `ROOSTER_LOG_LEVEL` | | `info` | |
-| `ROOSTER_SMTP_URL` | | — | e.g. `smtps://user:pass@smtp.example.com:465`. Enables email features. |
-| `ROOSTER_MAIL_FROM` | with SMTP | — | `Rooster <rooster@example.com>` |
-| `ROOSTER_VAPID_PUBLIC` / `_PRIVATE` / `ROOSTER_VAPID_SUBJECT` | | auto-generated / `mailto:<first admin>` | Web Push. |
+| `ROOSTER_SMTP_URL` | | — | `smtp://` or `smtps://`, e.g. `smtps://user:pass@smtp.example.com:465`. Enables email features (invites by email, notification emails, the digest). |
+| `ROOSTER_MAIL_FROM` | with SMTP | — | `Rooster <rooster@example.com>` or a bare address. Missing while SMTP is set: exit 78. |
+| `ROOSTER_VAPID_PUBLIC` / `_PRIVATE` / `ROOSTER_VAPID_SUBJECT` | | auto-generated / `mailto:<first admin>` | Web Push. Set both keys or neither (base64url, 65 and 32 bytes); without them the keys are generated once and kept in `instance_setting`. Keys from the env cannot be regenerated in the admin UI. The subject is a `mailto:` or `https:` URL. |
 | `ROOSTER_UPLOAD_MAX_MB` | | `25` | |
 | `ROOSTER_S3_ENDPOINT`, `_REGION`, `_BUCKET`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`, `_FORCE_PATH_STYLE` | | — | Setting the bucket switches attachments to S3. |
 | `ROOSTER_BACKUP_CRON` | | `0 3 * * *` | Set to `off` to disable. |

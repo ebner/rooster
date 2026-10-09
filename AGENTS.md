@@ -24,7 +24,9 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - `services/search-index.ts`: `indexTasks(tx, ids)` keeps `task_fts` in step (title, description and live comments). **Call it in the same transaction from any new write that changes a task's title, description, comments or `deleted_at`** (ADR 0013). Boot rebuilds the index when its row count is off; `POST /admin/search/reindex` rebuilds it on demand.
   - Request middleware covers idempotency (`Idempotency-Key`), edit time (`X-Rooster-Edit-Time`, clamped), client id/name, and the per-user rate limit. ADR 0005 has the list semantics.
   - `src/db/`: client and pragmas, `migrate.ts`, `schema/`, `migrations/` (generated, append-only). Hand-written migrations (FTS, triggers, pragmas only) are created with `pnpm --filter @rooster/server exec drizzle-kit generate --custom --name <name>`, statements separated by `--> statement-breakpoint`; `0004_task_fts.sql` is the example.
-  - `src/jobs/`: croner scheduler.
+  - `src/jobs/`: croner scheduler. Per-user timed sends (the due reminder, the digest) run every minute, claim `job_run(job, "<userId>|<local date>")` **before** sending, and use a 10-minute grace window (`services/job-runs.ts`, ADR 0035).
+  - `src/push/` (P7): VAPID keys (`vapid.ts`: env or generated into `instance_setting` at boot), `push-service.ts` (subscriptions, sends after commit through `lib/task-queue.ts`, 404/410 removes a device). **Every send re-checks `isAllowedPushEndpoint`** (SSRF, ADR 0033).
+  - `src/mail/` (P7): the nodemailer transport (only with `ROOSTER_SMTP_URL`), React email templates rendered with `@react-email/render` (`templates/`, tables and inline styles from `@rooster/tokens`, text in the `mail` i18n namespace), `mail-service.ts` (invites, immediate and batched notification emails, the digest) and HMAC unsubscribe tokens. `routes/unsubscribe.ts` serves `/unsubscribe/:token` outside `/api/v1`: GET only confirms, POST unsubscribes.
   - `src/events/`: the after-commit `EventBus` and the SSE `hub` behind `GET /api/v1/events`. Services publish through the per-transaction queue, and audiences are computed in `services/event-audience.ts`. `DomainEvent.direct` carries per-user messages other than invalidations (the SSE `notification` event). ADR 0009.
   - Tests live in `test/`. Helpers: `createTestDb`, `createTestApp`, `mock-idp.ts`, `signInAs(email)`.
   - `test/authz.matrix.test.ts` enumerates **every** OpenAPI route; a new route without a matrix row fails it.
@@ -49,7 +51,7 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - `src/lib/`: `cn`, `ui-scale.ts` (`uiScale()`), i18n (loads only the active locale via `@rooster/i18n/lazy`; `main.tsx` awaits `i18nReady`), `lazy.ts`, platform, `safe-redirect.ts`, and `user-storage.ts` (**per-user localStorage keys go through `userStorageKey()`**, swept on sign-out, 401 and user switch). **Every redirect target must go through `safeRedirectPath()`.**
   - `src/data/pipeline/`: the **mutation pipeline**. Every list op goes `enqueue → core reducer on the cache → send (Idempotency-Key, edit time, client id) → merge`. Undo pushes inverse ops through it. Ops are written to the IndexedDB outbox before they are sent; only the leader tab sends. Comment and follow ops go through it too (ADR 0028). Caches without a confirmed base (Everyone, activity) replay the queue in their query functions via `pipeline.withPendingTasks` / `withPendingActivity`; `usePendingEntity` (`pending.ts`) tells whether an entity still has queued ops (ADR 0030).
   - `src/data/sync/`: offline and realtime (04 §6, P4). `engine.ts` (`startSync`, awaited in `main.tsx` before the first render) restores the persisted query cache (`persist.ts`, idb-keyval key `rooster-cache-v1`; `my-list` is stored as the confirmed base, never the optimistic view) and the outbox (`outbox.ts`), elects the flushing tab (`leader.ts`, Web Locks `rooster-outbox`), mirrors queue/confirmations across tabs (`channel.ts`, `BroadcastChannel('rooster')`) and runs the SSE client (`events.ts`). Sign-out calls `clearLocalData()`. Persisted query roots need `gcTime: Infinity` (a 30-day timer overflows). Outbox records carry their `userId`; the persisted cache is dropped when its last confirmed `/me` is older than 30 days; every fresh `/me` prunes orgs the user left (ADR 0017). A visible follower steals the outbox lock from a silent (frozen) leader, list requests time out after 20 s, and every tab reconciles with the IndexedDB outbox (ADR 0019; test helper `fake-locks.ts`, e2e `sync-recovery.mobile.spec.ts`).
-  - `src/sw.ts`: the service worker (vite-plugin-pwa `injectManifest`, own `tsconfig.sw.json`). Off in `vite` dev unless `VITE_PWA_DEV=1`. `src/features/pwa/`: registration, the update gate and `update-controller.ts` (FR-PWA-6: toast plus a persistent header "Update" chip, `update-chip.tsx`; foreground checks; reload fallback without a service worker; ADR 0021), install prompts, the iOS tip sheet, and `SyncStatus` (the header sync pill and update chip; every header uses it).
+  - `src/sw.ts`: the service worker (vite-plugin-pwa `injectManifest`, own `tsconfig.sw.json`). Off in `vite` dev unless `VITE_PWA_DEV=1`. It shows push messages, routes notification clicks, re-subscribes on `pushsubscriptionchange`, and leaves server paths (`/api`, `/ical`, `/unsubscribe`, health) to the network. `src/data/push.ts` (a lazy chunk) turns push on per device from a user gesture (ADR 0034). `src/features/pwa/`: registration, the update gate and `update-controller.ts` (FR-PWA-6: toast plus a persistent header "Update" chip, `update-chip.tsx`; foreground checks; reload fallback without a service worker; ADR 0021), install prompts, the iOS tip sheet, and `SyncStatus` (the header sync pill and update chip; every header uses it).
   - `src/state/`: Zustand stores for list, undo and sync.
   - `src/keymap.ts`: **the single keymap registry** (02 §6). `useKeymap()` is mounted once at the root. The `?` cheat sheet is generated from it.
     - Focus zones `list` / `pane` / `paneList`; handlers return `false` to fall through.
@@ -155,18 +157,15 @@ This file is the entry point for every agent and must describe the repository **
 Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to them. A PR that changes any of the above without updating `AGENTS.md` is not done.
 
 ## Status
-- **Current phase:** Phase 7 (notification delivery: Web Push, email, scheduler) is next. P8 (CLI, PATs) may start in parallel (09).
+- **Current phase:** Phase 8 (CLI, PATs, public API polish) is next (09).
 - **Latest release:** 1.1.0 (amber accent, new brand and app icon, larger desktop UI, description indicator, Ctrl+click links, pre-update backups on every version change; ADRs 0022–0027).
-- **Last completed phase:** Phase 6, collaboration (2026-10-09; unreleased): assignment, Everyone's tasks, comments and activity, followers, the in-app inbox. AC-6.1 to AC-6.4 pass at the API level and in the e2e suite. ADRs 0028 to 0032. Migration `0005_collab`.
-- **Before that:** Phase 5, smart views, search, palette, export and Trash (2026-10-06), released as **v1.0.0**. AC-5.1 to AC-5.3 pass on desktop and the phone projects. ADRs 0012 to 0016 record the decisions; ADR 0016 relaxed the initial-bundle budget to 450 KB.
+- **Last completed phase:** Phase 7, notification delivery (2026-10-09; unreleased): Web Push per device, SMTP email (invites, immediate or batched notifications, the daily digest, confirm-then-POST unsubscribe), the due reminder, and the full preference matrix. AC-7.1 to AC-7.3 pass. ADRs 0033 to 0035. Migration `0006_delivery`.
+- **Before that:** Phase 6, collaboration (2026-10-09; unreleased): assignment, Everyone's tasks, comments and activity, followers, the in-app inbox. AC-6.1 to AC-6.4 pass at the API level and in the e2e suite. ADRs 0028 to 0032. Migration `0005_collab`.
+- Phase 5, smart views, search, palette, export and Trash (2026-10-06), released as **v1.0.0**. AC-5.1 to AC-5.3 pass on desktop and the phone projects. ADRs 0012 to 0016 record the decisions; ADR 0016 relaxed the initial-bundle budget to 450 KB.
 - **Backlog:** `docs/spec/09-phases.md` §Backlog. Do not build an item unless it is scheduled.
 - **E2E:** never run two Playwright suites at once; they share ports 9400, 3181, 5181 and 3182.
 - **Git:** commit locally; **do not push to origin unless the maintainer explicitly asks.**
 - **Deferred to later phases** (from ADRs 0003–0011; pick them up in the phase named):
-  - **P7:**
-    - The push handlers in `src/sw.ts` are stubs.
-    - `PUT /me/notification-prefs` accepts only the `inapp` channel; P7 opens `push` and `email`, and Settings → Notifications gains their columns (ADR 0028).
-    - Notifications are written with `emailed_at`/`pushed_at` null; delivery fills them.
   - **P8:**
     - Linked identities, PATs and CLI devices (FR-SET-3).
     - `rooster admin reindex` calls `POST /api/v1/admin/search/reindex` (ADR 0013).
@@ -175,6 +174,7 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
   - **Whenever touched:**
     - `UserService.reorderOrg` should move onto `OrderingService` (ADR 0005).
     - The retention purge job publishes no SSE events (ADR 0009).
+  - **P11:** the Docker image is 245 MB against the 250 MB smoke budget (P7 added nodemailer, web-push and react-dom/server); look at the base image or the budget before adding more.
 
 ## When you finish a WP
 - Run every gate in 10 §1.

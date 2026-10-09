@@ -14,6 +14,16 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
   - **Followers:** the creator, the assignee, commenters and mentioned members follow a task automatically. You can follow or unfollow any task.
   - **Inbox:** notifications for tasks assigned to you, comments on tasks you follow, mentions, your tasks completed or re-dated by someone else, and accepted invites. The sidebar and the phone's new Inbox tab show the unread count live. Settings → Notifications turns each kind on or off (ADRs 0029, 0031).
   - None of this appears in your personal organisation.
+- **Notification delivery (Phase 7):**
+  - **Push notifications:** turn push on per device in Settings → Notifications. You get the same events as the inbox, a test button, and an optional morning reminder of today's tasks at a time you choose. On an iPhone, add rooster to the Home Screen first (ADRs 0034, 0035).
+  - **Email** (when the server has SMTP configured):
+    - invites by email;
+    - notification emails, sent immediately or collected every 15 minutes;
+    - an optional daily digest of what's overdue, due today and new in your Inbox.
+    - Every email has an unsubscribe link for its kind. Without SMTP, email options are hidden and invites stay copyable links.
+  - **Settings → Notifications** is now a full grid: each event by in-app, push and email, plus the digest and the reminder with their times. Defaults: email only for assignments and mentions, and the digest and reminder off (ADR 0033).
+  - **Admin:** regenerate the push keys.
+  - **New settings:** `ROOSTER_SMTP_URL`, `ROOSTER_MAIL_FROM`, and optionally `ROOSTER_VAPID_PUBLIC`/`_PRIVATE`/`_SUBJECT`. Push keys are otherwise generated on first start.
 - **API:** `assigneeId` on task create and update, and the bulk op `assign`. Task lists accept `view=everyone`, `assignee` and `hasDue`. New routes for comments, the activity feed, followers, notifications and notification preferences. A new SSE event, `notification`. Search now also finds comments, and the export includes them.
 
 ### Changed
@@ -26,6 +36,7 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ### Migrations
 - `0005_collab`: adds the `comment`, `activity`, `follower`, `notification` and `notification_pref` tables.
+- `0006_delivery`: adds the `push_subscription` and `job_run` tables and an index for pending notification emails.
 
 ## [1.1.0] - 2026-10-09
 
