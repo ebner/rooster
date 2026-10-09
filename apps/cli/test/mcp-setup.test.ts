@@ -405,6 +405,32 @@ describe('writeFileAtomic', () => {
     expect(leftovers).toContain(join(cfg, 'mcp.json.19700101-000000.bak'));
   });
 
+  it('a directory replaced by a file keeps the original error and lists the leftovers', () => {
+    const cfg = join(cli.home, 'replaced-by-file');
+    mkdirSync(cfg, { recursive: true });
+    const file = join(cfg, 'mcp.json');
+    writeFileSync(file, '{}', { mode: 0o600 });
+    let error: unknown;
+    try {
+      writeFileAtomic(file, '{"new":true}', {
+        previous: readRegularFile(file),
+        newMode: 0o600,
+        backup: true,
+        now: 0,
+        beforeCommit: () => {
+          renameSync(cfg, `${cfg}-moved`);
+          writeFileSync(cfg, 'a plain file now');
+        },
+      });
+    } catch (caught) {
+      error = caught;
+    }
+    // The probes under a file throw ENOTDIR; that must not mask the conflict.
+    expect(error).toBeInstanceOf(UnsafePathError);
+    expect((error as UnsafePathError).leftovers).toHaveLength(2);
+    expect(readFileSync(cfg, 'utf8')).toBe('a plain file now');
+  });
+
   it('a write that fails part-way removes the partial temp file', () => {
     const file = join(cli.home, 'partial', 'config.json');
     mkdirSync(dirname(file), { recursive: true });

@@ -262,9 +262,18 @@ function checkPinned(pinned: readonly DirIdentity[], followLinks: boolean): void
 function removeCreated(created: readonly Created[], dir: { dev: number; ino: number }): string[] {
   const leftovers: string[] = [];
   for (const file of created) {
-    const parent = statSync(dirname(file.path), { throwIfNoEntry: false });
+    // A probe that fails (ENOTDIR, EACCES, ELOOP after the directory was replaced) proves
+    // nothing: the file is reported, and the caller's original error stands.
+    let parent: ReturnType<typeof statSync> | undefined;
+    let self: ReturnType<typeof lstatOrNull>;
+    try {
+      parent = statSync(dirname(file.path), { throwIfNoEntry: false });
+      self = lstatOrNull(file.path);
+    } catch {
+      leftovers.push(file.path);
+      continue;
+    }
     const sameDir = parent !== undefined && parent.dev === dir.dev && parent.ino === dir.ino;
-    const self = lstatOrNull(file.path);
     if (sameDir && self === null) continue;
     if (
       sameDir &&
