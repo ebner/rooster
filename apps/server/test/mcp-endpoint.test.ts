@@ -109,6 +109,42 @@ describe('AC-9.4 /mcp authentication (401)', () => {
     expect(res.status).toBe(401);
     expect(challenge(res)).toEqual(INVALID_TOKEN);
   });
+
+  it('re-checks the token after a slow body: a grant revoked meanwhile runs nothing', async () => {
+    const { app, alice, oauth } = setup();
+    const { token, created } = await oauth.token(alice, ['tasks:read', 'tasks:write']);
+    const inbox = await inboxOf(alice);
+    const payload = JSON.stringify(call('create_task', { title: 'After revoke' }, 'late'));
+    const half = Math.floor(payload.length / 2);
+    let finish: (() => void) | undefined;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(payload.slice(0, half)));
+        finish = () => {
+          controller.enqueue(new TextEncoder().encode(payload.slice(half)));
+          controller.close();
+        };
+      },
+    });
+    const pending = app.request('/mcp', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body,
+      duplex: 'half',
+    } as RequestInit);
+    // The token checks out while the body is still arriving; then the grant goes.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await alice.ok('DELETE', `/api/v1/me/grants/${created.grant.id}`, undefined, 204);
+    finish?.();
+    const res = await pending;
+    expect(res.status).toBe(401);
+    expect(challenge(res)).toEqual(INVALID_TOKEN);
+    expect(await titlesIn(alice, inbox.id)).toEqual([]);
+  });
 });
 
 describe('AC-9.4 /mcp scope step-up (403 insufficient_scope)', () => {

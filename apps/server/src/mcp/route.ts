@@ -212,11 +212,12 @@ export function registerMcpRoutes(app: OpenAPIHono<AppEnv>, deps: P9RouteDeps): 
         },
       );
     }
-    const actor =
+    const resolve = () =>
       token.length > MAX_TOKEN_LENGTH
-        ? null
-        : await resolveOAuthBearer(services, token, 'mcp', clientIp(c, config));
-    if (actor?.grant == null) {
+        ? Promise.resolve(null)
+        : resolveOAuthBearer(services, token, 'mcp', clientIp(c, config));
+    const early = await resolve();
+    if (early?.grant == null) {
       return rpcResponse(
         c,
         401,
@@ -231,7 +232,6 @@ export function registerMcpRoutes(app: OpenAPIHono<AppEnv>, deps: P9RouteDeps): 
         },
       );
     }
-    const grant = actor.grant;
 
     if (!isJsonContentType(c.req.header('content-type'))) {
       return rpcResponse(
@@ -259,6 +259,25 @@ export function registerMcpRoutes(app: OpenAPIHono<AppEnv>, deps: P9RouteDeps): 
         `Content Too Large: the body exceeds ${MCP_BODY_LIMIT / 1024} KB.`,
       );
     }
+    // The body may have taken a while: resolve the token again, so a grant revoked or narrowed
+    // meanwhile never runs a call with the permissions it had when the request started.
+    const actor = await resolve();
+    if (actor?.grant == null) {
+      return rpcResponse(
+        c,
+        401,
+        RPC_SERVER_ERROR,
+        'Unauthorized: the access token is invalid.',
+        null,
+        {
+          'WWW-Authenticate': mcpChallenge(config, {
+            error: 'invalid_token',
+            scope: [MCP_BASE_SCOPE],
+          }),
+        },
+      );
+    }
+    const grant = actor.grant;
     let body: unknown;
     try {
       body = JSON.parse(text);
