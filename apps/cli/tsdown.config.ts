@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'tsdown';
 
 // The native keychain addon cannot be bundled; it is an optional runtime dependency that
@@ -5,10 +6,10 @@ import { defineConfig } from 'tsdown';
 // is inlined so `dist/rooster.mjs` runs with nothing but Node.
 export const NATIVE_DEPS = ['@napi-rs/keyring'];
 /**
- * Ink's React DevTools hook (P9 TUI): imported only with `DEV=true` and only when the package
- * resolves (`ink/build/reconciler.js`), so it stays an external nobody installs.
+ * Ink's React DevTools hook (P9 TUI) is used only with `DEV=true`. It is aliased to a bundled
+ * no-op, because an unresolved external makes Bun's compiled binaries fail at startup.
  */
-export const DEV_ONLY_DEPS = ['react-devtools-core'];
+const DEVTOOLS_STUB = fileURLToPath(new URL('./src/tui/devtools-stub.ts', import.meta.url));
 
 export default defineConfig({
   entry: { rooster: 'src/main.ts' },
@@ -20,10 +21,9 @@ export default defineConfig({
   clean: true,
   minify: true,
   outExtensions: () => ({ js: '.mjs' }),
+  alias: { 'react-devtools-core': DEVTOOLS_STUB },
   deps: {
-    neverBundle: DEV_ONLY_DEPS,
-    alwaysBundle: (id) =>
-      ![...NATIVE_DEPS, ...DEV_ONLY_DEPS].some((dep) => id === dep || id.startsWith(`${dep}/`)),
+    alwaysBundle: (id) => !NATIVE_DEPS.some((dep) => id === dep || id.startsWith(`${dep}/`)),
     onlyBundle: false,
   },
 });

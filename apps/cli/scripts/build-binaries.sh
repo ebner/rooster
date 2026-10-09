@@ -49,7 +49,6 @@ for target in "${TARGETS[@]}"; do
     --minify \
     --target="bun-${target}" \
     --external @napi-rs/keyring \
-    --external react-devtools-core \
     --outfile "dist/bin/${name}"
   (cd dist/bin && checksum "$name" > "${name}.sha256")
 done
