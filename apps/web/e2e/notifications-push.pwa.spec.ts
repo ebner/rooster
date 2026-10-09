@@ -1,4 +1,4 @@
-import { signInAs, uniqueEmail } from './support/auth';
+import { apiCall, signInAs, uniqueEmail } from './support/auth';
 import { swActive } from './support/pwa';
 import { expect, test } from './support/test';
 
@@ -38,6 +38,8 @@ test.beforeEach(async ({ page }) => {
         toJSON: () => ({ endpoint, expirationTime: null, keys: { p256dh, auth } }),
         unsubscribe: async () => {
           current = null;
+          // Survives the full page load sign-out ends with.
+          sessionStorage.setItem('e2e-push-unsubscribed', endpoint);
           return true;
         },
       };
@@ -98,4 +100,37 @@ test('WP 7.1 turning push on registers this device; send a test; turn it off', a
   }
   await expect(state).toHaveAttribute('data-state', 'off');
   await expect(page.getByText('No devices yet.')).toBeVisible();
+});
+
+test('P1 signing out on a shared browser removes this device and unsubscribes it', async ({
+  page,
+}) => {
+  await signInAs(page, uniqueEmail('sam.shared'));
+  await swActive(page);
+  await page.goto('/settings/notifications');
+  const registered = page.waitForResponse(
+    (r) => r.url().endsWith('/api/v1/me/push-subscriptions') && r.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Turn on push for this device' }).click();
+  const device = (await (await registered).json()) as { id: string };
+  await expect(page.getByTestId('push-state')).toHaveAttribute('data-state', 'on');
+  const endpoint = ((await (await registered).request().postDataJSON()) as { endpoint: string })
+    .endpoint;
+
+  // The DELETE goes out while the session is still valid, before sign-out ends it.
+  const removed = page.waitForResponse(
+    (r) =>
+      r.url().endsWith(`/api/v1/me/push-subscriptions/${device.id}`) &&
+      r.request().method() === 'DELETE',
+  );
+  await page.getByRole('button', { name: /Account menu/ }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
+  expect((await removed).ok()).toBe(true);
+  await expect(page.getByRole('heading', { level: 1, name: 'Sign in to rooster' })).toBeVisible();
+  expect((await apiCall(page, 'GET', '/api/v1/me')).status()).toBe(401);
+  expect(await page.evaluate(() => sessionStorage.getItem('e2e-push-unsubscribed'))).toBe(endpoint);
+  const markers = await page.evaluate(() =>
+    Object.keys(localStorage).filter((k) => k.endsWith('.pushDevice')),
+  );
+  expect(markers).toEqual([]);
 });

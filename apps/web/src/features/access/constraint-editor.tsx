@@ -223,6 +223,8 @@ function OrgControls({
   const write = writeMode(grant.write);
   const readGroups = grant.read === 'all' ? [] : grant.read.groups;
   const writeGroups = grant.write === 'all' || grant.write === 'none' ? [] : grant.write.groups;
+  // Changing everything needs reading everything (`withWriteImpliesRead`).
+  const readNeeded = writes && write === 'all';
   const hasIssue = (kind: GrantIssue['kind']) =>
     issues.some((i) => i.kind === kind && 'orgId' in i && i.orgId === org.id);
 
@@ -252,11 +254,15 @@ function OrgControls({
           value={read}
           options={readOptions.map((o) => ({
             ...o,
-            isDisabled: o.id !== read && !can(setReadMode(value, orgs, org.id, o.id)),
+            isDisabled:
+              o.id !== read && (readNeeded || !can(setReadMode(value, orgs, org.id, o.id))),
           }))}
           onChange={(mode) => onChange(setReadMode(value, orgs, org.id, mode))}
           data-testid={`read-${org.id}`}
         />
+        {readNeeded && (
+          <p className="text-sm text-text-muted">{t('access.editor.readAllForWrite')}</p>
+        )}
         {read === 'groups' && (
           <div className="flex flex-col gap-1.5">
             <GroupPicker

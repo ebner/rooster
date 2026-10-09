@@ -115,7 +115,7 @@ export function toggleScope(
   const next = on
     ? minimalScopes([...value.scopes, scope])
     : minimalScopes([...expandScopes(value.scopes)].filter((s) => s !== scope));
-  let result: GrantValue = { ...value, scopes: next };
+  let result: GrantValue = withWriteImpliesRead({ ...value, scopes: next });
   if (on && !hasWriteScope(value.scopes) && hasWriteScope(next)) {
     const personal = orgs.find((org) => org.isPersonal);
     const inbox = inboxOf(personal);
@@ -161,6 +161,23 @@ export function setOrgIncluded(
   return { ...value, constraints: { orgs: list } };
 }
 
+/**
+ * Writing everywhere in an org implies reading everywhere in it: a credential that may create a
+ * task must be able to read it back (else it creates, then gets 404 editing it). Applied after
+ * every edit while the grant has a write scope.
+ */
+export function withWriteImpliesRead(value: GrantValue): GrantValue {
+  const list = value.constraints.orgs;
+  if (list === 'all' || !hasWriteScope(value.scopes)) return value;
+  if (!list.some((org) => org.write === 'all' && org.read !== 'all')) return value;
+  return {
+    ...value,
+    constraints: {
+      orgs: list.map((org) => (org.write === 'all' ? { ...org, read: 'all' as const } : org)),
+    },
+  };
+}
+
 export type ReadMode = 'all' | 'groups';
 export type WriteMode = 'none' | 'all' | 'groups';
 
@@ -179,12 +196,14 @@ export function setReadMode(
   orgId: string,
   mode: ReadMode,
 ): GrantValue {
-  return mapOrg(value, orgs, orgId, (org) => {
-    if (mode === readMode(org.read)) return org;
-    if (mode === 'all') return { ...org, read: 'all' };
-    const writing = org.write !== 'all' && org.write !== 'none' ? org.write.groups : [];
-    return { ...org, read: { groups: [...writing] } };
-  });
+  return withWriteImpliesRead(
+    mapOrg(value, orgs, orgId, (org) => {
+      if (mode === readMode(org.read)) return org;
+      if (mode === 'all') return { ...org, read: 'all' };
+      const writing = org.write !== 'all' && org.write !== 'none' ? org.write.groups : [];
+      return { ...org, read: { groups: [...writing] } };
+    }),
+  );
 }
 
 export function setWriteMode(
@@ -193,11 +212,13 @@ export function setWriteMode(
   orgId: string,
   mode: WriteMode,
 ): GrantValue {
-  return mapOrg(value, orgs, orgId, (org) => {
-    if (mode === writeMode(org.write)) return org;
-    if (mode !== 'groups') return { ...org, write: mode };
-    return { ...org, write: { groups: [] } };
-  });
+  return withWriteImpliesRead(
+    mapOrg(value, orgs, orgId, (org) => {
+      if (mode === writeMode(org.write)) return org;
+      if (mode !== 'groups') return { ...org, write: mode };
+      return { ...org, write: { groups: [] } };
+    }),
+  );
 }
 
 function union(a: readonly string[], b: readonly string[]): string[] {
@@ -306,9 +327,11 @@ export function normalizeConstraints(
     orgs: list.map((org) => {
       const write: WriteAccess = writes ? org.write : 'none';
       const read: ReadAccess =
-        org.read === 'all' || write === 'all' || write === 'none'
-          ? org.read
-          : { groups: union(org.read.groups, write.groups) };
+        org.read === 'all' || write === 'all'
+          ? 'all'
+          : write === 'none'
+            ? org.read
+            : { groups: union(org.read.groups, write.groups) };
       return { orgId: org.orgId, read, write };
     }),
   };
@@ -379,11 +402,74 @@ export function defaultDeviceValue(requested: readonly GrantScope[]): GrantValue
 
 /** Editing an existing grant. */
 export function valueFromGrant(grant: Pick<Grant, 'scopes' | 'constraints'>): GrantValue {
-  return {
+  return withWriteImpliesRead({
     scopes: minimalScopes(grant.scopes),
     constraints: grant.constraints as GrantConstraints,
     expiry: 'keep',
-  };
+  });
+}
+
+export interface StaleIds {
+  /** Orgs the user has left. */
+  orgs: number;
+  /** Groups deleted since the grant was made. */
+  groups: number;
+}
+
+/**
+ * Drops what the grant names but no longer exists for the user (orgs left, groups deleted),
+ * which the server would refuse (`422`) on any save, even a rename. Orgs are only judged once
+ * known (non-empty), and an org's groups once loaded. An org whose readable groups are all
+ * gone reached nothing and leaves the grant; a write list that empties becomes "none".
+ * Returns the same `value` when nothing is stale.
+ */
+export function reconcileGrant(
+  value: GrantValue,
+  orgs: readonly GrantOrgOption[],
+): { value: GrantValue; stale: StaleIds } {
+  const stale: StaleIds = { orgs: 0, groups: 0 };
+  const list = value.constraints.orgs;
+  if (list === 'all' || orgs.length === 0) return { value, stale };
+  const next: OrgGrant[] = [];
+  let changed = false;
+  for (const grant of list) {
+    const org = orgs.find((o) => o.id === grant.orgId);
+    if (!org) {
+      stale.orgs += 1;
+      changed = true;
+      continue;
+    }
+    if (!org.groups) {
+      next.push(grant);
+      continue;
+    }
+    const known = new Set(org.groups.map((g) => g.id));
+    const gone = new Set<string>();
+    const keep = (ids: readonly string[]) =>
+      ids.filter((id) => {
+        if (known.has(id)) return true;
+        gone.add(id);
+        return false;
+      });
+    const read: ReadAccess = grant.read === 'all' ? 'all' : { groups: keep(grant.read.groups) };
+    const writeGroups =
+      grant.write === 'all' || grant.write === 'none' ? null : keep(grant.write.groups);
+    if (gone.size === 0) {
+      next.push(grant);
+      continue;
+    }
+    stale.groups += gone.size;
+    changed = true;
+    if (read !== 'all' && read.groups.length === 0) continue;
+    const write: WriteAccess =
+      writeGroups === null
+        ? (grant.write as 'all' | 'none')
+        : writeGroups.length === 0
+          ? 'none'
+          : { groups: writeGroups };
+    next.push({ orgId: grant.orgId, read, write });
+  }
+  return changed ? { value: { ...value, constraints: { orgs: next } }, stale } : { value, stale };
 }
 
 /** Narrow-only editing for OAuth grants (11 §3.2); PATs and devices change freely. */

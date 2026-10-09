@@ -68,42 +68,69 @@ describe('push support', () => {
 });
 
 describe('pushsubscriptionchange', () => {
-  test('re-subscribes with the old key and registers the new endpoint', async () => {
-    const applicationServerKey = base64UrlToBytes(key).buffer;
-    const subscribe = vi.fn(async () => ({
-      toJSON: () => ({
-        endpoint: 'https://fcm.googleapis.com/fcm/send/new',
-        keys: { p256dh: 'p', auth: 'a' },
-      }),
-    }));
-    const post = vi.fn(async (_body: string) => undefined);
-    const done = await resubscribeAfterChange(
-      {
-        oldSubscription: { options: { applicationServerKey, userVisibleOnly: true } },
-        newSubscription: null,
-      },
+  const applicationServerKey = () => base64UrlToBytes(key).buffer;
+  const fresh = () => ({
+    toJSON: () => ({
+      endpoint: 'https://fcm.googleapis.com/fcm/send/new',
+      keys: { p256dh: 'p', auth: 'a' },
+    }),
+    unsubscribe: vi.fn(async () => true),
+  });
+  const oldSubscription = () => ({
+    endpoint: 'https://fcm.googleapis.com/fcm/send/old',
+    options: { applicationServerKey: applicationServerKey(), userVisibleOnly: true },
+  });
+  const answer = (status: number) => vi.fn(async (_body: string) => ({ status, ok: status < 300 }));
+
+  test('renews: re-subscribes with the old key and posts the new endpoint as a renewal', async () => {
+    const created = fresh();
+    const subscribe = vi.fn(async () => created);
+    const post = answer(201);
+    const result = await resubscribeAfterChange(
+      { oldSubscription: oldSubscription(), newSubscription: null },
       { subscribe } as unknown as PushManager,
       post,
       'UA',
     );
-    expect(done).toBe(true);
-    expect(subscribe).toHaveBeenCalledWith({ userVisibleOnly: true, applicationServerKey });
+    expect(result).toBe('renewed');
+    expect(subscribe).toHaveBeenCalledWith({
+      userVisibleOnly: true,
+      applicationServerKey: applicationServerKey(),
+    });
     expect(JSON.parse(post.mock.calls[0]?.[0] ?? '')).toEqual({
       endpoint: 'https://fcm.googleapis.com/fcm/send/new',
       keys: { p256dh: 'p', auth: 'a' },
       userAgent: 'UA',
+      renewsEndpoint: 'https://fcm.googleapis.com/fcm/send/old',
     });
+    expect(created.unsubscribe).not.toHaveBeenCalled();
   });
 
-  test('without the old key nothing can be renewed', async () => {
-    const post = vi.fn();
-    const done = await resubscribeAfterChange(
-      { oldSubscription: null, newSubscription: null },
+  test.each([410, 409])(
+    'P2: a device removed elsewhere (or another account’s endpoint, %i) is not resurrected',
+    async (status) => {
+      const created = fresh();
+      const result = await resubscribeAfterChange(
+        { oldSubscription: oldSubscription(), newSubscription: created },
+        { subscribe: vi.fn() } as unknown as PushManager,
+        answer(status),
+        'UA',
+      );
+      expect(result).toBe('gone');
+      expect(created.unsubscribe).toHaveBeenCalled();
+    },
+  );
+
+  test('without an old subscription nothing is posted (the next app open decides)', async () => {
+    const post = answer(201);
+    const created = fresh();
+    const result = await resubscribeAfterChange(
+      { oldSubscription: null, newSubscription: created },
       { subscribe: vi.fn() } as unknown as PushManager,
       post,
       'UA',
     );
-    expect(done).toBe(false);
+    expect(result).toBe('skipped');
     expect(post).not.toHaveBeenCalled();
   });
 });

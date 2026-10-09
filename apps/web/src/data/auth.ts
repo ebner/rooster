@@ -46,9 +46,27 @@ export function useSignIn(): MutationResult<SignInVariables> {
   return useMutation({ mutationFn: startSignIn });
 }
 
+/** How long sign-out waits for push cleanup (an unreachable server must not block it). */
+const pushCleanupMs = 3000;
+
 /**
- * Ends the session and forgets this user's local copies (the persisted cache and the outbox,
- * in every tab; 04 §6.1). Callers then load `/login` afresh (a full page load).
+ * Push off for this browser before the session ends (P1: on a shared browser the next person
+ * would otherwise get this user's notifications). The DELETE needs the session, so this runs
+ * first; it never throws and never holds sign-out up for long. The push module is lazy.
+ */
+export async function forgetPushBeforeSignOut(
+  load: () => Promise<{ forgetPushOnSignOut: () => Promise<void> }> = () => import('./push'),
+  timeoutMs = pushCleanupMs,
+): Promise<void> {
+  const cleanup = load()
+    .then((push) => push.forgetPushOnSignOut())
+    .catch(() => undefined);
+  await Promise.race([cleanup, new Promise((resolve) => setTimeout(resolve, timeoutMs))]);
+}
+
+/**
+ * Ends the session and forgets this user's local copies (push on this browser, the persisted
+ * cache and the outbox, in every tab; 04 §6.1). Callers then load `/login` afresh (a full page load).
  */
 export function useSignOut(): MutationResult<void> {
   return useMutation({
@@ -56,6 +74,7 @@ export function useSignOut(): MutationResult<void> {
       // Leaves the identity provider's session alone (no RP-initiated logout): signing
       // out of rooster should not sign the user out of their company SSO.
       const authClient = await loadAuthClient();
+      await forgetPushBeforeSignOut();
       const result = await authClient.signOut({ disableRedirect: true });
       if (result.error) throw new ApiError('sign_out_failed', result.error.status ?? 500);
       await clearLocalData();

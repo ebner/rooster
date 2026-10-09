@@ -1,6 +1,7 @@
 import { isAllowedPushEndpoint } from '@rooster/core/push-hosts';
-import type { PushSubscriptionCreate, PushSubscriptionInfo } from '@rooster/core/schemas';
+import type { PushSubscriptionInfo } from '@rooster/core/schemas';
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { pushMarkerPattern, unsubscribeThisBrowser } from '../features/pwa/push-local';
 import { userStorageKey } from '../lib/user-storage';
 import { ApiError } from './errors';
 import { api, unwrap } from './http';
@@ -46,7 +47,7 @@ function markedUsers(): string[] {
     const users: string[] = [];
     for (let i = 0; i < localStorage.length; i += 1) {
       const key = localStorage.key(i);
-      const match = key ? /^rooster\.user\.(.+)\.pushDevice$/.exec(key) : null;
+      const match = key ? pushMarkerPattern.exec(key) : null;
       if (match?.[1]) users.push(match[1]);
     }
     return users;
@@ -89,17 +90,44 @@ export function sameApplicationServerKey(
   return a.length === b.length && a.every((byte, i) => byte === b[i]);
 }
 
+/** `POST /me/push-subscriptions`; `renewsEndpoint` makes it a renewal (no gesture). */
+export interface SubscriptionBody {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+  userAgent: string;
+  renewsEndpoint?: string;
+}
+
+/** The server compares endpoints in their canonical form (`new URL(u).href`). */
+export function canonicalEndpoint(endpoint: string): string {
+  try {
+    return new URL(endpoint).href;
+  } catch {
+    return endpoint;
+  }
+}
+
 /** The POST body for a browser subscription; the server labels the device from its UA. */
 export function subscriptionBody(
   subscription: Pick<PushSubscription, 'toJSON'>,
   userAgent: string,
-): PushSubscriptionCreate & { userAgent: string } {
+  renewsEndpoint?: string,
+): SubscriptionBody {
   const json = subscription.toJSON();
   return {
-    endpoint: json.endpoint ?? '',
+    endpoint: canonicalEndpoint(json.endpoint ?? ''),
     keys: { p256dh: json.keys?.p256dh ?? '', auth: json.keys?.auth ?? '' },
     userAgent: userAgent.slice(0, 256),
+    ...(renewsEndpoint ? { renewsEndpoint: canonicalEndpoint(renewsEndpoint) } : {}),
   };
+}
+
+/**
+ * A renewal the server refused because the device is no longer this user's live subscription
+ * (`410 push_gone`: removed elsewhere) or the new endpoint is another account's (`409`).
+ */
+export function isRenewalRefused(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 410 || error.status === 409);
 }
 
 /** `GET /push/vapid-public-key`. */
@@ -157,7 +185,11 @@ export function useThisDevice(
  * subscription made with an older key is replaced first: `subscribe` refuses a different key
  * while one exists.
  */
-async function subscribeAndRegister(userId: string, publicKey: string): Promise<string> {
+async function subscribeAndRegister(
+  userId: string,
+  publicKey: string,
+  renewsEndpoint?: string,
+): Promise<string> {
   const reg = await registration();
   let subscription = await reg.pushManager.getSubscription();
   if (
@@ -171,7 +203,7 @@ async function subscribeAndRegister(userId: string, publicKey: string): Promise<
     userVisibleOnly: true,
     applicationServerKey: base64UrlToBytes(publicKey),
   });
-  const body = subscriptionBody(subscription, navigator.userAgent);
+  const body = subscriptionBody(subscription, navigator.userAgent, renewsEndpoint);
   if (!isAllowedPushEndpoint(body.endpoint)) {
     await subscription.unsubscribe();
     throw new UnsupportedPushServiceError();
@@ -277,8 +309,9 @@ export function useRemovePushDevice(userId: string | undefined): MutationResult<
 
 /**
  * On app start (`PwaRoot`): where this user turned push on and the permission still stands,
- * keep the subscription on the current key. After a key rotation the server dropped every
- * subscription, so this re-subscribes silently (no prompt: permission is already granted).
+ * keep the subscription on the current key. After a key rotation this re-subscribes silently
+ * (no prompt) as a renewal of the subscription it replaces, so a device the user removed
+ * elsewhere never comes back: the server answers `410`/`409`, and push goes off here too.
  */
 export async function resyncPush(): Promise<void> {
   const [userId] = markedUsers();
@@ -286,5 +319,38 @@ export async function resyncPush(): Promise<void> {
   const { publicKey } = await unwrap(api.GET('/api/v1/push/vapid-public-key'));
   const subscription = await (await registration()).pushManager.getSubscription();
   if (sameApplicationServerKey(subscription?.options.applicationServerKey, publicKey)) return;
-  await subscribeAndRegister(userId, publicKey);
+  const replaced = subscription?.endpoint;
+  if (!replaced) {
+    // Nothing to renew from (the browser or the worker dropped it): never subscribe anew
+    // without the user's gesture.
+    writeMarker(userId, null);
+    return;
+  }
+  try {
+    await subscribeAndRegister(userId, publicKey, replaced);
+  } catch (error) {
+    if (!isRenewalRefused(error)) throw error;
+    await unsubscribeThisBrowser();
+    writeMarker(userId, null);
+  }
+}
+
+/**
+ * Sign-out (call it while the session is still valid): removes this browser's device on the
+ * server for every user who turned push on here, drops the browser subscription, then the
+ * markers. On a shared browser the next person must not get this user's notifications. A
+ * failed DELETE (offline) still unsubscribes locally; the server drops the dead endpoint on
+ * the push service's next `404/410`.
+ */
+export async function forgetPushOnSignOut(): Promise<void> {
+  const users = markedUsers();
+  for (const userId of users) {
+    const id = readMarker(userId);
+    if (!id) continue;
+    await unwrap(
+      api.DELETE('/api/v1/me/push-subscriptions/{id}', { params: { path: { id } } }),
+    ).catch(() => undefined);
+  }
+  await unsubscribeThisBrowser();
+  for (const userId of users) writeMarker(userId, null);
 }

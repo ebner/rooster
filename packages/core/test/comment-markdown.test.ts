@@ -285,3 +285,50 @@ describe('plain text and round trips', () => {
     expect(parseCommentMarkdown(commentToMarkdown(ast))).toEqual(ast);
   });
 });
+
+describe('worst cases stay linear (a comment must never freeze the task view)', () => {
+  const n = 20_000;
+  const payloads: Record<string, string> = {
+    'a URL followed by closing parens': `https://a/${')'.repeat(n - 10)}`,
+    'a URL followed by paren pairs, then closing parens': `https://a/${'()'.repeat(n / 4)}${')'.repeat(n / 2 - 10)}`,
+    'a URL followed by mixed trailing punctuation': `https://a/${').'.repeat((n - 10) / 2)}`,
+    'star runs': '*'.repeat(n),
+    'alternating stars': '*a'.repeat(n / 2),
+    'underscore runs': '_'.repeat(n),
+    'many openers, then many closers (*)': '*a '.repeat(n / 6) + 'a* '.repeat(n / 6),
+    'many openers, then many closers (_)': '_a '.repeat(n / 6) + 'a_ '.repeat(n / 6),
+    'mixed openers and closers': '*_a '.repeat(n / 8) + 'a_* '.repeat(n / 8),
+    'closers after nesting too deep': `${'*a '.repeat(10)}b${' c*'.repeat(n / 3)}`,
+    'bracket runs': '['.repeat(n),
+    'unclosed link openers': '[a]('.repeat(n / 4),
+    'backtick runs': '`'.repeat(n),
+    'alternating backticks': '`a'.repeat(n / 2),
+    'an unclosed backtick before many runs': `\`${'``a'.repeat((n - 1) / 3)}`,
+    'mention openers': '@['.repeat(n / 2),
+  };
+  for (const [name, body] of Object.entries(payloads)) {
+    it(`${name} parse in under 50 ms`, () => {
+      parseCommentMarkdown(body); // warm up the JIT
+      const start = performance.now();
+      const blocks = parseCommentMarkdown(body);
+      expect(performance.now() - start).toBeLessThan(50);
+      expect(blocks.length).toBeGreaterThan(0);
+    });
+  }
+
+  it('trimming stays exact: unbalanced closing parens and trailing punctuation go', () => {
+    const [block] = parseCommentMarkdown(`see https://a.example/x_(y))).),`);
+    expect(block).toEqual({
+      type: 'paragraph',
+      children: [
+        { type: 'text', text: 'see ' },
+        {
+          type: 'link',
+          href: 'https://a.example/x_(y)',
+          children: [{ type: 'text', text: 'https://a.example/x_(y)' }],
+        },
+        { type: 'text', text: ')).),' },
+      ],
+    });
+  });
+});

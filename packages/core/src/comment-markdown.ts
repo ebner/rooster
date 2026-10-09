@@ -130,6 +130,11 @@ interface Delim {
   length: number;
   canOpen: boolean;
   canClose: boolean;
+  /**
+   * Pairing with this opener nests too deep. Later closers only see more content in between,
+   * so they would fail too: remembered, so the depth is not recounted for each (linear).
+   */
+  tooDeep?: boolean;
 }
 
 type Atom = CommentInline | Delim;
@@ -254,24 +259,35 @@ function findBacktickRun(text: string, from: number, length: number): number {
   return -1;
 }
 
-/** Trailing punctuation is not part of a bare URL; a closing paren only when it is unbalanced. */
+/**
+ * Trailing punctuation is not part of a bare URL; a closing paren only when it is unbalanced.
+ * Linear: the parens are counted once and the count follows the trimming (a URL followed by
+ * thousands of `)` once took a second per comment).
+ */
 function trimUrl(url: string): string {
-  let out = url;
+  let open = 0;
+  let close = 0;
+  for (let k = 0; k < url.length; k++) {
+    if (url[k] === '(') open += 1;
+    else if (url[k] === ')') close += 1;
+  }
+  let end = url.length;
   for (;;) {
-    const last = out.at(-1);
-    if (last && /[.,;:!?'*_]/.test(last)) {
-      out = out.slice(0, -1);
+    const last = url[end - 1];
+    if (last !== undefined && TRAILING_PUNCT.has(last)) {
+      end -= 1;
       continue;
     }
-    if (last === ')' && count(out, '(') < count(out, ')')) {
-      out = out.slice(0, -1);
+    if (last === ')' && open < close) {
+      end -= 1;
+      close -= 1;
       continue;
     }
-    return out;
+    return url.slice(0, end);
   }
 }
 
-const count = (s: string, c: string) => s.split(c).length - 1;
+const TRAILING_PUNCT: ReadonlySet<string> = new Set([...".,;:!?'*_"]);
 
 const depthOf = (atoms: readonly Atom[]): number => {
   let max = 0;
@@ -308,17 +324,24 @@ function matchEmphasis(input: Atom[]): Atom[] {
       if (at < 0 || stack.length - at > OPENER_LOOKBACK) break;
       const j = stack[at] as number;
       const opener = atoms[j] as Delim;
+      if (opener.tooDeep) break;
       const children = atoms.slice(j + 1, i);
-      if (depthOf(children) >= COMMENT_NESTING_MAX) break;
+      if (depthOf(children) >= COMMENT_NESTING_MAX) {
+        opener.tooDeep = true;
+        break;
+      }
       const use = opener.count >= 2 && closer.count >= 2 ? 2 : 1;
       atoms.splice(j + 1, i - j - 1, {
         type: use === 2 ? 'strong' : 'em',
         children: finish(children),
       });
       i = j + 2;
-      // Openers inside the pair can no longer match; a used-up opener leaves the stack.
+      // Openers inside the pair can no longer match; a used-up opener leaves the stack. The
+      // stacks are sorted, so popping from the top is enough (linear overall).
       for (const key of ['*', '_'] as const) {
-        openers[key] = openers[key].filter((k) => k < j || (k === j && opener.count > use));
+        const keyed = openers[key];
+        while (keyed.length > 0 && (keyed.at(-1) as number) > j) keyed.pop();
+        if (keyed.at(-1) === j && opener.count <= use) keyed.pop();
       }
       opener.count -= use;
       closer.count -= use;

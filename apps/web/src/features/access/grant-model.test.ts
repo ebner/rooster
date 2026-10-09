@@ -13,6 +13,7 @@ import {
   normalizeConstraints,
   normalizeUserCode,
   offeredScopes,
+  reconcileGrant,
   scopeState,
   setAllOrgs,
   setOrgIncluded,
@@ -26,6 +27,7 @@ import {
   toTokenCreate,
   valueFromGrant,
   withinCeiling,
+  withWriteImpliesRead,
   writesNothing,
 } from './grant-model';
 import { describeScopes, describeWhere, formatGrantDate } from './grant-summary';
@@ -185,6 +187,75 @@ describe('grant model', () => {
       true,
     );
     expect(withinCeiling(value, undefined)).toBe(true);
+  });
+
+  test('P2: stale ids (an org left, deleted groups) are reconciled away before a save', () => {
+    const value: GrantValue = {
+      scopes: ['tasks:write'],
+      constraints: {
+        orgs: [
+          { orgId: 'left-org', read: 'all', write: 'all' },
+          {
+            orgId: acme,
+            read: { groups: [g.companyPrio, 'deleted-1', 'deleted-2'] },
+            write: { groups: ['deleted-1'] },
+          },
+          { orgId: personal, read: { groups: ['deleted-3'] }, write: 'none' },
+        ],
+      },
+      expiry: 'keep',
+    };
+    const { value: next, stale } = reconcileGrant(value, orgs);
+    expect(stale).toEqual({ orgs: 1, groups: 3 });
+    // Personal read only a deleted group: it reached nothing and leaves the grant.
+    expect(next.constraints).toEqual({
+      orgs: [{ orgId: acme, read: { groups: [g.companyPrio] }, write: 'none' }],
+    });
+    expect(grantIssues(next)).toEqual([]);
+    // A rename now sends only ids that exist (the server answered 422 before).
+    expect(toGrantPatch(next, 0, 'Renamed').constraints).toEqual(next.constraints);
+    // Nothing stale: the same value; orgs or groups not loaded yet: not judged.
+    const clean = reconcileGrant(next, orgs);
+    expect(clean.value).toBe(next);
+    expect(reconcileGrant(value, []).value).toBe(value);
+    const loading = orgs.map((org) => ({ ...org, groups: undefined }));
+    expect(reconcileGrant(value, loading).stale).toEqual({ orgs: 1, groups: 0 });
+  });
+
+  test('P2: changing everything implies reading everything', () => {
+    let value: GrantValue = { ...defaultTokenValue(orgs), scopes: ['tasks:write'] };
+    value = setReadMode(value, orgs, acme, 'groups');
+    value = setReadGroups(value, orgs, acme, [g.companyPrio]);
+    value = setWriteMode(value, orgs, acme, 'all');
+    expect(value.constraints.orgs !== 'all' && value.constraints.orgs[1]).toEqual({
+      orgId: acme,
+      read: 'all',
+      write: 'all',
+    });
+    // Limiting the read again is refused while it changes everything.
+    expect(setReadMode(value, orgs, acme, 'groups').constraints).toEqual(value.constraints);
+    // A stored grant with the combination is repaired on edit and on send.
+    const stored = {
+      scopes: ['tasks:write' as const],
+      constraints: {
+        orgs: [{ orgId: acme, read: { groups: [g.companyPrio] }, write: 'all' as const }],
+      },
+    };
+    expect(valueFromGrant(stored).constraints).toEqual({
+      orgs: [{ orgId: acme, read: 'all', write: 'all' }],
+    });
+    expect(normalizeConstraints(stored)).toEqual({
+      orgs: [{ orgId: acme, read: 'all', write: 'all' }],
+    });
+    expect(describeWhere(stored, orgs, t, 'en')).toBe(
+      'Can read everything in Acme; can add and change tasks anywhere in Acme.',
+    );
+    // Without a write scope it writes nothing, so a limited read stays.
+    const readOnly = { ...stored, scopes: ['tasks:read' as const], expiry: 'keep' as const };
+    expect(withWriteImpliesRead(readOnly)).toBe(readOnly);
+    // Gaining a write scope with a stored "all" write applies the rule too.
+    const gained = toggleScope(readOnly, 'tasks:write', true, orgs);
+    expect(gained.constraints.orgs !== 'all' && gained.constraints.orgs[0]?.read).toBe('all');
   });
 
   test('user codes normalise like better-auth and print as ABCD-EFGH', () => {

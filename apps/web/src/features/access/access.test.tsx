@@ -86,6 +86,24 @@ describe('ConstraintEditor', () => {
     expect(screen.getByTestId('grant-summary').textContent).toContain('Acme › Prio');
   });
 
+  test('P2: "Change → Everything" makes reading everything, with the limit disabled and explained', () => {
+    render(<Editor initial={{ ...defaultTokenValue(orgs), scopes: ['tasks:write'] }} />);
+    const read = screen.getByTestId(`read-${acme}`);
+    fireEvent.click(within(read).getByRole('radio', { name: 'Only these groups' }));
+    fireEvent.click(
+      within(screen.getByTestId(`write-${acme}`)).getByRole('radio', { name: 'Everything' }),
+    );
+    expect(
+      (within(read).getByRole('radio', { name: 'Everything' }) as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(
+      (within(read).getByRole('radio', { name: 'Only these groups' }) as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText('Changing everything here needs reading everything here.'),
+    ).toBeTruthy();
+  });
+
   test('a ceiling hides scopes beyond it and disables widening choices', () => {
     const oauth = fixtureGrants(now)[2];
     if (!oauth) throw new Error('fixture');
@@ -178,6 +196,47 @@ describe('Connected apps', () => {
         ],
       },
       label: 'Prio sync script',
+    });
+  });
+
+  test('P2: editing a grant with stale ids says so and saves without them (rename works)', async () => {
+    const [, pat] = fixtureGrants(now);
+    if (!pat) throw new Error('fixture');
+    const stale = {
+      ...pat,
+      constraints: {
+        orgs: [
+          { orgId: 'left-org', read: 'all' as const, write: 'none' as const },
+          { orgId: acme, read: 'all' as const, write: { groups: [g.companyPrio, 'deleted'] } },
+        ],
+      },
+    };
+    const onUpdate = vi.fn(async () => undefined);
+    renderApps({ grants: [stale], onUpdate });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Prio sync script' }));
+    const form = screen.getByTestId('edit-grant');
+    expect(within(form).getByRole('status').textContent).toBe(
+      '1 group no longer exists and will be removed. You left 1 organisation it names; it will be removed.',
+    );
+    const picker = within(form).getByRole('listbox', { name: 'Groups it may change in Acme' });
+    expect(
+      within(picker)
+        .getAllByRole('option')
+        .filter((o) => o.getAttribute('aria-selected') === 'true')
+        .map((o) => o.textContent),
+    ).toEqual(['Prio']);
+    fireEvent.change(within(form).getByRole('textbox', { name: 'Name' }), {
+      target: { value: 'Renamed' },
+    });
+    await act(async () => {
+      fireEvent.click(within(form).getByRole('button', { name: 'Save changes' }));
+    });
+    expect(onUpdate).toHaveBeenCalledWith(pat.id, {
+      scopes: ['tasks:write'],
+      constraints: {
+        orgs: [{ orgId: acme, read: 'all', write: { groups: [g.companyPrio] } }],
+      },
+      label: 'Renamed',
     });
   });
 

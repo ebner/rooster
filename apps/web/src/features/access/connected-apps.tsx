@@ -17,6 +17,7 @@ import {
   type GrantOrgOption,
   type GrantValue,
   grantIssues,
+  reconcileGrant,
   toGrantPatch,
   toTokenCreate,
   valueFromGrant,
@@ -313,7 +314,9 @@ function EditGrant({
   onSave: (patch: GrantPatch) => Promise<void>;
 }) {
   const { t } = useTranslation('settings');
-  const [value, setValue] = useState<GrantValue>(() => valueFromGrant(grant));
+  const [edited, setValue] = useState<GrantValue>(() => valueFromGrant(grant));
+  // Orgs left and groups deleted since the grant was made would fail any save (422).
+  const { value, stale } = reconcileGrant(edited, orgs);
   const [label, setLabel] = useState(grant.label);
   const [pending, setPending] = useState(false);
   const blocked = grantIssues(value).length > 0 || label.trim() === '';
@@ -337,6 +340,16 @@ function EditGrant({
         data-testid="edit-grant"
       >
         {grant.kind === 'oauth' && <Banner>{t('access.apps.narrowOnly')}</Banner>}
+        {(stale.orgs > 0 || stale.groups > 0) && (
+          <Banner tone="warning" role="status">
+            {[
+              stale.groups > 0 ? t('access.apps.staleGroups', { count: stale.groups }) : null,
+              stale.orgs > 0 ? t('access.apps.staleOrgs', { count: stale.orgs }) : null,
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          </Banner>
+        )}
         <ConstraintEditor
           value={value}
           onChange={setValue}

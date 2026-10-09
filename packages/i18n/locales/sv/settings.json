@@ -306,7 +306,8 @@
       "readGroups": "Grupper den får läsa i {org}",
       "writeGroups": "Grupper den får ändra i {org}",
       "writesNothing": "Den kan inte ändra något än. Välj var under ”Ändra”.",
-      "summary": "Sammanfattning"
+      "summary": "Sammanfattning",
+      "readAllForWrite": "För att ändra allt här måste den också kunna läsa allt här."
     },
     "issue": {
       "noScopes": "Välj minst en behörighet.",
@@ -366,7 +367,9 @@
       "nameHint": "Så att du kan skilja dina token åt, till exempel ”Säkerhetskopieringsskript”.",
       "save": "Spara ändringar",
       "create": "Skapa token",
-      "createFailed": "Det gick inte att skapa token."
+      "createFailed": "Det gick inte att skapa token.",
+      "staleGroups": "{count, plural, one {# grupp finns inte längre och tas bort.} other {# grupper finns inte längre och tas bort.}}",
+      "staleOrgs": "{count, plural, one {Du har lämnat # organisation som den nämner; den tas bort.} other {Du har lämnat # organisationer som den nämner; de tas bort.}}"
     },
     "reveal": {
       "title": "{name} är klar",

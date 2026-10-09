@@ -306,7 +306,8 @@
       "readGroups": "Groups it may read in {org}",
       "writeGroups": "Groups it may change in {org}",
       "writesNothing": "It can’t change anything yet. Choose where under “Change”.",
-      "summary": "Summary"
+      "summary": "Summary",
+      "readAllForWrite": "Changing everything here needs reading everything here."
     },
     "issue": {
       "noScopes": "Choose at least one capability.",
@@ -366,7 +367,9 @@
       "nameHint": "To tell your tokens apart, like “Backup script”.",
       "save": "Save changes",
       "create": "Create token",
-      "createFailed": "Couldn’t create the token."
+      "createFailed": "Couldn’t create the token.",
+      "staleGroups": "{count, plural, one {# group no longer exists and will be removed.} other {# groups no longer exist and will be removed.}}",
+      "staleOrgs": "{count, plural, one {You left # organisation it names; it will be removed.} other {You left # organisations it names; they will be removed.}}"
     },
     "reveal": {
       "title": "{name} is ready",

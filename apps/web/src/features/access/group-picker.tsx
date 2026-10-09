@@ -34,9 +34,6 @@ export function GroupPicker({
   if (!groups) {
     return <p className="text-sm text-text-muted">{t('access.groupsLoading')}</p>;
   }
-  // Ids that are no longer groups (deleted) stay selected until the user unpicks them.
-  const known = new Set(groups.map((g) => g.id));
-  const stale = selected.filter((id) => !known.has(id));
   return (
     <ListBox
       aria-label={label}
@@ -46,15 +43,13 @@ export function GroupPicker({
       disabledKeys={disabledIds ?? []}
       onSelectionChange={(keys) => {
         if (keys === 'all') {
-          onChange([...groups.map((g) => g.id), ...stale]);
+          onChange(groups.map((g) => g.id));
           return;
         }
-        // Keep the groups' own order, so the payload is stable.
+        // Keep the groups' own order, so the payload is stable. Ids of deleted groups are
+        // never kept selected (they are reconciled away before a save).
         const picked = new Set([...keys].map(String));
-        onChange([
-          ...groups.filter((g) => picked.has(g.id)).map((g) => g.id),
-          ...stale.filter((id) => picked.has(id)),
-        ]);
+        onChange(groups.filter((g) => picked.has(g.id)).map((g) => g.id));
       }}
       {...(testId ? { 'data-testid': testId } : {})}
       className="flex flex-col rounded-sm border border-border bg-bg-app p-1 outline-none focus-ring:border-border-focus"

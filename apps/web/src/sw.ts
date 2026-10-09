@@ -63,8 +63,9 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(focusOrOpen(new URL(path, self.location.origin).href));
 });
 
-// The push service rotated this browser's subscription: register the new one. Without a
-// session (signed out) the POST fails, and the app re-subscribes on its next open instead.
+// The push service rotated this browser's subscription: renew it on the server (only while
+// the old device is still this user's live subscription; otherwise it is dropped here). Without
+// a session (signed out) the POST fails, and the app decides on its next open instead.
 self.addEventListener('pushsubscriptionchange', (event) => {
   const change = event as unknown as ExtendableEvent & SubscriptionChange;
   change.waitUntil(
@@ -79,7 +80,7 @@ self.addEventListener('pushsubscriptionchange', (event) => {
           body,
         }),
       self.navigator.userAgent,
-    ).catch(() => false),
+    ).catch(() => 'failed' as const),
   );
 });
 
