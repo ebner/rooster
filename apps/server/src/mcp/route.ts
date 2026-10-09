@@ -6,7 +6,7 @@ import { coversScopes, isToolName, requiredScopes } from '@rooster/mcp/tools';
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { resolveOAuthBearer } from '../auth/oauth-bearer.ts';
-import { API_BODY_LIMIT, bodyLimitFor } from '../lib/body-limit.ts';
+import { API_BODY_LIMIT } from '../lib/body-limit.ts';
 import { clientIp } from '../lib/client-ip.ts';
 import type { AppEnv } from '../lib/context.ts';
 import { logSafeError } from '../lib/log-safe-error.ts';
@@ -73,6 +73,34 @@ function acceptsMcpResponses(value: string | undefined): boolean {
   if (value === undefined) return false;
   const types = value.split(',').map((part) => part.split(';')[0]?.trim().toLowerCase());
   return types.includes('application/json') && types.includes('text/event-stream');
+}
+
+function hasAssigneeArg(args: unknown): boolean {
+  return typeof args === 'object' && args !== null && 'assignee' in args;
+}
+
+/**
+ * The body as text, or null once it exceeds `maxBytes`: a declared `Content-Length` is checked
+ * up front, a chunked body is counted while it is read and cut off at the bound.
+ */
+export async function readBoundedText(request: Request, maxBytes: number): Promise<string | null> {
+  const declared = request.headers.get('content-length');
+  if (declared !== null && Number(declared) > maxBytes) return null;
+  if (request.body === null) return '';
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
 /** Scopes in `ALL_GRANT_SCOPES` order, without duplicates, for a stable challenge. */
@@ -162,7 +190,6 @@ export function registerMcpRoutes(app: OpenAPIHono<AppEnv>, deps: P9RouteDeps): 
     app.options(path, preflight);
   }
 
-  app.use(MCP_PATH, bodyLimitFor(MCP_BODY_LIMIT));
   app.all(MCP_PATH, async (c) => {
     const origin = c.req.header('origin');
     if (origin !== undefined && origin !== expectedOrigin) {
@@ -222,7 +249,16 @@ export function registerMcpRoutes(app: OpenAPIHono<AppEnv>, deps: P9RouteDeps): 
         'Not Acceptable: accept both application/json and text/event-stream.',
       );
     }
-    const text = await c.req.text();
+    // Read only now, after the cheap checks, so a rejected request never waits for its body.
+    const text = await readBoundedText(c.req.raw, MCP_BODY_LIMIT);
+    if (text === null) {
+      return rpcResponse(
+        c,
+        413,
+        RPC_SERVER_ERROR,
+        `Content Too Large: the body exceeds ${MCP_BODY_LIMIT / 1024} KB.`,
+      );
+    }
     let body: unknown;
     try {
       body = JSON.parse(text);
@@ -233,7 +269,12 @@ export function registerMcpRoutes(app: OpenAPIHono<AppEnv>, deps: P9RouteDeps): 
     // Scope challenge (MCP Scope Challenge Handling, ADR 0042 §6): every scope the request
     // needs, in one challenge. The services enforce the same rules again on each REST call.
     const calls = toolCallsOf(body);
-    const scopeContext = { userId: actor.userId, email: actor.email };
+    // An exact display name also counts as "me" (ADR 0044 §1). The actor carries no name, so
+    // it is read once, and only when some call names an assignee.
+    const name = calls.some((call) => hasAssigneeArg(call.args))
+      ? services.users.getMe(actor).name
+      : undefined;
+    const scopeContext = { userId: actor.userId, email: actor.email, name };
     const needed = new Set<GrantScope>();
     let missing = false;
     for (const call of calls) {

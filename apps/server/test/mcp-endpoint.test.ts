@@ -137,7 +137,8 @@ describe('AC-9.4 /mcp scope step-up (403 insufficient_scope)', () => {
     const none = await rpc(app, write, call('update_task', { ref: '1', assignee: null }));
     expect(challenge(none)).toEqual(insufficient('tasks:write tasks:assign'));
     // Assigning oneself needs only tasks:write.
-    for (const me of ['me', 'alice@example.com', 'ALICE@example.com']) {
+    // The display name counts as "me" too (ADR 0044 §1); the user is named "Alice".
+    for (const me of ['me', 'alice@example.com', 'ALICE@example.com', 'Alice', ' alice ']) {
       const self = await rpc(
         app,
         write,
@@ -339,6 +340,70 @@ describe('/mcp transport rules', () => {
     }
     expect(oauth.calls).toEqual([]);
     expect((await rpc(app, token, call('list_orgs'), { origin: BASE_URL })).status).toBe(200);
+  });
+
+  it('rejects on Origin, method, auth and headers without waiting for the body', async () => {
+    const { app, alice, oauth } = setup();
+    const { token } = await oauth.token(alice, ['tasks:read']);
+    // A chunked body that never ends: any check that read it first would hang.
+    const endless = () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"jsonrpc":"2.0",'));
+        },
+      });
+    const send = (headers: Record<string, string>) =>
+      Promise.race([
+        app.request('/mcp', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+            ...headers,
+          },
+          body: endless(),
+          duplex: 'half',
+        } as RequestInit),
+        new Promise<'hung'>((resolve) => setTimeout(() => resolve('hung'), 1_000)),
+      ]);
+    const cases: [Record<string, string>, number][] = [
+      [{ origin: 'https://evil.example' }, 403],
+      [{}, 401],
+      [{ authorization: 'Bearer rooster_at_unknown' }, 401],
+      [{ authorization: `Bearer ${token}`, 'content-type': 'text/plain' }, 415],
+      [{ authorization: `Bearer ${token}`, accept: 'text/html' }, 406],
+    ];
+    for (const [headers, status] of cases) {
+      const res = await send(headers);
+      expect(res === 'hung' ? 'hung' : res.status, JSON.stringify(headers)).toBe(status);
+    }
+  });
+
+  it('cuts off a chunked body over 1 MB without a Content-Length', async () => {
+    const { app, alice, oauth } = setup();
+    const { token } = await oauth.token(alice, ['tasks:read']);
+    const chunk = new Uint8Array(64 * 1024).fill(0x20);
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        sent += chunk.byteLength;
+        controller.enqueue(chunk);
+        if (sent > 4 * 1024 * 1024) controller.close();
+      },
+    });
+    const res = await app.request('/mcp', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body,
+      duplex: 'half',
+    } as RequestInit);
+    expect(res.status).toBe(413);
+    // It stopped reading at the bound rather than draining the stream.
+    expect(sent).toBeLessThan(2 * 1024 * 1024);
   });
 
   it('enforces JSON, the Accept header, valid JSON and the body size', async () => {

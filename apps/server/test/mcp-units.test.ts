@@ -5,6 +5,7 @@ import { IN_PROCESS_ACTOR, type InProcessBindings } from '../src/lib/in-process.
 import { mcpProtectedResourceMetadata } from '../src/mcp/challenge.ts';
 import { createInProcessClient } from '../src/mcp/in-process-client.ts';
 import { echoId, toolCallsOf } from '../src/mcp/jsonrpc.ts';
+import { readBoundedText } from '../src/mcp/route.ts';
 import type { Actor } from '../src/services/index.ts';
 import { BASE_URL, testConfig } from './helpers.ts';
 
@@ -127,5 +128,32 @@ describe('challenge and metadata', () => {
     expect(mcpProtectedResourceMetadata(testConfig()).authorization_servers).toEqual([
       `${BASE_URL}/api/auth`,
     ]);
+  });
+});
+
+describe('readBoundedText', () => {
+  const post = (
+    body: string | ReadableStream<Uint8Array> | null,
+    headers: Record<string, string> = {},
+  ) =>
+    new Request('http://x/mcp', { method: 'POST', body, headers, duplex: 'half' } as RequestInit);
+
+  it('reads a body up to the bound, UTF-8 decoded', async () => {
+    expect(await readBoundedText(post('{"a":"å"}'), 16)).toBe('{"a":"å"}');
+    expect(await readBoundedText(post(null), 16)).toBe('');
+    expect(await readBoundedText(post('x'.repeat(16)), 16)).toBe('x'.repeat(16));
+  });
+
+  it('refuses a declared or streamed body over the bound', async () => {
+    expect(await readBoundedText(post('x'.repeat(17)), 16)).toBeNull();
+    expect(await readBoundedText(post('x', { 'content-length': '999' }), 16)).toBeNull();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(10));
+        controller.enqueue(new Uint8Array(10));
+        controller.close();
+      },
+    });
+    expect(await readBoundedText(post(stream), 16)).toBeNull();
   });
 });
