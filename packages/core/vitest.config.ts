@@ -5,5 +5,7 @@ export default defineProject({
     name: '@rooster/core',
     environment: 'node',
     include: ['test/**/*.test.ts'],
+    // CI runners are UTC; pin it so a local run in another zone can't hide a host-zone bug.
+    env: { TZ: 'UTC' },
   },
 });

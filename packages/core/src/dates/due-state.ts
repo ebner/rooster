@@ -1,5 +1,4 @@
-import { TZDate } from '@date-fns/tz';
-import { diffDays, type IsoDate, parseIsoDate, parseTime } from './iso.ts';
+import { diffDays, type IsoDate, parseIsoDate, parseTime, zonedWallTimeToInstant } from './iso.ts';
 
 export type DueState = 'overdue' | 'today' | 'tomorrow' | 'thisWeek' | 'later' | 'done' | 'none';
 
@@ -23,9 +22,7 @@ export interface DueContext {
 export function dueInstant(dueDate: IsoDate, dueTime: string, tz: string): number {
   const { year, month, day } = parseIsoDate(dueDate);
   const { hour, minute } = parseTime(dueTime);
-  const instant = new TZDate(year, month - 1, day, hour, minute, tz).getTime();
-  if (Number.isNaN(instant)) throw new RangeError(`Invalid time zone: ${tz}`);
-  return instant;
+  return zonedWallTimeToInstant({ year, month, day }, hour, minute, tz);
 }
 
 /** Due-date state driving the label colour (03 §2.3). */

@@ -98,6 +98,57 @@ export function todayIn(tz: string, now: number): IsoDate {
   return formatIsoDate({ year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() });
 }
 
+const DAY_MS = 86_400_000;
+const offsetFormats = new Map<string, Intl.DateTimeFormat>();
+
+/** How far zone `tz` is ahead of UTC (ms) at `instant`. Throws RangeError for an unknown zone. */
+function zoneOffsetMs(tz: string, instant: number): number {
+  let format = offsetFormats.get(tz);
+  if (!format) {
+    format = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+    });
+    offsetFormats.set(tz, format);
+  }
+  const part: Record<string, number> = {};
+  for (const { type, value } of format.formatToParts(instant)) part[type] = Number(value);
+  const wall = Date.UTC(
+    part.year as number,
+    (part.month as number) - 1,
+    part.day as number,
+    part.hour as number,
+    part.minute as number,
+    part.second as number,
+  );
+  return wall - (instant - (((instant % 1000) + 1000) % 1000));
+}
+
+/**
+ * The instant (ms epoch) at which zone `tz` shows the given wall-clock time. Uses only the
+ * zone's own rules, never the host's time zone. A time that occurs twice (clocks go back)
+ * resolves to its first occurrence; one that does not exist (clocks go forward) is moved
+ * forward by the gap, so 02:30 on a spring-forward night becomes 03:30.
+ */
+export function zonedWallTimeToInstant(
+  date: DateParts,
+  hour: number,
+  minute: number,
+  tz: string,
+): number {
+  const wall = Date.UTC(date.year, date.month - 1, date.day, hour, minute);
+  const before = zoneOffsetMs(tz, wall - DAY_MS);
+  const after = zoneOffsetMs(tz, wall + DAY_MS);
+  const valid = [wall - before, wall - after].filter((at) => zoneOffsetMs(tz, at) === wall - at);
+  return valid.length > 0 ? Math.min(...valid) : wall - before;
+}
+
 export function addDays(date: IsoDate, n: number): IsoDate {
   return formatIsoDate(fromDayNumber(toDayNumber(parseIsoDate(date)) + n));
 }
