@@ -113,9 +113,13 @@ const mixed: Record<number, FixtureTask[]> = {
 };
 
 describe('smart views (02 §10, AC-5.1)', () => {
-  test('Today: Overdue then Today from every group, each row with its group chip', async () => {
+  test('Today: Overdue then the date, from every group, each row with its group chip', async () => {
     await setup('today', mixed);
-    expect(sections()).toEqual(['Overdue', 'Today']);
+    // The page title says "Today", so the section names the date rather than repeating it.
+    expect(sections()).toEqual([
+      'Overdue',
+      expect.stringMatching(/^[A-Z][a-z]+day, [A-Z][a-z]{2} \d{1,2}$/),
+    ]);
     expect(titles()).toEqual(['Late task', 'Inbox today', 'Parent', 'Child due']);
     const late = screen.getAllByTestId('task-row')[0] as HTMLElement;
     expect(within(late).getByTestId('group-chip').textContent).toContain('Prio');

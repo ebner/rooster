@@ -42,7 +42,11 @@ test('AC-5.1 Today shows overdue and today tasks from all groups with a group ch
   await todayLink.click();
   await expect(page).toHaveURL(/\/o\/personal\/today$/);
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Today');
-  await expect(sectionNames(page)).toHaveText(['Overdue', 'Today']);
+  // The page title says "Today", so the section names the date rather than repeating it.
+  await expect(sectionNames(page)).toHaveText([
+    'Overdue',
+    /^[A-Z][a-z]+day, [A-Z][a-z]{2} \d{1,2}$/,
+  ]);
   await expect(page.getByTestId('task-row')).toHaveCount(3);
   await expect(
     row(page, 'Late report').getByTestId('group-chip').locator('[aria-hidden]'),

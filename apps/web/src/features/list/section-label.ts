@@ -25,8 +25,9 @@ export function dayMonthLabel(date: IsoDate, ctx: ViewerDateContext): string {
 }
 
 /**
- * A smart-view section header (02 §10): Overdue and Today in Today; Today, Tomorrow, then
- * "Wednesday, Oct 8" in Next 7 days. `t` is the `views` namespace.
+ * A smart-view section header (02 §10): Overdue, then the date ("Thursday, Oct 9") in Today,
+ * whose page title already says "Today"; Today, Tomorrow, then "Wednesday, Oct 8" in Next 7
+ * days. `t` is the `views` namespace.
  */
 export function sectionLabel(
   t: Translate,
@@ -35,10 +36,15 @@ export function sectionLabel(
   ctx: ViewerDateContext,
 ): string {
   if (kind === 'overdue') return t('section.overdue');
+  if (kind === 'today') return dayLabel(t, date ?? ctx.today, ctx);
   if (kind === 'flat' || !date) return t('section.today');
   const days = diffDays(date, ctx.today);
   if (days === 0) return t('section.today');
   if (days === 1) return t('section.tomorrow');
+  return dayLabel(t, date, ctx);
+}
+
+function dayLabel(t: Translate, date: IsoDate, ctx: ViewerDateContext): string {
   return t('section.day', {
     weekday: t(`weekday.${weekdayOf(date)}`),
     date: dayMonthLabel(date, ctx),

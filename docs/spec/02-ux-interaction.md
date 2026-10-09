@@ -369,7 +369,7 @@ A tiny status label sits in the toolbar's left area:
 ## 10. Smart views
 
 - **Today**:
-  - Section *Overdue* (sorted by due date ascending) and section *Today*.
+  - Section *Overdue* (sorted by due date ascending) and a section for today, labelled with the date ("Friday, Oct 9"), because the view's title already says Today.
   - Rows show their **group name as a muted chip** in place of tags overflow.
   - Inline add creates with due = today in the Inbox (with a `>Group` token to override).
 - **Next 7 days:** one section per day (Today, Tomorrow, then weekday plus date) for 7 days. Dropping is disabled; use D to re-date.
