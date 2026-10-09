@@ -30,7 +30,18 @@ export async function serveFetch(
       });
       for (const cookie of response.headers.getSetCookie()) out.push(['set-cookie', cookie]);
       res.writeHead(response.status, out.flat());
-      res.end(Buffer.from(await response.arrayBuffer()));
+      // Streamed, not buffered: `GET /api/v1/events` (SSE) never ends on its own.
+      if (response.body === null) res.end();
+      else {
+        const reader = response.body.getReader();
+        res.on('close', () => void reader.cancel().catch(() => {}));
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+        res.end();
+      }
     } catch (error) {
       res.writeHead(500);
       res.end(String(error));

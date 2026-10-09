@@ -1,3 +1,167 @@
 {
-  "title": "rooster"
+  "loading": "Läser in…",
+  "tooSmall": "Gör terminalen större (minst 30×8)",
+  "inbox": "Inkorg",
+  "view": {
+    "my": "Mina uppgifter",
+    "today": "Idag",
+    "week": "7 dagar",
+    "overdue": "Försenade",
+    "nodate": "Utan datum",
+    "everyone": "Allas uppgifter"
+  },
+  "status": {
+    "synced": "synkad",
+    "connecting": "ansluter…",
+    "offline": "offline",
+    "saving": "sparar…"
+  },
+  "section": {
+    "overdue": "Försenade",
+    "unassigned": "Ingen ansvarig",
+    "me": "{name} (du)"
+  },
+  "empty": {
+    "my": "Inga uppgifter än. Tryck n för att lägga till en.",
+    "today": "Inget att göra idag",
+    "week": "Inget planerat de kommande 7 dagarna",
+    "overdue": "Inget är försenat",
+    "nodate": "Alla uppgifter har ett datum",
+    "everyone": "Inga uppgifter i organisationen än",
+    "search": "Inga uppgifter matchar ”{query}”"
+  },
+  "detail": {
+    "group": "Grupp",
+    "parent": "Överordnad",
+    "due": "Datum",
+    "tags": "Taggar",
+    "assignee": "Ansvarig",
+    "unassigned": "Ingen ansvarig",
+    "noDescription": "Ingen beskrivning. Tryck e för att skriva en.",
+    "subtasks": "Deluppgifter",
+    "activity": "Aktivitet"
+  },
+  "picker": {
+    "date": "Datum",
+    "dateHint": "skriv ett datum eller välj ett nedan",
+    "tag": "Tagg",
+    "group": "Flytta till",
+    "createTag": "Skapa #{name}",
+    "none": "Inga träffar"
+  },
+  "date": {
+    "today": "idag",
+    "tomorrow": "imorgon",
+    "weekend": "i helgen",
+    "nextWeek": "nästa vecka",
+    "nextMonth": "nästa månad",
+    "none": "ingen",
+    "noneLabel": "Inget datum",
+    "invalid": "Kan inte tolka ”{phrase}” som ett datum"
+  },
+  "msg": {
+    "descriptionUnchanged": "Beskrivningen är oförändrad",
+    "emptyTitle": "Titeln kan inte vara tom",
+    "everyonePersonal": "Allas uppgifter finns bara i delade organisationer",
+    "noAddInSearch": "Lägg till uppgifter i en lista (Esc lämnar sökningen)",
+    "nothingToUndo": "Inget att ångra",
+    "nothingToRedo": "Inget att göra om",
+    "notInMyList": "Bara uppgifter i Mina uppgifter kan flyttas till en grupp",
+    "sortedView": "Sorterad vy: flytta uppgifter i Mina uppgifter (g m)",
+    "subtaskGroup": "Deluppgifter flyttas med sin överordnade uppgift",
+    "taskGone": "Uppgiften finns inte längre här"
+  },
+  "toast": {
+    "completed": "”{title}” är klar",
+    "reopened": "”{title}” är inte klar längre",
+    "deleted": "”{title}” togs bort",
+    "moved": "Flyttades till {group}",
+    "description": "Beskrivningen sparades",
+    "undone": "Ångrat",
+    "redone": "Gjort om"
+  },
+  "error": {
+    "save": "Kunde inte spara: {message}",
+    "load": "Kunde inte läsa in: {message}",
+    "denied": "Servern godtar inte inloggningen. Kör rooster login och starta rooster igen."
+  },
+  "hint": {
+    "down": "flytta",
+    "edit": "redigera",
+    "newBelow": "ny",
+    "complete": "klar",
+    "date": "datum",
+    "move": "flytta till",
+    "detail": "detaljer",
+    "undo": "ångra",
+    "search": "sök",
+    "help": "hjälp",
+    "quit": "avsluta",
+    "retry": "försök igen",
+    "dismiss": "stäng",
+    "save": "spara",
+    "addNext": "lägg till och nästa",
+    "done": "klart",
+    "choose": "välj",
+    "toggle": "växla",
+    "apply": "använd",
+    "close": "stäng",
+    "scroll": "bläddra",
+    "description": "beskrivning"
+  },
+  "help": {
+    "title": "Kortkommandon",
+    "differences": "Skillnader mot webben",
+    "limits": "Begränsningar",
+    "undoLimits": "u ångrar dina egna ändringar från den här sessionen, upp till 50: nya uppgifter, titlar, datum, klarmarkeringar, flyttar, taggar, beskrivningar och borttagningar. Att ångra en ny uppgift flyttar den till papperskorgen. Ångra kontrollerar inte om andra har ändrat något sedan dess, och att ångra en klarmarkering tar inte bort nästa uppgift som en återkommande uppgift skapade.",
+    "offline": "Terminalappen fungerar bara uppkopplad: utan anslutning visar statusen offline, och ändringar misslyckas med r för att försöka igen."
+  },
+  "key": {
+    "down": "Nästa rad",
+    "up": "Föregående rad",
+    "collapse": "Fäll ihop gruppen eller uppgiften, eller gå till den överordnade",
+    "expand": "Fäll ut gruppen eller uppgiften, eller gå till första deluppgiften",
+    "first": "Första raden",
+    "last": "Sista raden",
+    "edit": "Redigera titeln (Enter eller Esc sparar)",
+    "newBelow": "Ny uppgift nedanför",
+    "newAbove": "Ny uppgift ovanför",
+    "complete": "Markera som klar eller inte klar",
+    "date": "Datum: en fras som ”fre 14:00”, eller ingen",
+    "tag": "Lägg till eller ta bort taggar",
+    "move": "Flytta till en grupp",
+    "subtask": "Lägg till en deluppgift",
+    "detail": "Öppna eller stäng detaljerna",
+    "description": "Redigera beskrivningen i $EDITOR",
+    "moveDown": "Flytta uppgiften nedåt",
+    "moveUp": "Flytta uppgiften uppåt",
+    "nextGroup": "Flytta uppgiften till nästa grupp",
+    "prevGroup": "Flytta uppgiften till föregående grupp",
+    "delete": "Ta bort uppgiften",
+    "undo": "Ångra",
+    "redo": "Gör om",
+    "search": "Sök",
+    "go": "Gå till {view}",
+    "org": "Byt organisation",
+    "showCompleted": "Visa eller dölj klara uppgifter",
+    "retry": "Försök igen med en misslyckad ändring, eller uppdatera",
+    "scrollDown": "En sida ned (bläddrar i detaljerna när de är öppna)",
+    "scrollUp": "En sida upp",
+    "help": "Den här hjälpen",
+    "close": "Stäng detaljerna, sökningen eller ett meddelande",
+    "quit": "Avsluta"
+  },
+  "web": {
+    "complete": "På webben: {web} (där markerar x rader)",
+    "description": "På webben: {web} flyttar fokus till beskrivningen i panelen",
+    "moveDown": "På webben: {web}",
+    "moveUp": "På webben: {web}",
+    "nextGroup": "På webben: {web}",
+    "prevGroup": "På webben: {web}",
+    "undo": "På webben: {web}",
+    "redo": "På webben: {web}",
+    "org": "På webben: {web}",
+    "retry": "Finns inte på webben, som försöker igen av sig själv och fungerar offline",
+    "quit": "På webben är q snabbtillägg"
+  }
 }

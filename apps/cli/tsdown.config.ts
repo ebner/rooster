@@ -4,6 +4,11 @@ import { defineConfig } from 'tsdown';
 // `src/secrets.ts` imports lazily (07 §1). Everything else, the workspace packages included,
 // is inlined so `dist/rooster.mjs` runs with nothing but Node.
 export const NATIVE_DEPS = ['@napi-rs/keyring'];
+/**
+ * Ink's React DevTools hook (P9 TUI): imported only with `DEV=true` and only when the package
+ * resolves (`ink/build/reconciler.js`), so it stays an external nobody installs.
+ */
+export const DEV_ONLY_DEPS = ['react-devtools-core'];
 
 export default defineConfig({
   entry: { rooster: 'src/main.ts' },
@@ -16,7 +21,9 @@ export default defineConfig({
   minify: true,
   outExtensions: () => ({ js: '.mjs' }),
   deps: {
-    alwaysBundle: (id) => !NATIVE_DEPS.some((dep) => id === dep || id.startsWith(`${dep}/`)),
+    neverBundle: DEV_ONLY_DEPS,
+    alwaysBundle: (id) =>
+      ![...NATIVE_DEPS, ...DEV_ONLY_DEPS].some((dep) => id === dep || id.startsWith(`${dep}/`)),
     onlyBundle: false,
   },
 });

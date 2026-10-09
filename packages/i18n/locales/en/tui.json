@@ -1,3 +1,167 @@
 {
-  "title": "rooster"
+  "loading": "Loading…",
+  "tooSmall": "Make the terminal larger (at least 30×8)",
+  "inbox": "Inbox",
+  "view": {
+    "my": "My tasks",
+    "today": "Today",
+    "week": "7 days",
+    "overdue": "Overdue",
+    "nodate": "No date",
+    "everyone": "Everyone’s tasks"
+  },
+  "status": {
+    "synced": "synced",
+    "connecting": "connecting…",
+    "offline": "offline",
+    "saving": "saving…"
+  },
+  "section": {
+    "overdue": "Overdue",
+    "unassigned": "Unassigned",
+    "me": "{name} (you)"
+  },
+  "empty": {
+    "my": "No tasks yet. Press n to add one.",
+    "today": "Nothing due today",
+    "week": "Nothing due in the next 7 days",
+    "overdue": "Nothing overdue",
+    "nodate": "Every task has a date",
+    "everyone": "No tasks in this organisation yet",
+    "search": "No tasks match “{query}”"
+  },
+  "detail": {
+    "group": "Group",
+    "parent": "Parent",
+    "due": "Due",
+    "tags": "Tags",
+    "assignee": "Assignee",
+    "unassigned": "Unassigned",
+    "noDescription": "No description. Press e to write one.",
+    "subtasks": "Subtasks",
+    "activity": "Activity"
+  },
+  "picker": {
+    "date": "Date",
+    "dateHint": "type a date, or choose one below",
+    "tag": "Tag",
+    "group": "Move to",
+    "createTag": "Create #{name}",
+    "none": "No matches"
+  },
+  "date": {
+    "today": "today",
+    "tomorrow": "tomorrow",
+    "weekend": "this weekend",
+    "nextWeek": "next week",
+    "nextMonth": "next month",
+    "none": "none",
+    "noneLabel": "No date",
+    "invalid": "Can’t read “{phrase}” as a date"
+  },
+  "msg": {
+    "descriptionUnchanged": "Description unchanged",
+    "emptyTitle": "Title can’t be empty",
+    "everyonePersonal": "Everyone’s tasks is only in shared organisations",
+    "noAddInSearch": "Add tasks in a list (Esc leaves the search)",
+    "nothingToUndo": "Nothing to undo",
+    "nothingToRedo": "Nothing to redo",
+    "notInMyList": "Only tasks in My tasks can move to a group",
+    "sortedView": "Sorted view: move tasks in My tasks (g m)",
+    "subtaskGroup": "Subtasks move with their parent",
+    "taskGone": "That task is no longer here"
+  },
+  "toast": {
+    "completed": "Completed “{title}”",
+    "reopened": "Reopened “{title}”",
+    "deleted": "Deleted “{title}”",
+    "moved": "Moved to {group}",
+    "description": "Description saved",
+    "undone": "Undone",
+    "redone": "Redone"
+  },
+  "error": {
+    "save": "Couldn’t save: {message}",
+    "load": "Couldn’t load: {message}",
+    "denied": "The server refused this login. Run rooster login, then start rooster again."
+  },
+  "hint": {
+    "down": "move",
+    "edit": "edit",
+    "newBelow": "new",
+    "complete": "done",
+    "date": "date",
+    "move": "move",
+    "detail": "details",
+    "undo": "undo",
+    "search": "search",
+    "help": "help",
+    "quit": "quit",
+    "retry": "retry",
+    "dismiss": "dismiss",
+    "save": "save",
+    "addNext": "add and next",
+    "done": "done",
+    "choose": "choose",
+    "toggle": "toggle",
+    "apply": "apply",
+    "close": "close",
+    "scroll": "scroll",
+    "description": "description"
+  },
+  "help": {
+    "title": "Keyboard shortcuts",
+    "differences": "Differences from the web",
+    "limits": "Limits",
+    "undoLimits": "u undoes your own changes from this session, up to 50: adding, titles, dates, completing, moving, tags, descriptions and deleting. Undoing an add moves the task to the Trash. Undo doesn’t check for newer changes by others, and undoing a completion doesn’t remove the next task a repeating task created.",
+    "offline": "The terminal app works online only: without a connection the status says offline, and changes fail with r to retry."
+  },
+  "key": {
+    "down": "Next row",
+    "up": "Previous row",
+    "collapse": "Collapse the group or task, or go to the parent",
+    "expand": "Expand the group or task, or go to the first subtask",
+    "first": "First row",
+    "last": "Last row",
+    "edit": "Edit the title (Enter or Esc saves)",
+    "newBelow": "New task below",
+    "newAbove": "New task above",
+    "complete": "Complete or reopen",
+    "date": "Date: a phrase like “fri 14:00”, or none",
+    "tag": "Add or remove tags",
+    "move": "Move to a group",
+    "subtask": "Add a subtask",
+    "detail": "Open or close the details",
+    "description": "Edit the description in $EDITOR",
+    "moveDown": "Move the task down",
+    "moveUp": "Move the task up",
+    "nextGroup": "Move the task to the next group",
+    "prevGroup": "Move the task to the previous group",
+    "delete": "Delete the task",
+    "undo": "Undo",
+    "redo": "Redo",
+    "search": "Search",
+    "go": "Go to {view}",
+    "org": "Switch organisation",
+    "showCompleted": "Show or hide completed tasks",
+    "retry": "Retry a failed change, or refresh",
+    "scrollDown": "Page down (scrolls the details when open)",
+    "scrollUp": "Page up",
+    "help": "This help",
+    "close": "Close the details, the search or a notice",
+    "quit": "Quit"
+  },
+  "web": {
+    "complete": "On the web: {web} (x selects rows there)",
+    "description": "On the web: {web} focuses the description in the pane",
+    "moveDown": "On the web: {web}",
+    "moveUp": "On the web: {web}",
+    "nextGroup": "On the web: {web}",
+    "prevGroup": "On the web: {web}",
+    "undo": "On the web: {web}",
+    "redo": "On the web: {web}",
+    "org": "On the web: {web}",
+    "retry": "Not on the web, which retries by itself and works offline",
+    "quit": "On the web, q is quick add"
+  }
 }
