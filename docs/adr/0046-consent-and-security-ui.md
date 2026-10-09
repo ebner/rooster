@@ -35,3 +35,10 @@
 8. **Linked identities** sit in Settings → Security, between Signed-in devices and Connected apps, with an inline unlink confirm. The last identity can't be unlinked, and the page says why.
 9. **Activity** shows `via: oauth` as "via an app". The activity DTO carries no client name, so "via Claude (MCP)" (11 §2.3) would need the server to record it.
 10. **E2E** uses DCR (`ROOSTER_OAUTH_DCR=on` in the Playwright server env), because CIMD needs a public https host.
+
+## Amendments after the first security review
+- **Step-up:** the scopes the grant already has (`retainedScopes`) are shown checked and disabled as "Already allowed", because the server keeps them. Narrowing happens in Connected apps.
+- **Native app callbacks:** a private-use scheme such as `com.example.app:/callback` is followed only when its scheme, host and path equal the displayed `redirectUri`. `javascript:`, `data:`, `vbscript:`, `file:` and `blob:` are always refused.
+- **Re-confirming before Allow:** orgs and groups are checked against fresh data before Allow, and missing ones are dropped with the Connected apps note.
+- **`422 nothing_approved`** is shown inline on the screen.
+- **Query length:** signed queries up to `OAUTH_QUERY_MAX` (16,384 characters, `@rooster/core/limits`) are accepted by the server and both routes.

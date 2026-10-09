@@ -43,3 +43,10 @@
 
 ## Consequences
 - The Bun-compiled release binaries are untested locally (no Bun on the dev machine). The release workflow's `cli-smoke` jobs are the check that Bun compiles the chunked build.
+
+## Amendments after the first security review
+- **One identity per logical change:** each change keeps one edit time and one Idempotency-Key per write (`tui/idempotency.ts`), reused by `r`, so a lost response can't create a duplicate.
+- **Typing during a pending create:** after Enter on a draft, keys are buffered until the create returns, then replayed into the next draft. They are dropped on failure, so typed text never runs as shortcuts.
+- **The details follow the selection:** when the selection moves by itself, the details switch to the new task or close. Editing modes draw over the narrow details view.
+- **Org switches drop stale work:** searches, mutation callbacks, undo entries and pending retries are bound to a request generation and an org, and an org switch discards them.
+- **Drafts in collapsed groups:** adding from the header of a collapsed group opens the group first.

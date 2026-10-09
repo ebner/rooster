@@ -65,3 +65,14 @@
 - The new problem codes are `admin_only_scope` and `last_identity`.
 - The migration is `0010_oauth_provider`: the seven plugin tables (`oauthClient`, `oauthResource`, `oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`, `oauthConsent`, `oauthClientAssertion`), indexes on `reference_id`, and `access_grant.idle_timeout_ms`.
 - DCR's per-IP limit is the plugin's default and is not covered by tests, because tests run with the limiter off.
+
+## Amendments after the first security review
+- **Canonical token requests:** the mount normalises every token request before any check (trimmed `grant_type`, form or flat JSON only), and the provider receives exactly the fields that were checked. Repeated or non-string fields are `invalid_request`, and a repeated `resource` is `invalid_target`.
+- **Refresh reuse is atomic:** the reuse check and the provider's rotation run under one in-process lock per token (`auth/keyed-lock.ts`), which is enough because rooster runs a single server process. A concurrent second use waits, sees the rotated token, and revokes the grant.
+- **No DPoP:** a `DPoP` header at the token endpoint is `400 invalid_dpop_proof`, `dpop_jkt` is dropped at authorize, and any token row with a key binding fails closed.
+- **Token liveness on SSE:** an OAuth actor carries its access-token row id (`ActorGrant.oauthTokenId`), and its SSE stream ends once that token expires or is revoked.
+- **Idleness spans refresh chains:** it is measured over the grant's latest token activity across all chains. A stale chain's token is only refused while another chain is in use.
+- **CIMD:** a 304 revalidation is accepted with its cache headers, and one deadline covers DNS and the connection.
+- **Consent may narrow to implied scopes:** the grant holds exactly what the user approved. Approving none of the requested capabilities is `422 nothing_approved`.
+  - Token responses report the grant's scopes, with implied ones spelled out, not the requested ones.
+  - On step-up, the consent screen pre-fill drops deleted groups and orgs the user has left.

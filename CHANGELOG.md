@@ -6,6 +6,29 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+- **AI agents and other apps (Phase 9):**
+  - **Remote MCP:** add `https://<your rooster>/mcp` to an AI agent (Claude, IDEs, …) and it finds the rest itself. You approve it on a consent screen that shows who is asking and lets you choose what it may do and where: which organisations and groups, whether it may delete tasks ("Allow deleting tasks", off by default) and for how long, including "This session only". If an agent later needs more, it asks again and only the new part is highlighted (ADRs 0041, 0043, 0045, 0046).
+  - **`rooster mcp`** serves the same tools to local agents over stdio, and **`rooster mcp setup`** creates a separate, narrower login for the agent and prints or writes the config for Claude Code, Claude Desktop or Cursor (ADR 0044).
+  - **The rooster skill:** `rooster skill install` teaches an agent how to plan the day, capture and triage with rooster. Each server also publishes it, along with an MCP Server Card, `/.well-known/ai-catalog.json` and `/llms.txt`, so agents can discover rooster from its address alone (turn this off with `ROOSTER_AGENT_DISCOVERY=off`).
+  - **Third-party apps** can use the REST API through the same OAuth sign-in, with tokens that only work for the API they were issued for.
+- **Terminal UI:** `rooster` without arguments opens a full-screen, keyboard-only rooster with views, orgs, editing, dates, tags, moves, details, undo and live updates (ADR 0047).
+- **Settings → Security → Linked identities:** see which sign-in accounts are linked and unlink one (never the last).
+- **Admin from the command line:** admins can give a CLI login or token the admin capability (`rooster login --admin`) and run `rooster admin reindex`.
+- **New settings:** `ROOSTER_OAUTH_DCR=on` lets older MCP clients register themselves (shown as "Unverified app"); `ROOSTER_AGENT_DISCOVERY` (default on).
+
+### Changed
+- On the `/device` approval page and the consent screen, deleting tasks is its own checkbox.
+
+### Fixed
+- `rooster show` lists the newest comments when a task has more than 100.
+
+### Migrations
+- `0010_oauth_provider`: adds the OAuth provider's tables (`oauthClient`, `oauthResource`, `oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`, `oauthConsent`, `oauthClientAssertion`) and `access_grant.idle_timeout_ms`.
+
+### Upgrade notes
+- For remote MCP behind a reverse proxy, forward `/mcp`, `/mcp/server-card`, `/.well-known/*` and `/llms.txt` to rooster, and don't buffer `/mcp` (it may stream). `docker/proxy/` has updated Apache and nginx snippets.
+
 ## [1.2.0] - 2026-10-09
 
 Collaboration, notification delivery and the command line (Phases 6 to 8).

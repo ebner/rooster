@@ -19,6 +19,7 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - `src/lib/`: errors (problem+json), logger, request id/log (invite tokens redacted), security headers, SPA serving (never `*.map` or dot-paths), graceful close, `body-limit.ts` (64 KB `/api/auth`, 1 MB `/api/v1`), `client-ip.ts` (right-most `ROOSTER_TRUSTED_PROXY_HOPS` entry), `log-safe-error.ts` (**log errors through `logSafeError`**: SQL parameters are user content).
   - `src/routes/`: one file per resource. Route zod schemas come from `@rooster/core/schemas`, registered in `routes/schemas.ts` with `.openapi('Name')`.
   - `src/auth/`: the better-auth instance (`auth.ts`), mounting under `/api/auth/*`, actor resolution (`actor.ts`), and signed cookies (`__Host-` prefixed on https). better-auth handles **authentication only**; orgs are ours (ADR 0002). Account linking by email only from email-authority providers (Google, `trustEmail`; ADR 0017).
+  - **P9 OAuth 2.1 AS** (ADRs 0041, 0045): better-auth's `@better-auth/oauth-provider` + `@better-auth/cimd` (pinned exactly; issuer `<base>/api/auth`, endpoints `/api/auth/oauth2/*`). `mount.ts` canonicalises token requests and serialises refresh reuse per token (`keyed-lock.ts`); `oauth-handoff.ts` carries the rooster grant id to the provider's `referenceId`; `oauth-bearer.ts` `resolveOAuthBearer(services, token, 'mcp'|'api', ip)` is the only way to turn an OAuth token into an actor (audience-bound); `oauth-metadata.ts` builds RFC 8414/9728 documents and `WWW-Authenticate` challenges; `cimd-fetch.ts` is the DNS-pinned public-address fetch for Client ID Metadata Documents. No DPoP, no `openid`, `resource` required.
   - `src/services/`: `OrgService`, `UserService`, `AdminService`, `GroupService`, `TaskService` (incl. subtasks and duplicate), `TagService`, `PlacementService` (the 05 §4.1 invariant), `OrderingService` (all fractional keys are computed server-side), `BackupService`, `SearchService` (FTS5 queries), `ExportService` (JSON/Markdown), the P6 collaboration services `CommentService`, `ActivityService` (the activity writer, called in the same transaction as each task change), `FollowerService` and `NotificationService` (in-app fan-out in the same transaction; ADR 0029), and `sign-in-policy.ts` (the allowlist rules). **All authorisation lives here.** `cursor.ts` has the opaque page cursors.
   - `services/context.ts`: `immediate()` for writes, `readOnly()` (DEFERRED) for read-only service methods.
   - `services/search-index.ts`: `indexTasks(tx, ids)` keeps `task_fts` in step (title, description and live comments). **Call it in the same transaction from any new write that changes a task's title, description, comments or `deleted_at`** (ADR 0013). Boot rebuilds the index when its row count is off; `POST /admin/search/reindex` rebuilds it on demand.
@@ -27,6 +28,7 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - `src/jobs/`: croner scheduler. Per-user timed sends (the due reminder, the digest) run every minute, claim `job_run(job, "<userId>|<local date>")` **before** sending, and use a 10-minute grace window (`services/job-runs.ts`, ADR 0035).
   - `src/push/` (P7): VAPID keys (`vapid.ts`: env or generated into `instance_setting` at boot), `push-service.ts` (subscriptions, sends after commit through `lib/task-queue.ts`, 404/410 removes a device). **Every send re-checks `isAllowedPushEndpoint`** (SSRF, ADR 0033).
   - `src/mail/` (P7): the nodemailer transport (only with `ROOSTER_SMTP_URL`), React email templates rendered with `@react-email/render` (`templates/`, tables and inline styles from `@rooster/tokens`, text in the `mail` i18n namespace), `mail-service.ts` (invites, immediate and batched notification emails, the digest) and HMAC unsubscribe tokens. `routes/unsubscribe.ts` serves `/unsubscribe/:token` outside `/api/v1`: GET only confirms, POST unsubscribes.
+  - `src/mcp/` (P9, ADRs 0042, 0043): the remote `/mcp` endpoint (Streamable HTTP, stateless). Checks run origin → method → token → headers → bounded body → scope pre-check (`requiredScopes`) → per-grant rate limit → SDK. Tools run against the REST API **in-process** (`in-process-client.ts`, `IN_PROCESS_ACTOR` from `lib/in-process.ts`), so service authorisation applies unchanged and the token is never forwarded. `routes/discovery.ts` serves the Server Card (`/mcp/server-card`), `/.well-known/ai-catalog.json`, the agent-skills index and `SKILL.md`, and `/llms.txt` (off with `ROOSTER_AGENT_DISCOVERY=off`).
   - `src/events/`: the after-commit `EventBus` and the SSE `hub` behind `GET /api/v1/events`. Services publish through the per-transaction queue, and audiences are computed in `services/event-audience.ts`. `DomainEvent.direct` carries per-user messages other than invalidations (the SSE `notification` event). ADR 0009.
   - Tests live in `test/`. Helpers: `createTestDb`, `createTestApp`, `mock-idp.ts`, `signInAs(email)`.
   - `test/authz.matrix.test.ts` enumerates **every** OpenAPI route; a new route without a matrix row fails it.
@@ -64,16 +66,18 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
     - Agents running Playwright in parallel serialise on a lock: `flock /tmp/rooster-e2e.lock pnpm --filter @rooster/web exec playwright test …` (the suites share ports).
     - Phone specs (`*.mobile.spec.ts`) run in the `mobile` (iPhone 15, WebKit) and `mobile-android` (Pixel 8) projects; `e2e/support/touch.ts` has `swipe`, `longPress` and `showKeyboard` (visualViewport emulation).
     - `e2e/support/` has `signInAs`, `newClient` and `apiCall`. The sign-in identity is chosen with `login_hint`, and each browser sends its own `X-Forwarded-For` so the per-IP auth rate limit isn't shared.
-- `apps/cli`: the `rooster` CLI (P8; TUI and MCP arrive in P9). It uses only the public API, through `@rooster/api-client` (`src/api.ts`).
+- `apps/cli`: the `rooster` CLI (P8), its TUI and the stdio MCP server (P9). It uses only the public API, through `@rooster/api-client` (`src/api.ts`).
   - Source:
     - Entry: `src/main.ts` → `run.ts` → `cli.ts` (citty).
     - Commands: `src/commands/*`.
     - Output: `src/output/*` (token colours, truecolor → 256 → ANSI, `NO_COLOR`).
     - Infrastructure: `refs.ts` (`@last`, stdin; everything else via `GET /tasks/resolve`), `config.ts` (TOML profiles), `secrets.ts` (keychain via a lazy `@napi-rs/keyring`, 0600 file fallback), `errors.ts` (exit codes 07 §4.2), `launch.ts`, `i18n.ts`, `completion.ts`.
+    - P9: `commands/{mcp,skill,admin}.ts` (`rooster mcp [setup]`, `rooster skill print|install`, `rooster admin reindex`); `mcp-config.ts` (client configs for `mcp setup`); `tui/**` (Ink 8, lazy-loaded chunk; `KEYMAP` in `tui/keymap.ts` generates `?` help; `tui/sse.ts`; `tui/idempotency.ts` keeps one Idempotency-Key per logical change across retries; ADR 0047).
+  - **`safe-write.ts` is the only way to write files outside the CLI's own config** (other apps' MCP configs, `SKILL.md`): exclusive `O_NOFOLLOW` temp file, every byte written, directories pinned by dev/ino, refuse on change, delete only what it created (ADR 0044).
   - **`launch.ts` is the only way to open a browser or `$EDITOR`:** argv only, never a shell, and only https URLs on the profile's server origin (ADR 0039).
   - Strip control and bidi characters from user content before printing (`output/format.ts`).
   - Tests: `apps/cli/test`. Integration tests run against an in-process server (`test/support/rooster-server.ts`). AC-8.1 is the e2e `apps/web/e2e/cli.mobile.spec.ts`.
-  - The build bundles everything into `dist/rooster.mjs`, except the optional `@napi-rs/keyring` (`NATIVE_DEPS` in its `tsdown.config.ts`). `scripts/build-binaries.sh` (Bun) runs in the release workflow.
+  - The build bundles everything into `dist/rooster.mjs` plus lazy chunks (the TUI), except the optional `@napi-rs/keyring` (`NATIVE_DEPS` in its `tsdown.config.ts`). Ink's `react-devtools-core` is aliased to a no-op stub: an unresolved external makes Bun-compiled binaries crash at startup. `scripts/build-binaries.sh` (Bun) runs in the release workflow.
 - `packages/core`: **pure** TS (no IO, no `Date.now()` inside functions):
   - `ids` (uuidv7)
   - `ordering` (fractional keys)
@@ -85,6 +89,7 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - `schemas` (shared zod); `limits` (zod-free constants that `schemas` re-exports) and `sse` (zod-free SSE payload guards) for the web's initial bundle
 
   Imported as `@rooster/core/<module>`.
+- `packages/mcp` (P9, ADRs 0042, 0044): the MCP tools shared by `rooster mcp` (stdio) and `/mcp`: `createRoosterMcpServer` (tools over `@rooster/api-client` only; `granted` vs `step-up` listing), `tools.ts` (`requiredScopes`, the capability map of 11 §5.2), `format.ts` (user content goes out only as framed, escaped data blocks for the assistant), `skill.ts` (`skillMarkdown`, deterministic per instance URL, and the short `skillInstructions`).
 - `packages/api-client`: `schema.d.ts` is **generated** from `apps/server/openapi.json` (`pnpm gen:api`), so do not edit it. `src/index.ts` wraps it as `createRoosterClient()`.
 - `packages/i18n`: `locales/{en,sv}/<namespace>.json` (ICU messages). `.` bundles every catalog (`createI18n`/`initI18n`; server, CLI, tests), `./core` has the catalog-free helpers (`detectLocale`, `isLocale`, namespaces), `./lazy` loads one locale per chunk (`initLazyI18n`, `ensureLocale`; the web). A new namespace goes in `core.ts` and both `catalog-*.ts`.
 - `packages/tokens`: Coop tokens. `src/tokens.css` and `src/index.ts` must agree. A contrast test guards every allowed pair.
@@ -110,6 +115,7 @@ pnpm i18n:check                # en/sv parity, ICU validity, unused keys
 pnpm bundle:check              # initial JS for /o/:slug/my ≤ 450 KB gzip (after pnpm build; ADR 0016)
 pnpm --filter @rooster/cli dev -- ls   # run the CLI from source (ROOSTER_SERVER / --server, ROOSTER_KEYRING=off for tests)
 pnpm --filter @rooster/cli smoke  # build output against an in-memory server: --version, login --with-token, whoami
+pnpm --filter @rooster/cli dev    # with no arguments on a terminal: the TUI; `-- mcp --profile agent` serves MCP on stdio
 apps/cli/scripts/build-binaries.sh  # single-file binaries for 5 targets (needs Bun; run by the release workflow)
 pnpm db:generate               # drizzle-kit generate + STRICT post-processing
 pnpm ci                        # full pipeline (scripts/ci.sh); add --with-docker for image build + smoke
@@ -169,9 +175,10 @@ This file is the entry point for every agent and must describe the repository **
 Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to them. A PR that changes any of the above without updating `AGENTS.md` is not done.
 
 ## Status
-- **Current phase:** Phase 9 (TUI, MCP, OAuth and agent discovery; `docs/spec/11-agent-access.md`) is next (09).
+- **Current phase:** Phase 10 (recurrence, attachments, iCal) is next (09).
 - **Latest release:** 1.2.0 (Phases 6–8: collaboration, notification delivery, the CLI and grants, plus the security hardening of ADR 0040).
-- **Last completed phase:** Phase 8, CLI, grants and API polish (2026-10-09; released in 1.2.0): one grant model for PATs and CLI devices (scopes plus user-chosen org and group constraints, enforced in services, `/api/auth` browser-only), the device flow with a consent page, Settings → Connected apps, the documented OpenAPI with contract tests and e2e response validation, and the `rooster` CLI with release binaries. AC-8.1 to AC-8.5 pass. ADRs 0036 to 0039. Migration `0007_agent_access`.
+- **Last completed phase:** Phase 9, TUI, MCP and agent access (2026-10-09; unreleased): the OAuth 2.1 AS on better-auth (CIMD, consent screen with "Allow deleting tasks" and "This session only", audience-bound tokens, refresh reuse revokes the grant), the remote `/mcp` endpoint with scope step-up, discovery documents and the rooster skill, `packages/mcp` with `rooster mcp`/`mcp setup`/`skill`, the full-screen TUI, linked identities and the `admin` capability (`rooster admin reindex`). AC-9.1 to AC-9.6. ADRs 0041 to 0047. Migration `0010_oauth_provider`.
+- **Before that:** Phase 8, CLI, grants and API polish (2026-10-09; released in 1.2.0): one grant model for PATs and CLI devices (scopes plus user-chosen org and group constraints, enforced in services, `/api/auth` browser-only), the device flow with a consent page, Settings → Connected apps, the documented OpenAPI with contract tests and e2e response validation, and the `rooster` CLI with release binaries. AC-8.1 to AC-8.5 pass. ADRs 0036 to 0039. Migration `0007_agent_access`.
 - **Before that:** Phase 7, notification delivery (2026-10-09; released in 1.2.0): Web Push per device, SMTP email (invites, immediate or batched notifications, the daily digest, confirm-then-POST unsubscribe), the due reminder, and the full preference matrix. AC-7.1 to AC-7.3 pass. ADRs 0033 to 0035. Migration `0006_delivery`.
 - Phase 6, collaboration (2026-10-09; released in 1.2.0): assignment, Everyone's tasks, comments and activity, followers, the in-app inbox. AC-6.1 to AC-6.4 pass at the API level and in the e2e suite. ADRs 0028 to 0032. Migration `0005_collab`.
 - Phase 5, smart views, search, palette, export and Trash (2026-10-06), released as **v1.0.0**. AC-5.1 to AC-5.3 pass on desktop and the phone projects. ADRs 0012 to 0016 record the decisions; ADR 0016 relaxed the initial-bundle budget to 450 KB.
@@ -179,8 +186,7 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
 - **E2E:** never run two Playwright suites at once; they share ports 9400, 3181, 5181 and 3182.
 - **Git:** commit locally; **do not push to origin unless the maintainer explicitly asks.**
 - **Deferred to later phases** (from ADRs 0003–0011; pick them up in the phase named):
-  - **P9** (scope settled in ADR 0041): the TUI, MCP (stdio and remote), the OAuth AS on better-auth's provider, discovery and the skill, linked identities in Settings → Security (FR-SET-3), and the `admin` capability for `rooster admin reindex` (ADR 0013).
-  - **Later, unscheduled:**
+  - **Later, unscheduled:** Show the OAuth client's name in activity ("via Claude (MCP)", 11 §2.3; activity shows "via an app" today).
   - **P10:** avatar upload (needs sharp).
   - **Whenever touched:**
     - `UserService.reorderOrg` should move onto `OrderingService` (ADR 0005).
