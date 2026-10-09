@@ -1,5 +1,15 @@
+import {
+  type ActivityFeed,
+  applyCommentOp,
+  commentIdOf,
+  commentTaskId,
+  findComment,
+  mergeCommentResponse,
+} from '@rooster/core/activity';
+import { applyOpToTaskList, mergeTaskListResponse, rowsDeletedWith } from '@rooster/core/everyone';
 import { uuidv7 } from '@rooster/core/ids';
 import {
+  type ApplyContext,
   applyOp,
   type ListOp,
   type ListOpSpec,
@@ -7,9 +17,10 @@ import {
   mergeDetailResponse,
   mergeResponse,
   normalizeMyList,
+  opEntityIds,
   type ReducerContext,
 } from '@rooster/core/reducers';
-import type { Task, TaskDetail } from '@rooster/core/schemas';
+import type { ActivityPage, Comment, Task, TaskDetail } from '@rooster/core/schemas';
 import type { QueryClient } from '@tanstack/react-query';
 import { type SyncState, useSyncStore } from '../../state/sync-store';
 import { ApiError } from '../errors';
@@ -25,6 +36,10 @@ export const myListKey = (orgId: string) => ['my-list', orgId] as const;
 export const taskDetailKey = (taskId: string) => ['task', taskId] as const;
 /** `['tags', orgId]` (04 §5.1): GET /orgs/:orgId/tags. */
 export const tagsKey = (orgId: string) => ['tags', orgId] as const;
+/** P6: the root of every Everyone's tasks cache of an org (`['everyone', orgId, filters]`: `Task[]`). */
+export const everyoneRootKey = (orgId: string) => ['everyone', orgId] as const;
+/** P6: a task's comment and activity feed (`InfiniteData<ActivityPage>`, newest page first). */
+export const activityKey = (taskId: string) => ['activity', taskId] as const;
 
 /** A queued op is exactly what the outbox stores. */
 type Queued = OutboxRecord;
@@ -208,6 +223,12 @@ export function equivalentStates(a: ListState, b: ListState, ignoreStamps = fals
  * tick, then sent sequentially. The pipeline keeps the last server-confirmed state per org
  * (`base`); the cache is always `base` plus the pending ops replayed on top, so a server
  * response or a refetch never clobbers a newer optimistic change.
+ *
+ * P6: ops also go straight into the Everyone's tasks caches (`['everyone', orgId, …]`) and the
+ * activity feeds (`['activity', taskId]`). Those caches have no base here: their query
+ * functions replay the queue over each fetch (`withPendingTasks`, `withPendingActivity`), a
+ * confirmation merges the server's DTO unless a later queued op touches the same entity, and a
+ * dropped op refetches them.
  */
 export class ListPipeline {
   readonly transport: ListTransport;
@@ -248,6 +269,10 @@ export class ListPipeline {
   private readonly stored = new Set<string>();
   /** Recently confirmed, dropped or discarded ops: never queued again. */
   private readonly settled = new Set<string>();
+  /** Rows the Everyone caches lost to a queued delete, by deleted task (for an undo). */
+  private readonly deletedRows = new Map<string, readonly Task[]>();
+  /** Comments the activity feeds lost to a queued delete (for an undo). */
+  private readonly deletedComments = new Map<string, Comment>();
 
   constructor(options: PipelineOptions) {
     this.transport = options.transport;
@@ -319,7 +344,10 @@ export class ListPipeline {
       }
       // A copy of an op settled since (the outbox removal may still be on its way).
       if (this.settled.has(id)) continue;
-      if (!known.has(id)) this.queue.push(record);
+      if (!known.has(id)) {
+        this.queue.push(record);
+        this.applySide(record);
+      }
       this.stored.add(id);
     }
     if (foreign.length > 0) this.write(() => this.outbox?.remove(foreign));
@@ -342,6 +370,8 @@ export class ListPipeline {
     this.paused = false;
     this.lastError = null;
     this.lazySyncs.clear();
+    this.deletedRows.clear();
+    this.deletedComments.clear();
     this.wake?.();
     this.publish();
     this.changed();
@@ -376,6 +406,7 @@ export class ListPipeline {
     for (const id of ids) this.markSettled(id);
     this.write(() => this.outbox?.remove(ids));
     for (const orgId of new Set(gone.map((item) => item.orgId))) this.render(orgId);
+    for (const item of gone) this.refetchSide(item);
     this.publish();
     this.changed();
     this.settleIdle();
@@ -398,6 +429,43 @@ export class ListPipeline {
     return this.queue.filter((item) => item.orgId === orgId).map((item) => item.op);
   }
 
+  /**
+   * Whether a task or comment still has an op in the queue (unsent or unanswered): the comment
+   * composer shows "Sending…" while it does. Matches the IDs of `opEntityIds`.
+   */
+  hasPending(entityId: string): boolean {
+    return this.queue.some((item) => opEntityIds(item.op).includes(entityId));
+  }
+
+  /**
+   * For the query function of an Everyone's tasks cache: the fetched rows with the org's
+   * queued ops applied, so a refetch never hides an op the server has not confirmed yet.
+   */
+  withPendingTasks(orgId: string, tasks: readonly Task[]): Task[] {
+    let rows = tasks;
+    for (const item of this.queue) {
+      if (item.orgId === orgId) rows = applyOpToTaskList(rows, item.op, this.rowContext(item));
+    }
+    return rows as Task[];
+  }
+
+  /**
+   * For the query function of `['activity', taskId]`: one fetched page with the task's queued
+   * comment ops applied. `newest` is the page fetched without a cursor, the only one queued
+   * comments are appended to.
+   */
+  withPendingActivity(taskId: string, page: ActivityPage, newest: boolean): ActivityPage {
+    let feed: ActivityFeed = { pages: [page], pageParams: [null] };
+    for (const item of this.queue) {
+      if (commentTaskId(item.op) !== taskId) continue;
+      if (!newest && (item.op.kind === 'comment.create' || item.op.kind === 'comment.restore')) {
+        continue;
+      }
+      feed = applyCommentOp(feed, item.op, this.commentContext(item));
+    }
+    return feed.pages[0] as ActivityPage;
+  }
+
   /** Changes whenever the queue changes (for `useSyncExternalStore`). */
   getVersion = (): number => this.version;
 
@@ -411,20 +479,22 @@ export class ListPipeline {
    * change in the same frame (02 §1.3). Returns the stamped ops.
    */
   enqueue(orgId: string, specs: readonly ListOpSpec[], ctx: ReducerContext): ListOp[] {
+    // Without a loaded list (a comment from a pane opened by link) the ops still queue; the
+    // list's first fetch replays them.
     let view = this.view(orgId) ?? this.bases.get(orgId);
-    if (!view) throw new Error(`ListPipeline: no state for org ${orgId}`);
     const ops: ListOp[] = [];
     const items: Queued[] = [];
     const userId = this.user?.() ?? null;
     for (const spec of specs) {
       const op = { ...spec, opId: uuidv7(), editTime: this.now(), clientId: this.clientId };
       const item: Queued = userId === null ? { op, orgId, ctx } : { op, orgId, ctx, userId };
-      view = this.apply(view, item);
+      if (view) view = this.apply(view, item);
       this.queue.push(item);
+      this.applySide(item);
       items.push(item);
       ops.push(op);
     }
-    this.queryClient.setQueryData(myListKey(orgId), view);
+    if (view) this.queryClient.setQueryData(myListKey(orgId), view);
     const generation = this.generation;
     let stored = false;
     this.write(async () => {
@@ -469,6 +539,7 @@ export class ListPipeline {
         );
         if (fresh.length === 0) return;
         this.queue.push(...fresh);
+        for (const r of fresh) this.applySide(r);
         if (message.stored !== false) for (const r of fresh) this.stored.add(r.op.opId);
         for (const orgId of new Set(fresh.map((r) => r.orgId))) this.render(orgId);
         this.publish();
@@ -565,6 +636,7 @@ export class ListPipeline {
     for (const item of gone) this.take(item.op.opId);
     // Confirmed or dropped elsewhere: which one, and the server state, a refetch tells.
     for (const orgId of new Set(gone.map((item) => item.orgId))) void this.refetch(orgId);
+    for (const item of gone) this.refetchSide(item);
     if (gone.length > 0) void this.queryClient.invalidateQueries({ queryKey: ['task'] });
     this.restore(new Map(), records);
     this.settleIdle();
@@ -612,8 +684,8 @@ export class ListPipeline {
     );
   }
 
-  private apply(state: ListState, { op, ctx }: Queued): ListState {
-    return applyOp(state, op, { ...ctx, now: op.editTime });
+  private apply(state: ListState, item: Queued): ListState {
+    return applyOp(state, item.op, this.applyContext(item));
   }
 
   private replay(orgId: string): ListState {
@@ -701,6 +773,17 @@ export class ListPipeline {
   }
 
   private confirm(item: Queued, response: unknown): void {
+    this.confirmList(item, response);
+    this.confirmDetails(item, response);
+    this.confirmSide(item, response);
+    const { op } = item;
+    const newTags = op.kind === 'task.create' && (op.payload.tagNames?.length ?? 0) > 0;
+    if (op.kind === 'tag.create' || newTags) {
+      void this.queryClient.invalidateQueries({ queryKey: tagsKey(item.orgId) });
+    }
+  }
+
+  private confirmList(item: Queued, response: unknown): void {
     const base = this.bases.get(item.orgId);
     if (!base) return;
     const merged = mergeResponse(this.apply(base, item), item.op, response);
@@ -719,12 +802,6 @@ export class ListPipeline {
       this.syncWhenIdle(item.orgId);
     }
     if (merged.refetch) void this.refetch(item.orgId);
-    this.confirmDetails(item, response);
-    const { op } = item;
-    const newTags = op.kind === 'task.create' && (op.payload.tagNames?.length ?? 0) > 0;
-    if (op.kind === 'tag.create' || newTags) {
-      void this.queryClient.invalidateQueries({ queryKey: tagsKey(item.orgId) });
-    }
   }
 
   /** Confirmed ops move into every cached task detail they touch (their new server state). */
@@ -737,6 +814,89 @@ export class ListPipeline {
       const next = mergeDetailResponse(detail, op, response, applyCtx);
       if (next !== detail) this.queryClient.setQueryData(key, next);
     }
+  }
+
+  private applyContext({ op, ctx }: Queued): ApplyContext {
+    return { ...ctx, now: op.editTime };
+  }
+
+  private rowContext(item: Queued) {
+    return { ...this.applyContext(item), recall: (id: string) => this.deletedRows.get(id) };
+  }
+
+  private commentContext(item: Queued) {
+    return { ...this.applyContext(item), recall: (id: string) => this.deletedComments.get(id) };
+  }
+
+  /** The optimistic half for the P6 caches: every Everyone's tasks cache and the task's feed. */
+  private applySide(item: Queued): void {
+    const { op } = item;
+    const deletes =
+      op.kind === 'task.delete'
+        ? [op.entityId]
+        : op.kind === 'task.bulk' && op.payload.op === 'delete'
+          ? op.payload.ids
+          : [];
+    for (const [key, rows] of this.queryClient.getQueriesData<Task[]>({
+      queryKey: everyoneRootKey(item.orgId),
+    })) {
+      if (!Array.isArray(rows)) continue;
+      for (const [id, gone] of rowsDeletedWith(rows, deletes)) this.deletedRows.set(id, gone);
+      const next = applyOpToTaskList(rows, op, this.rowContext(item));
+      if (next !== rows) this.queryClient.setQueryData(key, next);
+    }
+    const taskId = commentTaskId(op);
+    if (taskId === null) return;
+    const key = activityKey(taskId);
+    const feed = this.queryClient.getQueryData<ActivityFeed>(key);
+    if (!feed?.pages) return;
+    if (op.kind === 'comment.delete') {
+      const comment = findComment(feed, op.entityId);
+      if (comment) this.deletedComments.set(op.entityId, comment);
+    }
+    const next = applyCommentOp(feed, op, this.commentContext(item));
+    if (next !== feed) this.queryClient.setQueryData(key, next);
+  }
+
+  /**
+   * The server's answer into the P6 caches. While a later queued op touches the same entity
+   * the optimistic copy stays: the answer predates that op, and its own answer follows.
+   */
+  private confirmSide(item: Queued, response: unknown): void {
+    const { op } = item;
+    const busy = new Set(this.queue.flatMap((queued) => opEntityIds(queued.op)));
+    const settledRows = !opEntityIds(op).some((id) => busy.has(id));
+    let refetch = false;
+    for (const [key, rows] of this.queryClient.getQueriesData<Task[]>({
+      queryKey: everyoneRootKey(item.orgId),
+    })) {
+      if (!Array.isArray(rows)) continue;
+      const merged = mergeTaskListResponse(rows, op, response);
+      refetch ||= merged.refetch;
+      if (settledRows && merged.tasks !== rows) this.queryClient.setQueryData(key, merged.tasks);
+    }
+    if (refetch) {
+      void this.queryClient.invalidateQueries({ queryKey: everyoneRootKey(item.orgId) });
+    }
+    const taskId = commentTaskId(op);
+    const commentId = commentIdOf(op);
+    if (taskId === null || commentId === null || busy.has(commentId)) return;
+    if (op.kind === 'comment.delete' || op.kind === 'comment.restore') {
+      // Settled: an undo now goes through a fresh delete, which captures the comment again.
+      this.deletedComments.delete(commentId);
+    }
+    const key = activityKey(taskId);
+    const feed = this.queryClient.getQueryData<ActivityFeed>(key);
+    if (!feed?.pages) return;
+    const next = mergeCommentResponse(feed, op, response);
+    if (next !== feed) this.queryClient.setQueryData(key, next);
+  }
+
+  /** A dropped or discarded op leaves the P6 caches through a refetch (they have no base). */
+  private refetchSide(item: Queued): void {
+    void this.queryClient.invalidateQueries({ queryKey: everyoneRootKey(item.orgId) });
+    const taskId = commentTaskId(item.op);
+    if (taskId !== null) void this.queryClient.invalidateQueries({ queryKey: activityKey(taskId) });
   }
 
   private readonly lazySyncs = new Map<string, () => void>();
@@ -813,6 +973,7 @@ export class ListPipeline {
     if (!this.take(item.op.opId)) return false;
     this.render(item.orgId);
     void this.refetch(item.orgId);
+    this.refetchSide(item);
     void this.queryClient.invalidateQueries({ queryKey: ['task'] });
     void this.queryClient.invalidateQueries({ queryKey: tagsKey(item.orgId) });
     for (const listener of this.dropListeners) {

@@ -75,9 +75,9 @@ describe('ListPipeline', () => {
     const transport = fixture();
     const sent: string[] = [];
     const spy: ListTransport = {
+      ...transport,
       fetchTask: () => Promise.reject(new Error('unused')),
       fetchTags: async () => [],
-      fetchMyList: transport.fetchMyList,
       send: (op, org) => {
         sent.push(op.kind);
         return transport.send(op, org);
@@ -114,9 +114,9 @@ describe('ListPipeline', () => {
       release = resolve;
     });
     const slow: ListTransport = {
+      ...transport,
       fetchTask: () => Promise.reject(new Error('unused')),
       fetchTags: async () => [],
-      fetchMyList: transport.fetchMyList,
       send: async (op, org) => {
         await gate;
         return transport.send(op, org);
@@ -173,9 +173,9 @@ describe('ListPipeline', () => {
     const transport = fixture();
     const failures: unknown[] = [new RateLimitedError(2000), new ApiError('unauthenticated', 401)];
     const flaky: ListTransport = {
+      ...transport,
       fetchTask: () => Promise.reject(new Error('unused')),
       fetchTags: async () => [],
-      fetchMyList: transport.fetchMyList,
       send: async (op, org) => {
         const failure = failures.shift();
         if (failure) throw failure;
@@ -202,9 +202,27 @@ describe('ListPipeline', () => {
     expect(transport.state(orgId).tasks[task.id]).toBeUndefined();
   });
 
-  test('enqueue needs loaded state; seed provides it', () => {
-    const { pipeline } = setup(fixture());
-    expect(() => pipeline.enqueue(orgId, [listOps.deleteTask('x')], { userId })).toThrow();
+  test('ops queue before the list loaded; its first fetch replays them', async () => {
+    const transport = fixture();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const slow: ListTransport = {
+      ...transport,
+      send: async (op, org) => {
+        await gate;
+        return transport.send(op, org);
+      },
+    };
+    const { pipeline } = setup(slow);
+    pipeline.enqueue(orgId, [listOps.createTask({ id: 'n1', title: 'Early' })], { userId });
+    expect(pipeline.view(orgId)).toBeUndefined();
+    expect(pipeline.pending).toBe(1);
+    const state = await pipeline.fetch(orgId);
+    expect(state.tasks.n1?.title).toBe('Early');
+    release();
+    await pipeline.idle();
     pipeline.seed(orgId, normalizeMyList(orgId, emptyList()));
     expect(pipeline.view(orgId)).toBeDefined();
   });

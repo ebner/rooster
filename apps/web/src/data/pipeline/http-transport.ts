@@ -1,5 +1,13 @@
 import type { ListOp } from '@rooster/core/reducers';
-import type { MyList, Tag, TaskDetail } from '@rooster/core/schemas';
+import type {
+  ActivityPage,
+  ActivityQuery,
+  MyList,
+  Tag,
+  TaskDetail,
+  TaskPage,
+  TaskQuery,
+} from '@rooster/core/schemas';
 import { api, toApiError } from '../http';
 import { type ListTransport, opHeaders, parseRetryAfter, RateLimitedError } from './transport';
 
@@ -121,11 +129,25 @@ function request(op: ListOp, orgId: string, signal?: AbortSignal): Promise<Fetch
     case 'group.restore':
       return api.POST('/api/v1/groups/{id}/restore', { params: { path: { id } }, ...init });
     case 'task.follow':
+      return op.payload.following
+        ? api.PUT('/api/v1/tasks/{id}/followers/me', { params: { path: { id } }, ...init })
+        : api.DELETE('/api/v1/tasks/{id}/followers/me', { params: { path: { id } }, ...init });
     case 'comment.create':
+      return api.POST('/api/v1/tasks/{id}/comments', {
+        params: { path: { id } },
+        body: wire(op.payload),
+        ...init,
+      });
     case 'comment.patch':
+      return api.PATCH('/api/v1/comments/{id}', {
+        params: { path: { id } },
+        body: wire(op.payload),
+        ...init,
+      });
     case 'comment.delete':
+      return api.DELETE('/api/v1/comments/{id}', { params: { path: { id } }, ...init });
     case 'comment.restore':
-      return Promise.reject(new Error(`${op.kind}: the P6 routes are not wired yet`));
+      return api.POST('/api/v1/comments/{id}/restore', { params: { path: { id } }, ...init });
   }
 }
 
@@ -139,5 +161,19 @@ export const httpTransport: ListTransport = {
     (await settle(api.GET('/api/v1/tasks/{id}', { params: { path: { id } } }))) as TaskDetail,
   fetchTags: async (orgId) =>
     (await settle(api.GET('/api/v1/orgs/{orgId}/tags', { params: { path: { orgId } } }))) as Tag[],
+  fetchTasks: async (orgId: string, query: TaskQuery, signal?: AbortSignal) =>
+    (await settle(
+      api.GET('/api/v1/orgs/{orgId}/tasks', {
+        params: { path: { orgId }, query: wire(query) },
+        ...(signal ? { signal } : {}),
+      }),
+    )) as TaskPage,
+  fetchActivity: async (id: string, query: ActivityQuery, signal?: AbortSignal) =>
+    (await settle(
+      api.GET('/api/v1/tasks/{id}/activity', {
+        params: { path: { id }, query: wire(query) },
+        ...(signal ? { signal } : {}),
+      }),
+    )) as ActivityPage,
   send: (op, orgId, signal) => settle(request(op, orgId, signal)),
 };

@@ -1,5 +1,13 @@
 import type { ListOp } from '@rooster/core/reducers';
-import type { MyList, Tag, TaskDetail } from '@rooster/core/schemas';
+import type {
+  ActivityPage,
+  ActivityQuery,
+  MyList,
+  Tag,
+  TaskDetail,
+  TaskPage,
+  TaskQuery,
+} from '@rooster/core/schemas';
 import { ApiError } from '../errors';
 
 /**
@@ -13,6 +21,14 @@ export interface ListTransport {
   fetchTask: (taskId: string) => Promise<TaskDetail>;
   /** GET /orgs/:orgId/tags (P3). */
   fetchTags: (orgId: string) => Promise<Tag[]>;
+  /** GET /orgs/:orgId/tasks: one page (P6: `view=everyone` for Everyone's tasks). */
+  fetchTasks: (orgId: string, query: TaskQuery, signal?: AbortSignal) => Promise<TaskPage>;
+  /** GET /tasks/:id/activity (P6): one page of the feed, newest page without a cursor. */
+  fetchActivity: (
+    taskId: string,
+    query: ActivityQuery,
+    signal?: AbortSignal,
+  ) => Promise<ActivityPage>;
   /**
    * Sends one op; resolves with the response body (undefined for 204), throws `ApiError`.
    * The pipeline aborts `signal` when the request takes too long.

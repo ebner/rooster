@@ -1,3 +1,4 @@
+import { compareRows, isRow } from '@rooster/core/everyone';
 import { uuidv7 } from '@rooster/core/ids';
 import { generateNKeysBetween } from '@rooster/core/ordering';
 import {
@@ -13,7 +14,17 @@ import {
   subtreeHeight,
   tasksInGroup,
 } from '@rooster/core/reducers';
-import type { Group, MyList, Tag, Task, TaskDetail } from '@rooster/core/schemas';
+import type {
+  ActivityItem,
+  ActivityPage,
+  Comment,
+  Group,
+  MyList,
+  Tag,
+  Task,
+  TaskDetail,
+  TaskPage,
+} from '@rooster/core/schemas';
 import { type TagColor, tagColorNames } from '@rooster/tokens';
 import { ApiError } from '../errors';
 import type { ListTransport } from './transport';
@@ -32,6 +43,10 @@ export type FixtureTask =
       tags?: readonly string[];
       subtasks?: readonly FixtureTask[];
       expanded?: boolean;
+      /** P6: a member's user ID, or null for unassigned. Default: the fixture user. */
+      assignee?: string | null;
+      /** P6: comment bodies, oldest first, by the fixture user. */
+      comments?: readonly string[];
     };
 
 export interface FixtureOptions {
@@ -44,6 +59,8 @@ export interface FixtureOptions {
   latencyMs?: number;
   /** Org tags to start with (P3). */
   tags?: readonly { name: string; color?: TagColor }[];
+  /** P6: the other members (assignees must be one of them or the fixture user). */
+  members?: readonly { userId: string; name: string }[];
 }
 
 /**
@@ -58,11 +75,16 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
   tags: (orgId: string) => Tag[];
   /** Descriptions are kept apart: list payloads omit them. */
   descriptions: Map<string, string>;
+  /** P6: every comment by ID (deleted ones carry `deleted`). */
+  comments: Map<string, Comment & { deleted?: boolean }>;
 } {
   const { userId, latencyMs = 0 } = options;
   const orgs = new Map<string, ListState>();
   const tagsByOrg = new Map<string, Tag[]>();
   const descriptions = new Map<string, string>();
+  const comments = new Map<string, Comment & { deleted?: boolean }>();
+  const followers = new Map<string, string[]>();
+  const memberIds = new Set([userId, ...(options.members ?? []).map((m) => m.userId)]);
   let seq = 0;
   let failure: ApiError | null = null;
 
@@ -116,7 +138,7 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
     const add = (
       entry: FixtureTask,
       position: string,
-      parent: { id: string } | null,
+      parent: Task | null,
       groupId: string,
     ): Task => {
       const spec = typeof entry === 'string' ? { title: entry } : entry;
@@ -124,6 +146,9 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
       const id = uuidv7();
       const children = spec.subtasks ?? [];
       const keys = generateNKeysBetween(null, null, children.length);
+      const assigneeId =
+        spec.assignee !== undefined ? spec.assignee : parent ? parent.assigneeId : userId;
+      const ownRow = assigneeId === userId && (parent === null || parent.assigneeId !== assigneeId);
       const task: Task = {
         id,
         orgId,
@@ -131,7 +156,7 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
         parentId: parent?.id ?? null,
         subtaskPosition: parent ? position : null,
         title: spec.title,
-        assigneeId: userId,
+        assigneeId,
         createdBy: userId,
         dueDate: spec.dueDate ?? null,
         dueTime: spec.dueTime ?? null,
@@ -141,11 +166,23 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
         completedAt: spec.completed ? 1 : null,
         hasDescription: (spec.description ?? '').trim() !== '',
         counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
-        placement: parent ? null : { groupId, position },
-        createdAt: 0,
+        placement: ownRow ? { groupId, position } : null,
+        createdAt: seq,
         updatedAt: 0,
       };
       if (spec.description) descriptions.set(id, spec.description);
+      for (const [i, body] of (spec.comments ?? []).entries()) {
+        const commentId = uuidv7();
+        comments.set(commentId, {
+          id: commentId,
+          taskId: id,
+          authorId: userId,
+          body,
+          createdAt: seq * 1_000 + i,
+          editedAt: null,
+        });
+        task.counts.comments += 1;
+      }
       if (spec.expanded) expandedTaskIds.push(id);
       tasks.push(task);
       const made = children.map((child, i) => add(child, keys[i] as string, task, groupId));
@@ -189,10 +226,34 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
     }
   };
 
+  /** 06 §2.3 my-list: placed tasks, everything below them, and the ancestors of orphans. */
+  const myListTasks = (state: ListState): Task[] => {
+    const included = new Set<string>();
+    const placed = Object.values(state.tasks).filter((t) => t.placement !== null);
+    for (const task of placed) {
+      included.add(task.id);
+      for (const id of descendantIds(state, task.id)) included.add(id);
+      for (const ancestor of ancestorsOf(state, task.id)) included.add(ancestor.id);
+    }
+    return Object.values(state.tasks).filter((t) => included.has(t.id));
+  };
+
+  const commentOf = (id: string) => {
+    const comment = comments.get(id);
+    if (!comment) throw new ApiError('not_found', 404);
+    return comment;
+  };
+  const visible = ({ deleted: _deleted, ...comment }: Comment & { deleted?: boolean }) => comment;
+  const findTask = (taskId: string) => {
+    for (const state of orgs.values()) if (state.tasks[taskId]) return state.tasks[taskId];
+    return undefined;
+  };
+
   return {
     state: stateOf,
     tags: tagsOf,
     descriptions,
+    comments,
     failNext: (status, code = `http_${status}`) => {
       failure = new ApiError(code, status);
     },
@@ -212,7 +273,7 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
           parentChain: ancestorsOf(state, taskId)
             .reverse()
             .map((t) => ({ id: t.id, title: t.title })),
-          followers: [],
+          followers: followers.get(taskId) ?? [],
         };
         return structuredClone(detail);
       }
@@ -223,11 +284,85 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
       const state = stateOf(orgId);
       const list: MyList = {
         groups: Object.values(state.groups),
-        tasks: Object.values(state.tasks),
+        tasks: myListTasks(state),
         expandedTaskIds: [...state.expandedTaskIds],
         serverTime: Date.now(),
       };
       return structuredClone(list);
+    },
+    fetchTasks: async (orgId, query) => {
+      await wait();
+      const state = stateOf(orgId);
+      const all = Object.values(state.tasks);
+      const byId = new Map(all.map((t) => [t.id, t]));
+      const completed = query.completed ?? 'false';
+      const assignees = query.assignee === undefined ? [] : [query.assignee].flat();
+      const tags = query.tag === undefined ? [] : [query.tag].flat();
+      const everyone = query.view === 'everyone';
+      const rows = all
+        .filter((t) => (everyone ? isRow(t, byId) : t.placement !== null))
+        .filter((t) => completed === 'any' || (t.completedAt !== null) === (completed === 'true'))
+        .filter(
+          (t) =>
+            assignees.length === 0 ||
+            assignees.some((a) =>
+              a === 'any'
+                ? true
+                : a === 'none'
+                  ? t.assigneeId === null
+                  : t.assigneeId === (a === 'me' ? userId : a),
+            ),
+        )
+        .filter(
+          (t) => query.hasDue === undefined || (t.dueDate !== null) === (query.hasDue === 'true'),
+        )
+        .filter((t) => tags.every((tag) => t.tagIds.includes(tag)))
+        .sort(compareRows);
+      const offset = Number(query.cursor ?? 0);
+      const limit = query.limit ?? 50;
+      const items = rows.slice(offset, offset + limit);
+      const next = offset + limit < rows.length ? String(offset + limit) : null;
+      return structuredClone({ items, nextCursor: next } satisfies TaskPage);
+    },
+    fetchActivity: async (taskId, query) => {
+      await wait();
+      const task = findTask(taskId);
+      if (!task) throw new ApiError('not_found', 404);
+      const items: ActivityItem[] = [
+        ...(query.filter === 'comments'
+          ? []
+          : [
+              {
+                kind: 'activity' as const,
+                activity: {
+                  id: `${taskId}-created`,
+                  taskId,
+                  actorId: task.createdBy,
+                  via: 'web' as const,
+                  createdAt: task.createdAt,
+                  type: 'created' as const,
+                  data: {},
+                },
+              },
+            ]),
+        ...[...comments.values()]
+          .filter((c) => c.taskId === taskId && !c.deleted)
+          .map((c) => ({ kind: 'comment' as const, comment: visible(c) })),
+      ].sort(
+        (a, b) =>
+          (a.kind === 'comment' ? a.comment.createdAt : a.activity.createdAt) -
+          (b.kind === 'comment' ? b.comment.createdAt : b.activity.createdAt),
+      );
+      // Pages go back in time: the cursor counts the items already returned from the end.
+      const skip = Number(query.cursor ?? 0);
+      const limit = query.limit ?? 50;
+      const end = items.length - skip;
+      const start = Math.max(0, end - limit);
+      const page: ActivityPage = {
+        items: items.slice(start, end),
+        nextCursor: start > 0 ? String(skip + (end - start)) : null,
+      };
+      return structuredClone(page);
     },
     send: async (op, orgId) => {
       await wait();
@@ -261,6 +396,60 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
       }
       if (op.kind === 'task.patch' && op.payload.description !== undefined) {
         descriptions.set(op.entityId, op.payload.description);
+      }
+      const assignee =
+        op.kind === 'task.create' || op.kind === 'task.patch'
+          ? op.payload.assigneeId
+          : op.kind === 'task.bulk' && op.payload.op === 'assign'
+            ? op.payload.args.assigneeId
+            : undefined;
+      if (assignee !== undefined && assignee !== null && !memberIds.has(assignee)) {
+        throw new ApiError('validation_failed', 422);
+      }
+      switch (op.kind) {
+        case 'task.follow': {
+          if (!before.tasks[op.entityId]) throw new ApiError('not_found', 404);
+          const current = (followers.get(op.entityId) ?? []).filter((id) => id !== userId);
+          followers.set(op.entityId, op.payload.following ? [...current, userId] : current);
+          return { followers: [...(followers.get(op.entityId) ?? [])] };
+        }
+        case 'comment.create': {
+          if (!before.tasks[op.entityId]) throw new ApiError('not_found', 404);
+          const existing = comments.get(op.payload.id);
+          if (existing) {
+            if (existing.body !== op.payload.body) throw new ApiError('id_conflict', 409);
+            return structuredClone(visible(existing));
+          }
+          const comment: Comment = {
+            id: op.payload.id,
+            taskId: op.entityId,
+            authorId: userId,
+            body: op.payload.body,
+            createdAt: op.editTime,
+            editedAt: null,
+          };
+          comments.set(comment.id, comment);
+          break;
+        }
+        case 'comment.patch':
+        case 'comment.delete':
+        case 'comment.restore': {
+          const comment = commentOf(op.entityId);
+          if (comment.authorId !== userId) throw new ApiError('forbidden', 403);
+          if (op.kind === 'comment.patch') {
+            if (comment.deleted) throw new ApiError('conflict_deleted', 410);
+            comments.set(comment.id, { ...comment, body: op.payload.body, editedAt: op.editTime });
+            return structuredClone(visible(commentOf(op.entityId)));
+          }
+          // Repeats are no-ops, and change no counts.
+          if (Boolean(comment.deleted) === (op.kind === 'comment.delete')) {
+            return op.kind === 'comment.delete' ? undefined : structuredClone(visible(comment));
+          }
+          comments.set(comment.id, { ...comment, deleted: op.kind === 'comment.delete' });
+          break;
+        }
+        default:
+          break;
       }
       if (op.kind === 'group.delete') {
         const live = tasksInGroup(before, op.entityId).length;
@@ -333,7 +522,12 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
           return { position: after.groups[op.entityId]?.position };
         case 'task.delete':
         case 'group.delete':
+        case 'comment.delete':
           return undefined;
+        case 'comment.create':
+          return structuredClone(visible(commentOf(op.payload.id)));
+        case 'comment.restore':
+          return structuredClone(visible(commentOf(op.entityId)));
       }
     },
   };
