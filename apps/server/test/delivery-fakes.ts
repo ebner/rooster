@@ -14,7 +14,11 @@ export class FakePush {
   /** Endpoint → HTTP status the push service answers with (e.g. 410). */
   readonly failWith = new Map<string, number>();
 
+  /** While set, every send waits for it before the push service "answers". */
+  hold: Promise<void> | null = null;
+
   readonly sender: PushSender = async (target: PushTarget, payload, options) => {
+    if (this.hold !== null) await this.hold;
     const status = this.failWith.get(target.endpoint);
     if (status !== undefined) {
       throw Object.assign(new Error(`push service answered ${status}`), { statusCode: status });

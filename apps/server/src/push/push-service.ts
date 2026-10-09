@@ -66,6 +66,20 @@ function toInfo(row: SubscriptionRow): PushSubscriptionInfo {
   };
 }
 
+/**
+ * The row as it was when a message went out. A renewal keeps the id but replaces endpoint and
+ * keys, so a late answer about the old endpoint (404/410, or success) must neither delete nor
+ * credit the renewed row.
+ */
+function sameAsSent(sent: SubscriptionRow) {
+  return and(
+    eq(pushSubscription.id, sent.id),
+    eq(pushSubscription.endpoint, sent.endpoint),
+    eq(pushSubscription.p256dh, sent.p256dh),
+    eq(pushSubscription.auth, sent.auth),
+  );
+}
+
 const notFound = () => new AppError('not_found', 404, 'Push subscription not found.');
 
 type Outcome = 'ok' | 'gone' | 'failed';
@@ -369,7 +383,7 @@ export class PushService {
     if (row === undefined) return 'gone';
     const endpoint = canonicalPushEndpoint(row.endpoint);
     if (endpoint === null) {
-      this.remove(row.id);
+      this.remove(row);
       log.warn('push subscription with a disallowed endpoint deleted');
       return 'gone';
     }
@@ -387,7 +401,7 @@ export class PushService {
     } catch (err) {
       const status = pushStatusOf(err);
       if (status === 404 || status === 410) {
-        this.remove(row.id);
+        this.remove(row);
         log.info({ status }, 'push subscription expired; deleted');
         return 'gone';
       }
@@ -395,17 +409,15 @@ export class PushService {
       return 'failed';
     }
     immediate(this.deps.db, (tx) => {
-      tx.update(pushSubscription)
-        .set({ lastOkAt: this.deps.clock() })
-        .where(eq(pushSubscription.id, row.id))
-        .run();
+      tx.update(pushSubscription).set({ lastOkAt: this.deps.clock() }).where(sameAsSent(row)).run();
     });
     return 'ok';
   }
 
-  private remove(id: string): void {
+  /** Deletes the subscription only while it is still what was sent to (see `sameAsSent`). */
+  private remove(sent: SubscriptionRow): void {
     immediate(this.deps.db, (tx) => {
-      tx.delete(pushSubscription).where(eq(pushSubscription.id, id)).run();
+      tx.delete(pushSubscription).where(sameAsSent(sent)).run();
     });
   }
 

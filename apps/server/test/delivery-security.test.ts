@@ -266,6 +266,50 @@ describe('push subscription renewal', () => {
   });
 });
 
+describe('a send to an endpoint that was renewed meanwhile', () => {
+  async function inFlight(answer: number | null) {
+    const ctx = listCtx();
+    const a = ctx.user('a@example.com');
+    const sub = await a.ok<PushSubscriptionInfo>(
+      'POST',
+      '/api/v1/me/push-subscriptions',
+      subscriptionBody('v1'),
+      201,
+    );
+    if (answer !== null) ctx.push.failWith.set(fcmEndpoint('v1'), answer);
+    let release = () => {};
+    ctx.push.hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // The send to v1 is out at the push service when the browser renews to v2.
+    const sent = ctx.app.services.push.test(a.actor, sub.id).then(
+      () => 'sent',
+      (err: { code?: string }) => err.code,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const res = await a.call('POST', '/api/v1/me/push-subscriptions', {
+      ...subscriptionBody('v2'),
+      renewsEndpoint: fcmEndpoint('v1'),
+    });
+    expect(res.status).toBe(201);
+    release();
+    return { ctx, sub, outcome: await sent };
+  }
+
+  it('a late 410 for the old endpoint does not delete the renewed subscription', async () => {
+    const { ctx, sub, outcome } = await inFlight(410);
+    expect(outcome).toBe('push_gone');
+    const rows = ctx.db.orm.select().from(pushSubscription).all();
+    expect(rows.map((r) => [r.id, r.endpoint])).toEqual([[sub.id, fcmEndpoint('v2')]]);
+  });
+
+  it('a late success for the old endpoint does not credit the renewed subscription', async () => {
+    const { ctx, outcome } = await inFlight(null);
+    expect(outcome).toBe('sent');
+    expect(ctx.db.orm.select().from(pushSubscription).get()?.lastOkAt).toBeNull();
+  });
+});
+
 // ---------------------------------------------------------------------------------------------
 // [P2] Unsubscribe tokens in request logs
 // ---------------------------------------------------------------------------------------------
