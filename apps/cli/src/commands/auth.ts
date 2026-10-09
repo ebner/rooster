@@ -250,7 +250,7 @@ export const logoutCommand = defineCommand({
       out.warn(t('logout.envToken'));
       return;
     }
-    const snapshot = runtime.config.reload().profiles[runtime.profileName] ?? {};
+    const snapshot = runtime.config.peek().profiles[runtime.profileName] ?? {};
     const captured = credentialOf(snapshot);
     if (captured === undefined) {
       out.notice(t('logout.notLoggedIn', { profile: runtime.profileName }));

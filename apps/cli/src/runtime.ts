@@ -83,6 +83,7 @@ export class Runtime {
   requiredScope: GrantScope | undefined;
   private client: RoosterClient | undefined;
   private pinnedProfile: string | undefined;
+  private pinnedSettings: Profile | undefined;
   private meCache: Promise<Me> | undefined;
   private readonly listCache = new Map<string, Promise<MyList>>();
   private readonly tagCache = new Map<string, Promise<Tag[]>>();
@@ -121,8 +122,15 @@ export class Runtime {
     return this.pinnedProfile;
   }
 
+  /**
+   * The pinned profile's settings (server, org, locale, …) as first read in this invocation.
+   * Later config reads (credential refreshes, other processes' edits) never change them, so
+   * a command keeps the server and org it started with. Credentials are not taken from here:
+   * `storedLogin` reads them fresh.
+   */
   get profile(): Profile {
-    return this.configData.profiles[this.profileName] ?? {};
+    this.pinnedSettings ??= { ...(this.configData.profiles[this.profileName] ?? {}) };
+    return this.pinnedSettings;
   }
 
   /** `ROOSTER_SERVER`, then the profile's server. */
@@ -145,12 +153,16 @@ export class Runtime {
    * never a fallback.
    */
   async storedLogin(): Promise<{ login: StoredLogin; origin: string } | undefined> {
+    const pinned = this.profile;
     for (let attempt = 0; attempt < REF_ATTEMPTS; attempt++) {
-      const before = this.config.reload().profiles[this.profileName] ?? {};
+      // `peek`, not `reload`: only the credential fields are taken from the fresh file.
+      const before = this.config.peek().profiles[this.profileName] ?? {};
+      this.checkSameServer(pinned, before);
       const credential = credentialOf(before);
       if (credential === undefined || before.credential_origin === undefined) return undefined;
       const login = await this.credentials.load(credential);
-      const after = this.config.reload().profiles[this.profileName] ?? {};
+      const after = this.config.peek().profiles[this.profileName] ?? {};
+      this.checkSameServer(pinned, after);
       const still = credentialOf(after);
       if (
         still?.store !== credential.store ||
@@ -163,6 +175,16 @@ export class Runtime {
       return { login, origin: before.credential_origin };
     }
     throw new CredentialsChanging();
+  }
+
+  /** A profile whose server moved to another origin since this invocation started: exit 3. */
+  private checkSameServer(pinned: Profile, fresh: Profile): void {
+    if (pinned.server === undefined || fresh.server === undefined) return;
+    const was = serverOrigin(normalizeServer(pinned.server));
+    const now = serverOrigin(normalizeServer(fresh.server));
+    if (was !== now) {
+      throw new CliError(EXIT.auth, t('auth.otherServer', { stored: now, server: was }));
+    }
   }
 
   /**

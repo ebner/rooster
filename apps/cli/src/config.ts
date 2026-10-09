@@ -216,6 +216,15 @@ export class ConfigStore {
     return this.cached;
   }
 
+  /**
+   * The file as it is now, without touching this invocation's cached copy: for re-reading
+   * credential refs, which must not change any other setting of a running command.
+   */
+  peek(): Config {
+    const text = readIfExists(this.path);
+    return text === undefined ? { profiles: {} } : parseConfig(text, this.path);
+  }
+
   /** Re-reads the file now (another process may have changed it). */
   reload(): Config {
     this.cached = undefined;

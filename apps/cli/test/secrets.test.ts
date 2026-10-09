@@ -1114,3 +1114,69 @@ describe('round 10 regressions', () => {
     }
   });
 });
+
+describe('round 11 regressions', () => {
+  const task = {
+    id: '01a00000-0000-7000-8000-0000000000f3',
+    orgId: ME.orgs[0]?.id,
+    seq: 42,
+    title: 'x',
+  };
+
+  /** Logs in, pauses `rm 42` inside its keychain read, runs `edit` meanwhile, then resumes. */
+  async function rmWhileEditing(edit: (store: ConfigStore) => void) {
+    const h = sharedHome({
+      'GET /api/v1/tasks/resolve': task,
+      'DELETE /api/v1/tasks/*': undefined,
+    });
+    const store = new ConfigStore(join(h.cli.home, 'config', 'rooster'));
+    expect((await h.login('tok-1')).code).toBe(0);
+    expect(store.reload().profiles.default?.org).toBe('acme');
+    const ref = store.reload().profiles.default?.credential_ref as string;
+    const paused = gate();
+    let reading = false;
+    h.keychain.state.beforeGet = async (account) => {
+      if (account === ref && !reading) {
+        reading = true;
+        await paused.promise;
+      }
+    };
+    h.requests.length = 0;
+    const rm = h.cli.run(['rm', '42', '--json', '--yes'], { env: h.env });
+    await until(() => reading);
+    edit(store);
+    paused.release();
+    const result = await rm;
+    return { h, result };
+  }
+
+  it('[P1] an org change during the keychain read never redirects the running command', async () => {
+    const { h, result } = await rmWhileEditing((store) =>
+      store.updateProfile('default', (p) => ({ ...p, org: 'other' })),
+    );
+    try {
+      expect(result.code).toBe(0);
+      const taskCalls = h.requests.filter((r) => r.path.startsWith('/api/v1/tasks'));
+      expect(taskCalls.map((r) => `${r.method} ${r.path}`)).toEqual([
+        'GET /api/v1/tasks/resolve',
+        `DELETE /api/v1/tasks/${task.id}`,
+      ]);
+      expect(taskCalls[0]?.search).toContain('org=acme');
+      expect(taskCalls[0]?.search).not.toContain('org=other');
+    } finally {
+      h.cli.cleanup();
+    }
+  });
+
+  it('[P1] a server change during the keychain read fails closed, sending nothing', async () => {
+    const { h, result } = await rmWhileEditing((store) =>
+      store.updateProfile('default', (p) => ({ ...p, server: 'https://elsewhere.example' })),
+    );
+    try {
+      expect(result.code).toBe(3);
+      expect(h.requests.filter((r) => r.path.startsWith('/api/v1/tasks'))).toEqual([]);
+    } finally {
+      h.cli.cleanup();
+    }
+  });
+});
