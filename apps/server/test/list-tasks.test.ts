@@ -476,3 +476,54 @@ describe('reads', () => {
     expect(list.groups.map((g) => g.name)).toEqual(['Inbox', 'Today', 'Prio', 'Upcoming']);
   });
 });
+
+describe('hasDescription', () => {
+  it('is in every task payload and true only for a non-blank description', async () => {
+    const ctx = listCtx();
+    const a = ctx.user('a@example.com');
+    const none = await createTask(a, { title: 'none' });
+    const blank = await createTask(a, { title: 'blank', description: ' \n\t ' });
+    const notes = await createTask(a, { title: 'notes', description: '# Notes' });
+    expect([none.hasDescription, blank.hasDescription, notes.hasDescription]).toEqual([
+      false,
+      false,
+      true,
+    ]);
+
+    const list = await myList(a);
+    const listed = (id: string) => list.tasks.find((t) => t.id === id);
+    expect(listed(notes.id)).toMatchObject({ hasDescription: true });
+    expect(listed(notes.id)).not.toHaveProperty('description');
+    expect(listed(none.id)?.hasDescription).toBe(false);
+    expect(listed(blank.id)?.hasDescription).toBe(false);
+    expect(await a.ok<Task>('GET', `/api/v1/tasks/${notes.id}`)).toMatchObject({
+      description: '# Notes',
+      hasDescription: true,
+    });
+  });
+
+  it('follows PATCH description and is copied by duplicate', async () => {
+    const ctx = listCtx();
+    const a = ctx.user('a@example.com');
+    const t = await createTask(a, { title: 'x' });
+    const set = await a.ok<TaskPatchResult>('PATCH', `/api/v1/tasks/${t.id}`, {
+      description: 'Body',
+    });
+    expect(set.task.hasDescription).toBe(true);
+    expect((await myList(a)).tasks.find((r) => r.id === t.id)?.hasDescription).toBe(true);
+
+    const copy = await a.ok<Task>('POST', `/api/v1/tasks/${t.id}/duplicate`, {}, 201);
+    expect(copy.hasDescription).toBe(true);
+    expect((await myList(a)).tasks.find((r) => r.id === copy.id)?.hasDescription).toBe(true);
+
+    const cleared = await a.ok<TaskPatchResult>('PATCH', `/api/v1/tasks/${t.id}`, {
+      description: '   ',
+    });
+    expect(cleared.task.hasDescription).toBe(false);
+    expect((await myList(a)).tasks.find((r) => r.id === t.id)?.hasDescription).toBe(false);
+
+    await a.ok('DELETE', `/api/v1/tasks/${copy.id}`, undefined, 204);
+    const trash = await a.ok<TrashPage>('GET', '/api/v1/orgs/personal/trash');
+    expect(trash.items.find((r) => r.id === copy.id)?.hasDescription).toBe(true);
+  });
+});

@@ -111,6 +111,10 @@ export function applyOps(
 
 const noCounts = () => ({ subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 });
 
+/** Mirrors the server's `hasDescription`: a description of only whitespace counts as none. */
+const hasText = (description: string | undefined) =>
+  description !== undefined && description.trim() !== '';
+
 function createTask(state: ListState, p: TaskCreateBody, ctx: ApplyContext): ListState {
   if (state.tasks[p.id] || state.deletedTasks[p.id]) return state;
   if (p.parentId !== undefined) return createSubtask(state, p, p.parentId, ctx);
@@ -130,6 +134,7 @@ function createTask(state: ListState, p: TaskCreateBody, ctx: ApplyContext): Lis
     subtaskPosition: null,
     title: p.title,
     ...(p.description === undefined ? {} : { description: p.description }),
+    hasDescription: hasText(p.description),
     assigneeId: ctx.userId,
     createdBy: ctx.userId,
     ...dueUnit(p),
@@ -171,6 +176,7 @@ function createSubtask(
     subtaskPosition,
     title: p.title,
     ...(p.description === undefined ? {} : { description: p.description }),
+    hasDescription: hasText(p.description),
     assigneeId: parent.assigneeId,
     createdBy: ctx.userId,
     ...dueUnit(p),
@@ -399,7 +405,9 @@ function patchTasks(
   return mapTasks(state, ids, (task) => ({
     ...task,
     ...(p.title === undefined ? {} : { title: p.title }),
-    ...(p.description === undefined ? {} : { description: p.description }),
+    ...(p.description === undefined
+      ? {}
+      : { description: p.description, hasDescription: hasText(p.description) }),
     ...(touchesDue(p) ? dueUnit(p) : {}),
     updatedAt: now,
   }));

@@ -106,6 +106,7 @@ describe('list schemas', () => {
           startDate: null,
           completedAt: null,
           tagIds: [],
+          hasDescription: false,
           counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
           placement: { groupId, position: 'a0' },
           createdAt: 1,

@@ -191,6 +191,7 @@ Letter spacing: −0.011em at 20 px and above, 0 below. The description editor u
 | Repeat | `repeat` |
 | Attachment | `paperclip` |
 | Comments | `message-square` |
+| Description (row meta) | `align-left` |
 | Subtasks | `list-tree` |
 | Tag | `hash` |
 | Due date | `calendar` |
@@ -223,7 +224,7 @@ All components live in `apps/web/src/ui/`. Each has a variant API built with `cv
 | Checkbox | A **round** 18 px circle with a 1.5 px `--color-border-strong` outline. On hover, the outline is n-500 and a faint ✓ shows in n-400. When done, it is filled `--color-check-done` with a white ✓ and pops (scale 1 → 1.2 → 1, 300 ms, spring). The hit area is 32 × 32 on desktop and 44 × 44 on mobile. |
 | Title | `--text-base` (mobile `--text-md`), `--color-text`, single line with ellipsis in Navigate. In Edit it is an input with the same metrics, so there is no layout shift. A done title is struck through and uses `--color-text-muted`. |
 | Breadcrumb (for a subtask shown at top level) | Muted `--text-sm`, "Parent title ›", max 30 % of the width with ellipsis, before the title. |
-| Meta | After the title, gap 8 px: tag chips (max 3, then "+N"; mobile max 1), subtask counter `list-tree 2/5`, comment count, `paperclip`, `repeat`, assignee avatar (20 px, only when applicable). All are `--text-xs`, `--color-text-muted`. |
+| Meta | After the title, gap 8 px: tag chips (max 3, then "+N"; mobile max 1), description indicator `align-left` (icon only, when the description is non-blank; tooltip and screen-reader text "Has description"), subtask counter `list-tree 2/5`, comment count, `paperclip`, `repeat`, assignee avatar (20 px, only when applicable). All are `--text-xs`, `--color-text-muted`. |
 | Date cell | Right-aligned in a 112 px column, `--text-sm`, tabular, colour per §2.3. Empty shows a calendar icon at opacity 0, becoming 0.6 on row hover. |
 | States | **Hover:** `--color-bg-subtle`, `--radius-sm`. **Selected:** `--color-bg-selected` plus a 2 px `--color-selection-bar` on the left edge (inside the radius). **Focus-visible:** focus ring (§3.12). **Dragging source:** 40 % opacity. **Done-pending-hide:** done styles, then a height collapse over `--dur-slow`. |
 | Subtask level | Indented 24 px per level. A chevron (`chevron-right`, 16 px) on parents sits in the checkbox gutter's left. The subtask row height is 36 px on desktop. |

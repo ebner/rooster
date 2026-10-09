@@ -47,6 +47,7 @@ function task(id: string, groupId: string, position: string, extra: Partial<Task
     startDate: null,
     completedAt: null,
     tagIds: [],
+    hasDescription: false,
     counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
     placement: { groupId, position },
     createdAt: 1,
@@ -765,5 +766,85 @@ describe('P3 contract additions', () => {
     const undone = applyOps(after, inverseOf(op, before, ctx), ctx);
     expect(undone.tasks.a1?.startDate).toBeNull();
     expect(undone.tasks.a1?.dueDate).toBeNull();
+  });
+});
+
+describe('hasDescription', () => {
+  it('is set from the description a create carries (default false)', () => {
+    let state = fixture();
+    state = applyOp(state, listOps.createTask({ id: 'n1', title: 'x', groupId: 'today' }), ctx);
+    state = applyOp(
+      state,
+      listOps.createTask({ id: 'n2', title: 'x', groupId: 'today', description: ' \n\t' }),
+      ctx,
+    );
+    state = applyOp(
+      state,
+      listOps.createTask({ id: 'n3', title: 'x', groupId: 'today', description: '# Notes' }),
+      ctx,
+    );
+    state = applyOp(
+      state,
+      listOps.createTask({ id: 's1', title: 'x', parentId: 'a1', description: 'sub' }),
+      ctx,
+    );
+    state = applyOp(state, listOps.createTask({ id: 's2', title: 'x', parentId: 'a1' }), ctx);
+    expect(state.tasks.n1?.hasDescription).toBe(false);
+    expect(state.tasks.n2?.hasDescription).toBe(false);
+    expect(state.tasks.n3?.hasDescription).toBe(true);
+    expect(state.tasks.s1?.hasDescription).toBe(true);
+    expect(state.tasks.s2?.hasDescription).toBe(false);
+  });
+
+  it('follows description patches and survives other patches', () => {
+    let state = applyOp(fixture(), listOps.patchTask('a1', { description: 'text' }), ctx);
+    expect(state.tasks.a1?.hasDescription).toBe(true);
+    state = applyOp(state, listOps.patchTask('a1', { title: 'Renamed' }), ctx);
+    state = applyOp(
+      state,
+      listOps.bulk(ORG, { op: 'setDue', ids: ['a1'], args: { dueDate: '2026-10-10' } }),
+      ctx,
+    );
+    expect(state.tasks.a1?.hasDescription).toBe(true);
+    state = applyOp(state, listOps.patchTask('a1', { description: '   ' }), ctx);
+    expect(state.tasks.a1?.hasDescription).toBe(false);
+  });
+
+  it('is restored by undo', () => {
+    const before = applyOp(fixture(), listOps.patchTask('a1', { description: 'keep' }), ctx);
+    const clear = listOps.patchTask('a1', { description: '' });
+    const cleared = applyOp(before, clear, ctx);
+    expect(cleared.tasks.a1?.hasDescription).toBe(false);
+    const undone = applyOps(cleared, inverseOf(clear, before, ctx), ctx);
+    expect(undone.tasks.a1).toMatchObject({ description: 'keep', hasDescription: true });
+    const add = listOps.patchTask('a2', { description: 'new' });
+    const added = applyOp(fixture(), add, ctx);
+    expect(added.tasks.a2?.hasDescription).toBe(true);
+    const reverted = applyOps(added, inverseOf(add, fixture(), ctx), ctx);
+    expect(reverted.tasks.a2?.hasDescription).toBe(false);
+  });
+
+  it('is copied by duplicate, subtasks included', () => {
+    let state = applyOp(fixture(), listOps.patchTask('a1', { description: 'd' }), ctx);
+    state = applyOp(
+      state,
+      listOps.createTask({ id: 's1', title: 'x', parentId: 'a1', description: 'sub' }),
+      ctx,
+    );
+    state = applyOp(state, listOps.duplicateTask('a1', 'c1'), ctx);
+    expect(state.tasks.c1?.hasDescription).toBe(true);
+    const copies = Object.values(state.tasks).filter((t) => t.parentId === 'c1');
+    expect(copies.map((t) => t.hasDescription)).toEqual([true]);
+    state = applyOp(state, listOps.duplicateTask('a2', 'c2'), ctx);
+    expect(state.tasks.c2?.hasDescription).toBe(false);
+  });
+
+  it('takes the server value on merge', () => {
+    const op = listOps.patchTask('a1', { description: 'x' });
+    const optimistic = applyOp(fixture(), op, ctx);
+    const { state } = mergeResponse(optimistic, op, {
+      task: task('a1', 'today', 'b', { hasDescription: false }),
+    });
+    expect(state.tasks.a1?.hasDescription).toBe(false);
   });
 });

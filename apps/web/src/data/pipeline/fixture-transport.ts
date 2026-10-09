@@ -139,6 +139,7 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
         startDate: spec.startDate ?? null,
         tagIds: (spec.tags ?? []).map((name) => tagNamed(orgId, name).id),
         completedAt: spec.completed ? 1 : null,
+        hasDescription: (spec.description ?? '').trim() !== '',
         counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
         placement: parent ? null : { groupId, position },
         createdAt: 0,

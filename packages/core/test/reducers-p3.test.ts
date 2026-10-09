@@ -48,6 +48,7 @@ function task(id: string, extra: Partial<Task> = {}): Task {
     startDate: null,
     completedAt: null,
     tagIds: [],
+    hasDescription: false,
     counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
     placement: null,
     createdAt: 1,
@@ -460,6 +461,9 @@ describe('task detail reducers', () => {
     expect(created.counts.subtasks).toBe(4);
     const described = applyOpToDetail(d, listOps.patchTask('p', { description: 'New' }), ctx);
     expect(described.description).toBe('New');
+    expect(described.hasDescription).toBe(true);
+    const cleared = applyOpToDetail(described, listOps.patchTask('p', { description: '' }), ctx);
+    expect(cleared).toMatchObject({ description: '', hasDescription: false });
     const untouched = applyOpToDetail(d, listOps.patchTask('q', { title: 'x' }), ctx);
     expect(untouched).toBe(d);
     const deleted = applyOpToDetail(d, listOps.deleteTask('p'), ctx);

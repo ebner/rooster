@@ -49,6 +49,7 @@ function task(id: string, extra: Partial<Task> = {}): Task {
     startDate: null,
     completedAt: null,
     tagIds: [],
+    hasDescription: false,
     counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
     placement: null,
     createdAt: 10,

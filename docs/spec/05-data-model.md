@@ -370,6 +370,7 @@ type TaskDTO = {
   id: string; orgId: string; seq: number | null;
   parentId: string | null; subtaskPosition: string | null;
   title: string; description?: string;            // description omitted in list payloads
+  hasDescription: boolean;                         // description is non-blank; in every payload
   assigneeId: string | null; createdBy: string;
   dueDate: string | null; dueTime: string | null; dueTz: string | null; startDate: string | null;
   recurrence: string | null; recurrenceBasis: 'due' | 'completion' | null;

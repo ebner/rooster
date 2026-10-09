@@ -10,7 +10,8 @@
     "firstRunHint": "Skriv en uppgift och tryck på Enter",
     "colonChip": "↵ igen för att göra om till gruppen ”{name}”",
     "pasteChip": "Skapa {count, plural, one {# uppgift} other {# uppgifter}}? ↵",
-    "breadcrumb": "{title} ›"
+    "breadcrumb": "{title} ›",
+    "hasDescription": "Har beskrivning"
   },
   "group": {
     "untitled": "Ny grupp",
@@ -229,8 +230,10 @@
     },
     "tasks": {
       "reply": "Svara Anna om fakturan",
+      "replyNotes": "Faktura 1042 betalades två gånger; be om en kreditfaktura.",
       "dentist": "Boka tandläkare",
       "plan": "Skriv planen för Q4",
+      "planNotes": "Mål, budget och de tre öppna frågorna från uppstarten.",
       "passport": "Förnya passet",
       "offsite": "Planera teamdagen",
       "done": "Skicka bilderna"

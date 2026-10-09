@@ -253,6 +253,7 @@ export function toTaskDto(
     subtaskPosition: row.subtaskPosition,
     title: row.title,
     ...(options.description === true ? { description: row.description } : {}),
+    hasDescription: row.description.trim() !== '',
     assigneeId: row.assigneeId,
     createdBy: row.createdBy,
     dueDate: row.dueDate,

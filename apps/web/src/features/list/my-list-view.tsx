@@ -96,6 +96,7 @@ export function draftPlaceholder(orgId: string, userId: string, draft: Draft): T
     startDate: null,
     tagIds: [],
     completedAt: null,
+    hasDescription: false,
     counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
     placement: draft.parentId ? null : { groupId: draft.groupId, position: '' },
     createdAt: 0,

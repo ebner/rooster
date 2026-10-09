@@ -39,6 +39,7 @@ function sampleTask(id: string, title: string, overrides: Partial<Task> = {}): T
     startDate: null,
     completedAt: null,
     tagIds: [],
+    hasDescription: false,
     counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
     placement: null,
     createdAt: 0,

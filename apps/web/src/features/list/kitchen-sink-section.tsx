@@ -61,6 +61,7 @@ export function ListSection() {
         1: [
           {
             title: t('dev.tasks.reply'),
+            description: t('dev.tasks.replyNotes'),
             tags: ['mail', 'work', 'finance', 'urgent'],
             expanded: true,
             subtasks: [t('dev.tasks.passport'), { title: t('dev.tasks.done'), completed: true }],
@@ -69,7 +70,11 @@ export function ListSection() {
           { title: t('dev.tasks.done'), completed: true },
         ],
         2: [
-          { title: t('dev.tasks.plan'), dueDate: addDays(today, 4) },
+          {
+            title: t('dev.tasks.plan'),
+            description: t('dev.tasks.planNotes'),
+            dueDate: addDays(today, 4),
+          },
           { title: t('dev.tasks.passport'), dueDate: addDays(today, -2) },
         ],
         3: [{ title: t('dev.tasks.offsite'), dueDate: addDays(today, 1) }],

@@ -1117,6 +1117,7 @@ export interface components {
             subtaskPosition: string | null;
             title: string;
             description?: string;
+            hasDescription: boolean;
             assigneeId: string | null;
             createdBy: string;
             dueDate: string | null;
@@ -1285,6 +1286,7 @@ export interface components {
             subtaskPosition: string | null;
             title: string;
             description: string;
+            hasDescription: boolean;
             assigneeId: string | null;
             createdBy: string;
             dueDate: string | null;
@@ -1383,6 +1385,7 @@ export interface components {
             subtaskPosition: string | null;
             title: string;
             description: string;
+            hasDescription: boolean;
             assigneeId: string | null;
             createdBy: string;
             dueDate: string | null;

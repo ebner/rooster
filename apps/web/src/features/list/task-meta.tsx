@@ -1,5 +1,5 @@
 import type { Tag, Task } from '@rooster/core/schemas';
-import { ListTree } from 'lucide-react';
+import { AlignLeft, ListTree } from 'lucide-react';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
@@ -56,6 +56,22 @@ export const RowTagChips = memo(function RowTagChips({ task }: { task: Task }) {
     </span>
   );
 });
+
+/** `align-left` (03 §3.1): the task has a non-blank description. */
+export function DescriptionIndicator({ task, className }: { task: Task; className?: string }) {
+  const { t } = useTranslation('list');
+  if (!task.hasDescription) return null;
+  return (
+    <span
+      data-testid="description-indicator"
+      className={cn('inline-flex shrink-0 items-center text-text-muted', className)}
+      title={t('row.hasDescription')}
+    >
+      <AlignLeft className="size-3" strokeWidth={iconStrokeWidth} aria-hidden />
+      <span className="sr-only">{t('row.hasDescription')}</span>
+    </span>
+  );
+}
 
 /** `list-tree 2/5` (03 §3.1). */
 export function SubtaskCounter({ task, className }: { task: Task; className?: string }) {

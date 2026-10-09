@@ -1205,6 +1205,9 @@
           "description": {
             "type": "string"
           },
+          "hasDescription": {
+            "type": "boolean"
+          },
           "assigneeId": {
             "type": [
               "string",
@@ -1310,6 +1313,7 @@
           "parentId",
           "subtaskPosition",
           "title",
+          "hasDescription",
           "assigneeId",
           "createdBy",
           "dueDate",
@@ -2065,6 +2069,9 @@
           "description": {
             "type": "string"
           },
+          "hasDescription": {
+            "type": "boolean"
+          },
           "assigneeId": {
             "type": [
               "string",
@@ -2196,6 +2203,7 @@
           "subtaskPosition",
           "title",
           "description",
+          "hasDescription",
           "assigneeId",
           "createdBy",
           "dueDate",
@@ -2548,6 +2556,9 @@
           "description": {
             "type": "string"
           },
+          "hasDescription": {
+            "type": "boolean"
+          },
           "assigneeId": {
             "type": [
               "string",
@@ -2654,6 +2665,7 @@
           "subtaskPosition",
           "title",
           "description",
+          "hasDescription",
           "assigneeId",
           "createdBy",
           "dueDate",

@@ -10,7 +10,8 @@
     "firstRunHint": "Type a task and press Enter",
     "colonChip": "↵ again to turn into group “{name}”",
     "pasteChip": "Create {count, plural, one {# task} other {# tasks}}? ↵",
-    "breadcrumb": "{title} ›"
+    "breadcrumb": "{title} ›",
+    "hasDescription": "Has description"
   },
   "group": {
     "untitled": "New group",
@@ -229,8 +230,10 @@
     },
     "tasks": {
       "reply": "Reply to Anna about the invoice",
+      "replyNotes": "Invoice 1042 was paid twice; ask for a credit note.",
       "dentist": "Book dentist",
       "plan": "Write Q4 plan",
+      "planNotes": "Goals, budget and the three open questions from the kickoff.",
       "passport": "Renew passport",
       "offsite": "Plan the team offsite",
       "done": "Send the slides"

@@ -105,6 +105,8 @@ export const taskSchema = z.object({
   title: z.string(),
   /** Omitted in list payloads; present in `GET /tasks/:id`. */
   description: z.string().optional(),
+  /** True when the description is non-blank. Present in every payload, list payloads included. */
+  hasDescription: z.boolean(),
   assigneeId: idSchema.nullable(),
   createdBy: idSchema,
   dueDate: isoDateSchema.nullable(),

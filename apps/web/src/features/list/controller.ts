@@ -860,8 +860,13 @@ export class ListController {
   hasContent(task: Task): boolean {
     const { subtasks, comments, attachments } = task.counts;
     if (subtasks > 0 || comments > 0 || attachments > 0) return true;
-    // List payloads omit the description; only tasks created here are known to have none.
-    if (task.description === undefined) return !createdHere.has(task.id);
+    // List payloads omit the description but carry `hasDescription`. A cache persisted before
+    // that field existed lacks it; then only tasks created here are known to have none.
+    if (task.description === undefined) {
+      return typeof task.hasDescription === 'boolean'
+        ? task.hasDescription
+        : !createdHere.has(task.id);
+    }
     return task.description.trim() !== '';
   }
 
