@@ -6,6 +6,10 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-09
+
+AI agents, the terminal UI and agent access (Phase 9), plus phone and settings fixes.
+
 ### Added
 - **AI agents and other apps (Phase 9):**
   - **Remote MCP:** add `https://<your rooster>/mcp` to an AI agent (Claude, IDEs, …) and it finds the rest itself. You approve it on a consent screen that shows who is asking and lets you choose what it may do and where: which organisations and groups, whether it may delete tasks ("Allow deleting tasks", off by default) and for how long, including "This session only". If an agent later needs more, it asks again and only the new part is highlighted (ADRs 0041, 0043, 0045, 0046).
@@ -19,9 +23,14 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ### Changed
 - On the `/device` approval page and the consent screen, deleting tasks is its own checkbox.
+- **Settings on phones** open as a list of sections; each section has a "‹ Settings" back button, instead of a strip of tabs that pushed the page sideways.
+- The desktop settings menu is as wide as its longest label, so "Notifications" is no longer cut off.
 
 ### Fixed
 - `rooster show` lists the newest comments when a task has more than 100.
+- Choosing "Only these groups" when creating a token no longer blanks the screen on phones or adds a second scrollbar on desktop.
+- On phones, "+ Add task" lines up with the task titles above it.
+- The token summary no longer reads "Can read ; …" before any group is chosen.
 
 ### Migrations
 - `0010_oauth_provider`: adds the OAuth provider's tables (`oauthClient`, `oauthResource`, `oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`, `oauthConsent`, `oauthClientAssertion`) and `access_grant.idle_timeout_ms`.
