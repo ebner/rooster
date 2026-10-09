@@ -191,7 +191,7 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
   - **Whenever touched:**
     - `UserService.reorderOrg` should move onto `OrderingService` (ADR 0005).
     - The retention purge job publishes no SSE events (ADR 0009).
-  - **P11:** the Docker image is 245 MB against the 250 MB smoke budget (P7 added nodemailer, web-push and react-dom/server); look at the base image or the budget before adding more.
+  - **P11:** the Docker image budget is 350 MB total and 100 MB for rooster's layers (ADR 0048; 1.3.0 is 248 MB). Slimming the base image is still worth a look.
 
 ## When you finish a WP
 - Run every gate in 10 §1.

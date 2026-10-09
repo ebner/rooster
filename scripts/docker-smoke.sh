@@ -32,9 +32,9 @@ USER_ID="$(docker inspect --format '{{.Config.User}}' "$IMAGE")"
 
 SIZE=$(docker image inspect "$IMAGE" --format '{{.Size}}')
 SIZE_MB=$((SIZE / 1024 / 1024))
-(( SIZE_MB < 250 )) && echo "✓ image size ${SIZE_MB} MB" || { echo "✗ image size ${SIZE_MB} MB ≥ 250"; exit 1; }
+(( SIZE_MB < 350 )) && echo "✓ image size ${SIZE_MB} MB" || { echo "✗ image size ${SIZE_MB} MB ≥ 350"; exit 1; }
 APP_LAYER_MB=$(docker history "$IMAGE" --format '{{.Size}} {{.CreatedBy}}' --human=false | awk '/COPY .*\/app/ {print int($1/1024/1024)}' | head -1)
-(( APP_LAYER_MB < 50 )) && echo "✓ app layer ${APP_LAYER_MB} MB" || { echo "✗ app layer ${APP_LAYER_MB} MB ≥ 50"; exit 1; }
+(( APP_LAYER_MB < 100 )) && echo "✓ app layer ${APP_LAYER_MB} MB" || { echo "✗ app layer ${APP_LAYER_MB} MB ≥ 100"; exit 1; }
 
 # AC-0.3: missing required config exits with EX_CONFIG (78)
 set +e
