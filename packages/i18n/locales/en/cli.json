@@ -295,7 +295,6 @@
     "sessionInvalid": "The stored credential was rejected (expired or revoked). Run rooster login.",
     "notRooster": "{server} doesn’t look like a rooster server.",
     "keychainFallback": "No system keychain available; the credential is stored in {path} (readable only by you).",
-    "storedInFile": "Credential stored in the credentials file.",
     "otherServer": "This profile’s login is for {stored}, not {server}. Run rooster login --server {server} (or use another --profile).",
     "keychainUnavailable": "This profile’s login is stored in the system keychain, which can’t be read now (it may be locked). Unlock it and try again, or sign in again with rooster login (with ROOSTER_KEYRING=off the new login is stored in a file).",
     "keychainRefused": "The system keychain refused to store the login ({reason}). Unlock it and run rooster login again, or set ROOSTER_KEYRING=off to store the login in a file (readable only by you)."
@@ -317,7 +316,8 @@
     "denied": "Sign-in was denied.",
     "expired": "The code expired before it was approved. Run rooster login again.",
     "failed": "Sign-in failed: {error}",
-    "done": "Signed in as {name} <{email}> (profile {profile})."
+    "done": "Signed in as {name} <{email}> (profile {profile}).",
+    "previousKept": "The previous login could not be removed from its store; it is no longer used."
   },
   "logout": {
     "envToken": "ROOSTER_TOKEN is set; unset it to sign out. Tokens are revoked with rooster token revoke.",
@@ -352,7 +352,8 @@
     "badLocale": "“{value}” isn’t a supported language; use en or sv.",
     "unset": "{key} isn’t set.",
     "saved": "Saved {key} for profile {profile}.",
-    "badServer": "“{value}” isn’t a server address. Use https://rooster.example.com."
+    "badServer": "“{value}” isn’t a server address. Use https://rooster.example.com.",
+    "locked": "Another rooster process is changing the configuration; try again. If none is running, delete {path}."
   },
   "completion": {
     "badShell": "Choose a shell: {shells}"

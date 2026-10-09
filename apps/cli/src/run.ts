@@ -1,5 +1,6 @@
 import { RoosterApiError } from './api.ts';
 import { dispatch } from './cli.ts';
+import { ConfigLockedError } from './config.ts';
 import { CliError, EXIT, type ExitCode } from './errors.ts';
 import { extractGlobals } from './globals.ts';
 import { describeApiError } from './grant-info.ts';
@@ -64,7 +65,9 @@ export async function runCli(
 async function report(runtime: Runtime, error: unknown): Promise<ExitCode> {
   let failure: CliError;
   if (error instanceof CliError) failure = error;
-  else if (error instanceof KeychainRefused) {
+  else if (error instanceof ConfigLockedError) {
+    failure = new CliError(EXIT.conflict, t('config.locked', { path: error.lockPath }));
+  } else if (error instanceof KeychainRefused) {
     failure = new CliError(EXIT.auth, t('auth.keychainRefused', { reason: error.message }));
   } else if (error instanceof CredentialStoreUnavailable) {
     failure = new CliError(EXIT.auth, t('auth.keychainUnavailable'));

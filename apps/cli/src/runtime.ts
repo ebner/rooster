@@ -121,44 +121,38 @@ export class Runtime {
   }
 
   /**
-   * The profile's stored login, from the store recorded at login (`credential_store`), with
-   * a one-time move of logins from the old shared credentials file. Undefined when the
-   * profile has none; a recorded keychain that can't be read is an error, never a fallback.
+   * The profile's stored login, from the store (and keychain account) recorded at login.
+   * Undefined when the profile has none; a recorded keychain that can't be read is an
+   * error, never a fallback. The store and the profile must agree on the server origin.
    */
   async storedLogin(): Promise<{ login: StoredLogin; store: StoreKind } | undefined> {
     const profile = this.profile;
-    if (profile.credential_store === undefined) {
-      const migrated = this.credentials.migrateLegacy(this.profileName);
-      if (migrated === undefined) return undefined;
-      this.config.updateProfile(this.profileName, (p) => ({
-        ...p,
-        credential_store: 'file',
-        credential_origin: migrated.server,
-      }));
-      return { login: migrated, store: 'file' };
-    }
-    const login = await this.credentials.load(this.profileName, profile.credential_store);
-    if (login === undefined) return undefined;
-    // The store and the profile must agree on the server (a login racing another one).
-    if (login.server !== profile.credential_origin) return undefined;
+    if (profile.credential_store === undefined) return undefined;
+    const login = await this.credentials.load(
+      this.profileName,
+      profile.credential_store,
+      profile.credential_account,
+    );
+    if (login === undefined || login.server !== profile.credential_origin) return undefined;
     return { login, store: profile.credential_store };
   }
 
   /**
-   * The token to send to `server()`: `ROOSTER_TOKEN` (explicit, 07 §2), else the profile's
-   * stored login, but only when it was issued by that same server. A login is never sent to
-   * another origin (`ROOSTER_SERVER` or a changed `server` setting): exit 3 instead.
+   * The token for a request to `requestServer` (the origin the caller will actually send
+   * to): `ROOSTER_TOKEN` (explicit, 07 §2), else the profile's stored login, only when the
+   * stored origin, the profile's origin and the request origin are one. A login is never sent
+   * to another origin: exit 3 instead.
    */
-  async token(): Promise<string | undefined> {
+  async token(requestServer: string): Promise<string | undefined> {
     const env = this.io.env.ROOSTER_TOKEN;
     if (env !== undefined && env !== '') return env.trim();
     const stored = await this.storedLogin();
     if (stored === undefined) return undefined;
-    const server = this.server();
-    if (stored.login.server !== serverOrigin(server)) {
+    const request = serverOrigin(requestServer);
+    if (stored.login.server !== request) {
       throw new CliError(
         EXIT.auth,
-        t('auth.otherServer', { stored: stored.login.server, server: serverOrigin(server) }),
+        t('auth.otherServer', { stored: stored.login.server, server: request }),
       );
     }
     return stored.login.token;
@@ -172,7 +166,8 @@ export class Runtime {
   async api(): Promise<RoosterClient> {
     if (this.client === undefined) {
       const server = this.server();
-      const token = await this.token();
+      // The token is chosen for this exact origin, the one the client will send to.
+      const token = await this.token(server);
       if (token === undefined) throw new CliError(EXIT.auth, t('auth.notLoggedIn'));
       this.client = this.clientFor(server, token);
     }

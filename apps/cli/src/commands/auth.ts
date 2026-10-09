@@ -1,7 +1,7 @@
 import { GRANT_SCOPES, type GrantScope } from '@rooster/core/grants';
 import { defineCommand } from 'citty';
 import { cliFetch, grantsApi, type Me, type Meta, RoosterApiError, unwrap } from '../api.ts';
-import { normalizeServer } from '../config.ts';
+import { normalizeServer, type Profile } from '../config.ts';
 import { CliError, EXIT } from '../errors.ts';
 import { constraintLines, currentGrant, parseScopes, scopeSummary } from '../grant-info.ts';
 import { isLocale, setLocale, t } from '../i18n.ts';
@@ -111,36 +111,52 @@ async function finishLogin(
   }
   const profileName = runtime.profileName;
   const origin = serverOrigin(server);
-  // The store first, then the profile that points at it: a login completes with the config.
-  const where = await runtime.credentials.save(profileName, { token, server: origin });
-  if (where === 'file' && !runtime.keyringOff && runtime.state.takeKeychainNotice()) {
+  // 1. Store the new login (a keychain login is staged under a fresh account, so a refused
+  // login leaves the active one alone).
+  const saved = await runtime.credentials.save(profileName, { token, server: origin });
+  if (saved.store === 'file' && !runtime.keyringOff && runtime.state.takeKeychainNotice()) {
     runtime.out.notice(
       t('auth.keychainFallback', { path: runtime.credentials.pathOf(profileName) }),
     );
   }
-  const previous = runtime.profile;
-  const wanted = orgFlag ?? (previous.server === server ? previous.org : undefined);
-  const org =
-    (wanted === undefined
-      ? undefined
-      : me.orgs.find((o) => o.slug === wanted || o.id === wanted)) ??
-    me.orgs.find((o) => o.isPersonal) ??
-    me.orgs[0];
-  runtime.config.updateProfile(profileName, (profile) => ({
-    ...profile,
-    server,
-    ...(org === undefined ? {} : { org: org.slug }),
-    user: me.email,
-    credential_store: where,
-    credential_origin: origin,
-  }));
-  const config = runtime.config.read();
-  if (config.default_profile === undefined && profileName !== 'default') {
-    runtime.config.write({ ...config, default_profile: profileName });
+  // 2. Publish it: one locked update of the profile (and the default profile).
+  let previous: Profile = {};
+  runtime.config.update((config) => {
+    previous = config.profiles[profileName] ?? {};
+    const wanted = orgFlag ?? (previous.server === server ? previous.org : undefined);
+    const org =
+      (wanted === undefined
+        ? undefined
+        : me.orgs.find((o) => o.slug === wanted || o.id === wanted)) ??
+      me.orgs.find((o) => o.isPersonal) ??
+      me.orgs[0];
+    const { credential_account: _account, ...rest } = previous;
+    const profile: Profile = {
+      ...rest,
+      server,
+      ...(org === undefined ? {} : { org: org.slug }),
+      user: me.email,
+      credential_store: saved.store,
+      credential_origin: origin,
+      ...(saved.store === 'keychain' ? { credential_account: saved.account } : {}),
+    };
+    const makeDefault = config.default_profile === undefined && profileName !== 'default';
+    return {
+      ...config,
+      ...(makeDefault ? { default_profile: profileName } : {}),
+      profiles: { ...config.profiles, [profileName]: profile },
+    };
+  });
+  // 3. Drop what the profile pointed at before; it is no longer referenced either way.
+  const before = {
+    ...(previous.credential_store === undefined ? {} : { store: previous.credential_store }),
+    ...(previous.credential_account === undefined ? {} : { account: previous.credential_account }),
+  };
+  if (!(await runtime.credentials.dropPrevious(profileName, before, saved))) {
+    runtime.out.warn(t('login.previousKept'));
   }
   runtime.state.setUserLocale(profileName, me.locale);
   if (!isLocale(previous.locale)) setLocale(me.locale);
-  if (where === 'file' && runtime.globals.verbose) runtime.out.notice(t('auth.storedInFile'));
   return me;
 }
 
@@ -235,9 +251,7 @@ export const logoutCommand = defineCommand({
       out.warn(t('logout.envToken'));
       return;
     }
-    // Moves a login from the old shared credentials file first, if there is one.
-    await runtime.storedLogin().catch(() => undefined);
-    const store = runtime.profile.credential_store;
+    const { credential_store: store, credential_account: account } = runtime.profile;
     if (store === undefined) {
       out.notice(t('logout.notLoggedIn', { profile: runtime.profileName }));
       return;
@@ -260,7 +274,7 @@ export const logoutCommand = defineCommand({
       }
     }
     try {
-      await runtime.credentials.remove(runtime.profileName, store);
+      await runtime.credentials.remove(runtime.profileName, store, account);
     } catch (error) {
       if (error instanceof CredentialRemovalError) {
         const where =
@@ -335,7 +349,7 @@ export async function printVersion(runtime: Runtime): Promise<void> {
   const server = runtime.serverOrNull();
   let serverVersion: string | null = null;
   // A login for another server only means no server version here, not an error.
-  const token = server === null ? undefined : await runtime.token().catch(() => undefined);
+  const token = server === null ? undefined : await runtime.token(server).catch(() => undefined);
   if (server !== null && token !== undefined) {
     serverVersion = await fetchMeta(runtime, server)
       .then((meta) => meta.version)

@@ -23,10 +23,14 @@
    - truecolor where the terminal says so, else 256 colours, else basic ANSI picked by hue;
    - overdue is also marked with `!`;
    - colour is off for `NO_COLOR`, `--no-color`, `--json`, `TERM=dumb` and pipes; `FORCE_COLOR` overrides.
-7. **Secrets: one store per profile, chosen at login** (amended after the security review, ADR 0040).
-   - Login writes the OS keychain (`@napi-rs/keyring`, loaded lazily, optional) and reads it back. If the keychain is positively absent (a strict allowlist: no addon, no Secret Service or D-Bus session, no session keyring, unsupported platform), login uses a 0600 file under `credentials.d/<profile>` instead, with a one-time notice. A keychain that refuses (locked, denied, unreachable) fails the login with the `ROOSTER_KEYRING=off` hint.
-   - The profile records `credential_store` and the server origin. Reads use only that store and never fall back.
-   - Logout succeeds only when the delete is confirmed.
+7. **Secrets: one store per profile, chosen at login** (amended after the security reviews, ADR 0040).
+   - Login stages the token in the OS keychain (`@napi-rs/keyring`, loaded lazily, optional) under a fresh account `<profile>:<uuid>` and reads it back. A refused or failed read-back deletes the staged entry and fails the login (exit 3, with the `ROOSTER_KEYRING=off` hint); the active login is never touched.
+   - If the keychain is positively absent (a strict allowlist of messages: no addon, no Secret Service or D-Bus session, no session keyring, unsupported platform), or `ROOSTER_KEYRING=off`, the login goes to a 0600 file `credentials.d/p-<hex of the profile name>` instead, with a one-time notice. Hex keeps profiles apart on case-insensitive file systems.
+   - The profile records `credential_store`, `credential_origin` and (keychain) `credential_account`, published in one update of `config.toml` after the store write. Then the previous account or file is removed, and a failure there is only a warning.
+   - Every read-modify-write of `config.toml` holds an interprocess lock (`config.toml.lock`, created exclusively, bounded wait, stale takeover after 10 s when its process is gone).
+   - Reads use only the recorded store and account and never fall back. A token is used only when the stored origin, the profile's origin and the origin of the request being sent are the same.
+   - Logout succeeds only when the delete is confirmed; then the profile's credential fields are cleared. A profile without `credential_store` has no login.
+   - The CLI was never released, so there is no migration from earlier formats.
    - The compiled binaries always use the file, which keeps cross-compilation deterministic.
 8. **Opening things is argv-only.** The browser opens only https URLs (http only for loopback) on the profile's server origin, through `xdg-open`, `open` or `rundll32 url.dll,FileProtocolHandler`, never a shell; anything else is printed. `$VISUAL`/`$EDITOR` is split into argv and run without a shell. User content is stripped of control and bidi characters before printing.
 9. **`logout`** revokes the current grant when it is a device login. A PAT is only forgotten locally, since CI may use it elsewhere; the CLI points to `rooster token revoke`.

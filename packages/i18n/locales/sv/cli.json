@@ -295,7 +295,6 @@
     "sessionInvalid": "Den sparade inloggningen godtogs inte (den har gått ut eller återkallats). Kör rooster login.",
     "notRooster": "{server} ser inte ut att vara en rooster-server.",
     "keychainFallback": "Ingen nyckelring finns tillgänglig; inloggningen sparas i {path} (bara läsbar för dig).",
-    "storedInFile": "Inloggningen sparades i credentials-filen.",
     "otherServer": "Profilens inloggning gäller {stored}, inte {server}. Kör rooster login --server {server} (eller använd en annan --profile).",
     "keychainUnavailable": "Profilens inloggning finns i systemets nyckelring, som inte går att läsa nu (den kan vara låst). Lås upp den och försök igen, eller logga in igen med rooster login (med ROOSTER_KEYRING=off sparas den nya inloggningen i en fil).",
     "keychainRefused": "Systemets nyckelring vägrade spara inloggningen ({reason}). Lås upp den och kör rooster login igen, eller sätt ROOSTER_KEYRING=off för att spara inloggningen i en fil (bara läsbar för dig)."
@@ -317,7 +316,8 @@
     "denied": "Inloggningen nekades.",
     "expired": "Koden gick ut innan den godkändes. Kör rooster login igen.",
     "failed": "Inloggningen misslyckades: {error}",
-    "done": "Inloggad som {name} <{email}> (profil {profile})."
+    "done": "Inloggad som {name} <{email}> (profil {profile}).",
+    "previousKept": "Den tidigare inloggningen kunde inte tas bort ur sitt lager; den används inte längre."
   },
   "logout": {
     "envToken": "ROOSTER_TOKEN är satt; ta bort den för att logga ut. Token återkallas med rooster token revoke.",
@@ -352,7 +352,8 @@
     "badLocale": "”{value}” är inget språk som stöds; använd en eller sv.",
     "unset": "{key} är inte satt.",
     "saved": "Sparade {key} för profilen {profile}.",
-    "badServer": "”{value}” är ingen serveradress. Använd https://rooster.example.com."
+    "badServer": "”{value}” är ingen serveradress. Använd https://rooster.example.com.",
+    "locked": "En annan rooster-process ändrar konfigurationen; försök igen. Om ingen körs, ta bort {path}."
   },
   "completion": {
     "badShell": "Välj ett skal: {shells}"

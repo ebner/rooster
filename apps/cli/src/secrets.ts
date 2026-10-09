@@ -1,6 +1,6 @@
-import { rmSync, unlinkSync } from 'node:fs';
+import { unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { parse } from 'smol-toml';
+import { uuidv7 } from '@rooster/core/ids';
 import { readIfExists, writeFileAtomic } from './config.ts';
 
 /**
@@ -124,10 +124,16 @@ function decode(raw: string | undefined | null): StoredLogin | undefined {
   return undefined;
 }
 
-/** A profile name as a file name: no separators, no `.`/`..`. */
-function fileNameOf(profile: string): string {
-  return encodeURIComponent(profile).replace(/\./g, '%2E');
+/**
+ * A profile name as a file name: `p-` plus the lowercase hex of its UTF-8 bytes. Never a
+ * separator or `.`/`..`, and `home` and `Home` stay apart on case-insensitive file systems.
+ */
+export function fileNameOf(profile: string): string {
+  return `p-${Buffer.from(profile, 'utf8').toString('hex')}`;
 }
+
+/** Where a login was stored: what the profile records to find it again. */
+export type SavedLogin = { store: 'keychain'; account: string } | { store: 'file' };
 
 export class CredentialStore {
   readonly dir: string;
@@ -140,7 +146,7 @@ export class CredentialStore {
     this.dir = join(configDir, 'credentials.d');
   }
 
-  /** `<config dir>/credentials.d/<profile>`: one file per profile, so profiles never collide. */
+  /** `<config dir>/credentials.d/p-<hex>`: one file per profile, so profiles never collide. */
   pathOf(profile: string): string {
     return join(this.dir, fileNameOf(profile));
   }
@@ -151,16 +157,19 @@ export class CredentialStore {
   }
 
   /**
-   * Login: the keychain when a write and its read-back succeed; the file only when the
-   * keychain is provably absent (no addon, `ROOSTER_KEYRING=off`, or an allowlisted error);
-   * otherwise `KeychainRefused`. Returns the store to record in the profile.
+   * Login. In the keychain, the new login is staged under a fresh account
+   * (`<profile>:<uuid>`) and read back, so a refused login never touches the active one; the
+   * caller publishes the account in the profile and then drops the previous one. The file is
+   * used only when the keychain is provably absent (no addon, `ROOSTER_KEYRING=off`, or an
+   * allowlisted error); a keychain that refuses is `KeychainRefused`.
    */
-  async save(profile: string, login: StoredLogin): Promise<StoreKind> {
+  async save(profile: string, login: StoredLogin): Promise<SavedLogin> {
     const factory = await this.factory();
     if (factory !== null) {
+      const account = `${profile}:${uuidv7()}`;
       let entry: KeyringEntry | undefined;
       try {
-        entry = factory(SERVICE, profile);
+        entry = factory(SERVICE, account);
       } catch (error) {
         if (!isStoreAbsent(error, 'construct')) throw new KeychainRefused(error);
       }
@@ -171,35 +180,40 @@ export class CredentialStore {
           if (back?.token !== login.token || back.server !== login.server) {
             throw new Error('The keychain did not return the stored login.');
           }
-          // A login from an earlier file-backed session must not linger on disk.
-          this.removeFileQuietly(profile);
-          return 'keychain';
+          return { store: 'keychain', account };
         } catch (error) {
+          await this.discardAccount(account);
           if (!isStoreAbsent(error, 'call')) throw new KeychainRefused(error);
         }
       }
     }
     writeFileAtomic(this.pathOf(profile), `${encode(login)}\n`, 0o600);
-    return 'file';
+    return { store: 'file' };
   }
 
   /**
-   * The login in the recorded store, or undefined when that store holds none. A keychain
-   * that can't be read is an error (`CredentialStoreUnavailable`), never a fallback.
+   * The login in the recorded store (the keychain account the profile records), or undefined
+   * when it holds none. A keychain that can't be read is `CredentialStoreUnavailable`, never
+   * a fallback to the file.
    */
-  async load(profile: string, kind: StoreKind): Promise<StoredLogin | undefined> {
+  async load(
+    profile: string,
+    kind: StoreKind,
+    account: string | undefined,
+  ): Promise<StoredLogin | undefined> {
     if (kind === 'file') return decode(readIfExists(this.pathOf(profile)));
+    if (account === undefined) return undefined;
     const factory = await this.factory();
     if (factory === null) throw new CredentialStoreUnavailable();
     try {
-      return decode(await factory(SERVICE, profile).getPassword());
+      return decode(await factory(SERVICE, account).getPassword());
     } catch (error) {
       throw new CredentialStoreUnavailable(error);
     }
   }
 
   /** Logout: removes the login from the recorded store, or throws `CredentialRemovalError`. */
-  async remove(profile: string, kind: StoreKind): Promise<void> {
+  async remove(profile: string, kind: StoreKind, account: string | undefined): Promise<void> {
     if (kind === 'file') {
       try {
         unlinkSync(this.pathOf(profile));
@@ -210,54 +224,51 @@ export class CredentialStore {
       }
       return;
     }
+    if (account === undefined) return;
     const factory = await this.factory();
     if (factory === null) {
       throw new CredentialRemovalError('keychain', new Error('The keychain is not available.'));
     }
     try {
-      await factory(SERVICE, profile).deletePassword();
+      await factory(SERVICE, account).deletePassword();
     } catch (error) {
       throw new CredentialRemovalError('keychain', error);
     }
   }
 
-  private removeFileQuietly(profile: string): void {
-    try {
-      unlinkSync(this.pathOf(profile));
-    } catch {
-      // Not there, or unwritable: the profile records the keychain, so it is never read.
+  /**
+   * After a new login is published: removes what the profile pointed at before (another
+   * keychain account, or the profile's file when the new login is in the keychain). False
+   * when something could not be removed (the caller warns; it is no longer referenced).
+   */
+  async dropPrevious(
+    profile: string,
+    previous: { store?: StoreKind; account?: string },
+    current: SavedLogin,
+  ): Promise<boolean> {
+    let ok = true;
+    if (previous.store === 'keychain' && previous.account !== undefined) {
+      const same = current.store === 'keychain' && current.account === previous.account;
+      if (!same) ok = (await this.discardAccount(previous.account)) && ok;
     }
+    if (current.store === 'keychain') {
+      try {
+        unlinkSync(this.pathOf(profile));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') ok = false;
+      }
+    }
+    return ok;
   }
 
-  /**
-   * The shared `credentials` file of earlier builds (`[profiles.<name>] token, server`):
-   * moves every login into its own file and deletes the old file. Idempotent, so two
-   * processes migrating at once write the same files. Returns this profile's login, if any.
-   */
-  migrateLegacy(profile: string): StoredLogin | undefined {
-    const legacy = join(this.configDir, 'credentials');
-    const text = readIfExists(legacy);
-    if (text === undefined) return undefined;
-    let profiles: Record<string, Record<string, unknown>> = {};
+  private async discardAccount(account: string): Promise<boolean> {
     try {
-      profiles = ((parse(text) as { profiles?: typeof profiles }).profiles ??
-        {}) as typeof profiles;
+      const factory = await this.factory();
+      if (factory === null) return false;
+      await factory(SERVICE, account).deletePassword();
+      return true;
     } catch {
-      // Unreadable: nothing to migrate.
+      return false;
     }
-    let mine: StoredLogin | undefined;
-    for (const [name, value] of Object.entries(profiles)) {
-      const login =
-        typeof value.token === 'string' && value.token !== '' && typeof value.server === 'string'
-          ? { token: value.token, server: serverOrigin(value.server) }
-          : undefined;
-      if (login === undefined) continue;
-      if (readIfExists(this.pathOf(name)) === undefined) {
-        writeFileAtomic(this.pathOf(name), `${encode(login)}\n`, 0o600);
-      }
-      if (name === profile) mine = login;
-    }
-    rmSync(legacy, { force: true });
-    return mine;
   }
 }

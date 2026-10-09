@@ -101,9 +101,9 @@ const configSet = defineCommand({
     const key = parseKey(raw);
     const clear = value === '' || value === 'none';
     if (key === 'default_profile') {
-      const config = runtime.config.read();
-      const { default_profile: _old, ...rest } = config;
-      runtime.config.write(clear ? rest : { ...rest, default_profile: value });
+      runtime.config.update(({ default_profile: _old, ...rest }) =>
+        clear ? rest : { ...rest, default_profile: value },
+      );
     } else {
       let next = value;
       if (!clear && key === 'server') next = normalizeServer(value);
