@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isAllowedPushEndpoint } from '../push-hosts.ts';
 import { idSchema, timestampSchema } from './common.ts';
 
 /**
@@ -16,9 +17,14 @@ export const vapidPublicKeySchema = z.object({ publicKey: z.string().min(1) });
 /**
  * POST /me/push-subscriptions: `PushSubscription.toJSON()` from the browser plus a device
  * label. Upserts by `endpoint` (re-subscribing the same browser updates its keys and owner).
+ * The endpoint must be on a known push service (`push-hosts.ts`, SSRF guard); the server
+ * checks again with `isAllowedPushEndpoint` before every send.
  */
 export const pushSubscriptionCreateSchema = z.object({
-  endpoint: z.url({ protocol: /^https$/ }).max(2048),
+  endpoint: z
+    .url({ protocol: /^https$/ })
+    .max(2048)
+    .refine((u) => isAllowedPushEndpoint(u), { error: 'Not a known Web Push service' }),
   keys: z.object({ p256dh: z.string().min(1).max(256), auth: z.string().min(1).max(64) }),
   /** A readable device label, e.g. "Chrome on Android"; the server falls back to its UA. */
   userAgent: z.string().max(256).optional(),
