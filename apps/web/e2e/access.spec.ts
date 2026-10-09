@@ -148,3 +148,28 @@ test('AC-8.5 (UI) a token limited to Prio: 403 outside_grant elsewhere, narrowin
   await expect(page.locator('#connected-apps').getByTestId(`grant-${grant?.id}`)).toHaveCount(0);
   expect((await call('GET', '/api/v1/me')).status()).toBe(401);
 });
+
+test('a group-limited token: choosing "Only these groups" keeps the page in place', async ({
+  page,
+}) => {
+  await signInAs(page, uniqueEmail('pat.groups'));
+  await page.goto('/settings/security');
+  const section = page.locator('#connected-apps');
+  await section.getByTestId('new-token').click();
+  const form = section.getByTestId('new-token-form');
+  // Only the app's <main> scrolls: React Aria's visually hidden radio inputs used to escape it
+  // (an unpositioned scroller is not their containing block), grow the document and, focused
+  // on press, scroll the whole app frame off screen.
+  const documentScroll = () =>
+    page.evaluate(() => {
+      const doc = document.scrollingElement as HTMLElement;
+      return { top: doc.scrollTop, overflow: doc.scrollHeight - doc.clientHeight };
+    });
+  expect(await documentScroll()).toEqual({ top: 0, overflow: 0 });
+  await form
+    .locator('[data-testid^="read-"][role="radiogroup"]')
+    .getByText('Only these groups', { exact: true })
+    .click();
+  await expect(form.getByRole('listbox', { name: /Groups it may read in/ })).toBeInViewport();
+  expect(await documentScroll()).toEqual({ top: 0, overflow: 0 });
+});

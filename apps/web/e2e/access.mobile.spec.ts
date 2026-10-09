@@ -1,5 +1,6 @@
 import { apiCall, signInAs, uniqueEmail } from './support/auth';
 import { groupId, personalOrg } from './support/p3';
+import { frameState } from './support/phone-frame';
 import { expect, test } from './support/test';
 
 /**
@@ -134,4 +135,54 @@ test('/device: a wrong code is explained, and a code can be typed in', async ({ 
   await page.getByRole('button', { name: 'Continue' }).tap();
   await expect(page).toHaveURL(/\/device\?user_code=ZZZZZZZZ$/);
   await expect(page.getByRole('alert')).toContainText('That code doesn’t match');
+});
+
+test('Connected apps on a phone: choosing "Only these groups" keeps the screen in place', async ({
+  page,
+}) => {
+  await signInAs(page, uniqueEmail('pat.phone'));
+  const section = page.locator('#connected-apps');
+  // WebKit may still be finishing the post-sign-in redirect: retry the navigation.
+  await expect(async () => {
+    await page.goto('/settings/security');
+    await expect(section.getByTestId('new-token')).toBeVisible({ timeout: 2_000 });
+  }).toPass();
+  await section.getByTestId('new-token').tap();
+  const form = section.getByTestId('new-token-form');
+  // The visually hidden radio inputs used to escape the scrolling <main>: focused on tap, they
+  // scrolled the fixed phone frame itself and left the screen blank.
+  await form
+    .locator('[data-testid^="read-"][role="radiogroup"]')
+    .getByText('Only these groups', { exact: true })
+    .tap();
+  await expect(form.getByRole('listbox', { name: /Groups it may read in/ })).toBeInViewport();
+  const frame = await page.evaluate(() => {
+    const shell = document.querySelector<HTMLElement>('[data-shell="mobile"]');
+    return { top: shell?.scrollTop ?? -1, left: shell?.scrollLeft ?? -1 };
+  });
+  expect(frame).toEqual({ top: 0, left: 0 });
+  const state = await frameState(page);
+  expect(state.headerTop).toBe(0);
+  expect(state.docScrollTop).toBe(0);
+  await expect(page.getByTestId('mobile-header')).toBeInViewport();
+});
+
+test('Settings on a phone: the section strip scrolls inside itself, never the page', async ({
+  page,
+}) => {
+  await signInAs(page, uniqueEmail('settings.strip'));
+  for (const name of ['Profile', 'Data']) {
+    const strip = page.getByRole('navigation', { name: 'Settings sections' });
+    const active = strip.getByRole('link', { name, exact: true });
+    await expect(async () => {
+      await page.goto(`/settings/${name.toLowerCase()}`);
+      await expect(active).toHaveAttribute('aria-current', 'page', { timeout: 2_000 });
+    }).toPass();
+    await expect(active).toBeInViewport({ ratio: 1 });
+    const main = await page.evaluate(() => {
+      const el = document.querySelector('main') as HTMLElement;
+      return el.scrollWidth - el.clientWidth;
+    });
+    expect(main, name).toBe(0);
+  }
 });

@@ -123,7 +123,12 @@ export function AppShell({ renderSidebar, children, navKey, mobile }: AppShellPr
             className="fixed inset-0 flex flex-col overflow-hidden bg-bg-app"
             data-shell="mobile"
           >
-            <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-y-none">
+            {/*
+             * Relative: the scroller is the containing block of absolutely positioned content
+             * (React Aria's visually hidden inputs). Otherwise that content escapes it, and
+             * focusing it scrolls the frame itself off screen.
+             */}
+            <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-y-none">
               {children}
             </main>
             {/* The keyboard and selection mode's bulk bar take the nav's place (02 §13). */}
@@ -178,7 +183,8 @@ export function AppShell({ renderSidebar, children, navKey, mobile }: AppShellPr
               </div>
             )}
           </div>
-          <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">{children}</main>
+          {/* Relative, as on phones: absolutely positioned content must not grow the document. */}
+          <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto">{children}</main>
           <CheatSheet />
           <PaletteHost />
         </div>

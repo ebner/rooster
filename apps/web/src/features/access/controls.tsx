@@ -64,7 +64,9 @@ export function FormCheckbox({
       {...(force ? { 'data-force': force } : {})}
       {...(testId ? { 'data-testid': testId } : {})}
       className={cn(
-        'group flex cursor-default items-start gap-3 rounded-sm py-1.5 text-sm text-text outline-none',
+        // Relative: React Aria's visually hidden input stays inside the row, so focusing it
+        // scrolls only as far as the row (ChoiceGroup's radios likewise).
+        'group relative flex cursor-default items-start gap-3 rounded-sm py-1.5 text-sm text-text outline-none',
         'pointer-coarse:min-h-hit-touch pointer-coarse:items-center',
         'data-disabled:cursor-not-allowed',
         className,
@@ -144,7 +146,7 @@ export function ChoiceGroup<K extends string>({
             value={option.id}
             isDisabled={option.isDisabled ?? false}
             className={cn(
-              'inline-flex h-control-sm min-w-0 cursor-default items-center justify-center rounded-xs px-3 text-sm font-medium whitespace-nowrap text-text-secondary',
+              'relative inline-flex h-control-sm min-w-0 cursor-default items-center justify-center rounded-xs px-3 text-sm font-medium whitespace-nowrap text-text-secondary',
               'pointer-coarse:h-hit-touch',
               'transition-colors duration-(--dur-fast) ease-standard hover:text-text',
               'data-selected:bg-bg-elevated data-selected:text-text data-selected:shadow-sm',

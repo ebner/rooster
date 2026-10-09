@@ -14,6 +14,13 @@ const addClass = cn(
   'focus-visible:-outline-offset-2',
 );
 
+/**
+ * The checkbox column of a task row: 44 px on phones and touch screens like `TaskCheckbox`
+ * in a row, so the icon sits under the checkbox and the label under the title.
+ */
+const iconSlotClass =
+  'flex size-hit shrink-0 items-center justify-center max-tablet:size-hit-touch pointer-coarse:size-hit-touch';
+
 /** The drag-handle column of a task row, so icons and text line up with checkbox and title. */
 function HandleSpacer() {
   return <span aria-hidden className="ms-1 w-4 shrink-0 pointer-coarse:hidden" />;
@@ -37,7 +44,7 @@ export const AddTaskRow = memo(function AddTaskRow({ row }: { row: AddRow }) {
           onClick={() => controller.addAtEnd(row.groupId, row.sectionId)}
         >
           <HandleSpacer />
-          <span className="flex size-hit shrink-0 items-center justify-center">
+          <span className={iconSlotClass}>
             <Plus className="size-4" strokeWidth={iconStrokeWidth} aria-hidden />
           </span>
           <span className="ps-1">{t('row.addTask')}</span>
@@ -60,7 +67,7 @@ export const FirstRunHint = memo(function FirstRunHint({ row }: { row: HintRow }
       <GridCell className="flex flex-1">
         <button type="button" className={addClass} onClick={() => controller.addAtEnd(row.groupId)}>
           <HandleSpacer />
-          <span className="flex size-hit shrink-0 items-center justify-center">
+          <span className={iconSlotClass}>
             <span className="size-checkbox rounded-full border-(length:--border-check) border-dashed border-border-strong" />
           </span>
           <span className="ps-1">{t('row.firstRunHint')}</span>
@@ -114,7 +121,7 @@ export const AddSubtaskRowView = memo(function AddSubtaskRowView({ row }: { row:
           onClick={() => controller.addSubtask(row.parentId)}
         >
           <HandleSpacer />
-          <span className="flex size-hit shrink-0 items-center justify-center">
+          <span className={iconSlotClass}>
             <Plus className="size-4" strokeWidth={iconStrokeWidth} aria-hidden />
           </span>
           <span className="ps-1 text-sm">{t('subtasks.add')}</span>
