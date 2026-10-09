@@ -7,6 +7,8 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 ## [Unreleased]
 
 ### Changed
+- **Bigger on large screens:** on desktop windows from 1440 px wide the whole interface is 12.5 % larger, and from 1600 px 25 % larger, as if the browser were zoomed in. Laptops below 1440 px, tablets and phones are unchanged. If you had zoomed your browser to get this, set it back to 100 % (ADR 0027).
+- **New logo and app icon:** a redrawn rooster head with a hand-painted amber comb and a new "rooster" wordmark, used the same way everywhere: sign-in (where the comb is painted in as the page loads), the sidebar, the phone header, empty views, the loading screen, the 404 and error pages, the favicon and the installed app's icon (ADR 0026).
 - **New accent colour:** amber replaces the coral-red accent (buttons, selection, focus rings, the app icon), so red is left for things that really need attention, such as overdue dates and delete buttons. "Tomorrow" dates are now orange (ADR 0024).
 - **Backups before every update:** the server now writes a "Before update" backup whenever it starts with a different version, not only when the database schema changes (ADR 0023). The first start after upgrading takes one.
 

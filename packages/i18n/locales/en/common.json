@@ -13,6 +13,11 @@
     "body": "The page you’re looking for doesn’t exist.",
     "home": "Go to the start page"
   },
+  "error": {
+    "title": "Something went wrong",
+    "body": "rooster ran into a problem showing this page. Reloading usually fixes it.",
+    "reload": "Reload"
+  },
   "action": {
     "dismiss": "Dismiss",
     "retry": "Retry",

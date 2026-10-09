@@ -39,11 +39,13 @@ import { PwaKitchenSection } from '../pwa/kitchen-sink-section';
 import { MobileKitchenSection } from '../shell/mobile-kitchen-section';
 import { TagsKitchenSection } from '../tags/kitchen-sink-section';
 import { ViewsKitchenSection } from '../views/kitchen-sink-section';
+import { BrandSection } from './brand-section';
 import { Group, Section, Specimen } from './layout';
 import { Phase1Sections, phase1SectionIds } from './phase1-sections';
 
 const sectionIds = [
   'foundations',
+  'brand',
   'button',
   'iconButton',
   'input',
@@ -742,6 +744,7 @@ export function KitchenSink() {
           </nav>
         </div>
         <FoundationsSection />
+        <BrandSection />
         <ButtonSection />
         <IconButtonSection />
         <InputSection />

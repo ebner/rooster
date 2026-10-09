@@ -8,6 +8,7 @@ import { Avatar } from '../../ui/avatar';
 import { BottomSheet, SheetOption } from '../../ui/bottom-sheet';
 import { iconStrokeWidth } from '../../ui/button';
 import { IconButton } from '../../ui/icon-button';
+import { LogoMark } from '../../ui/logo';
 import { Menu, MenuPopover, MenuTrigger } from '../../ui/menu';
 import { SyncStatus } from '../pwa/sync-status';
 import { CreateOrgForm } from './create-org-form';
@@ -63,6 +64,8 @@ export function MobileHeader({
       className={cn('z-(--z-sticky) bg-bg-app pt-safe', !isStatic && 'sticky top-0')}
     >
       <div className="flex h-sheet-header items-center gap-1 ps-2 pe-1">
+        {/* 03 §2.10: the mark heads every phone screen; the title or org switcher names it. */}
+        <LogoMark className="mx-1" />
         {org ? (
           <>
             <h1 className="sr-only">{context ? `${title} · ${context}` : title}</h1>

@@ -13,6 +13,11 @@
     "body": "Sidan du letar efter finns inte.",
     "home": "Gå till startsidan"
   },
+  "error": {
+    "title": "Något gick fel",
+    "body": "rooster kunde inte visa den här sidan. Oftast hjälper det att ladda om.",
+    "reload": "Ladda om"
+  },
   "action": {
     "dismiss": "Stäng",
     "retry": "Försök igen",

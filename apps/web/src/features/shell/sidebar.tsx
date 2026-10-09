@@ -25,7 +25,7 @@ import type { CreateOrgInput, CurrentUser, Org, OrgReorderIntent } from '../../d
 import { primaryKeys } from '../../keymap';
 import { cn } from '../../lib/cn';
 import { IconButton } from '../../ui/icon-button';
-import { LogoMark, Wordmark } from '../../ui/logo';
+import { Logo, LogoMark } from '../../ui/logo';
 import { overlayOffsetPx, popoverMotion, popoverSurface } from '../../ui/popover';
 import { openPalette } from '../palette/store';
 import { CreateOrgForm } from './create-org-form';
@@ -140,7 +140,7 @@ export function Sidebar({
           rail ? 'justify-center' : 'justify-between ps-5 pe-3',
         )}
       >
-        {rail ? <LogoMark /> : <Wordmark />}
+        {rail ? <LogoMark label={t('app.name', { ns: 'common' })} /> : <Logo />}
         {!rail && onToggleCollapsed && !inDrawer && (
           <IconButton
             icon={PanelLeftClose}

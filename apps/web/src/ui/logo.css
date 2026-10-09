@@ -1,0 +1,85 @@
+/*
+ * The rooster mark (03 §2.10, ADR 0026). Colours come from the tones; the draw-in is one
+ * sequence: the line draws itself, the eye opens, then the comb and wattle are brushed in
+ * through the brush masks. Reduced motion shows the finished drawing at once.
+ */
+.rooster-mark {
+  --mark-ink: var(--color-text);
+  --mark-paint: var(--color-brand);
+  overflow: visible;
+}
+.rooster-mark[data-tone="inverse"] {
+  --mark-ink: var(--color-text-inverse);
+}
+.rooster-mark[data-tone="muted"] {
+  --mark-ink: var(--color-border-strong);
+}
+
+.rooster-mark .ink {
+  fill: none;
+  stroke: var(--mark-ink);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.rooster-mark .eye {
+  fill: var(--mark-ink);
+}
+.rooster-mark .paint {
+  fill: var(--mark-paint);
+}
+/* Mask luminance, not a colour: white shows the paint under the brush. */
+.rooster-mark .brush {
+  fill: none;
+  stroke: white;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rooster-mark[data-drawing] .ink,
+.rooster-mark[data-drawing] .brush {
+  stroke-dasharray: 1 2;
+  animation: rooster-draw var(--dur-logo-line) var(--ease-standard) both;
+}
+/* The eye opens as the line finishes; then the comb is painted, then the wattle. */
+.rooster-mark[data-drawing] .eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rooster-pop var(--dur-pop) var(--ease-spring)
+    calc(var(--dur-logo-line) - var(--dur-pop)) both;
+}
+.rooster-mark[data-drawing] .brush[data-step="0"] {
+  animation-duration: var(--dur-logo-paint);
+  animation-delay: var(--dur-logo-line);
+}
+.rooster-mark[data-drawing] .brush[data-step="1"] {
+  animation-duration: var(--dur-pop);
+  animation-delay: calc(var(--dur-logo-line) + var(--dur-logo-paint));
+}
+
+@keyframes rooster-draw {
+  0% {
+    stroke-dashoffset: 1;
+    opacity: 0;
+  }
+  2% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+@keyframes rooster-pop {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rooster-mark[data-drawing] * {
+    animation: none;
+  }
+}

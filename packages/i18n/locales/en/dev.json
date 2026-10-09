@@ -4,6 +4,7 @@
   "contents": "Contents",
   "section": {
     "foundations": "Foundations",
+    "brand": "Brand",
     "button": "Button",
     "iconButton": "Icon button",
     "input": "Input",
@@ -206,5 +207,19 @@
         "body": "That invite no longer works."
       }
     }
+  },
+  "brand": {
+    "marks": "Mark",
+    "size": "{size} px",
+    "inverse": "Inverse",
+    "muted": "Muted (empty views)",
+    "logos": "Logo",
+    "row": "Row (sidebar)",
+    "page": "Row, page size (404, error)",
+    "stack": "Stack (sign-in)",
+    "drawIn": "Draw-in",
+    "drawInHint": "Plays once per page load on the sign-in screens",
+    "replay": "Replay",
+    "appIcons": "App icons"
   }
 }

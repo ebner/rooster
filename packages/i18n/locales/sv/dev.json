@@ -4,6 +4,7 @@
   "contents": "Innehåll",
   "section": {
     "foundations": "Grunder",
+    "brand": "Varumärke",
     "button": "Knapp",
     "iconButton": "Ikonknapp",
     "input": "Textfält",
@@ -206,5 +207,19 @@
         "body": "Inbjudan gäller inte längre."
       }
     }
+  },
+  "brand": {
+    "marks": "Märke",
+    "size": "{size} px",
+    "inverse": "Inverterad",
+    "muted": "Dämpad (tomma vyer)",
+    "logos": "Logotyp",
+    "row": "Rad (sidofält)",
+    "page": "Rad, sidstorlek (404, fel)",
+    "stack": "Stapel (inloggning)",
+    "drawIn": "Inritning",
+    "drawInHint": "Spelas en gång per sidladdning på inloggningssidorna",
+    "replay": "Spela igen",
+    "appIcons": "Appikoner"
   }
 }

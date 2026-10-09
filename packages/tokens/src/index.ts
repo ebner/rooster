@@ -284,6 +284,9 @@ export const durations = {
   pop: 300,
   fade: 120,
   shimmer: 1200,
+  /** The logo's draw-in (03 §2.10): the line, then the comb being painted. */
+  'logo-line': 900,
+  'logo-paint': 550,
 } as const;
 
 /** Durations under `prefers-reduced-motion: reduce`: 0, except fades capped at 80 ms. */
@@ -294,6 +297,8 @@ export const reducedMotionDurations = {
   pop: 0,
   fade: 80,
   shimmer: 0,
+  'logo-line': 0,
+  'logo-paint': 0,
 } as const satisfies Record<keyof typeof durations, number>;
 
 export const easings = {
