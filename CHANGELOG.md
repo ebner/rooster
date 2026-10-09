@@ -16,7 +16,12 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
   - None of this appears in your personal organisation.
 - **API:** `assigneeId` on task create and update, and the bulk op `assign`. Task lists accept `view=everyone`, `assignee` and `hasDue`. New routes for comments, the activity feed, followers, notifications and notification preferences. A new SSE event, `notification`. Search now also finds comments, and the export includes them.
 
+### Changed
+- **Today view:** the section for today's tasks is now labelled with the date ("Friday, Oct 9") instead of repeating "Today" under the Today heading.
+- **Larger logo** in the desktop sidebar and the collapsed rail.
+
 ### Fixed
+- Closing search (Esc) after opening it with the mouse no longer leaves a focus ring on the sidebar's Search item. When you do use the keyboard, the ring is now drawn inside the item, so its top edge is no longer cut off.
 - A task due at a time that happens twice when the clocks go back (such as 02:30 on 25 October in Sweden) now counts as due at the first of the two, whatever time zone the server runs in. Before, a server in UTC used the second one.
 
 ### Migrations
