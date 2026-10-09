@@ -6,8 +6,21 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+- **Collaboration in shared organisations (Phase 6):**
+  - **Assignment:** assign a task with Tab+A or A, from the task pane, with `@name` when you type a new task, or for a whole selection. The task moves to the top of the other person's Inbox, and Undo puts it back where it was (ADR 0032).
+  - **Everyone's tasks:** a view with a section per member plus Unassigned. It has filters for due date, people and tags, lets you add a task under any member, and you drag between sections to reassign (ADR 0032).
+  - **Comments and activity:** the task pane shows comments and a history of changes. Comments support bold, italic, code, links and lists, and `@mentions` with suggestions as you type. You can edit or delete your own comments. Comments work offline and sync later (ADRs 0028, 0031).
+  - **Followers:** the creator, the assignee, commenters and mentioned members follow a task automatically. You can follow or unfollow any task.
+  - **Inbox:** notifications for tasks assigned to you, comments on tasks you follow, mentions, your tasks completed or re-dated by someone else, and accepted invites. The sidebar and the phone's new Inbox tab show the unread count live. Settings → Notifications turns each kind on or off (ADRs 0029, 0031).
+  - None of this appears in your personal organisation.
+- **API:** `assigneeId` on task create and update, and the bulk op `assign`. Task lists accept `view=everyone`, `assignee` and `hasDue`. New routes for comments, the activity feed, followers, notifications and notification preferences. A new SSE event, `notification`. Search now also finds comments, and the export includes them.
+
 ### Fixed
 - A task due at a time that happens twice when the clocks go back (such as 02:30 on 25 October in Sweden) now counts as due at the first of the two, whatever time zone the server runs in. Before, a server in UTC used the second one.
+
+### Migrations
+- `0005_collab`: adds the `comment`, `activity`, `follower`, `notification` and `notification_pref` tables.
 
 ## [1.1.0] - 2026-10-09
 
