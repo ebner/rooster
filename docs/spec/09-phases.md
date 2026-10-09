@@ -243,18 +243,20 @@ An import from other task managers is on the [Backlog](#backlog); v1.0 ships wit
 
 ---
 
-## Phase 10: Recurrence, attachments, iCal
+## Phase 10: Recurrence, reminders, attachments, iCal
 
 | WP | Content |
 |---|---|
 | 10.1 Recurrence | `packages/core/recurrence` with exhaustive tests; the picker "Repeat" section with presets and custom; NL phrases EN/SV; next-instance creation on completion (same group, directly after; copies per FR-REC-3); "this / this and following" on delete; the row icon. |
 | 10.2 Attachments | BlobStore local and S3, streaming upload with a limit, mime sniffing, sharp thumbnails, the pane grid, the lightbox, paste and drop, and purge with the task. |
 | 10.3 iCal | Feed tokens, the ICS generator (all-day vs timed VEVENTs, `X-WR-CALNAME` "rooster – Personal"), caching, and the settings UI. |
+| 10.4 Task reminders | FR-REM: `task_reminder` with resolved `fire_at` (recomputed in the same transaction as any due-field change, and when the user's timezone or default reminder time changes); the per-minute scheduler claims due reminders (`fired_at`) before sending, fires late up to 24 h; the `reminder` notification type through the existing inbox, push and email delivery and the "Task reminders" matrix row; the date popover's reminder section (Alt+R), the pane line, the phone sheet; the row `bell` indicator (`nextReminderAt`); the `!15m` title token in `packages/core/dates`; CLI `--remind`, TUI (the `d` picker accepts the tokens) and MCP `remind`; recurrence carries relative reminders forward. |
 
 **Acceptance criteria**
 - AC-10.1 "Water plants every mon" completed on Monday 2026-10-05 creates the next instance due 2026-10-12, in the same group directly below the old task's position. "every 3 days after done" completed on Oct 7 gives Oct 10.
 - AC-10.2 Uploading 30 MB with a 25 MB limit returns 413. Images show thumbnails. A non-member cannot download (404).
 - AC-10.3 The ICS validates (icalendar validator), and Google Calendar subscribes successfully (manual check).
+- AC-10.4 A task due Fri 14:00 Europe/Stockholm with "1 h before" reminds exactly once at 13:00 local (push and inbox), also across a container restart at 12:59:30. Moving the due time to 15:00 moves the reminder to 14:00. A task completed before 13:00 doesn't remind. The row shows the bell until the reminder fires. `Call Bob fri 14:00 !1h` creates the same task and reminder. Another member of the org sees neither the bell nor the reminder. Completing a weekly recurring task with a relative reminder gives the next instance the same reminder.
 
 ---
 

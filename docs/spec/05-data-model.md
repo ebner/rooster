@@ -185,7 +185,7 @@ CREATE TABLE notification (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
   org_id     TEXT NOT NULL,
-  type       TEXT NOT NULL,   -- assigned|comment|mention|completed|due_changed|invite_accepted
+  type       TEXT NOT NULL,   -- assigned|comment|mention|completed|due_changed|invite_accepted|reminder (P10)
   task_id    TEXT REFERENCES task(id) ON DELETE CASCADE,
   actor_id   TEXT REFERENCES user(id),
   data       TEXT NOT NULL DEFAULT '{}',
@@ -199,11 +199,30 @@ CREATE INDEX notification_inbox ON notification(user_id, read_at, created_at DES
 -- P7
 CREATE TABLE notification_pref (
   user_id  TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
-  type     TEXT NOT NULL,          -- notification type or 'digest' | 'due_reminder'
+  type     TEXT NOT NULL,          -- notification type (incl. 'reminder', P10) or 'digest' | 'due_reminder'
   channel  TEXT NOT NULL CHECK (channel IN ('inapp','push','email')),
   enabled  INTEGER NOT NULL,
   PRIMARY KEY (user_id, type, channel)
 ) STRICT;
+
+-- P10: task reminders (FR-REM). Personal: one user's reminders on one task.
+CREATE TABLE task_reminder (
+  id             TEXT PRIMARY KEY,
+  task_id        TEXT NOT NULL REFERENCES task(id) ON DELETE CASCADE,
+  user_id        TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+  kind           TEXT NOT NULL CHECK (kind IN ('relative','absolute')),
+  offset_minutes INTEGER,          -- relative: minutes before the due moment (0 = at due time)
+  remind_at      INTEGER,          -- absolute: ms epoch
+  fire_at        INTEGER,          -- resolved instant; recomputed when the due fields or the
+                                   -- user's default reminder time or timezone change; NULL = dormant
+  fired_at       INTEGER,          -- claimed before sending (idempotent across restarts)
+  created_at     INTEGER NOT NULL,
+  CHECK ((kind = 'relative') = (offset_minutes IS NOT NULL)),
+  CHECK ((kind = 'absolute') = (remind_at IS NOT NULL)),
+  CHECK (offset_minutes IS NULL OR offset_minutes BETWEEN 0 AND 40320)
+) STRICT;
+CREATE INDEX task_reminder_due ON task_reminder(fire_at) WHERE fired_at IS NULL;
+CREATE INDEX task_reminder_task ON task_reminder(task_id, user_id);
 
 CREATE TABLE push_subscription (
   id         TEXT PRIMARY KEY,
@@ -395,6 +414,7 @@ type TaskDTO = {
   assigneeId: string | null; createdBy: string;
   dueDate: string | null; dueTime: string | null; dueTz: string | null; startDate: string | null;
   recurrence: string | null; recurrenceBasis: 'due' | 'completion' | null;
+  nextReminderAt: number | null;                   // P10: the requesting user's next pending reminder
   completedAt: number | null;
   tagIds: string[];
   counts: { subtasks: number; subtasksDone: number; comments: number; attachments: number };

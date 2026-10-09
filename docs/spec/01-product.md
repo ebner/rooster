@@ -119,6 +119,16 @@ Requirements are numbered `FR-<AREA>-<n>`. **P** is the phase that delivers each
 | FR-NOT-3 | **Email** is available when SMTP is configured. It covers invites, notifications as immediate or a 15-minute batch, and an optional **daily digest** (due today, overdue, new in Inbox). Every email has an unsubscribe link per category. | 7 |
 | FR-NOT-4 | A per-user preference matrix (event × channel) controls notifications. Users never receive notifications for their own actions. | 6/7 |
 
+## FR-REM: Task reminders
+
+| ID | Requirement | P |
+|---|---|---|
+| FR-REM-1 | A user can set **reminders** on any task they can read: **relative** to the due moment ("at due time", "15 min / 1 h / 1 day before", or a custom offset) or **absolute** (a chosen date and time). A task has at most 5 reminders per user. Reminders are **personal**: only the user who set them sees them and is reminded. | 10 |
+| FR-REM-2 | The **due moment** of a timed task is its due date and time in its `due_tz`. For an all-day task it is the due date at the user's **default reminder time** (a setting, default 09:00, in the user's timezone). Relative reminders follow the task when its due date or time changes; a task without a due date can only have absolute reminders, and removing the due date removes its relative ones. | 10 |
+| FR-REM-3 | A reminder fires **once**, as a notification of type `reminder` (in-app inbox, push, and email when SMTP is configured), controlled by a "Task reminders" row in the preference matrix (default: in-app and push on, email off). Reminders are the one exception to "never for your own actions". Completed and deleted tasks never remind. A reminder missed while the server was down fires late, up to 24 hours, marked as late. | 10 |
+| FR-REM-4 | **Setting them:** the date popover's "+ Reminder" section, the detail pane, the title token `!15m`/`!1h`/`!1d`/`!due` (§02 8), the CLI `--remind`, and the MCP `remind` argument. A row with a pending reminder shows a **bell** in its meta, like the description indicator, with the next reminder's time as tooltip. | 10 |
+| FR-REM-5 | A recurring task's next instance (FR-REC-3) carries the relative reminders forward; absolute ones are not copied. | 10 |
+
 ## FR-REC: Recurring tasks
 
 | ID | Requirement | P |

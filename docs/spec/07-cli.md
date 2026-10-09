@@ -54,9 +54,9 @@ Global flags: `--org <slug>`, `--profile <name>`, `--json`, `--quiet` (IDs only)
 | `rooster` | On a TTY, opens the **TUI**. Otherwise it is the same as `rooster ls`. |
 | `rooster ls [view]` | View is `my` (default), `today`, `week`, `overdue`, `nodate` or `everyone`. Flags: `--group <name>`, `--tag <t>`, `--completed`, `--all-orgs`, `--subtasks`. The human output is grouped by group headers. |
 | `rooster today` / `rooster week` | Aliases. |
-| `rooster add <title…>` | The title is NL-parsed server-side (`parse:true`), e.g. `rooster add "Book dentist fri #health >Today"`. **Quote the title**: unquoted, `#` starts a shell comment and `>` redirects output. Multiple unquoted words are joined with spaces, but the docs and `--help` always show the quoted form. Flags: `--due <phrase\|date>`, `--time HH:MM`, `--start <date>`, `--group <name>`, `--top`/`--bottom` (default top of the group, or the Inbox when no group is given), `--tag <t>` (repeatable), `--assign <email\|name\|me>`, `--parent <ref>`, `--desc <text>`, `--desc-file <path\|->`, `--no-parse`. It prints the created task line. |
+| `rooster add <title…>` | The title is NL-parsed server-side (`parse:true`), e.g. `rooster add "Book dentist fri #health >Today"`. **Quote the title**: unquoted, `#` starts a shell comment and `>` redirects output. Multiple unquoted words are joined with spaces, but the docs and `--help` always show the quoted form. Flags: `--due <phrase\|date>`, `--time HH:MM`, `--start <date>`, `--group <name>`, `--top`/`--bottom` (default top of the group, or the Inbox when no group is given), `--tag <t>` (repeatable), `--assign <email\|name\|me>`, `--parent <ref>`, `--desc <text>`, `--desc-file <path\|->`, `--no-parse`, (P10) `--remind <15m\|1h\|1d\|due\|"fri 14:00">` (repeatable). The title token `!1h` works too. It prints the created task line. |
 | `rooster show <ref>` | Full details: Markdown description rendered for the terminal, subtasks, tags and (P6) recent comments. |
-| `rooster edit <ref>` | `--title`, `--due <phrase\|none>`, `--time`, `--start`, `--desc`, `--desc-file`, `--editor` (opens `$EDITOR` with the description; saves on exit), `--assign`, `--parent <ref\|none>`. |
+| `rooster edit <ref>` | `--title`, `--due <phrase\|none>`, `--time`, `--start`, `--desc`, `--desc-file`, `--editor` (opens `$EDITOR` with the description; saves on exit), `--assign`, `--parent <ref\|none>`. P10: `--remind <15m\|1h\|1d\|due\|"fri 14:00">` (repeatable) and `--no-remind`. |
 | `rooster done <ref…>` / `rooster undone <ref…>` | Complete or reopen. Shows the next recurrence when one is created. |
 | `rooster mv <ref…> --group <name>` | `--top` (default) / `--bottom` / `--after <ref>` / `--before <ref>`. |
 | `rooster rm <ref…>` | Soft delete (asks for confirmation when more than 3 tasks, unless `--yes`). `rooster restore <ref>`. |
@@ -153,8 +153,8 @@ Built with **Ink 8**. It is a full-screen, keyboard-only mini rooster.
 | `list_tasks` | `{org?, view?: my\|today\|week\|overdue\|nodate\|everyone, group?, tag?, includeCompleted?}` | Returns compact rows: seq, title, due, group, tags. |
 | `get_task` | `{ref}` | Includes description and subtasks. |
 | `search_tasks` | `{query, allOrgs?}` | |
-| `create_task` | `{title, due?, group?, tags?, description?, parent?, assignee?}` | `due` accepts NL phrases. |
-| `update_task` | `{ref, title?, due?, description?, assignee?}` | |
+| `create_task` | `{title, due?, group?, tags?, description?, parent?, assignee?, remind?}` | `due` accepts NL phrases; `remind` (P10) takes `15m`/`1h`/`1d`/`due` or an absolute time, and creates a reminder for the grant's user. |
+| `update_task` | `{ref, title?, due?, description?, assignee?, remind?, clearReminders?}` | `remind`/`clearReminders` (P10). |
 | `complete_task` | `{ref, completed?: boolean}` | |
 | `move_task` | `{ref, group, position?: top\|bottom}` | |
 | `list_groups` / `create_group` | | |

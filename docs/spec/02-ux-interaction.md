@@ -264,12 +264,15 @@ The **cheat sheet** (`?`) is generated from the same keymap registry that dispat
   1. A text input with autofocus and the placeholder "Type a date… (e.g. fri, next week, 12 oct)". A live preview below it reads "→ Fri, Oct 10" or "Can't understand that".
   2. Quick chips: Today · Tomorrow · Next week · Weekend · No date. Each chip has the hint **Alt+T, Alt+M, Alt+W, Alt+E, Alt+0** (⌥ on macOS, matched by `event.code`). Plain letters always go to the text input.
   3. A month calendar with ←/→ month navigation. Today is ringed and the selected date is filled with the accent. Arrow keys move the day when the calendar has focus. The week starts on the user's setting.
-  4. Footer toggles: "+ Time" (reveals an HH:MM input with 15-minute suggestions), "+ Start date" (switches the calendar to range mode), and (P10) "↻ Repeat" (presets plus Custom).
+  4. Footer toggles: "+ Time" (reveals an HH:MM input with 15-minute suggestions), "+ Start date" (switches the calendar to range mode), and (P10) "↻ Repeat" (presets plus Custom) and "🔔 Reminder" (**Alt+R**).
+  5. (P10, FR-REM) **Reminder section:** the task's reminders as removable chips ("1 h before · Fri 13:00"), then presets: *At due time* (timed tasks), *15 min before*, *1 hour before*, *1 day before*, *On the day at 09:00* (all-day tasks; the user's default reminder time), and *Custom…* (an offset, or a date and time). The input also accepts the title tokens (`15m`, `1h`, `1d`, `due`) and phrases like "fri 14:00". Without a due date only absolute reminders are offered. Choosing a reminder keeps the popover open, like the Time sub-mode; Esc or a click outside closes it.
 - **Commit rules:**
   - Clicking a calendar day, clicking a chip, or pressing Enter in the input with a valid parse **sets the date and closes the popover** immediately.
   - Exception: when the Time or Start date sub-mode is active, the popover stays open until Enter or a click outside.
   - Esc closes without changes.
-- **Clearing:** the "No date" chip, or Backspace/Delete on a **focused date cell** (with undo). See "Focus wins" in §6.
+- **Clearing:** the "No date" chip, or Backspace/Delete on a **focused date cell** (with undo). See "Focus wins" in §6. Clearing the date also removes relative reminders (FR-REM-2); the undo toast says so and restores them.
+- **Detail pane (P10):** a "Reminders" line under the due date lists the user's reminders with their resolved times and an "Add reminder" button that opens the same reminder section.
+- **Phone (P10):** the date sheet has the same reminder section, below the calendar.
 
 ## 8. Natural-language dates
 
@@ -283,6 +286,8 @@ The **cheat sheet** (`?`) is generated from the same keymap registry that dispat
 - Clicking the highlight, or pressing Backspace immediately after the phrase, marks it *ignored* for this edit. It renders as normal text and is not reparsed.
 - The **title-parsing grammar** is the user's UI language **plus English full words**. Abbreviations are only active for the UI language. For example, `tom` means tomorrow only when the language is English, because in Swedish *tom* means "empty".
 - Title parsing can be disabled in Settings. The **date picker input always parses** both languages fully.
+
+- (P10) **Reminder token in titles:** `!15m`, `!2h`, `!1d` (that long before the due moment) and `!due` (at the due moment), at the end of the title like the relative phrases, in any order with `#tag`, `>Group` and `@name`. It is highlighted like a date phrase, removed on commit and applied as a relative reminder (FR-REM). A bare `!` or `!` followed by anything else is plain text, so "Ship it!" stays a title.
 
 ### 8.2 Grammar
 
