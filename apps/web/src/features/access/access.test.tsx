@@ -330,6 +330,25 @@ describe('Connected apps', () => {
     );
   });
 
+  test('a failed confirmation (e.g. cancelled) still saves, unpruned: the server decides', async () => {
+    const [, pat] = fixtureGrants(now);
+    if (!pat) throw new Error('fixture');
+    const onUpdate = vi.fn(async () => undefined);
+    const confirmOrgs = vi.fn(async (): Promise<typeof orgs> => {
+      throw new Error('CancelledError');
+    });
+    renderApps({ grants: [pat], onUpdate, confirmOrgs });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Prio sync script' }));
+    const form = screen.getByTestId('edit-grant');
+    await act(async () => {
+      fireEvent.click(within(form).getByRole('button', { name: 'Save changes' }));
+    });
+    expect(onUpdate).toHaveBeenCalledWith(
+      pat.id,
+      expect.objectContaining({ constraints: pat.constraints, label: pat.label }),
+    );
+  });
+
   test('P2: if everything it named is confirmed gone, the save stops and says why', async () => {
     const [, pat] = fixtureGrants(now);
     if (!pat) throw new Error('fixture');

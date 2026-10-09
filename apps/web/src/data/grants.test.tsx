@@ -73,6 +73,47 @@ describe('grant confirmation (P2)', () => {
     expect(fresh[0]?.groups?.map((g) => g.id)).toEqual(['g1', 'g2', 'g3']);
   });
 
+  test('a background update never cancels the save’s confirmation (round 5)', async () => {
+    const queryClient = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useConfirmedGrantOrgs([orgA]), { wrapper });
+    // The snapshot has loaded once (a refetch of a query with data is what gets cancelled).
+    await waitFor(() => expect(result.current.orgs[0]?.groups).toBeDefined());
+    // From here every request waits until released.
+    const pending: (() => void)[] = [];
+    http.GET.mockImplementation(
+      (path: string) =>
+        new Promise((resolve) => {
+          pending.push(() =>
+            resolve(
+              path === '/api/v1/me'
+                ? { data: me, response: new Response(null, { status: 200 }) }
+                : {
+                    data: { groups, tasks: [], expandedTaskIds: [], serverTime: 0 },
+                    response: new Response(null, { status: 200 }),
+                  },
+            ),
+          );
+        }),
+    );
+    // A background confirmation is fetching…
+    queryClient.setQueryData(['my-list', orgA], { groups: [] });
+    await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+    // …when Save asks for a confirmation, then two cache updates invalidate the snapshot.
+    const saving = result.current.confirm();
+    queryClient.setQueryData(['my-list', orgA], { groups: [{}] });
+    queryClient.setQueryData(['me'], { ...me });
+    for (let k = 0; k < 10; k += 1) {
+      while (pending.length > 0) pending.shift()?.();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    await expect(saving).resolves.toEqual([
+      expect.objectContaining({ id: orgA, groups: [expect.objectContaining({ id: 'g1' })] }),
+    ]);
+  });
+
   test('nothing is fetched while no grant is being edited', () => {
     const queryClient = new QueryClient();
     const wrapper = ({ children }: { children: ReactNode }) => (

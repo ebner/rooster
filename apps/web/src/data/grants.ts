@@ -135,7 +135,7 @@ const confirmKey = (orgIds: readonly string[]) =>
 export interface ConfirmedGrantOrgs {
   /** The latest confirmation (for the "no longer exists" note); empty until it arrives. */
   orgs: GrantOrgOption[];
-  /** Confirms afresh, now: call right before pruning on save. */
+  /** Confirms afresh, now, with its own requests: call right before pruning on save. */
   confirm: () => Promise<GrantOrgOption[]>;
 }
 
@@ -170,7 +170,8 @@ export function useConfirmedGrantOrgs(orgIds: readonly string[] | null): Confirm
   }, [queryClient, watched, orgIds === null]);
   return {
     orgs: query.data ?? [],
-    confirm: () =>
-      queryClient.fetchQuery({ queryKey: key, queryFn: () => confirmGrantOrgs(ids), staleTime: 0 }),
+    // Independent of the shared snapshot query: joining it would let a background invalidation
+    // (another `/me` or `my-list` update) cancel the save's confirmation.
+    confirm: () => confirmGrantOrgs(ids),
   };
 }

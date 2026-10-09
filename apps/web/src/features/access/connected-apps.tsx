@@ -371,8 +371,9 @@ function EditGrant({
           setSaveIssue(null);
           try {
             // Re-confirm right before pruning: fetch fresh, prune what is confirmed missing,
-            // send. Without a confirmation nothing is pruned (the server answers).
-            const fresh = confirmOrgs ? await confirmOrgs() : [];
+            // send. A failed or missing confirmation prunes nothing and the save goes ahead
+            // (the server answers); it never silently drops the save.
+            const fresh = confirmOrgs ? await confirmOrgs().catch(() => []) : [];
             const toSend = reconcileGrant(edited, fresh).value;
             const [issue] = grantIssues(toSend);
             if (issue) {
