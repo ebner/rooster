@@ -74,9 +74,22 @@ export const completeCommand = defineCommand({
     const kind = positionals(args)[0] as DynamicKind | undefined;
     if (kind === undefined || !DYNAMIC_KINDS.includes(kind)) return;
     try {
-      for (const name of await dynamicNames(runtime, kind)) runtime.io.stdout.write(`${name}\n`);
+      for (const name of await dynamicNames(runtime, kind)) {
+        // One name per line: a name with a line break or other control character would split
+        // or corrupt the list the shell reads, so it is not offered.
+        if (hasControlCharacter(name)) continue;
+        runtime.io.stdout.write(`${name}\n`);
+      }
     } catch {
       // Not logged in or offline: no suggestions rather than an error in the prompt.
     }
   },
 });
+
+function hasControlCharacter(value: string): boolean {
+  for (const char of value) {
+    const code = char.codePointAt(0) ?? 0;
+    if (code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
+}

@@ -111,11 +111,14 @@ function bashScript(entries: readonly CompletionEntry[]): string {
 _rooster_values() {
   COMPREPLY=($(compgen -W "$1" -- "$cur"))
 }
+# Group and tag names come from the server, where any org member can name them: never let the
+# shell expand them (compgen -W runs command substitution), and insert them shell-quoted.
 _rooster_dynamic() {
-  local IFS=$'\\n'
-  local values
-  values="$(rooster __complete "$1" 2>/dev/null)"
-  COMPREPLY=($(compgen -W "$values" -- "$cur"))
+  local line
+  COMPREPLY=()
+  while IFS= read -r line; do
+    [[ "$line" == "$cur"* ]] && COMPREPLY+=("$(printf '%q' "$line")")
+  done < <(rooster __complete "$1" 2>/dev/null)
 }
 _rooster() {
   local cur prev path="" i w words
@@ -275,8 +278,10 @@ Register-ArgumentCompleter -Native -CommandName rooster -ScriptBlock {
   } else {
     $words = $roosterCommands[$path]
   }
-  $words | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
-    [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+  # Server-provided names are quoted unless plain, so a $(...) inside a tag name never runs.
+  $words | Where-Object { $_.StartsWith($wordToComplete, [System.StringComparison]::Ordinal) } | ForEach-Object {
+    $text = if ($_ -match '^[\\w./:@#+-]+$') { $_ } else { "'" + ($_ -replace "'", "''") + "'" }
+    [System.Management.Automation.CompletionResult]::new($text, $_, 'ParameterValue', $_)
   }
 }
 `;

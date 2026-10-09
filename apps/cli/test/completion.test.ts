@@ -81,9 +81,38 @@ describe('bash', () => {
 
   it('completes group and tag names dynamically (rooster __complete)', () => {
     expect(complete(['rooster', 'mv', '42', '--group', 'P'])).toEqual(['Prio']);
-    expect(complete(['rooster', 'mv', '42', '--group', 'So'])).toEqual(['Some group']);
-    expect(complete(['rooster', 'group', 'rm', ''])).toEqual(['Prio', 'Some group']);
+    // Inserted shell-quoted, so the name stays one argument.
+    expect(complete(['rooster', 'mv', '42', '--group', 'So'])).toEqual(['Some\\ group']);
+    expect(complete(['rooster', 'group', 'rm', ''])).toEqual(['Prio', 'Some\\ group']);
     expect(complete(['rooster', 'ls', '--tag', 'fi'])).toEqual(['finance']);
+  });
+});
+
+describe('bash with hostile names', () => {
+  it('never runs commands hidden in server-provided group or tag names', () => {
+    // Any org member can name a tag; compgen -W would run its command substitution.
+    const work = mkdtempSync(join(tmpdir(), 'rooster-pwn-'));
+    const script = join(dir, 'hostile.bash');
+    writeFileSync(script, completionScript('bash', entries));
+    const program = `
+      cd ${JSON.stringify(work)}
+      source ${JSON.stringify(script)}
+      rooster() { printf '%s\\n' '$(touch pwned1)' 'x\`touch pwned2\`' "a'b" '*'; }
+      COMP_WORDS=(rooster ls --tag "")
+      COMP_CWORD=3
+      _rooster
+      printf '%s\\n' "\${COMPREPLY[@]}"
+    `;
+    const out = execFileSync('bash', ['-c', program], { encoding: 'utf8' });
+    const listing = execFileSync('ls', ['-A', work], { encoding: 'utf8' });
+    rmSync(work, { recursive: true, force: true });
+    expect(listing).toBe('');
+    expect(out.split('\n').filter((l) => l !== '')).toEqual([
+      '\\$\\(touch\\ pwned1\\)',
+      'x\\`touch\\ pwned2\\`',
+      "a\\'b",
+      '\\*',
+    ]);
   });
 });
 
