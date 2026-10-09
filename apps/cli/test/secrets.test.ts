@@ -792,9 +792,10 @@ const until = async (check: () => boolean) => {
 };
 
 /** A home with a keychain, a fake API that records the bearer tokens it receives, and a gate. */
-function sharedHome() {
+function sharedHome(routes: Parameters<typeof fakeApi>[0] = {}) {
   const keychain = fakeKeychain();
   const bearers: string[] = [];
+  const requests: { method: string; path: string; search: string; auth: string }[] = [];
   const grantsGate: { current: ReturnType<typeof gate> | null; asked: boolean } = {
     current: null,
     asked: false,
@@ -803,9 +804,17 @@ function sharedHome() {
     'GET /api/v1/meta': {},
     'GET /api/v1/me': ME,
     'GET /api/v1/me/grants': [],
+    ...routes,
   });
   const fetchFn = (async (input: Request) => {
     bearers.push(input.headers.get('authorization') ?? '');
+    const url = new URL(input.url);
+    requests.push({
+      method: input.method,
+      path: url.pathname,
+      search: url.search,
+      auth: input.headers.get('authorization') ?? '',
+    });
     if (new URL(input.url).pathname === '/api/v1/me/grants' && grantsGate.current !== null) {
       grantsGate.asked = true;
       await grantsGate.current.promise;
@@ -821,7 +830,7 @@ function sharedHome() {
     });
   const profile = () =>
     new ConfigStore(join(cli.home, 'config', 'rooster')).reload().profiles.default ?? {};
-  return { keychain, bearers, grantsGate, cli, env, login, profile, fetchFn };
+  return { keychain, bearers, requests, grantsGate, cli, env, login, profile, fetchFn };
 }
 
 describe('round 9 regressions', () => {
@@ -965,6 +974,142 @@ describe('round 9 regressions', () => {
       );
       expect(h.bearers[0]).toBe('Bearer tok-3');
     } finally {
+      h.cli.cleanup();
+    }
+  });
+});
+
+describe('round 10 regressions', () => {
+  it('[1] a default_profile change during the keychain read never moves a running command to another profile', async () => {
+    const task = {
+      id: '01a00000-0000-7000-8000-0000000000f2',
+      orgId: ME.orgs[0]?.id,
+      seq: 42,
+      title: 'x',
+    };
+    const h = sharedHome({
+      'GET /api/v1/tasks/resolve': task,
+      'DELETE /api/v1/tasks/*': undefined,
+    });
+    const configDirPath = join(h.cli.home, 'config', 'rooster');
+    try {
+      for (const [name, token] of [
+        ['home', 'tok-home'],
+        ['work', 'tok-work'],
+      ] as const) {
+        const login = await h.cli.run(
+          ['login', '--with-token', '--server', FAKE_ENV.ROOSTER_SERVER, '--profile', name],
+          { stdin: token, env: h.env },
+        );
+        expect(login.code).toBe(0);
+      }
+      const store = new ConfigStore(configDirPath);
+      store.updateProfile('work', (p) => ({ ...p, org: 'other' }));
+      expect(store.reload().default_profile).toBe('home');
+      const homeRef = store.reload().profiles.home?.credential_ref as string;
+
+      const paused = gate();
+      let reading = false;
+      h.keychain.state.beforeGet = async (account) => {
+        if (account === homeRef && !reading) {
+          reading = true;
+          await paused.promise;
+        }
+      };
+      h.requests.length = 0;
+      const rm = h.cli.run(['rm', '42', '--json', '--yes'], { env: h.env });
+      await until(() => reading);
+      // Another process switches the default profile mid-command.
+      store.update((c) => ({ ...c, default_profile: 'work' }));
+      paused.release();
+      const result = await rm;
+      expect(result.stderr).toBe('');
+      expect(result.code).toBe(0);
+      const taskCalls = h.requests.filter((r) => r.path.startsWith('/api/v1/tasks'));
+      expect(taskCalls.map((r) => `${r.method} ${r.path}`)).toEqual([
+        'GET /api/v1/tasks/resolve',
+        `DELETE /api/v1/tasks/${task.id}`,
+      ]);
+      expect(taskCalls.every((r) => r.auth === 'Bearer tok-home')).toBe(true);
+      expect(taskCalls[0]?.search).toContain('org=acme');
+    } finally {
+      h.cli.cleanup();
+    }
+  });
+
+  it('[2] logout revokes only its own captured grant, never a newer login published meanwhile', async () => {
+    const deleted: string[] = [];
+    const h = sharedHome({
+      'DELETE /api/v1/me/grants/*': (call: { path: string }) => {
+        deleted.push(call.path);
+        return undefined;
+      },
+    });
+    // Each token sees its own device grant as current.
+    const grantFor = (auth: string) => [
+      {
+        id: auth === 'Bearer tok-2' ? 'grant-new' : 'grant-old',
+        kind: 'device',
+        clientId: 'rooster-cli',
+        label: 'x',
+        scopes: ['tasks:read'],
+        constraints: { orgs: 'all' },
+        tokenPrefix: null,
+        createdAt: 0,
+        updatedAt: 0,
+        expiresAt: null,
+        lastUsedAt: null,
+        lastUsedIp: null,
+        current: true,
+      },
+    ];
+    const cli = cliHarness(
+      { loadKeyring: h.keychain.load },
+      {
+        fetch: (async (input: Request) => {
+          if (new URL(input.url).pathname === '/api/v1/me/grants' && input.method === 'GET') {
+            return Response.json(grantFor(input.headers.get('authorization') ?? ''));
+          }
+          return h.fetchFn(input);
+        }) as typeof fetch,
+      },
+    );
+    // Use the shared home's directories.
+    const env = {
+      ...h.env,
+      HOME: h.cli.home,
+      XDG_CONFIG_HOME: join(h.cli.home, 'config'),
+      XDG_STATE_HOME: join(h.cli.home, 'state'),
+      XDG_CACHE_HOME: join(h.cli.home, 'cache'),
+    };
+    try {
+      expect((await h.login('tok-1')).code).toBe(0);
+      const k1 = h.profile().credential_ref as string;
+      const paused = gate();
+      let reading = false;
+      h.keychain.state.beforeGet = async (account) => {
+        if (account === k1 && !reading) {
+          reading = true;
+          await paused.promise;
+        }
+      };
+      const logout = cli.run(['logout'], { env });
+      await until(() => reading);
+      h.keychain.state.beforeGet = null;
+      // A new login is published while logout reads its captured credential.
+      expect((await h.login('tok-2')).code).toBe(0);
+      paused.release();
+      const result = await logout;
+      expect(result.code).toBe(5);
+      expect(deleted).not.toContain('/api/v1/me/grants/grant-new');
+      expect(h.profile().credential_ref).not.toBe(k1);
+      h.bearers.length = 0;
+      expect((await h.cli.run(['whoami', '--quiet'], { env: h.env })).stdout).toBe(
+        'ada@example.com\n',
+      );
+      expect(h.bearers[0]).toBe('Bearer tok-2');
+    } finally {
+      cli.cleanup();
       h.cli.cleanup();
     }
   });

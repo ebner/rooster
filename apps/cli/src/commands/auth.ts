@@ -250,27 +250,39 @@ export const logoutCommand = defineCommand({
       out.warn(t('logout.envToken'));
       return;
     }
-    const captured = credentialOf(runtime.config.reload().profiles[runtime.profileName] ?? {});
+    const snapshot = runtime.config.reload().profiles[runtime.profileName] ?? {};
+    const captured = credentialOf(snapshot);
     if (captured === undefined) {
       out.notice(t('logout.notLoggedIn', { profile: runtime.profileName }));
       return;
     }
     // A device login is this CLI's own grant: revoke it. A PAT may be in use elsewhere
-    // (CI), so it is only forgotten here; `rooster token revoke` ends it.
+    // (CI), so it is only forgotten here; `rooster token revoke` ends it. The lookup and the
+    // revocation use the captured login's own token and origin, read once: never a newer
+    // login that another process may publish meanwhile.
     let revoked = false;
-    const server = runtime.serverOrNull();
-    if (server !== null) {
-      try {
-        const grant = await currentGrant(runtime);
+    try {
+      const login = await runtime.credentials.load(captured);
+      const origin = snapshot.credential_origin;
+      const server = snapshot.server === undefined ? undefined : normalizeServer(snapshot.server);
+      if (
+        login !== undefined &&
+        origin !== undefined &&
+        login.server === origin &&
+        server !== undefined &&
+        serverOrigin(server) === origin
+      ) {
+        const client = runtime.clientFor(server, login.token);
+        const grant = (await grantsApi.list(client)).find((g) => g.current) ?? null;
         if (grant !== null && grant.kind === 'device') {
-          await grantsApi.remove(await runtime.api(), grant.id);
+          await grantsApi.remove(client, grant.id);
           revoked = true;
         } else if (grant !== null && grant.kind === 'pat') {
           out.notice(t('logout.patKept', { prefix: grant.tokenPrefix ?? grant.id }));
         }
-      } catch {
-        out.warn(t('logout.revokeFailed'));
       }
+    } catch {
+      out.warn(t('logout.revokeFailed'));
     }
     // Delete exactly the captured ref, confirmed, before the profile lets go of it.
     try {

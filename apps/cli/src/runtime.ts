@@ -82,6 +82,7 @@ export class Runtime {
   /** The capability the running command needs, for explaining `forbidden_scope`. */
   requiredScope: GrantScope | undefined;
   private client: RoosterClient | undefined;
+  private pinnedProfile: string | undefined;
   private meCache: Promise<Me> | undefined;
   private readonly listCache = new Map<string, Promise<MyList>>();
   private readonly tagCache = new Map<string, Promise<Tag[]>>();
@@ -110,8 +111,14 @@ export class Runtime {
     return this.config.read();
   }
 
+  /**
+   * The profile this invocation works with, resolved once (flag, env, then the config's
+   * `default_profile`) and pinned: a concurrent change of `default_profile` never moves a
+   * running command to another profile, its token or its org.
+   */
   get profileName(): string {
-    return resolveProfileName(this.globals.profile, this.io.env, this.configData);
+    this.pinnedProfile ??= resolveProfileName(this.globals.profile, this.io.env, this.configData);
+    return this.pinnedProfile;
   }
 
   get profile(): Profile {
