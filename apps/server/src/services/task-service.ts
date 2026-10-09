@@ -1049,6 +1049,13 @@ export class TaskService {
       .where(and(inArray(placement.taskId, ids), isNotNull(taskGroup.deletedAt)))
       .all();
     for (const p of orphaned) this.placements.rehomeToInbox(tx, p.userId, p.orgId, [p.taskId]);
+    // Where every restored task ends up (out from under a parent in Trash, re-homed from a
+    // deleted group) must be writable too; otherwise the restore rolls back.
+    if (actor.grant !== null) {
+      for (const [, group] of groupSnapshot(tx, actor.userId, ids)) {
+        authorizeGroupTarget(tx, actor, row.orgId, group);
+      }
+    }
     this.collab.activity.record(tx, row, this.scope(actor, meta), { type: 'restored', data: {} });
     this.emit(tx, actor, 'task.restored', row.orgId, [row.id], {
       trash: true,

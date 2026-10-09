@@ -135,6 +135,8 @@ function toNotificationDto(row: NotificationRow, orgSlug: string): Notification 
 
 /** Rows of live orgs only: a deleted org's notifications drop out of the inbox and count. */
 const liveOrg = isNull(organization.deletedAt);
+/** IDs per UPDATE when a grant marks notifications (SQLite caps bound parameters). */
+const MARK_CHUNK = 500;
 
 /** Rows that exist only for push or email delivery are not in the inbox. */
 const inInbox = sql`json_extract(${notification.data}, '$.hidden') IS NULL`;
@@ -389,38 +391,55 @@ export class NotificationService {
   mark(actor: Actor, input: NotificationMark, read: boolean): NotificationMarkResult {
     requireScope(actor, 'notifications:read');
     return immediate(this.deps.db, (tx) => {
-      let ids = 'ids' in input ? [...new Set(input.ids)] : null;
-      if (actor.grant !== null) {
-        // A grant marks only notifications it may read, also for `{all: true}`.
-        ids = tx
+      const requested = 'ids' in input ? [...new Set(input.ids)] : null;
+      const readAt = read ? this.deps.clock() : null;
+      const pending = read ? isNull(notification.readAt) : isNotNull(notification.readAt);
+      let changed = 0;
+      if (actor.grant === null) {
+        changed = tx
+          .update(notification)
+          .set({ readAt })
+          .where(
+            and(
+              eq(notification.userId, actor.userId),
+              inInbox,
+              requested === null ? undefined : inArray(notification.id, requested),
+              pending,
+            ),
+          )
+          .run().changes;
+      } else {
+        // A grant marks only notifications it may read, also for `{all: true}`. Readability
+        // is decided per row, so the update runs over the allowed IDs in bounded chunks.
+        const allowed = tx
           .select({ id: notification.id, orgId: notification.orgId, taskId: notification.taskId })
           .from(notification)
           .where(
             and(
               eq(notification.userId, actor.userId),
               inInbox,
-              ids === null ? undefined : inArray(notification.id, ids),
+              requested === null ? undefined : inArray(notification.id, requested),
+              pending,
             ),
           )
           .all()
           .filter((n) => canReadNotification(tx, actor, n))
           .map((n) => n.id);
+        for (let i = 0; i < allowed.length; i += MARK_CHUNK) {
+          changed += tx
+            .update(notification)
+            .set({ readAt })
+            .where(
+              and(
+                eq(notification.userId, actor.userId),
+                inArray(notification.id, allowed.slice(i, i + MARK_CHUNK)),
+                pending,
+              ),
+            )
+            .run().changes;
+        }
       }
-      const changed =
-        ids !== null && ids.length === 0
-          ? 0
-          : tx
-              .update(notification)
-              .set({ readAt: read ? this.deps.clock() : null })
-              .where(
-                and(
-                  eq(notification.userId, actor.userId),
-                  inInbox,
-                  ids === null ? undefined : inArray(notification.id, ids),
-                  read ? isNull(notification.readAt) : isNotNull(notification.readAt),
-                ),
-              )
-              .run().changes;
+      const ids = requested;
       const unreadCount = this.unreadCountFor(actor, tx);
       if (changed > 0) {
         // Every stream gets the user's whole count; a grant's stream rewrites it to its own

@@ -223,7 +223,8 @@ export function canReadNotification(
 
 /**
  * The SSE query keys a grant's stream may receive (11 §2.3): nothing of an org it does not
- * reach; task-level keys only with `tasks:read` and for readable tasks; the inbox only with
+ * reach; task-level keys only with `tasks:read`, and for an unreadable task only the bare
+ * `['task']`/`['activity']` prefix; the inbox only with
  * `notifications:read`; org administration never.
  */
 export function visibleKeys(
@@ -236,34 +237,51 @@ export function visibleKeys(
   if (grant === null) return [...keys];
   if (org !== null && !grantsOrg(grant.constraints, org)) return [];
   const reads = hasScope(grant.scopes, 'tasks:read');
-  return keys.filter((key) => {
+  const out: (readonly string[])[] = [];
+  const seen = new Set<string>();
+  const push = (key: readonly string[]) => {
+    const id = JSON.stringify(key);
+    if (seen.has(id)) return;
+    seen.add(id);
+    out.push(key);
+  };
+  for (const key of keys) {
     switch (key[0]) {
       case 'task':
       case 'activity': {
         const id = key[1];
-        if (!reads) return false;
-        if (id === undefined) return true;
+        if (!reads) break;
+        if (id === undefined) {
+          push(key);
+          break;
+        }
         const row = tx
           .select({ id: task.id, parentId: task.parentId, orgId: task.orgId, title: task.title })
           .from(task)
           .where(eq(task.id, id))
           .get();
-        return row !== undefined && canReadTask(tx, actor, row);
+        // A task the grant cannot read (any more: purged, or moved out of its groups) is
+        // invalidated by the bare prefix, so a cached copy goes stale without naming it.
+        push(row !== undefined && canReadTask(tx, actor, row) ? key : [key[0]]);
+        break;
       }
       case 'my-list':
       case 'everyone':
       case 'tags':
       case 'trash':
       case 'org-members':
-        return reads;
+        if (reads) push(key);
+        break;
       case 'notifications':
-        return hasScope(grant.scopes, 'notifications:read');
+        if (hasScope(grant.scopes, 'notifications:read')) push(key);
+        break;
       case 'org-invites':
-        return false;
+        break;
       default:
-        return true;
+        push(key);
     }
-  });
+  }
+  return out;
 }
 
 /** The direct children of a task (deleted ones too). */

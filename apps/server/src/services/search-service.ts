@@ -37,6 +37,8 @@ const BM25 = sql.raw('bm25(task_fts, 0.0, 0.0, 10.0, 1.0, 1.0)');
 const SNIPPET_TOKENS = 12;
 /** Candidates are filtered in batches of this many (filters need the full TaskDTO). */
 const FILTER_BATCH = 200;
+/** Ranked candidates read per round when results are filtered after ranking. */
+const SCAN_PAGE = 500;
 /**
  * A query with filters loads its candidates in rank order and filters them in memory; at
  * most this many are examined, so a rarely matching filter cannot load a whole instance.
@@ -102,23 +104,27 @@ export class SearchService {
       const matcher = this.matcher(tx, actor, orgIds, input.q);
       if (matcher === null) return [];
       const limit = input.limit ?? SEARCH_LIMIT_DEFAULT;
-      const ids = this.candidates(
-        tx,
-        orgIds,
-        matcher,
-        matcher.hasFilters ? SEARCH_SCAN_CAP : limit,
-      );
+      // Readability is applied before the limit: ranked candidates are read in batches until
+      // `limit` visible hits (or the end), so a hidden task never displaces a visible one.
+      const restricted = [...filters.values()].some((f) => f !== null);
+      const scan = matcher.hasFilters || restricted;
+      const pageSize = scan ? SCAN_PAGE : limit;
       const hits: Task[] = [];
-      for (const batch of chunked(ids, FILTER_BATCH)) {
-        const order = new Map(batch.map((id, i) => [id, i]));
-        const rows = liveTasksById(tx, batch)
-          .filter((r) => filters.get(r.orgId)?.(r) ?? true)
-          .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
-        for (const dto of taskDtos(tx, actor.userId, rows)) {
-          if (matcher.accepts(dto)) hits.push(dto);
+      for (let offset = 0; hits.length < limit; offset += pageSize) {
+        if (matcher.hasFilters && offset >= SEARCH_SCAN_CAP) break;
+        const ids = this.candidates(tx, orgIds, matcher, pageSize, offset);
+        for (const batch of chunked(ids, FILTER_BATCH)) {
+          const order = new Map(batch.map((id, i) => [id, i]));
+          const rows = liveTasksById(tx, batch)
+            .filter((r) => filters.get(r.orgId)?.(r) ?? true)
+            .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+          for (const dto of taskDtos(tx, actor.userId, rows)) {
+            if (matcher.accepts(dto)) hits.push(dto);
+            if (hits.length === limit) break;
+          }
           if (hits.length === limit) break;
         }
-        if (hits.length === limit) break;
+        if (!scan || ids.length < pageSize) break;
       }
       const snippets = this.snippets(
         tx,
@@ -202,9 +208,12 @@ export class SearchService {
     orgIds: readonly string[],
     matcher: SearchMatcher,
     limit: number | null,
+    offset = 0,
   ): string[] {
     const status = matcher.parsed.status;
-    if (matcher.fts !== null) return this.ftsCandidates(tx, orgIds, matcher.fts, status, limit);
+    if (matcher.fts !== null) {
+      return this.ftsCandidates(tx, orgIds, matcher.fts, status, limit, offset);
+    }
     const query = tx
       .select({ id: task.id })
       .from(task)
@@ -225,7 +234,9 @@ export class SearchService {
         desc(task.updatedAt),
         asc(task.id),
       );
-    return (limit === null ? query.all() : query.limit(limit).all()).map((r) => r.id);
+    return (limit === null ? query.all() : query.limit(limit).offset(offset).all()).map(
+      (r) => r.id,
+    );
   }
 
   private ftsCandidates(
@@ -234,6 +245,7 @@ export class SearchService {
     fts: string,
     status: ParsedSearchQuery['status'] | null,
     limit: number | null,
+    offset = 0,
   ): string[] {
     if (orgIds.length === 0) return [];
     const orgList = sql.join(
@@ -246,7 +258,7 @@ export class SearchService {
         : status === 'done'
           ? sql` AND t.completed_at IS NOT NULL`
           : sql``;
-    const limitSql: SQL = limit === null ? sql`` : sql` LIMIT ${limit}`;
+    const limitSql: SQL = limit === null ? sql`` : sql` LIMIT ${limit} OFFSET ${offset}`;
     try {
       return tx
         .all<{ id: string }>(

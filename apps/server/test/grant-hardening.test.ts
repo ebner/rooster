@@ -248,8 +248,11 @@ describe('P8 grant boundary', () => {
       ['org-invites', org.id],
       ['notifications'],
     ];
+    // G is unreadable: its keys become the bare prefixes (round 3).
     expect(access.filterKeys?.(org.id, keys)).toEqual([
       ['task', t.id],
+      ['task'],
+      ['activity'],
       ['my-list', org.id],
     ]);
     const inboxOnly = await pat(owner, ['notifications:read']);
@@ -480,5 +483,141 @@ describe('P6 server fixes', () => {
     expect(ctx.db.orm.select().from(follower).where(eq(follower.userId, bob.userId)).all()).toEqual(
       [],
     );
+  });
+});
+
+describe('review round 3', () => {
+  it('R1 a restore whose task lands outside the grant (parent in Trash, group gone) rolls back', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const prio = await groupNamed(owner, 'Prio');
+    const extra = await owner.ok<{ group: { id: string; orgId: string } }>(
+      'POST',
+      '/api/v1/orgs/personal/groups',
+      { name: 'Extra' },
+      201,
+    );
+    const orgId = extra.group.orgId;
+    const api = bearer(
+      ctx,
+      (
+        await pat(owner, ALL, {
+          orgs: [{ orgId, read: 'all', write: { groups: [prio.id, extra.group.id] } }],
+        })
+      ).token,
+    );
+    // A subtask deleted on its own, then its parent: restoring it alone makes it top-level,
+    // in the owner's Inbox.
+    const parent = await owner.ok<Task>(
+      'POST',
+      '/api/v1/orgs/personal/tasks',
+      { title: 'P', groupId: prio.id },
+      201,
+    );
+    const child = await owner.ok<Task>(
+      'POST',
+      '/api/v1/orgs/personal/tasks',
+      { title: 'C', parentId: parent.id },
+      201,
+    );
+    await owner.ok('DELETE', `/api/v1/tasks/${child.id}`, undefined, 204);
+    await owner.ok('DELETE', `/api/v1/tasks/${parent.id}`, undefined, 204);
+    const res = await api.call('POST', `/api/v1/tasks/${child.id}/restore`);
+    expect(res.status).toBe(403);
+    expect(await code(res)).toBe('outside_grant');
+    expect((await owner.ok<Task>('GET', `/api/v1/tasks/${child.id}`)).deletedAt).toBeTypeOf(
+      'number',
+    );
+    // A task whose group was deleted meanwhile is re-homed to the Inbox: same.
+    const x = await owner.ok<Task>(
+      'POST',
+      '/api/v1/orgs/personal/tasks',
+      { title: 'X', groupId: extra.group.id },
+      201,
+    );
+    await owner.ok('DELETE', `/api/v1/tasks/${x.id}`, undefined, 204);
+    await owner.ok('DELETE', `/api/v1/groups/${extra.group.id}`, {}, 204);
+    const bulk = await api.ok<{ results: { id: string; ok: boolean; code?: string }[] }>(
+      'POST',
+      '/api/v1/tasks/bulk',
+      { op: 'restore', ids: [x.id] },
+    );
+    expect(bulk.results).toEqual([{ id: x.id, ok: false, code: 'outside_grant' }]);
+    expect((await owner.ok<Task>('GET', `/api/v1/tasks/${x.id}`)).deletedAt).toBeTypeOf('number');
+  });
+
+  it('R2 search filters readability before its limit', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const prio = await groupNamed(owner, 'Prio');
+    const today = await groupNamed(owner, 'Today');
+    for (let i = 0; i < 3; i++) {
+      await owner.ok(
+        'POST',
+        '/api/v1/orgs/personal/tasks',
+        { title: 'alpha', groupId: today.id },
+        201,
+      );
+    }
+    const visible = await owner.ok<Task>(
+      'POST',
+      '/api/v1/orgs/personal/tasks',
+      { title: 'alpha', groupId: prio.id },
+      201,
+    );
+    const api = bearer(
+      ctx,
+      (
+        await pat(owner, ['tasks:read'], {
+          orgs: [{ orgId: visible.orgId, read: { groups: [prio.id] }, write: 'none' }],
+        })
+      ).token,
+    );
+    const hits = await api.ok<{ task: Task }[]>('GET', '/api/v1/search?q=alpha&limit=1');
+    expect(hits.map((h) => h.task.id)).toEqual([visible.id]);
+  });
+
+  it('R3 a task key the grant cannot read becomes the bare prefix', async () => {
+    const { ctx, owner, org, g, prioOnly } = await tree();
+    const reader = await pat(owner, ['tasks:read'], prioOnly('prio'));
+    const access = ctx.app.services.grants.streamAccess(await actorOf(ctx, reader.token));
+    const gone = '0199aaaa-0000-7000-8000-00000000dead';
+    expect(
+      access.filterKeys?.(org.id, [
+        ['task', g.id],
+        ['activity', g.id],
+        ['task', gone],
+      ]),
+    ).toEqual([['task'], ['activity']]);
+  });
+
+  it('R4 a grant marks more notifications than SQLite allows bound parameters', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const orgId = (
+      await owner.ok<{ orgs: { id: string; isPersonal: boolean }[] }>('GET', '/api/v1/me')
+    ).orgs.find((o) => o.isPersonal)?.id;
+    const insert = ctx.db.sqlite.prepare(
+      "INSERT INTO notification (id, user_id, org_id, type, data, created_at) VALUES (?, ?, ?, 'mention', '{}', ?)",
+    );
+    const many = 33_500;
+    ctx.db.sqlite.transaction(() => {
+      for (let i = 0; i < many; i++) {
+        insert.run(
+          `0199aaaa-0000-7000-8000-${i.toString(16).padStart(12, '0')}`,
+          owner.userId,
+          orgId,
+          i,
+        );
+      }
+    })();
+    const api = bearer(ctx, (await pat(owner, ['notifications:read'])).token);
+    const res = await api.ok<{ unreadCount: number }>('POST', '/api/v1/notifications/read', {
+      all: true,
+    });
+    expect(res.unreadCount).toBe(0);
+    expect(
+      ctx.db.sqlite.prepare('SELECT count(*) AS n FROM notification WHERE read_at IS NULL').get(),
+    ).toEqual({ n: 0 });
   });
 });
