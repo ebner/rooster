@@ -14,6 +14,7 @@ import { ConstraintEditor } from './constraint-editor';
 import {
   ceilingForGrant,
   defaultTokenValue,
+  type GrantIssue,
   type GrantOrgOption,
   type GrantValue,
   grantIssues,
@@ -57,6 +58,12 @@ export interface ConnectedAppsSectionProps {
    * only ids missing there are pruned before a save. Undefined: nothing is pruned.
    */
   confirmedOrgs?: readonly GrantOrgOption[] | undefined;
+  /**
+   * Confirms the edited grant's orgs and groups afresh; called right before pruning on save,
+   * so a group created after the editor opened is never taken for deleted. Without it nothing
+   * is pruned.
+   */
+  confirmOrgs?: (() => Promise<readonly GrantOrgOption[]>) | undefined;
   /** The grant being edited (or null), so the caller can confirm its orgs and groups. */
   onEditingChange?: ((grant: Grant | null) => void) | undefined;
 }
@@ -79,6 +86,7 @@ export function ConnectedAppsSection({
   initialMode,
   id = 'connected-apps',
   confirmedOrgs,
+  confirmOrgs,
   onEditingChange,
 }: ConnectedAppsSectionProps) {
   const { t } = useTranslation('settings');
@@ -141,6 +149,7 @@ export function ConnectedAppsSection({
               onUpdate={onUpdate}
               onRevoke={onRevoke}
               confirmedOrgs={confirmedOrgs}
+              confirmOrgs={confirmOrgs}
             />
           ))}
         </ul>
@@ -159,10 +168,12 @@ function GrantRow({
   onUpdate,
   onRevoke,
   confirmedOrgs,
+  confirmOrgs,
 }: {
   grant: Grant;
   orgs: readonly GrantOrgOption[];
   confirmedOrgs: readonly GrantOrgOption[] | undefined;
+  confirmOrgs: (() => Promise<readonly GrantOrgOption[]>) | undefined;
   prefs: DisplayPrefs;
   now: number;
   mode: ConnectedAppsMode;
@@ -289,6 +300,7 @@ function GrantRow({
           grant={grant}
           orgs={orgs}
           confirmedOrgs={confirmedOrgs}
+          confirmOrgs={confirmOrgs}
           prefs={prefs}
           now={now}
           onCancel={() => setMode({ kind: 'idle' })}
@@ -320,6 +332,7 @@ function EditGrant({
   grant,
   orgs,
   confirmedOrgs,
+  confirmOrgs,
   prefs,
   now,
   onCancel,
@@ -328,6 +341,7 @@ function EditGrant({
   grant: Grant;
   orgs: readonly GrantOrgOption[];
   confirmedOrgs: readonly GrantOrgOption[] | undefined;
+  confirmOrgs: (() => Promise<readonly GrantOrgOption[]>) | undefined;
   prefs: DisplayPrefs;
   now: number;
   onCancel: () => void;
@@ -338,9 +352,12 @@ function EditGrant({
   // Orgs left and groups deleted since the grant was made would fail any save (422). Only
   // what the server confirms missing is dropped, and only from what is sent: the edits keep
   // every id, so a removal never outlives data that shows the group exists.
-  const { value, stale } = reconcileGrant(edited, confirmedOrgs ?? []);
+  // The note: what the latest confirmation misses that this tab does not show either (a group
+  // created a moment ago is in the picker before the confirmation catches up).
+  const { value, stale } = reconcileGrant(edited, knownOrgs(confirmedOrgs ?? [], orgs));
   const [label, setLabel] = useState(grant.label);
   const [pending, setPending] = useState(false);
+  const [saveIssue, setSaveIssue] = useState<GrantIssue | null>(null);
   const blocked = grantIssues(value).length > 0 || label.trim() === '';
   return (
     <InlinePanel onEscape={onCancel}>
@@ -351,8 +368,18 @@ function EditGrant({
           event.preventDefault();
           if (blocked) return;
           setPending(true);
+          setSaveIssue(null);
           try {
-            await onSave(toGrantPatch(value, Date.now(), label));
+            // Re-confirm right before pruning: fetch fresh, prune what is confirmed missing,
+            // send. Without a confirmation nothing is pruned (the server answers).
+            const fresh = confirmOrgs ? await confirmOrgs() : [];
+            const toSend = reconcileGrant(edited, fresh).value;
+            const [issue] = grantIssues(toSend);
+            if (issue) {
+              setSaveIssue(issue);
+              return;
+            }
+            await onSave(toGrantPatch(toSend, Date.now(), label));
           } catch {
             // The caller reports the failure; the form keeps the edits.
           } finally {
@@ -390,6 +417,17 @@ function EditGrant({
             autoFocus
           />
         </ConstraintEditor>
+        {saveIssue && (
+          <p role="alert" className="text-sm text-text-danger">
+            {t(
+              saveIssue.kind === 'noScopes'
+                ? 'access.issue.noScopes'
+                : saveIssue.kind === 'noOrgs'
+                  ? 'access.issue.noOrgs'
+                  : 'access.issue.noGroups',
+            )}
+          </p>
+        )}
         <div className="flex flex-wrap gap-2">
           <Button type="submit" variant="primary" isLoading={pending} isDisabled={blocked}>
             {t('access.apps.save')}
@@ -522,4 +560,20 @@ export function TokenReveal({
       </div>
     </div>
   );
+}
+
+/**
+ * The confirmed orgs, each with the groups either source knows: for the note only, so a group
+ * this tab already shows is never announced as deleted while the confirmation catches up.
+ */
+function knownOrgs(
+  confirmed: readonly GrantOrgOption[],
+  cached: readonly GrantOrgOption[],
+): GrantOrgOption[] {
+  return confirmed.map((org) => {
+    const local = cached.find((c) => c.id === org.id)?.groups;
+    if (!org.groups || !local) return org;
+    const ids = new Set(org.groups.map((g) => g.id));
+    return { ...org, groups: [...org.groups, ...local.filter((g) => !ids.has(g.id))] };
+  });
 }

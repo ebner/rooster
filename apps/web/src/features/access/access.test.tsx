@@ -216,7 +216,7 @@ describe('Connected apps', () => {
       },
     };
     const onUpdate = vi.fn(async () => undefined);
-    renderApps({ grants: [stale], onUpdate, confirmedOrgs: orgs });
+    renderApps({ grants: [stale], onUpdate, confirmedOrgs: orgs, confirmOrgs: async () => orgs });
     fireEvent.click(screen.getByRole('button', { name: 'Edit Prio sync script' }));
     const form = screen.getByTestId('edit-grant');
     expect(within(form).getByRole('status').textContent).toBe(
@@ -294,6 +294,58 @@ describe('Connected apps', () => {
         },
       }),
     );
+  });
+
+  test('P2: a group created after the editor opened, then selected and saved, is kept', async () => {
+    const [, pat] = fixtureGrants(now);
+    if (!pat) throw new Error('fixture');
+    const created = { id: '0192f5d0-7a1e-7c3a-9f10-00000000b098', name: 'Fresh', isInbox: false };
+    const withCreated = orgs.map((org) =>
+      org.id === acme ? { ...org, groups: [...(org.groups ?? []), created] } : org,
+    );
+    const onUpdate = vi.fn(async () => undefined);
+    const confirmOrgs = vi.fn(async () => withCreated);
+    // The confirmation snapshot predates the group; this tab's list already shows it.
+    renderApps({ grants: [pat], onUpdate, orgs: withCreated, confirmedOrgs: orgs, confirmOrgs });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Prio sync script' }));
+    const form = screen.getByTestId('edit-grant');
+    const picker = within(form).getByRole('listbox', { name: 'Groups it may change in Acme' });
+    fireEvent.click(within(picker).getByRole('option', { name: 'Fresh' }));
+    // Not announced as deleted while the confirmation catches up.
+    expect(within(form).queryByRole('status')).toBeNull();
+    await act(async () => {
+      fireEvent.click(within(form).getByRole('button', { name: 'Save changes' }));
+    });
+    expect(confirmOrgs).toHaveBeenCalledTimes(1);
+    expect(onUpdate).toHaveBeenCalledWith(
+      pat.id,
+      expect.objectContaining({
+        constraints: {
+          orgs: [
+            { orgId: fixtureIds.personalOrg, read: 'all', write: 'none' },
+            { orgId: acme, read: 'all', write: { groups: [g.companyPrio, created.id] } },
+          ],
+        },
+      }),
+    );
+  });
+
+  test('P2: if everything it named is confirmed gone, the save stops and says why', async () => {
+    const [, pat] = fixtureGrants(now);
+    if (!pat) throw new Error('fixture');
+    const gone = {
+      ...pat,
+      constraints: { orgs: [{ orgId: 'left', read: 'all' as const, write: 'none' as const }] },
+    };
+    const onUpdate = vi.fn(async () => undefined);
+    renderApps({ grants: [gone], onUpdate, confirmOrgs: async () => orgs });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Prio sync script' }));
+    const form = screen.getByTestId('edit-grant');
+    await act(async () => {
+      fireEvent.click(within(form).getByRole('button', { name: 'Save changes' }));
+    });
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(within(form).getByRole('alert').textContent).toBe('Choose at least one organisation.');
   });
 
   test('a new token is created from the form and shown once', async () => {

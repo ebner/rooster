@@ -69,7 +69,7 @@ function ConnectedApps({ now }: { now: number }) {
       : editing.constraints.orgs === 'all'
         ? []
         : editing.constraints.orgs.map((org) => org.orgId);
-  const confirmedOrgs = useConfirmedGrantOrgs(confirmIds);
+  const confirmed = useConfirmedGrantOrgs(confirmIds);
   const failed = (message: string) => (error: unknown) => {
     toast({ message, tone: 'danger' });
     throw error;
@@ -79,7 +79,8 @@ function ConnectedApps({ now }: { now: number }) {
       grants={grants.data}
       error={grants.error}
       orgs={orgs}
-      confirmedOrgs={editing ? confirmedOrgs : undefined}
+      confirmedOrgs={editing ? confirmed.orgs : undefined}
+      confirmOrgs={confirmed.confirm}
       onEditingChange={setEditing}
       prefs={prefs}
       now={now}

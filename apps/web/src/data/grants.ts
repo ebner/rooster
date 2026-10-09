@@ -2,6 +2,7 @@ import type { Schemas } from '@rooster/api-client';
 import { orderedGroups } from '@rooster/core/reducers';
 import type { Grant, GrantPatch, TokenCreate, TokenCreated } from '@rooster/core/schemas';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import type { GrantOrgOption } from '../features/access/grant-model';
 import { api, unwrap } from './http';
 import { myListKey, useListPipeline } from './list';
@@ -93,45 +94,83 @@ export function useGrantOrgs(): GrantOrgOption[] {
 }
 
 /**
- * Server-confirmed orgs and groups, for pruning a grant's stale ids before a save (P2): never
- * the optimistic `my-list` cache, where a live group this tab has not fetched yet looks
- * deleted. Fetches a fresh `/me` and each named org's groups (`staleTime: 0`, not retried).
- * Until confirmed, or when offline, an org's `groups` is undefined (and with no fresh `/me`
- * the list is empty), so nothing is pruned and the server has the last word.
+ * Server-confirmed orgs and groups for pruning a grant's stale ids (P2): a fresh `/me` and
+ * each named org's groups from the server, never the optimistic `my-list` cache (where a live
+ * group this tab has not fetched yet looks deleted). Never throws: without a fresh `/me` the
+ * list is empty, and an org whose groups could not be fetched has `groups: undefined`, so
+ * nothing is pruned for it and the server has the last word.
  */
-export function useConfirmedGrantOrgs(orgIds: readonly string[] | null): GrantOrgOption[] {
-  const fresh = { staleTime: 0, gcTime: 0, retry: false, refetchOnWindowFocus: false } as const;
-  const me = useQuery({
-    queryKey: ['grant-confirm', 'me'],
-    queryFn: async () => toMe(await unwrap(api.GET('/api/v1/me'))).orgs,
-    enabled: orgIds !== null,
-    ...fresh,
-  });
-  const named = (me.data ?? []).filter((org) => orgIds?.includes(org.id));
-  const groups = useQueries({
-    queries: named.map((org) => ({
-      queryKey: ['grant-confirm', 'groups', org.id],
-      queryFn: async () =>
-        (
-          await unwrap(
-            api.GET('/api/v1/orgs/{orgId}/my-list', { params: { path: { orgId: org.id } } }),
-          )
-        ).groups.map((group) => ({
-          id: group.id,
-          name: group.name,
-          isInbox: group.kind === 'inbox',
-        })),
-      ...fresh,
-    })),
-  });
-  if (orgIds === null || !me.data) return [];
-  return me.data.map((org) => {
-    const index = named.findIndex((n) => n.id === org.id);
-    return {
+export async function confirmGrantOrgs(orgIds: readonly string[]): Promise<GrantOrgOption[]> {
+  let orgs: Awaited<ReturnType<typeof toMe>>['orgs'];
+  try {
+    orgs = toMe(await unwrap(api.GET('/api/v1/me'))).orgs;
+  } catch {
+    return [];
+  }
+  return Promise.all(
+    orgs.map(async (org) => ({
       id: org.id,
       name: org.name,
       isPersonal: org.isPersonal,
-      groups: index >= 0 ? groups[index]?.data : undefined,
-    };
+      groups: orgIds.includes(org.id)
+        ? await unwrap(
+            api.GET('/api/v1/orgs/{orgId}/my-list', { params: { path: { orgId: org.id } } }),
+          ).then(
+            (list) =>
+              list.groups.map((group) => ({
+                id: group.id,
+                name: group.name,
+                isInbox: group.kind === 'inbox',
+              })),
+            () => undefined,
+          )
+        : undefined,
+    })),
+  );
+}
+
+const confirmKey = (orgIds: readonly string[]) =>
+  ['grant-confirm', [...orgIds].sort().join(',')] as const;
+
+export interface ConfirmedGrantOrgs {
+  /** The latest confirmation (for the "no longer exists" note); empty until it arrives. */
+  orgs: GrantOrgOption[];
+  /** Confirms afresh, now: call right before pruning on save. */
+  confirm: () => Promise<GrantOrgOption[]>;
+}
+
+/**
+ * `confirmGrantOrgs` for the grant being edited (`orgIds`, or null when none is). The snapshot
+ * is refetched whenever `/me` or one of those orgs' `my-list` changes (another tab created a
+ * group, SSE), so the note stays accurate; saving still re-confirms first (`confirm`).
+ */
+export function useConfirmedGrantOrgs(orgIds: readonly string[] | null): ConfirmedGrantOrgs {
+  const queryClient = useQueryClient();
+  const ids = orgIds ?? [];
+  const key = confirmKey(ids);
+  const query = useQuery({
+    queryKey: key,
+    queryFn: () => confirmGrantOrgs(ids),
+    enabled: orgIds !== null,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
   });
+  const watched = key[1];
+  useEffect(() => {
+    if (orgIds === null) return;
+    const names = watched.split(',');
+    return queryClient.getQueryCache().subscribe((event) => {
+      if (event.type !== 'updated' || event.action.type !== 'success') return;
+      const [root, orgId] = event.query.queryKey;
+      const related = root === 'me' || (root === 'my-list' && names.includes(String(orgId)));
+      if (related) void queryClient.invalidateQueries({ queryKey: ['grant-confirm', watched] });
+    });
+  }, [queryClient, watched, orgIds === null]);
+  return {
+    orgs: query.data ?? [],
+    confirm: () =>
+      queryClient.fetchQuery({ queryKey: key, queryFn: () => confirmGrantOrgs(ids), staleTime: 0 }),
+  };
 }

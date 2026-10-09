@@ -127,7 +127,13 @@ test('AC-8.5 (UI) a token limited to Prio: 403 outside_grant elsewhere, narrowin
   await row.getByRole('button', { name: 'Edit Prio writer' }).click();
   const edit = row.getByTestId('edit-grant');
   await edit.getByTestId(`write-${orgId}`).getByText('Nothing', { exact: true }).click();
+  const patched = page.waitForResponse(
+    (r) => r.url().endsWith(`/api/v1/me/grants/${grant?.id}`) && r.request().method() === 'PATCH',
+  );
   await edit.getByRole('button', { name: 'Save changes' }).click();
+  // Saving re-confirms the grant's orgs and groups first, then sends the PATCH.
+  expect((await patched).ok()).toBe(true);
+  await expect(row.getByTestId('edit-grant')).toHaveCount(0);
   await expect(row).toContainText('can’t change anything');
   const narrowed = await call('POST', `/api/v1/orgs/${orgId}/tasks`, {
     title: 'Not anymore',
