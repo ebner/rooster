@@ -86,7 +86,7 @@ Scopes can't say "write only in Prio" (RFC 9396 §1), so each grant also stores 
 - Every grant-authorized mutation records `via` (`cli`, `mcp`, `pat`, `oauth`) and `grantId` in the activity data. The pane shows "via Claude (MCP)" using the client's name (§4.2).
 
 ### 2.4 Lifetimes and revocation
-- **Grants:** an optional expiry (7, 30 or 90 days, a date, never, or **this session only** for OAuth clients: the grant ends once its refresh token has gone unused for 24 hours, `idle_timeout_ms`, ADR 0041; default 90 days for OAuth clients and PATs, never for CLI devices). Revocable in Settings → Connected apps, and by the CLI (`rooster logout`, `rooster token revoke`).
+- **Grants:** an optional expiry (7, 30 or 90 days, a date, never, or **this session only** for OAuth clients: the grant ends once no token has been issued for it for 24 hours, `idle_timeout_ms`, ADRs 0041, 0045; default 90 days for OAuth clients and PATs, never for CLI devices). Revocable in Settings → Connected apps, and by the CLI (`rooster logout`, `rooster token revoke`).
 - **OAuth access tokens:** 15 minutes, audience-bound (§4.3). **Refresh tokens:** rotated on every use, with reuse detection that revokes the whole grant. Editing a grant's constraints takes effect on the next request, because the resource server reads the grant each time (§4.3).
 - **PATs** (`rooster_pat_…`) are grant-backed API keys (better-auth `apiKey`), hashed at rest and shown once.
 - **Device sessions** (CLI login) are grant-backed bearer sessions.

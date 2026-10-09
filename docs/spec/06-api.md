@@ -9,7 +9,7 @@
 | Topic | Rule |
 |---|---|
 | Auth | One of: session cookie (web); `Authorization: Bearer <session token>` (CLI device flow); `Authorization: Bearer rooster_pat_…` (PAT). An unauthenticated request gets `401 {code:"unauthenticated"}`. |
-| Scopes | Non-browser credentials carry a grant (11 §2): capabilities (`tasks:read`, `tasks:write`, `comments:write`, `tasks:assign`, `groups:write`, `tasks:delete`, `notifications:read`) plus user-chosen org and group constraints. A missing capability gets `403 forbidden_scope`, and a target outside the constraints `403 outside_grant`. Settings, org administration and admin routes need the browser session. |
+| Scopes | Non-browser credentials carry a grant (11 §2): capabilities (`tasks:read`, `tasks:write`, `comments:write`, `tasks:assign`, `groups:write`, `tasks:delete`, `notifications:read`, and for instance admins `admin`) plus user-chosen org and group constraints. A missing capability gets `403 forbidden_scope`, and a target outside the constraints `403 outside_grant`. Settings and org administration need the browser session; admin routes need the browser session or an `admin` PAT or CLI login of a current admin (ADR 0045). Granting `admin` as a non-admin is `403 admin_only_scope`. |
 | CSRF | For cookie auth on POST, PATCH, PUT and DELETE, the `Origin` header must equal `ROOSTER_BASE_URL`. |
 | Idempotency | Every mutation accepts `Idempotency-Key: <uuid>`. The web outbox always sends it. Replays within 7 days return the original status and body. |
 | LWW | Mutations accept `X-Rooster-Edit-Time: <ms epoch>`, the time the user made the edit, and default to the server's now. Fields older than the stored clock are skipped and listed in `ignoredFields`. |
