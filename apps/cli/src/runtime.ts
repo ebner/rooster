@@ -92,7 +92,7 @@ export class Runtime {
   constructor(
     readonly io: Io,
     readonly globals: Globals,
-    options: { loadKeyring?: () => Promise<KeyringFactory | null> } = {},
+    private readonly options: { loadKeyring?: () => Promise<KeyringFactory | null> } = {},
   ) {
     const dir = configDir(io.env, io.platform, io.homedir);
     this.config = new ConfigStore(dir);
@@ -106,6 +106,14 @@ export class Runtime {
       this.keyringOff ? async () => null : (options.loadKeyring ?? loadKeyring),
     );
     this.out = new Output(io, globals);
+  }
+
+  /**
+   * The same invocation for another profile, pinned afresh: `rooster mcp setup` signs in its
+   * dedicated profile while the command itself started under the default one.
+   */
+  forProfile(profile: string): Runtime {
+    return new Runtime(this.io, { ...this.globals, profile }, this.options);
   }
 
   get configData(): Config {

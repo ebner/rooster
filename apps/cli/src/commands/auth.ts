@@ -1,4 +1,4 @@
-import { GRANT_SCOPES, type GrantScope } from '@rooster/core/grants';
+import { ADMIN_SCOPE, GRANT_SCOPES, type GrantScope } from '@rooster/core/grants';
 import { defineCommand } from 'citty';
 import { cliFetch, grantsApi, type Me, type Meta, RoosterApiError, unwrap } from '../api.ts';
 import { normalizeServer, type Profile } from '../config.ts';
@@ -98,6 +98,7 @@ async function finishLogin(
   server: string,
   token: string,
   orgFlag: string | undefined,
+  options: { makeDefault?: boolean } = {},
 ): Promise<Me> {
   const client = runtime.clientFor(server, token);
   let me: Me;
@@ -138,7 +139,10 @@ async function finishLogin(
         credential_ref: saved.ref,
         credential_origin: origin,
       };
-      const makeDefault = config.default_profile === undefined && profileName !== 'default';
+      const makeDefault =
+        options.makeDefault !== false &&
+        config.default_profile === undefined &&
+        profileName !== 'default';
       return {
         ...config,
         ...(makeDefault ? { default_profile: profileName } : {}),
@@ -159,10 +163,60 @@ async function finishLogin(
   return me;
 }
 
-function serverFrom(runtime: Runtime, flag: unknown): string {
+export function serverFrom(runtime: Runtime, flag: unknown): string {
   const raw = str(flag) ?? runtime.io.env.ROOSTER_SERVER ?? runtime.profile.server;
   if (raw === undefined || raw === '') throw new CliError(EXIT.usage, t('login.serverMissing'));
   return normalizeServer(raw);
+}
+
+export interface DeviceLoginOptions {
+  server: string;
+  scopes: readonly GrantScope[];
+  orgFlag?: string | undefined;
+  /** Open the verification page in the browser (`--no-browser` turns it off). */
+  browser: boolean;
+  /** Make this the default profile when there is none yet (`rooster mcp setup` doesn't). */
+  makeDefault?: boolean;
+}
+
+/**
+ * The device flow (07 §2) for the runtime's profile: validates the server, asks for a code
+ * with `scopes`, shows it, polls until approval, then stores the login (ADR 0039 §7).
+ */
+export async function deviceLogin(runtime: Runtime, options: DeviceLoginOptions): Promise<Me> {
+  const { out } = runtime;
+  const { server } = options;
+  const meta = await fetchMeta(runtime, server);
+  warnOnVersion(runtime, meta.version);
+  const { status, data } = await authPost(runtime, server, '/device/code', {
+    client_id: CLI_CLIENT_ID,
+    scope: options.scopes.join(' '),
+  });
+  if (
+    status !== 200 ||
+    typeof data.device_code !== 'string' ||
+    typeof data.user_code !== 'string'
+  ) {
+    throw new CliError(
+      EXIT.auth,
+      t('login.failed', { error: String(data.error_description ?? data.error ?? status) }),
+    );
+  }
+  const code = data as unknown as DeviceCode;
+  const url = code.verification_uri_complete ?? code.verification_uri;
+  out.notice(t('login.instructions', { url: code.verification_uri, code: code.user_code }));
+  // The code goes to stdout on its own line too, so scripts and tests can read it.
+  out.line(`${t('login.codeLabel')} ${paint(code.user_code, styles.accent, out.level)}`);
+  if (options.browser) {
+    const href = openableUrl(url, server);
+    if (href !== null) await runtime.io.openUrl(href);
+    else out.notice(t('open.notOpened'));
+  }
+  out.notice(t('login.waiting'));
+  const token = await pollForToken(runtime, server, code);
+  return finishLogin(runtime, server, token, options.orgFlag, {
+    ...(options.makeDefault === undefined ? {} : { makeDefault: options.makeDefault }),
+  });
 }
 
 export const loginCommand = defineCommand({
@@ -172,6 +226,7 @@ export const loginCommand = defineCommand({
     'with-token': { type: 'boolean', description: t('login.arg.withToken') },
     browser: { type: 'boolean', default: true, negativeDescription: t('login.arg.noBrowser') },
     scope: { type: 'string', valueHint: 'scope,…', description: t('login.arg.scope') },
+    admin: { type: 'boolean', description: t('login.arg.admin') },
     org: { type: 'string', valueHint: 'slug', description: t('login.arg.org') },
   }),
   async run({ args, rawArgs }) {
@@ -194,42 +249,28 @@ export const loginCommand = defineCommand({
       return;
     }
 
-    const meta = await fetchMeta(runtime, server);
-    warnOnVersion(runtime, meta.version);
     const requested = multi(rawArgs, 'scope');
     const scopes = requested.length === 0 ? [...DEFAULT_LOGIN_SCOPES] : parseScopes(requested);
-    const { status, data } = await authPost(runtime, server, '/device/code', {
-      client_id: CLI_CLIENT_ID,
-      scope: scopes.join(' '),
+    if (args.admin === true && !scopes.includes(ADMIN_SCOPE)) scopes.push(ADMIN_SCOPE);
+    const me = await deviceLogin(runtime, {
+      server,
+      scopes,
+      orgFlag,
+      browser: args.browser !== false,
     });
-    if (
-      status !== 200 ||
-      typeof data.device_code !== 'string' ||
-      typeof data.user_code !== 'string'
-    ) {
-      throw new CliError(
-        EXIT.auth,
-        t('login.failed', { error: String(data.error_description ?? data.error ?? status) }),
-      );
-    }
-    const code = data as unknown as DeviceCode;
-    const url = code.verification_uri_complete ?? code.verification_uri;
-    out.notice(t('login.instructions', { url: code.verification_uri, code: code.user_code }));
-    // The code goes to stdout on its own line too, so scripts and tests can read it.
-    out.line(`${t('login.codeLabel')} ${paint(code.user_code, styles.accent, out.level)}`);
-    if (args.browser !== false) {
-      const href = openableUrl(url, server);
-      if (href !== null) await runtime.io.openUrl(href);
-      else out.notice(t('open.notOpened'));
-    }
-    out.notice(t('login.waiting'));
-    const token = await pollForToken(runtime, server, code);
-    const me = await finishLogin(runtime, server, token, orgFlag);
     if (out.json) out.data({ server, profile: runtime.profileName, user: me.email });
     else
       out.notice(
         t('login.done', { name: clean(me.name), email: me.email, profile: runtime.profileName }),
       );
+    // The device page offers `admin` only to instance admins and drops it for anyone else
+    // (ADR 0042 §1), so say when the login came back without it.
+    if (scopes.includes(ADMIN_SCOPE)) {
+      const grant = await currentGrant(runtime);
+      if (!me.isAdmin || (grant !== null && !grant.scopes.includes(ADMIN_SCOPE))) {
+        out.warn(t('login.adminDropped'));
+      }
+    }
   },
 });
 

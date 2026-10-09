@@ -1,6 +1,6 @@
 import {
+  ALL_GRANT_SCOPES,
   expandScopes,
-  GRANT_SCOPES,
   type GrantConstraints,
   type GrantScope,
   isGrantScope,
@@ -20,7 +20,7 @@ export function parseScopes(values: readonly string[]): GrantScope[] {
     if (!isGrantScope(value)) {
       throw new CliError(
         EXIT.usage,
-        t('grant.unknownScope', { scope: value, scopes: GRANT_SCOPES.join(', ') }),
+        t('grant.unknownScope', { scope: value, scopes: ALL_GRANT_SCOPES.join(', ') }),
       );
     }
     if (!out.includes(value)) out.push(value);

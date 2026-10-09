@@ -220,7 +220,7 @@
     },
     "arg": {
       "name": "Ett namn att känna igen den på",
-      "scope": "Behörigheter, kommaseparerade (standard tasks:read)",
+      "scope": "Behörigheter, kommaseparerade (standard tasks:read; admin för instansens administratörer)",
       "readOnly": "Samma som --scope tasks:read",
       "org": "Bara den här organisationen (kan upprepas)",
       "group": "Läs bara de här grupperna: org/Grupp (kan upprepas)",
@@ -309,7 +309,8 @@
       "withToken": "Läs en personlig åtkomsttoken från stdin (för CI)",
       "noBrowser": "Öppna ingen webbläsare",
       "scope": "Be om färre behörigheter, t.ex. tasks:read",
-      "org": "Standardorganisation för profilen"
+      "org": "Standardorganisation för profilen",
+      "admin": "Be även om administratörsbehörighet (bara för instansens administratörer)"
     },
     "serverMissing": "Vilken server? Ange --server https://rooster.example.com",
     "tokenMissing": "Ingen token på stdin. Exempel: echo $TOKEN | rooster login --with-token --server URL",
@@ -322,7 +323,8 @@
     "failed": "Inloggningen misslyckades: {error}",
     "done": "Inloggad som {name} <{email}> (profil {profile}).",
     "previousKept": "Den tidigare inloggningen kunde inte tas bort ur sitt lager; den används inte längre.",
-    "stagedKept": "Den nya inloggningen kunde inte sparas i konfigurationen, och dess sparade kopia kunde inte heller tas bort; den används inte."
+    "stagedKept": "Den nya inloggningen kunde inte sparas i konfigurationen, och dess sparade kopia kunde inte heller tas bort; den används inte.",
+    "adminDropped": "Inloggningen saknar administratörsbehörighet: bara instansens administratörer kan ge den."
   },
   "logout": {
     "envToken": "ROOSTER_TOKEN är satt; ta bort den för att logga ut. Token återkallas med rooster token revoke.",
@@ -376,5 +378,72 @@
   "version": {
     "server": "server {version}",
     "mismatch": "CLI:t ({cli}) och servern ({server}) har olika huvudversioner; uppdatera den äldre."
+  },
+  "mcp": {
+    "cmd": {
+      "setup": "Konfigurera en AI-agent: en egen profil och behörighet, plus klientens konfiguration"
+    },
+    "arg": {
+      "readOnly": "Erbjud bara verktyg som läser (lista, hämta, söka)",
+      "client": "Vilken klient som ska konfigureras (standard print)",
+      "allowDelete": "Be även om lov att ta bort uppgifter (de hamnar i papperskorgen)",
+      "relogin": "Logga in profilen på nytt även om den redan har en inloggning"
+    },
+    "noGrant": "Det går inte att läsa vad inloggningen får göra; logga in igen med rooster login.",
+    "noTools": "Inloggningen tillåter inga av MCP-verktygen; agenten får en tom verktygslista.",
+    "toolFailed": "rooster mcp: {tool} misslyckades: {error}",
+    "transportError": "rooster mcp: anslutningsfel: {error}",
+    "setup": {
+      "badClient": "Okänd klient ”{client}”. Välj bland: {clients}",
+      "badProfile": "”{profile}” går inte att använda som profilnamn för agenten: använd bokstäver, siffror, - och _.",
+      "envToken": "ROOSTER_TOKEN är satt; ta bort den, eftersom agentprofilen loggas in med en egen inloggning.",
+      "reusing": "Använder profilen {profile}s befintliga inloggning (lägg till --relogin för att logga in igen).",
+      "signingIn": "Loggar in profilen {profile} åt agenten. Välj på godkännandesidan vilka organisationer och grupper agenten får använda.",
+      "confirmReplace": "{path} har redan en annan server med namnet ”{key}”. Vill du ersätta den?",
+      "claudeCode": "Lägg till rooster i Claude Code med:",
+      "printJson": "Lägg till det här i MCP-klientens konfiguration:",
+      "unchanged": "{app} är redan konfigurerad ({path}).",
+      "written": "rooster har lagts till i {app} ({path}).",
+      "backup": "Den tidigare filen finns kvar som {path}.",
+      "restart": "Starta om {app} så att ändringen läses in.",
+      "skillHint": "Tips: rooster skill install lär agenten hur rooster används.",
+      "app": {
+        "claude-desktop": "Claude Desktop",
+        "cursor": "Cursor"
+      },
+      "unsafe": {
+        "symlink": "{path} är en symbolisk länk; rooster skriver inte via den. Redigera filen själv, eller använd --client print.",
+        "notFile": "{path} är inte en vanlig fil; rooster skriver inte till den.",
+        "changed": "{path} ändrades medan rooster skrev; inget har skrivits. Försök igen.",
+        "tooLarge": "{path} är för stor för att vara en klientkonfiguration; inget har skrivits."
+      },
+      "badConfig": {
+        "json": "{path} är inte giltig JSON, så rooster lät den vara. Rätta filen, eller använd --client print och lägg till rooster för hand.",
+        "shape": "{path} har inte den väntade formen (ett objekt med mcpServers), så rooster lät den vara. Använd --client print och lägg till rooster för hand."
+      }
+    }
+  },
+  "skill": {
+    "cmd": {
+      "print": "Skriv ut rooster-färdigheten (SKILL.md) för profilens server",
+      "install": "Installera rooster-färdigheten där agenter hittar den"
+    },
+    "arg": {
+      "server": "Servern som färdigheten gäller (standard: profilens)",
+      "target": "claude (~/.claude/skills) eller agents (~/.agents/skills); standard claude",
+      "project": "Installera i den aktuella katalogen i stället för i hemkatalogen"
+    },
+    "serverMissing": "Vilken server? Logga in med rooster login, eller ange --server https://rooster.example.com",
+    "badTarget": "Okänt mål ”{target}”. Välj bland: {targets}",
+    "added": "rooster-färdigheten är installerad: {path}",
+    "updated": "rooster-färdigheten är uppdaterad: {path}",
+    "unchanged": "rooster-färdigheten är redan aktuell: {path}"
+  },
+  "admin": {
+    "cmd": {
+      "reindex": "Bygg om sökindexet"
+    },
+    "needsAdmin": "Det här kräver administratörsbehörighet, som bara instansens administratörer kan ge. Logga in med rooster login --admin (eller skapa en token med --scope admin i webbläsaren).",
+    "reindexed": "Sökindexet är ombyggt: {count, plural, one {# uppgift} other {# uppgifter}} på {ms} ms."
   }
 }

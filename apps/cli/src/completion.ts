@@ -68,8 +68,10 @@ export const VALUE_SOURCES: readonly { when: string; words: string }[] = [
   {
     when: 'flag:--scope',
     words:
-      'list:tasks:read tasks:write comments:write tasks:assign groups:write tasks:delete notifications:read',
+      'list:tasks:read tasks:write comments:write tasks:assign groups:write tasks:delete notifications:read admin',
   },
+  { when: 'flag:--client', words: 'list:claude-code claude-desktop cursor print' },
+  { when: 'flag:--target', words: 'list:claude agents' },
   { when: 'cmd:group add:--after', words: 'dyn:groups' },
   { when: 'cmd:group mv:--after', words: 'dyn:groups' },
   { when: 'cmd:group mv:--before', words: 'dyn:groups' },
@@ -110,6 +112,8 @@ const VALUE_FLAGS = [
   '--parent',
   '--server',
   '--expires',
+  '--client',
+  '--target',
 ] as const;
 
 /**
@@ -322,7 +326,7 @@ function fishScript(entries: readonly CompletionEntry[]): string {
     '            continue',
     '        end',
     '        switch $tok',
-    '            case --org --profile --group --tag --move-to --after --before --color --scope --write-group --due --time --start --assign --desc --desc-file --title --parent --server --expires',
+    `            case ${VALUE_FLAGS.join(' ')}`,
     '                set skip 1',
     '            case "-*"',
     '            case "*"',
@@ -404,7 +408,7 @@ ${table}
 $roosterValues = @{
 ${values}
 }
-$roosterValueFlags = @('--org','--profile','--group','--tag','--move-to','--after','--before','--color','--scope','--write-group','--due','--time','--start','--assign','--desc','--desc-file','--title','--parent','--server','--expires')
+$roosterValueFlags = @(${VALUE_FLAGS.map((flag) => `'${flag}'`).join(',')})
 Register-ArgumentCompleter -Native -CommandName rooster -ScriptBlock {
   param($wordToComplete, $commandAst, $cursorPosition)
   # Unquoted values ('my profile' → my profile); other elements as written.

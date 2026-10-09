@@ -220,7 +220,7 @@
     },
     "arg": {
       "name": "A name to recognise it by",
-      "scope": "Capabilities, comma-separated (default tasks:read)",
+      "scope": "Capabilities, comma-separated (default tasks:read; admin for instance admins)",
       "readOnly": "Same as --scope tasks:read",
       "org": "Only this organisation (repeatable)",
       "group": "Read only these groups: org/Group (repeatable)",
@@ -309,7 +309,8 @@
       "withToken": "Read a personal access token from stdin (for CI)",
       "noBrowser": "Don’t open a browser",
       "scope": "Ask for fewer capabilities, e.g. tasks:read",
-      "org": "Default organisation for this profile"
+      "org": "Default organisation for this profile",
+      "admin": "Also ask for the admin capability (instance admins only)"
     },
     "serverMissing": "Which server? Pass --server https://rooster.example.com",
     "tokenMissing": "No token on stdin. Example: echo $TOKEN | rooster login --with-token --server URL",
@@ -322,7 +323,8 @@
     "failed": "Sign-in failed: {error}",
     "done": "Signed in as {name} <{email}> (profile {profile}).",
     "previousKept": "The previous login could not be removed from its store; it is no longer used.",
-    "stagedKept": "The new login could not be saved to the configuration, and its stored copy could not be removed either; it is not used."
+    "stagedKept": "The new login could not be saved to the configuration, and its stored copy could not be removed either; it is not used.",
+    "adminDropped": "This login has no admin capability: only instance admins can grant it."
   },
   "logout": {
     "envToken": "ROOSTER_TOKEN is set; unset it to sign out. Tokens are revoked with rooster token revoke.",
@@ -376,5 +378,72 @@
   "version": {
     "server": "server {version}",
     "mismatch": "This CLI ({cli}) and the server ({server}) have different major versions; update the older one."
+  },
+  "mcp": {
+    "cmd": {
+      "setup": "Set up an AI agent: a dedicated profile and grant, plus the client config"
+    },
+    "arg": {
+      "readOnly": "Offer only the tools that read (list, get, search)",
+      "client": "Which client to configure (default print)",
+      "allowDelete": "Also ask for permission to delete tasks (they go to Trash)",
+      "relogin": "Sign the profile in again even if it already has a login"
+    },
+    "noGrant": "Can’t read what this credential may do; sign in again with rooster login.",
+    "noTools": "This credential allows none of the MCP tools; the agent will see an empty tool list.",
+    "toolFailed": "rooster mcp: {tool} failed: {error}",
+    "transportError": "rooster mcp: connection error: {error}",
+    "setup": {
+      "badClient": "Unknown client “{client}”. Choose from: {clients}",
+      "badProfile": "“{profile}” can’t be used as an agent profile name: use letters, digits, - and _.",
+      "envToken": "ROOSTER_TOKEN is set; unset it, since setup signs the agent profile in with its own login.",
+      "reusing": "Using the existing login of profile {profile} (add --relogin to sign in again).",
+      "signingIn": "Signing in profile {profile} for the agent. On the approval page, choose which organisations and groups the agent may use.",
+      "confirmReplace": "{path} already has a different “{key}” server. Replace it?",
+      "claudeCode": "Add rooster to Claude Code with:",
+      "printJson": "Add this to your MCP client’s configuration:",
+      "unchanged": "{app} is already set up ({path}).",
+      "written": "Added rooster to {app} ({path}).",
+      "backup": "The previous file is kept as {path}.",
+      "restart": "Restart {app} to load it.",
+      "skillHint": "Tip: rooster skill install teaches the agent how to use rooster.",
+      "app": {
+        "claude-desktop": "Claude Desktop",
+        "cursor": "Cursor"
+      },
+      "unsafe": {
+        "symlink": "{path} is a symbolic link; rooster won’t write through it. Edit the file yourself, or use --client print.",
+        "notFile": "{path} isn’t a regular file; rooster won’t write it.",
+        "changed": "{path} changed while rooster was writing it; nothing was written. Try again.",
+        "tooLarge": "{path} is too large to be a client configuration; nothing was written."
+      },
+      "badConfig": {
+        "json": "{path} isn’t valid JSON, so rooster left it alone. Fix it, or use --client print and add rooster by hand.",
+        "shape": "{path} doesn’t have the expected shape (an object with mcpServers), so rooster left it alone. Use --client print and add rooster by hand."
+      }
+    }
+  },
+  "skill": {
+    "cmd": {
+      "print": "Print the rooster skill (SKILL.md) for this profile’s server",
+      "install": "Install the rooster skill where agents find it"
+    },
+    "arg": {
+      "server": "Server the skill is for (default: the profile’s)",
+      "target": "claude (~/.claude/skills) or agents (~/.agents/skills); default claude",
+      "project": "Install into the current directory instead of your home directory"
+    },
+    "serverMissing": "Which server? Sign in with rooster login, or pass --server https://rooster.example.com",
+    "badTarget": "Unknown target “{target}”. Choose from: {targets}",
+    "added": "Installed the rooster skill: {path}",
+    "updated": "Updated the rooster skill: {path}",
+    "unchanged": "The rooster skill is already up to date: {path}"
+  },
+  "admin": {
+    "cmd": {
+      "reindex": "Rebuild the search index"
+    },
+    "needsAdmin": "This needs the admin capability, which only instance admins can grant. Sign in with rooster login --admin (or create a token with --scope admin in the browser).",
+    "reindexed": "Search index rebuilt: {count, plural, one {# task} other {# tasks}} in {ms} ms."
   }
 }
