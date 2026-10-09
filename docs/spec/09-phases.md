@@ -228,9 +228,10 @@ An import from other task managers is on the [Backlog](#backlog); v1.0 ships wit
 |---|---|
 | 9.1 TUI | 07 §5. |
 | 9.2 MCP tools | `packages/mcp`: the tools of 07 §6 with their capability map, `instructions`, the `rooster://{org}/my` resource, and the stdio server `rooster mcp` plus `rooster mcp setup` (11 §5.1). |
-| 9.3 OAuth 2.1 authorization server | better-auth OAuth 2.1 Provider plus CIMD, rooster's consent screen and grants, opaque audience-bound tokens, refresh rotation, the CIMD SSRF guard, optional DCR, AS and resource metadata (11 §4). |
+| 9.3 OAuth 2.1 authorization server | better-auth OAuth 2.1 Provider plus CIMD with the ADR 0041 adapters (issuer `<base>/api/auth`, the grant in `referenceId`), rooster's consent screen (incl. the "Allow deleting tasks" checkbox and "This session only") and grants, opaque audience-bound tokens, refresh rotation, the CIMD SSRF guard, optional DCR, AS and resource metadata (11 §4). |
 | 9.4 Remote MCP | `/mcp` Streamable HTTP (protocol 2026-07-28), 401/403 challenges with `resource_metadata` and step-up scopes, per-grant rate limits (11 §5.2). |
 | 9.5 Discovery & skill | The MCP Server Card (SEP-2127), the AI Catalog, the agent-skills index, `llms.txt`, `ROOSTER_AGENT_DISCOVERY`; the rooster `SKILL.md`, and `rooster skill print\|install` (11 §6). |
+| 9.6 Security settings and admin capability | Settings → Security lists linked sign-in identities and unlinks one (never the last; FR-SET-3). The `admin` capability for PATs and CLI logins of instance admins, never OAuth or MCP, and `rooster admin reindex` (ADR 0041). |
 
 **Acceptance criteria**
 - AC-9.1 The TUI lists, creates, completes, dates, moves, and switches views and orgs. A change made in the web appears in the TUI within 2 s.
@@ -238,6 +239,7 @@ An import from other task managers is on the [Backlog](#backlog); v1.0 ships wit
 - AC-9.3 An MCP client that implements the 2026-07-28 authorization spec, given only `https://<host>/mcp`, discovers the authorization server (RFC 9728 → RFC 8414). It registers through a Client ID Metadata Document and completes PKCE with `resource` and `iss` validation. The user then grants `tasks:read` on one org through the consent screen, and the client lists that org's tasks. A token for `/mcp` is rejected by `/api/v1`, and vice versa.
 - AC-9.4 Calling `create_task` with a read-only token yields `403 insufficient_scope` with `scope="tasks:write"`. After step-up, the user allows writing only in *Inbox*: creating there succeeds, and moving the task to *Prio* returns a tool error naming the allowed groups. Revoking the app in Settings → Connected apps fails the next call with `401`.
 - AC-9.5 With discovery on, an agent starting from the instance URL finds the MCP endpoint and the rooster skill through `/.well-known/ai-catalog.json`, the skill's `sha256` digest matches, and the documents validate against their published schemas. With `ROOSTER_AGENT_DISCOVERY=off` only the OAuth metadata remains.
+- AC-9.6 A user with Google and an OIDC identity unlinks one in Settings → Security and can't unlink the last. An admin's CLI login with `admin` runs `rooster admin reindex`. After the user loses the admin role, the same login gets `403`, and the consent screen never offers `admin` to an OAuth client. An MCP client granted `tasks:delete` through the consent checkbox can call `delete_task`, which moves the task to Trash; without the checkbox the tool is not listed.
 
 ---
 

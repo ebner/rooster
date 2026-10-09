@@ -138,11 +138,11 @@
 ### 2.11 OAuth, MCP and discovery (P9, 11)
 | Method & path | Description |
 |---|---|
-| GET `/oauth/authorize` | The authorization endpoint (PKCE S256 required, `resource` required). It renders the consent screen (11 §3.1) for a signed-in user. |
-| POST `/oauth/token` · POST `/oauth/revoke` | Code and refresh-token grants (refresh rotation); RFC 7009 revocation. |
-| POST `/oauth/register` | Dynamic Client Registration, only with `ROOSTER_OAUTH_DCR=on` (deprecated in MCP). |
+| GET `/api/auth/oauth2/authorize` | The authorization endpoint (better-auth OAuth 2.1 Provider; PKCE S256 required, `resource` required). It redirects a signed-in user to the consent screen, the SPA route `/oauth/consent` (11 §3.1, ADR 0041). |
+| POST `/api/auth/oauth2/token` · POST `/api/auth/oauth2/revoke` | Code and refresh-token grants (refresh rotation); RFC 7009 revocation. |
+| POST `/api/auth/oauth2/register` | Dynamic Client Registration, only with `ROOSTER_OAUTH_DCR=on` (deprecated in MCP). |
 | POST/GET/DELETE `/mcp` | The remote MCP endpoint (Streamable HTTP, protocol 2026-07-28). OAuth bearer tokens with audience `<host>/mcp` only. |
-| GET `/.well-known/oauth-authorization-server` | RFC 8414 metadata. |
+| GET `/.well-known/oauth-authorization-server/api/auth` | RFC 8414 metadata for the issuer `<base>/api/auth`. |
 | GET `/.well-known/oauth-protected-resource/mcp` · `…/api/v1` | RFC 9728 resource metadata (11 §5.2). |
 | GET MCP Server Card (path per SEP-2127) · `/.well-known/ai-catalog.json` · `/.well-known/agent-skills/index.json` · `/.well-known/agent-skills/rooster/SKILL.md` · `/llms.txt` | Discovery (11 §6); off with `ROOSTER_AGENT_DISCOVERY=off`. |
 

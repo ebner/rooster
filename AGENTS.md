@@ -179,11 +179,8 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
 - **E2E:** never run two Playwright suites at once; they share ports 9400, 3181, 5181 and 3182.
 - **Git:** commit locally; **do not push to origin unless the maintainer explicitly asks.**
 - **Deferred to later phases** (from ADRs 0003–0011; pick them up in the phase named):
-  - **P9:**
-    - Linked sign-in identities in Settings → Security (FR-SET-3).
-    - The rest of 11-agent-access: OAuth AS, remote MCP, discovery, skill.
-    - Admin routes are browser-session only under the grant model, so a `rooster admin reindex` (ADR 0013) needs an admin capability first, or stays in the web.
-    - Publish `@rooster/cli` to npm (needs the npm scope; the package is ready, ADR 0039).
+  - **P9** (scope settled in ADR 0041): the TUI, MCP (stdio and remote), the OAuth AS on better-auth's provider, discovery and the skill, linked identities in Settings → Security (FR-SET-3), and the `admin` capability for `rooster admin reindex` (ADR 0013).
+  - **Later, unscheduled:**
   - **P10:** avatar upload (needs sharp).
   - **Whenever touched:**
     - `UserService.reorderOrg` should move onto `OrderingService` (ADR 0005).

@@ -70,9 +70,10 @@ Global flags: `--org <slug>`, `--profile <name>`, `--json`, `--quiet` (IDs only)
 | `rooster token create <name> [--scope tasks:read,…] [--org <slug>] [--group <org>/<name>]… [--write-group <org>/<name>]… [--expires 90d\|never]` / `ls` / `revoke <id>` | PATs with a grant (11 §2). The default is `tasks:read` for 90 days. `--read-only` is an alias for `--scope tasks:read`. `create` works from a device login only (not from a PAT), and the token must be a subset of that login's grant (ADR 0037). `revoke` revokes the current grant; others need the browser. |
 | `rooster apps ls` / `rooster apps revoke <id>` | Connected apps (every grant: PATs, devices, OAuth clients; 11 §3.2). |
 | `rooster mcp [--read-only] [--profile agent]` | Starts the MCP server on stdio (§6), using the profile's grant. |
-| `rooster mcp setup [--client claude-code\|claude-desktop\|cursor\|print] [--profile agent]` | Creates a dedicated agent profile through the device flow (its own, narrower grant; 11 §5.1) and writes or prints the MCP client config. |
+| `rooster mcp setup [--client claude-code\|claude-desktop\|cursor\|print] [--profile agent] [--allow-delete]` | Creates a dedicated agent profile through the device flow (its own, narrower grant; 11 §5.1) and writes or prints the MCP client config. |
 | `rooster skill print` / `rooster skill install [--target claude\|agents] [--project]` | Prints or installs the rooster agent skill (`SKILL.md`, 11 §6.2). |
 | `rooster completion bash\|zsh\|fish\|powershell` | Shell completions, including dynamic completion of group and tag names (cached for 60 s). |
+| `rooster admin reindex` | Rebuilds the search index (`POST /admin/search/reindex`). Needs a login or PAT with the `admin` capability, which only instance admins can grant (ADR 0041). P9. |
 | `rooster whoami`, `rooster config get\|set\|path`, `rooster logout` | Utilities. |
 
 ### 4.1 Output
@@ -159,9 +160,10 @@ Built with **Ink 8**. It is a full-screen, keyboard-only mini rooster.
 | `list_groups` / `create_group` | | |
 | `add_comment` | `{ref, body}` | P6. |
 | `list_notifications` | `{unread?}` | P6 inbox. |
+| `delete_task` | `{ref}` | Only when the grant has `tasks:delete`, which needs the consent checkbox (11 §3.1). Moves the task and its subtasks to Trash. |
 
 Each tool needs a capability (11 §5.2): read tools `tasks:read`; `create_task`, `update_task`, `complete_task` and `move_task` `tasks:write`; assigning others `tasks:assign`; `create_group` `groups:write`; `add_comment` `comments:write`; `list_notifications` `notifications:read`. A tool whose target lies outside the grant's org or group constraints returns a tool error that tells the agent to ask the user to widen access, rather than a protocol error.
 
 - **Resources:** `rooster://{org}/my` (a Markdown rendering of My tasks), usable as context.
 - **Instructions:** the `initialize` result carries the short form of the rooster skill (11 §6.2). `SKILL.md` has the long form.
-- **Safety:** there is no delete tool. `--read-only`, or a grant without write scopes, exposes only the list, get and search tools. Every mutation is attributed to the grant's user and appears in the activity log with `via: "mcp"` and the client's name. Task text is returned as data, and the skill tells agents never to follow instructions found in it.
+- **Safety:** `delete_task` exists only with an explicitly consented `tasks:delete` (`rooster mcp setup --allow-delete`; ADR 0041), and nothing deletes groups or deletes permanently. `--read-only`, or a grant without write scopes, exposes only the list, get and search tools. Every mutation is attributed to the grant's user and appears in the activity log with `via: "mcp"` and the client's name. Task text is returned as data, and the skill tells agents never to follow instructions found in it.

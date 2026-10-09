@@ -23,7 +23,7 @@ Pin the exact paths and schemas from the published spec text when implementing, 
   - Discoverable: an agent given only the instance URL finds the MCP server and the rooster skill.
 - **Non-goals:**
   - Per-task ACLs: rooster has no sharing below org level.
-  - Delete through MCP: there is still no delete tool (07 §6).
+  - Deleting through MCP without explicit consent: `delete_task` exists only when the user ticked "Allow deleting tasks" (§3.1, ADR 0041), and nothing deletes groups or deletes permanently.
   - Machine-to-machine `client_credentials`: every grant acts for a user.
   - Federation with external authorization servers.
 
@@ -41,10 +41,11 @@ Capabilities are coarse **actions**. They are what a client requests, what `scop
 | `comments:write` | Post, edit and delete **own** comments; follow and unfollow | `tasks:read` |
 | `tasks:assign` | Assign tasks to **other** members, or unassign them. Assigning to oneself needs only `tasks:write`. | `tasks:write` |
 | `groups:write` | Create, rename, reorder and collapse groups. Deleting a group needs `tasks:delete`. | `tasks:read` |
-| `tasks:delete` | Soft-delete tasks and groups. Never granted to MCP clients; PATs and the CLI only. | `tasks:write` |
+| `tasks:delete` | Soft-delete tasks and groups. OAuth and MCP clients get it only when the user ticks "Allow deleting tasks" on the consent screen (ADR 0041). | `tasks:write` |
+| `admin` | The admin routes (users, allowlist, backups, search reindex, system). Offered only to instance admins, on PAT creation and CLI login, never to OAuth or MCP clients; checked against the user's current admin role on every request (ADR 0041). | — |
 | `notifications:read` | The inbox and the unread count | — |
 
-- Org administration, settings, admin, export, import and push are **never** reachable with a grant. They need the browser session. Tokens are the one exception: a CLI device session may create PATs that are a subset of its own grant; a PAT may not (ADR 0037).
+- Org administration, settings, export, import and push are **never** reachable with a grant, and admin only with the `admin` capability. They need the browser session. Tokens are the one exception: a CLI device session may create PATs that are a subset of its own grant; a PAT may not (ADR 0037).
 - `offline_access` is the standard OAuth scope for a refresh token. It is requested by the client and never advertised by the MCP resource (MCP spec).
 
 ### 2.2 Resource constraints (chosen by the user)
@@ -85,7 +86,7 @@ Scopes can't say "write only in Prio" (RFC 9396 §1), so each grant also stores 
 - Every grant-authorized mutation records `via` (`cli`, `mcp`, `pat`, `oauth`) and `grantId` in the activity data. The pane shows "via Claude (MCP)" using the client's name (§4.2).
 
 ### 2.4 Lifetimes and revocation
-- **Grants:** an optional expiry (7, 30 or 90 days, a date, or never; default 90 days for OAuth clients and PATs, never for CLI devices). Revocable in Settings → Connected apps, and by the CLI (`rooster logout`, `rooster token revoke`).
+- **Grants:** an optional expiry (7, 30 or 90 days, a date, never, or **this session only** for OAuth clients: the grant ends once its refresh token has gone unused for 24 hours, `idle_timeout_ms`, ADR 0041; default 90 days for OAuth clients and PATs, never for CLI devices). Revocable in Settings → Connected apps, and by the CLI (`rooster logout`, `rooster token revoke`).
 - **OAuth access tokens:** 15 minutes, audience-bound (§4.3). **Refresh tokens:** rotated on every use, with reuse detection that revokes the whole grant. Editing a grant's constraints takes effect on the next request, because the resource server reads the grant each time (§4.3).
 - **PATs** (`rooster_pat_…`) are grant-backed API keys (better-auth `apiKey`), hashed at rest and shown once.
 - **Device sessions** (CLI login) are grant-backed bearer sessions.
@@ -93,7 +94,7 @@ Scopes can't say "write only in Prio" (RFC 9396 §1), so each grant also stores 
 
 ## 3. User experience
 
-### 3.1 Consent screen (`/oauth/authorize`; the CLI's `/device` page uses the same component)
+### 3.1 Consent screen (`/oauth/consent`; the CLI's `/device` page uses the same component)
 - **Who is asking:**
   - The client's name, logo and **domain** (from its Client ID Metadata Document), "Verified" when the metadata URL's host matches the redirect URI host, and the redirect target.
   - Loopback redirects (`http://127.0.0.1:<port>`) are labelled "an app on this computer".
@@ -104,7 +105,8 @@ Scopes can't say "write only in Prio" (RFC 9396 §1), so each grant also stores 
 - **Defaults are least privilege:**
   - Read: every org the client asked about, or every org.
   - Write: "Nothing" unless `tasks:write` was requested, then the **personal org's Inbox only**, which the user widens.
-- **How long:** the expiry select.
+- **Deleting:** an "Allow deleting tasks" checkbox, shown only when the client requested `tasks:delete`, unticked by default and never pre-ticked by `authorization_details` (ADR 0041).
+- **How long:** the expiry select, with "This session only" for OAuth clients (§2.4).
 - **Buttons:** Allow and Deny. The screen is keyboard-operable and is not a modal (hard rule 9).
 - **Re-consent:** consent is remembered per (client, user). A repeat authorization with no new scopes skips the screen. New scopes from step-up show it again with the existing constraints pre-filled.
 
@@ -116,17 +118,17 @@ Scopes can't say "write only in Prio" (RFC 9396 §1), so each grant also stores 
 ## 4. OAuth 2.1 authorization server (P9)
 
 ### 4.1 Implementation
-- Built on better-auth's **OAuth 2.1 Provider** plugin (`@better-auth/oauth-provider`) with **CIMD** (`@better-auth/cimd`), pinned at implementation time.
+- Built on better-auth's **OAuth 2.1 Provider** plugin (`@better-auth/oauth-provider`) with **CIMD** (`@better-auth/cimd`), both pinned exactly (ADR 0041).
   - better-auth owns discovery, registration, PKCE, resource binding, issuance, refresh and `iss`.
-  - Rooster owns the **consent screen** (§3.1), the **grant** (§2) and the constraint checks.
-  - If the plugin can't hold rooster's grant (a custom consent page plus a grant id carried on the token), fall back to a small in-house AS, in an ADR.
-- **Issuer:** `ROOSTER_BASE_URL`. **Endpoints:** `/oauth/authorize`, `/oauth/token`, `/oauth/revoke` (RFC 7009), and metadata at `/.well-known/oauth-authorization-server` (RFC 8414). OIDC discovery and `id_token` only if a later need appears.
+  - Rooster owns the **consent screen** (§3.1, the SPA route `/oauth/consent` that the plugin's `consentPage` redirects to), the **grant** (§2, carried as the plugin's `referenceId` on tokens and consent) and the constraint checks.
+  - The adapters are listed in ADR 0041: `resource` required, no `openid`, unused plugin endpoints disabled, refresh reuse revokes the grant, an OAuth branch in actor resolution.
+- **Issuer:** `<ROOSTER_BASE_URL>/api/auth`. **Endpoints:** `/api/auth/oauth2/authorize`, `/api/auth/oauth2/token`, `/api/auth/oauth2/revoke` (RFC 7009), and metadata at `/.well-known/oauth-authorization-server/api/auth` (RFC 8414 path insertion). OIDC discovery and `id_token` only if a later need appears.
 - **Grants:** `authorization_code` with **PKCE S256 required** for all clients, and `refresh_token`. No implicit, no password, no `client_credentials`.
 - `authorization_response_iss_parameter_supported: true`, and `iss` is sent on every authorization response, errors included (RFC 9207).
 
 ### 4.2 Client registration
 - **Client ID Metadata Documents** (SHOULD in MCP) are the main path.
-  - A client's `client_id` is an https URL. The server fetches the metadata **through the SSRF guard**: https only, public IPs only (no loopback, RFC 1918, link-local or ULA, re-checked after DNS resolution), 5 s timeout, 32 KB maximum, no redirects, cached per HTTP caching with a 24 h maximum.
+  - A client's `client_id` is an https URL. The server fetches the metadata **through an IP-based SSRF guard**: https only, DNS resolved once and every answer public (no loopback, RFC 1918, link-local or ULA), the connection pinned to that address, 5 s timeout, 5 KB maximum (the plugin's cap), no redirects, revalidated at most every 24 h (ADR 0041).
   - `redirect_uris` from the document must match exactly.
 - **Pre-registered:** `rooster-cli` (the device flow, 07 §2).
 - **Dynamic Client Registration** (deprecated in MCP 2026-07-28) is **off** by default, behind `ROOSTER_OAUTH_DCR=on` for older clients, and rate-limited per IP. Clients registered that way show "Unverified app" on the consent screen.
@@ -162,6 +164,7 @@ Scopes can't say "write only in Prio" (RFC 9396 §1), so each grant also stores 
   | `create_group` | `groups:write` |
   | `add_comment` | `comments:write` |
   | `list_notifications` | `notifications:read` |
+  | `delete_task` (only with the consent checkbox, §3.1) | `tasks:delete` |
 - Protocol revision **2026-07-28**, stateless, using the official TypeScript SDK v2.
 - The server's `initialize` result carries **`instructions`**: a short version of the skill (§6.2), so an agent gets the essentials even without the skill installed.
 - Rate limits: 120 tool calls per minute per grant, and the per-user API limit (06 §1).
@@ -174,7 +177,7 @@ Scopes can't say "write only in Prio" (RFC 9396 §1), so each grant also stores 
 |---|---|---|---|
 | `/.well-known/oauth-protected-resource/mcp` (and `/api/v1`) | RFC 9728 | Resource metadata (§5.2) | **Yes** (MCP) |
 | `/.well-known/oauth-authorization-server` | RFC 8414 | AS metadata incl. `client_id_metadata_document_supported`, `code_challenge_methods_supported: ["S256"]`, `authorization_response_iss_parameter_supported` | **Yes** (MCP) |
-| MCP Server Card, path per SEP-2127 (`/.well-known/mcp/…`) | SEP-2127, merged 2026-10-06 | `name` (`io.rooster/rooster`), title, description, `websiteUrl`, version, icons, `remotes: [{type: "streamable-http", url: "<host>/mcp", authentication: oauth2, supportedProtocolVersions}]`, `packages` (the npm CLI for stdio) | Best effort |
+| MCP Server Card, path per SEP-2127 (`/.well-known/mcp/…`) | SEP-2127, merged 2026-10-06 | `name` (`io.github.201works/rooster`, ADR 0041), title, description, `websiteUrl`, version, icons, `remotes: [{type: "streamable-http", url: "<host>/mcp", authentication: oauth2, supportedProtocolVersions}]`, `packages` (the npm CLI `@rooster/cli` for stdio; not yet published, ADR 0041) | Best effort |
 | `/.well-known/ai-catalog.json` | ARD / AI Catalog (draft) | Entries: the MCP Server Card (`application/mcp-server-card+json`), the skills index, the OpenAPI document (`/api/v1/openapi.json`) and `/llms.txt` | Best effort |
 | `/.well-known/agent-skills/index.json` and `…/rooster/SKILL.md` | Agent Skills Discovery v0.2.0 (draft) | One `skill-md` entry with its `sha256` digest (computed at boot, because the skill embeds the instance URL) | Best effort |
 | `/llms.txt` | Convention | What rooster is, plus links to the API docs, MCP, the skill and the CLI | Best effort |
@@ -206,8 +209,8 @@ Scopes can't say "write only in Prio" (RFC 9396 §1), so each grant also stores 
 ## 7. Security considerations
 - **Confused deputy and token passthrough:** per-resource audiences (§4.3). The MCP endpoint never calls other APIs with the user's token.
 - **Consent phishing:** the consent screen shows the client's domain and redirect host, and "Unverified app" for DCR. Write access defaults to nothing or the Inbox, and every grant expires by default.
-- **SSRF:** CIMD fetches (§4.2) use the same public-address guard as push endpoints (ADR 0033).
-- **Prompt injection:** task content is untrusted. Results mark it as data (§5.2) and the skill says so. There is no delete tool, write constraints bound the damage, and every action is attributed in activity with an undoable history.
+- **SSRF:** CIMD fetches (§4.2) go through a DNS-pinned public-address guard. Push endpoints use a separate host allowlist (ADR 0033).
+- **Prompt injection:** task content is untrusted. Results mark it as data (§5.2) and the skill says so. Deleting needs an explicit consent checkbox and only moves tasks to Trash, write constraints bound the damage, and every action is attributed in activity with an undoable history.
 - **Abuse:** rate limits per grant and per IP. Refresh-token reuse revokes the grant. `audit` entries cover grant create, edit and revoke.
 - **Tests (10 §3.3):**
   - The authorization matrix gains grant columns: read-only, write-in-group, other-org, expired, revoked.
@@ -222,7 +225,4 @@ Scopes can't say "write only in Prio" (RFC 9396 §1), so each grant also stores 
   - The OAuth AS (§4).
   - The remote MCP endpoint and the stdio MCP server sharing `packages/mcp` (§5).
   - Discovery documents and the skill (§6).
-- **Open questions** to settle in the P9 contract, as ADRs:
-  - Whether better-auth's provider can carry rooster grants unchanged (§4.1).
-  - Whether `tasks:delete` should ever reach MCP behind an explicit consent checkbox (currently: never).
-  - Whether the consent screen should offer "this session only" (expire on refresh-token disuse after 24 h).
+- **Settled for P9** (ADR 0041): better-auth's provider carries the grant through `referenceId` with adapters; `tasks:delete` reaches MCP only by an explicit consent checkbox; the consent screen offers "this session only".

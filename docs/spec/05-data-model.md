@@ -43,7 +43,7 @@ The better-auth CLI generates these through the Drizzle adapter, and they are ke
 | `invitation` | id, organizationId, email, role, status, expiresAt, inviterId (**email invites only**) | — |
 | `apikey` | PATs (hashed key, prefix, name, expiresAt, metadata JSON `{grantId}`) | — |
 | `deviceCode` | device authorisation grants | — |
-| `oauthClient`, `oauthAccessToken`, `oauthRefreshToken`, `oauthConsent` (P9) | better-auth OAuth 2.1 Provider tables (exact names per the plugin version). Access and refresh tokens are stored hashed and carry the `access_grant.id`. | — |
+| `oauthClient`, `oauthAccessToken`, `oauthRefreshToken`, `oauthConsent` (P9) | better-auth OAuth 2.1 Provider tables (exact names per the plugin version). Access and refresh tokens are stored hashed and carry the `access_grant.id` in the plugin's `referenceId` (ADR 0041). | — |
 
 Invariant: an org with `is_personal = 1` has exactly one `member` row (role `owner`). This is enforced in `OrgService` and checked by a test.
 
@@ -256,6 +256,7 @@ CREATE TABLE access_grant (
   created_at   INTEGER NOT NULL,
   updated_at   INTEGER NOT NULL,
   expires_at   INTEGER,
+  idle_timeout_ms INTEGER,                  -- P9 "this session only": ends when the refresh token is unused this long (ADR 0041)
   revoked_at   INTEGER,
   last_used_at INTEGER,
   last_used_ip TEXT
