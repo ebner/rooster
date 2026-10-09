@@ -145,7 +145,7 @@ export const tagPalette = {
   pink: { bg: '#FCE7F3', fg: '#9D174D' },
 } as const satisfies Record<TagColor, { bg: string; fg: string }>;
 
-/** Typography (03 §2.5). Sizes and line heights in px. */
+/** Typography (03 §2.5). Sizes and line heights in px at scale 1; CSS declares them in rem. */
 export const fontFamilies = {
   sans: '"Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
   mono: '"Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace',
@@ -173,7 +173,7 @@ export const fontSizes = {
 
 export type FontSizeTokenName = keyof typeof fontSizes;
 
-/** Spacing scale (03 §2.6), px. Keys mirror Tailwind steps; "." becomes "_" in CSS. */
+/** Spacing scale (03 §2.6), px at scale 1 (rem in CSS). Keys mirror Tailwind steps; "." becomes "_" in CSS. */
 export const spacing = {
   '0': 0,
   '0.5': 2,
@@ -190,7 +190,7 @@ export const spacing = {
   '16': 64,
 } as const;
 
-/** Component heights (03 §2.6 and §3), px. CSS: `--h-<name>`. */
+/** Component heights (03 §2.6 and §3), px at scale 1. CSS: `--h-<name>`, in rem. */
 export const heights = {
   'control-sm': 28,
   control: 32,
@@ -212,7 +212,7 @@ export const heights = {
   'sheet-handle': 4,
 } as const;
 
-/** Square sizes (03 §3), px. CSS: `--size-<name>`. */
+/** Square sizes (03 §3), px at scale 1. CSS: `--size-<name>`, in rem. */
 export const sizes = {
   checkbox: 18,
   hit: 32,
@@ -221,7 +221,7 @@ export const sizes = {
   'calendar-cell': 36,
 } as const;
 
-/** Layout widths (03 §2.8, §3; D-27, D-29, D-29a), px. CSS: `--w-<name>`. */
+/** Layout widths (03 §2.8, §3; D-27, D-29, D-29a), px at scale 1. CSS: `--w-<name>`, in rem. */
 export const layoutWidths = {
   'list-max': 1040,
   'list-min': 480,
@@ -245,7 +245,7 @@ export const borderWidths = {
   check: 1.5,
 } as const;
 
-/** Radii (03 §2.6), px. `full` is a pill. */
+/** Radii (03 §2.6), px at scale 1 (rem in CSS). `full` is a pill and stays px. */
 export const radii = {
   '2xs': 2,
   xs: 4,
@@ -320,6 +320,11 @@ export function resolveDueDateColor(state: DueDateState): string {
 }
 
 const px = (value: number): string => `${value}px`;
+/**
+ * Sizes are declared in rem (16 px = 1 rem) so the root font size scales the UI on desktop
+ * (03 §2.5). Every design value is a multiple of 1/16 px, so the quotient is exact.
+ */
+const rem = (value: number): string => `${value / 16}rem`;
 const kebab = (value: string): string => value.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 const cssKey = (value: string): string => value.replace('.', '_');
 
@@ -343,19 +348,21 @@ export function cssVariables(): Record<string, string> {
   vars['--font-sans'] = fontFamilies.sans;
   vars['--font-mono'] = fontFamilies.mono;
   for (const [name, token] of Object.entries(fontSizes) as [string, FontSizeToken][]) {
-    vars[`--text-${name}`] = px(token.size);
-    vars[`--text-${name}--line-height`] = px(token.lineHeight);
+    vars[`--text-${name}`] = rem(token.size);
+    vars[`--text-${name}--line-height`] = rem(token.lineHeight);
     if (token.weight !== undefined) vars[`--text-${name}--font-weight`] = String(token.weight);
     if (token.letterSpacing !== undefined) {
       vars[`--text-${name}--letter-spacing`] = token.letterSpacing;
     }
   }
-  for (const [name, value] of Object.entries(spacing)) vars[`--space-${cssKey(name)}`] = px(value);
-  for (const [name, value] of Object.entries(heights)) vars[`--h-${name}`] = px(value);
-  for (const [name, value] of Object.entries(sizes)) vars[`--size-${name}`] = px(value);
-  for (const [name, value] of Object.entries(layoutWidths)) vars[`--w-${name}`] = px(value);
+  for (const [name, value] of Object.entries(spacing)) vars[`--space-${cssKey(name)}`] = rem(value);
+  for (const [name, value] of Object.entries(heights)) vars[`--h-${name}`] = rem(value);
+  for (const [name, value] of Object.entries(sizes)) vars[`--size-${name}`] = rem(value);
+  for (const [name, value] of Object.entries(layoutWidths)) vars[`--w-${name}`] = rem(value);
   for (const [name, value] of Object.entries(borderWidths)) vars[`--border-${name}`] = px(value);
-  for (const [name, value] of Object.entries(radii)) vars[`--radius-${name}`] = px(value);
+  for (const [name, value] of Object.entries(radii)) {
+    vars[`--radius-${name}`] = name === 'full' ? px(value) : rem(value);
+  }
   for (const [name, value] of Object.entries(shadows)) vars[`--shadow-${name}`] = value;
   for (const [name, value] of Object.entries(zIndex)) vars[`--z-${name}`] = String(value);
   for (const [name, value] of Object.entries(durations)) vars[`--dur-${name}`] = `${value}ms`;

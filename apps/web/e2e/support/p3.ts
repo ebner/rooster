@@ -46,10 +46,21 @@ export async function waitForSync(page: Page) {
 
 export const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
 
-/** A click on the row body (02 §3.3: selects and opens the pane), left of the date cell. */
+/** The UI scale: the root font size over 16 px (112.5 % on desktop, 125 % on wide). */
+export async function uiScale(page: Page): Promise<number> {
+  return page.evaluate(
+    () => Number.parseFloat(getComputedStyle(document.documentElement).fontSize) / 16,
+  );
+}
+
+/**
+ * A click on the row body (02 §3.3: selects and opens the pane), left of the date cell: 140 px
+ * at scale 1 clears the 112 px date cell and the row's end padding.
+ */
 export async function clickRowBody(page: Page, title: string) {
   const row = page.getByTestId('task-row').filter({ hasText: title }).first();
   const box = await row.boundingBox();
   if (!box) throw new Error(`no row ${title}`);
-  await row.click({ position: { x: box.width - 140, y: box.height / 2 } });
+  const scale = await uiScale(page);
+  await row.click({ position: { x: box.width - 140 * scale, y: box.height / 2 } });
 }

@@ -51,6 +51,13 @@ async function box(locator: Locator) {
   return b;
 }
 
+/** A row-relative point on the row body just past the title text (a press there drags). */
+async function pastTitle(page: Page, title: string) {
+  const r = await box(row(page, title));
+  const text = await box(row(page, title).getByText(title, { exact: true }));
+  return { x: text.x + text.width + 24 - r.x, y: r.height / 2 };
+}
+
 /** Presses on `locator` at `at` (row-relative) and moves past the 4 px threshold. */
 async function lift(page: Page, locator: Locator, at: { x: number; y: number }) {
   const b = await box(locator);
@@ -210,7 +217,7 @@ test('a task is never offered directly before or after itself (pointer, selectio
     .toBe(true);
   await row(page, 'Task 4').click({ modifiers: ['Shift'], position: { x: 200, y: 20 } });
   await expect(row(page, 'Task 4')).toHaveAttribute('aria-selected', 'true');
-  await lift(page, row(page, 'Task 3'), { x: 100, y: 20 });
+  await lift(page, row(page, 'Task 3'), await pastTitle(page, 'Task 3'));
   await expect(page.getByTestId('drop-indicator')).toHaveCount(0);
   const [b2, b5] = [await box(row(page, 'Task 2')), await box(row(page, 'Task 5'))];
   const x = b2.x + 150;

@@ -4,6 +4,7 @@ import { type KeyboardEvent, useMemo } from 'react';
 import { Input as AriaInput, ComboBox, ListBox, Popover } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
+import { uiScale } from '../../lib/ui-scale';
 import { iconStrokeWidth } from '../../ui/button';
 import { IconButton } from '../../ui/icon-button';
 import { inputVariants } from '../../ui/input';
@@ -18,7 +19,7 @@ export const quarterHours: readonly string[] = Array.from({ length: 96 }, (_, i)
   return `${hour}:${minute}`;
 });
 
-/** Eight suggestion rows of `--h-control` (32 px) before the list scrolls. */
+/** Eight suggestion rows of `--h-control` (32 px at UI scale 1) before the list scrolls. */
 const suggestionListMaxHeightPx = 256;
 
 const timePattern = /^(\d{1,2})(?:[:.]?(\d{2}))?\s*(am|pm|fm|em)?$/;
@@ -107,7 +108,7 @@ export function TimeField({
         />
         <Popover
           offset={overlayOffsetPx}
-          maxHeight={suggestionListMaxHeightPx}
+          maxHeight={Math.round(suggestionListMaxHeightPx * uiScale())}
           className={listBoxPopoverClass}
         >
           <ListBox aria-label={t('time.suggestions')} className="outline-none">

@@ -9,21 +9,33 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
-import { listWidthMin, paneWidthMax, paneWidthMin, usePaneStore } from '../../state/pane-store';
+import { uiScale } from '../../lib/ui-scale';
+import {
+  effectivePaneWidth,
+  listWidthMin,
+  paneWidthMax,
+  paneWidthMin,
+  usePaneStore,
+} from '../../state/pane-store';
 
 export type PaneMode = 'split' | 'overlay' | 'sheet' | 'full';
 
-/** 02 §2 breakpoints and D-29/D-29a: how the pane sits next to the list. */
+/**
+ * 02 §2 breakpoints and D-29/D-29a: how the pane sits next to the list. Widths are CSS px;
+ * `listMin` is the D-29a minimum at the current UI scale (480 px at scale 1).
+ */
 export function paneMode(options: {
   viewport: number;
   container: number;
   paneWidth: number;
   fullScreen: boolean;
+  listMin?: number;
 }): PaneMode {
   if (options.viewport < 768) return 'sheet';
   if (options.fullScreen) return 'full';
   if (options.viewport < 1200) return 'overlay';
-  return options.container - options.paneWidth < listWidthMin ? 'overlay' : 'split';
+  const listMin = options.listMin ?? listWidthMin;
+  return options.container - options.paneWidth < listMin ? 'overlay' : 'split';
 }
 
 function useViewportWidth(): number {
@@ -42,7 +54,7 @@ const resizeStep = 16;
  * The main area with the detail pane (02 §9.1, D-29/D-29a): a split where the list keeps at
  * least 480 px, an overlay below that (and on tablets), a full-screen sheet on phones, and
  * full screen on request. The split edge is draggable (400–720 px, persisted) and keyboard
- * resizable.
+ * resizable. All of these are px at UI scale 1 and grow with the root font size on desktop.
  */
 export function SplitView({
   list,
@@ -62,7 +74,11 @@ export function SplitView({
   const container = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const viewport = useViewportWidth();
-  const width = usePaneStore((s) => s.width);
+  const storedWidth = usePaneStore((s) => s.width);
+  // The root font size follows the viewport breakpoints, so reading it on every render (the
+  // viewport hook re-renders on resize) keeps the pane in step with the tokens.
+  const scale = uiScale();
+  const width = effectivePaneWidth(storedWidth, scale);
   const fullScreen = usePaneStore((s) => s.fullScreen);
   const [entered, setEntered] = useState(false);
   const open = pane !== null;
@@ -94,6 +110,7 @@ export function SplitView({
     container: containerWidth || viewport,
     paneWidth: width,
     fullScreen,
+    listMin: listWidthMin * scale,
   });
   const overlayWidth = viewport < 1200 ? undefined : width;
 
@@ -110,21 +127,23 @@ export function SplitView({
   const onPointerUp = () => {
     if (!drag.current) return;
     drag.current = null;
-    usePaneStore.getState().setWidth(usePaneStore.getState().width, true);
+    const resized = usePaneStore.getState().width;
+    if (resized !== null) usePaneStore.getState().setWidth(resized, true);
   };
+  const minWidth = Math.round(paneWidthMin * scale);
+  const maxWidth = Math.round(paneWidthMax * scale);
   const onResizeKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    const store = usePaneStore.getState();
-    const steps: Record<string, number> = {
-      ArrowLeft: resizeStep,
-      ArrowRight: -resizeStep,
-      Home: paneWidthMax - store.width,
-      End: paneWidthMin - store.width,
+    const targets: Record<string, number> = {
+      ArrowLeft: width + resizeStep,
+      ArrowRight: width - resizeStep,
+      Home: maxWidth,
+      End: minWidth,
     };
-    const delta = steps[event.key];
-    if (delta === undefined) return;
+    const target = targets[event.key];
+    if (target === undefined) return;
     event.preventDefault();
     event.stopPropagation();
-    store.setWidth(store.width + delta, true);
+    usePaneStore.getState().setWidth(target, true);
   };
 
   const paneStyle =
@@ -183,8 +202,8 @@ export function SplitView({
               tabIndex={0}
               aria-orientation="vertical"
               aria-label={t('resize')}
-              aria-valuemin={paneWidthMin}
-              aria-valuemax={paneWidthMax}
+              aria-valuemin={minWidth}
+              aria-valuemax={maxWidth}
               aria-valuenow={width}
               data-testid="pane-resize"
               onPointerDown={onPointerDown}

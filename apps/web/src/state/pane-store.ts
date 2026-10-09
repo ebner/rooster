@@ -1,24 +1,37 @@
 import { create } from 'zustand';
+import { uiScale } from '../lib/ui-scale';
 
-/** 02 §9.1 / D-29: the split pane is 520 px by default, resizable from 400 to 720 px. */
+/**
+ * 02 §9.1 / D-29: the split pane is 520 px by default, resizable from 400 to 720 px. These are
+ * px at UI scale 1, like the tokens they mirror (--w-pane*); multiply by `uiScale()`.
+ */
 export const paneWidthDefault = 520;
 export const paneWidthMin = 400;
 export const paneWidthMax = 720;
-/** D-29a: below this list width the pane overlays the list instead of splitting. */
+/** D-29a: below this list width (px at scale 1) the pane overlays the list instead of splitting. */
 export const listWidthMin = 480;
 
 const widthKey = 'rooster.pane.width';
 
-export function clampPaneWidth(width: number): number {
-  return Math.round(Math.min(paneWidthMax, Math.max(paneWidthMin, width)));
+/** Clamps a rendered pane width (CSS px) to the 400–720 range at the given UI scale. */
+export function clampPaneWidth(width: number, scale = 1): number {
+  return Math.round(Math.min(paneWidthMax * scale, Math.max(paneWidthMin * scale, width)));
 }
 
-function readWidth(): number {
+/**
+ * The pane width to render: the user's width when they resized it, the default otherwise,
+ * clamped to the range at the current scale so a width set on a smaller scale still fits.
+ */
+export function effectivePaneWidth(width: number | null, scale: number): number {
+  return clampPaneWidth(width ?? paneWidthDefault * scale, scale);
+}
+
+function readWidth(): number | null {
   try {
     const stored = Number(globalThis.localStorage?.getItem(widthKey));
-    return Number.isFinite(stored) && stored > 0 ? clampPaneWidth(stored) : paneWidthDefault;
+    return Number.isFinite(stored) && stored > 0 ? stored : null;
   } catch {
-    return paneWidthDefault;
+    return null;
   }
 }
 
@@ -28,7 +41,8 @@ export type PaneFocusTarget = 'title' | 'description' | 'subtask' | 'tags' | 'da
 export interface PaneState {
   /** Full screen (Tab+X, ⤢): the pane takes the main area, the sidebar stays. */
   fullScreen: boolean;
-  width: number;
+  /** The width the user resized the pane to (CSS px), or null for the scaled default. */
+  width: number | null;
   /** A pending focus request; `seq` makes repeated requests distinct. */
   focus: { target: PaneFocusTarget; seq: number } | null;
   /** The task the pane last showed, so a group header selection keeps it (02 §3.2). */
@@ -52,7 +66,7 @@ export const usePaneStore = create<PaneState & PaneActions>()((set) => ({
   lastTaskId: null,
   setFullScreen: (fullScreen) => set({ fullScreen }),
   setWidth: (width, persist = false) => {
-    const next = clampPaneWidth(width);
+    const next = clampPaneWidth(width, uiScale());
     set({ width: next });
     if (!persist) return;
     try {

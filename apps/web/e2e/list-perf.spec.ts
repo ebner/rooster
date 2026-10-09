@@ -126,10 +126,7 @@ test('AC-2.12 with 500 tasks and 100 subtasks, keypress to paint for create, com
   await page.keyboard.press('Escape');
 
   // Move: Ctrl+↓ on the selected row.
-  await rows(page)
-    .filter({ hasText: 'Task 200' })
-    .first()
-    .click({ position: { x: 4, y: 10 } });
+  await rows(page).filter({ hasText: 'Task 200' }).first().locator('[data-drag-handle]').click();
   await measure('move', async () => {
     await page.keyboard.press(`${mod}+ArrowDown`);
   });

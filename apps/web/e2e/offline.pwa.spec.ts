@@ -58,11 +58,9 @@ async function openSecondDevice(browser: Parameters<typeof newClient>[0], email:
   return { context, page };
 }
 
-/** Selects a row by clicking its left edge (Navigate mode on that row). */
+/** Selects a row by clicking its drag handle (Navigate mode on that row, no pane). */
 async function selectRow(page: Page, title: string) {
-  await rows(page)
-    .filter({ hasText: title })
-    .click({ position: { x: 4, y: 10 } });
+  await rows(page).filter({ hasText: title }).locator('[data-drag-handle]').click();
 }
 
 async function renameRow(page: Page, from: string, to: string) {

@@ -135,9 +135,11 @@ All pairs are ≥ 4.5:1. New tags get the next colour in round-robin order.
 
 Letter spacing: −0.011em at 20 px and above, 0 below. The description editor uses `--text-md`, a max line length of about 72 ch, and heading sizes H1 20, H2 18, H3 16 (600 weight).
 
+**Scale.** Every size token (type, spacing, heights, square sizes, layout widths, radii except `--radius-full`) is declared in **rem** at 16 px = 1 rem, so the root font size scales the whole UI. The px values in §2.5–2.8 and §3 are the design values at scale 1. Phones, tablets and desktops below 1440 px render at 100 %; from **1440 px** the root is **112.5 %** and from `--bp-wide` (1600 px) **125 %**. Each step starts at the narrowest window where sidebar + minimum list + default pane still sit side by side (1404 px at 112.5 %, 1560 px at 125 %), so 1280 and 1366 px laptops keep the split view. The root uses percentages, so the browser's default font size still applies. Border widths, shadows, breakpoints, z-index and motion stay in px; layout constants in JS (the pane widths, D-29/D-29a) multiply by the current scale.
+
 ### 2.6 Spacing, sizing, radius, elevation
 
-- **Spacing scale (4 px base):** `0, 0.5=2, 1=4, 1.5=6, 2=8, 3=12, 4=16, 5=20, 6=24, 8=32, 10=40, 12=48, 16=64`. Use only these.
+- **Spacing scale (4 px base, px at scale 1; tokens are rem, see §2.5 Scale):** `0, 0.5=2, 1=4, 1.5=6, 2=8, 3=12, 4=16, 5=20, 6=24, 8=32, 10=40, 12=48, 16=64`. Use only these.
 - **Control heights:** `--h-control-sm` 28, `--h-control` 32, `--h-control-lg` 40, `--h-row` **40** (desktop task row), `--h-row-mobile` **52**, `--h-group` 44 (desktop) / 48 (mobile).
 - **Radius:** `--radius-xs` 4 (chips, NL highlight 2), `--radius-sm` 6 (buttons, inputs, rows on hover), `--radius-md` 8 (popovers, menus, toasts), `--radius-lg` 12 (palette, sheets top corners, cards), `--radius-full`.
 - **Shadows** (cool tinted; the rgb channels below are fixed and only the alpha varies):

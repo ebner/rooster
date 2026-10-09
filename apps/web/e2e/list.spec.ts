@@ -280,9 +280,7 @@ test('AC-2.5 completing pops, hides after 1.5 s with an undo toast; undo and Ctr
   await expect.poll(() => visibleTitles(page, 'Today')).toEqual(['One', 'Two', 'Three']);
 
   // Ctrl+Enter, then Ctrl+Z.
-  await rows(page)
-    .filter({ hasText: 'Three' })
-    .click({ position: { x: 4, y: 10 } });
+  await rows(page).filter({ hasText: 'Three' }).locator('[data-drag-handle]').click();
   await page.keyboard.press(`${mod}+Enter`);
   await expect.poll(() => visibleTitles(page, 'Today'), { timeout: 4000 }).toEqual(['One', 'Two']);
   await page.keyboard.press(`${mod}+z`);
@@ -330,9 +328,7 @@ test('AC-2.8 Tab+N on the 2nd of 4 tasks splits the group; one undo reverts it',
   const { orgId } = await openList(page, 'ac.twoeight');
   await createTasks(page, orgId, 'Today', ['T1', 'T2', 'T3', 'T4']);
   await page.reload();
-  await rows(page)
-    .filter({ hasText: 'T2' })
-    .click({ position: { x: 4, y: 10 } });
+  await rows(page).filter({ hasText: 'T2' }).locator('[data-drag-handle]').click();
   await page.keyboard.down('Tab');
   await page.keyboard.press('n');
   await page.keyboard.up('Tab');
@@ -404,9 +400,7 @@ test('keyboard paths: D dates, M moves with a digit, F2 renames, Alt+click colla
   const { orgId } = await openList(page, 'list.keys');
   await createTasks(page, orgId, 'Today', ['Alpha', 'Beta']);
   await page.reload();
-  await rows(page)
-    .filter({ hasText: 'Alpha' })
-    .click({ position: { x: 4, y: 10 } });
+  await rows(page).filter({ hasText: 'Alpha' }).locator('[data-drag-handle]').click();
 
   // D opens the date popover on the row; a chip sets the date and closes it.
   await page.keyboard.press('d');
@@ -418,9 +412,7 @@ test('keyboard paths: D dates, M moves with a digit, F2 renames, Alt+click colla
   await expect(rows(page).filter({ hasText: 'Alpha' })).toContainText('Tomorrow');
 
   // M + 3 → the third group in the list (Prio; the Inbox is empty and hidden).
-  await rows(page)
-    .filter({ hasText: 'Alpha' })
-    .click({ position: { x: 4, y: 10 } });
+  await rows(page).filter({ hasText: 'Alpha' }).locator('[data-drag-handle]').click();
   await page.keyboard.press('m');
   await expect(page.getByRole('combobox', { name: 'Filter groups' })).toBeFocused();
   await page.keyboard.press('3');

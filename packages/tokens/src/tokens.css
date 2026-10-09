@@ -3,6 +3,11 @@
  *
  * The TS mirror in ./index.ts must declare the same names and values; the test in
  * ../test/contrast.test.ts enforces the agreement and the WCAG contrast pairs.
+ *
+ * Sizes (type, spacing, heights, squares, widths, radii) are rem at 16 px = 1 rem, so the
+ * root font size scales the whole UI (apps/web/src/styles/theme.css: 112.5 % on desktop,
+ * 125 % on wide). The design values in 03 §2.5–2.8 are the px at scale 1. Border widths,
+ * shadows and breakpoints stay px.
  */
 :root {
   /* Palette: neutral (cool grey). Raw values; only semantic tokens reference them. */
@@ -133,99 +138,99 @@
     "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     sans-serif;
   --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --text-xs: 12px;
-  --text-xs--line-height: 16px;
-  --text-sm: 13px;
-  --text-sm--line-height: 20px;
-  --text-base: 14px;
-  --text-base--line-height: 20px;
-  --text-md: 16px;
-  --text-md--line-height: 24px;
-  --text-group: 16px;
-  --text-group--line-height: 24px;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.25rem;
+  --text-md: 1rem;
+  --text-md--line-height: 1.5rem;
+  --text-group: 1rem;
+  --text-group--line-height: 1.5rem;
   --text-group--font-weight: 600;
-  --text-lg: 20px;
-  --text-lg--line-height: 28px;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.75rem;
   --text-lg--font-weight: 600;
   --text-lg--letter-spacing: -0.011em;
-  --text-xl: 24px;
-  --text-xl--line-height: 32px;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 2rem;
   --text-xl--font-weight: 600;
   --text-xl--letter-spacing: -0.011em;
-  --text-2xl: 30px;
-  --text-2xl--line-height: 38px;
+  --text-2xl: 1.875rem;
+  --text-2xl--line-height: 2.375rem;
   --text-2xl--font-weight: 600;
   --text-2xl--letter-spacing: -0.011em;
 
   /* Spacing scale (4 px base). Use only these steps. */
-  --space-0: 0px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-10: 40px;
-  --space-12: 48px;
-  --space-16: 64px;
-  --space-0_5: 2px;
-  --space-1_5: 6px;
+  --space-0: 0rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-0_5: 0.125rem;
+  --space-1_5: 0.375rem;
 
   /* Component heights */
-  --h-control-sm: 28px;
-  --h-control: 32px;
-  --h-control-lg: 40px;
-  --h-row: 40px;
-  --h-row-mobile: 52px;
-  --h-row-subtask: 36px;
-  --h-group: 44px;
-  --h-group-mobile: 48px;
-  --h-chip: 20px;
-  --h-pill: 24px;
-  --h-toolbar: 48px;
-  --h-sheet-header: 56px;
-  --h-property-row: 36px;
+  --h-control-sm: 1.75rem;
+  --h-control: 2rem;
+  --h-control-lg: 2.5rem;
+  --h-row: 2.5rem;
+  --h-row-mobile: 3.25rem;
+  --h-row-subtask: 2.25rem;
+  --h-group: 2.75rem;
+  --h-group-mobile: 3rem;
+  --h-chip: 1.25rem;
+  --h-pill: 1.5rem;
+  --h-toolbar: 3rem;
+  --h-sheet-header: 3.5rem;
+  --h-property-row: 2.25rem;
   /* Mobile frame (02 §13, 03 §3.11) */
-  --h-property-row-mobile: 48px;
-  --h-bottom-nav: 64px;
-  --h-view-switcher: 48px;
-  --h-accessory-bar: 56px;
-  --h-sheet-handle: 4px;
+  --h-property-row-mobile: 3rem;
+  --h-bottom-nav: 4rem;
+  --h-view-switcher: 3rem;
+  --h-accessory-bar: 3.5rem;
+  --h-sheet-handle: 0.25rem;
 
   /* Square sizes: checkbox, hit areas (desktop / touch), calendar cells */
-  --size-checkbox: 18px;
-  --size-hit: 32px;
-  --size-hit-touch: 44px;
-  --size-fab: 56px;
-  --size-calendar-cell: 36px;
+  --size-checkbox: 1.125rem;
+  --size-hit: 2rem;
+  --size-hit-touch: 2.75rem;
+  --size-fab: 3.5rem;
+  --size-calendar-cell: 2.25rem;
 
   /* Layout widths (03 §2.8, §3; D-27, D-29, D-29a) */
-  --w-list-max: 1040px;
-  --w-list-min: 480px;
-  --w-sidebar: 248px;
-  --w-rail: 56px;
-  --w-pane: 520px;
-  --w-pane-min: 400px;
-  --w-pane-max: 720px;
-  --w-pane-overlay: 480px;
-  --w-date-popover: 320px;
-  --w-palette: 640px;
-  --w-toast: 360px;
-  --w-date-cell: 112px;
-  --w-label-col: 112px;
-  --w-illustration: 160px;
-  --w-sheet-handle: 36px;
+  --w-list-max: 65rem;
+  --w-list-min: 30rem;
+  --w-sidebar: 15.5rem;
+  --w-rail: 3.5rem;
+  --w-pane: 32.5rem;
+  --w-pane-min: 25rem;
+  --w-pane-max: 45rem;
+  --w-pane-overlay: 30rem;
+  --w-date-popover: 20rem;
+  --w-palette: 40rem;
+  --w-toast: 22.5rem;
+  --w-date-cell: 7rem;
+  --w-label-col: 7rem;
+  --w-illustration: 10rem;
+  --w-sheet-handle: 2.25rem;
 
   /* Border widths that are not whole Tailwind steps */
   --border-check: 1.5px;
 
   /* Radius */
-  --radius-2xs: 2px;
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-2xs: 0.125rem;
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
   --radius-full: 9999px;
 
   /* Elevation (cool tinted) */
