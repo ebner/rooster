@@ -7,6 +7,7 @@ import {
   CredentialStoreUnavailable,
   CredentialsChanging,
   FileSecretStore,
+  isStoreUnreachable,
   LayeredSecretStore,
 } from '../src/secrets.ts';
 import { FAKE_ENV, fakeApi, ME } from './support/fake-api.ts';
@@ -90,9 +91,9 @@ describe('credential storage (07 §2)', () => {
     const store = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
     await store.set('home', 'old', 'https://a.example');
     time.tick();
-    keychain.state.locked = true;
-    expect(await store.set('home', 'new', 'https://a.example')).toBe('file');
-    keychain.state.locked = false;
+    // A later login from a session without a usable keychain (SSH, no Secret Service).
+    const elsewhere = new LayeredSecretStore(file, async () => null, vi.fn(), time.now);
+    expect(await elsewhere.set('home', 'new', 'https://a.example')).toBe('file');
     expect(await store.get('home')).toMatchObject({ token: 'new' });
     // Reads never delete: the stale keychain entry stays until the next login or logout.
     expect(keychain.entries.has('rooster/home')).toBe(true);
@@ -110,9 +111,11 @@ describe('credential storage (07 §2)', () => {
     // A stale keychain login (T1) and a newer fallback login in the file (T2).
     await store.set('home', 't1', 'https://a.example');
     time.tick();
-    keychain.state.locked = true;
-    await store.set('home', 't2', 'https://a.example');
-    keychain.state.locked = false;
+    await new LayeredSecretStore(file, async () => null, vi.fn(), time.now).set(
+      'home',
+      't2',
+      'https://a.example',
+    );
     time.tick();
     // Every keychain delete waits until released, so the reader can be caught mid-cleanup.
     let release = () => {};
@@ -170,9 +173,11 @@ describe('credential storage (07 §2)', () => {
     const time = clock(50_000);
     const file = new FileSecretStore(dir);
     const store = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
-    keychain.state.locked = true;
-    await store.set('home', 'from-file', 'https://a.example');
-    keychain.state.locked = false;
+    await new LayeredSecretStore(file, async () => null, vi.fn(), time.now).set(
+      'home',
+      'from-file',
+      'https://a.example',
+    );
     time.tick(-20_000);
     expect(await store.set('home', 'from-keychain', 'https://a.example')).toBe('keychain');
     expect(await store.get('home')).toMatchObject({ token: 'from-keychain' });
@@ -235,9 +240,11 @@ describe('[P2] a read racing a login returns a settled credential', () => {
     const setup = new LayeredSecretStore(file, keychain.factory, vi.fn(), time.now);
     await setup.set('home', 'A', 'https://a.example');
     time.tick();
-    keychain.state.locked = true;
-    await setup.set('home', 'B', 'https://a.example');
-    keychain.state.locked = false;
+    await new LayeredSecretStore(file, async () => null, vi.fn(), time.now).set(
+      'home',
+      'B',
+      'https://a.example',
+    );
     time.tick();
 
     // The reader's first keychain read sees A, then waits until released.
@@ -455,6 +462,93 @@ describe('[P2] reads that never settle fail closed', () => {
       expect(out.stderr).toContain('another rooster process');
     } finally {
       cli.cleanup();
+    }
+  });
+});
+
+describe('[P2] no usable platform store versus a refusing keychain', () => {
+  const META = { version: '1.1.0', gitSha: 'x', providers: [], features: {}, serverTime: 0 };
+  const NO_SERVICE =
+    'Platform secure storage failure: org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.secrets was not provided by any .service files';
+
+  /** A keyring whose backend fails the way `@napi-rs/keyring` does on a headless host. */
+  const broken =
+    (where: 'construct' | 'calls', message: string) =>
+    async () =>
+    (_service: string, _account: string) => {
+      if (where === 'construct') throw new Error(message);
+      const fail = async (): Promise<never> => {
+        throw new Error(message);
+      };
+      return { getPassword: fail, setPassword: fail, deletePassword: fail };
+    };
+
+  async function loginThenWhoami(loadKeyring: ReturnType<typeof broken>) {
+    const api = fakeApi({
+      'GET /api/v1/meta': META,
+      'GET /api/v1/me': ME,
+      'GET /api/v1/me/grants': [],
+    });
+    const cli = cliHarness({ loadKeyring }, { fetch: api.fetch });
+    const env = { ROOSTER_KEYRING: '' };
+    try {
+      const login = await cli.run(['login', '--with-token', '--server', FAKE_ENV.ROOSTER_SERVER], {
+        stdin: 'tok',
+        env,
+      });
+      const whoami = await cli.run(['whoami', '--quiet'], { env });
+      const logout = await cli.run(['logout'], { env });
+      const after = await cli.run(['whoami'], { env });
+      return { login, whoami, logout, after };
+    } finally {
+      cli.cleanup();
+    }
+  }
+
+  it.each([
+    ['the backend fails at every call (no Secret Service)', broken('calls', NO_SERVICE)],
+    [
+      'creating the entry fails (Linux keyutils without a session keyring)',
+      broken('construct', "Couldn't access platform storage: KeyRevoked"),
+    ],
+  ])('%s: login falls back to the file, and whoami and logout work', async (_name, loadKeyring) => {
+    const { login, whoami, logout, after } = await loginThenWhoami(loadKeyring);
+    expect(login.code).toBe(0);
+    expect(login.stderr).toContain('No system keychain available');
+    expect(whoami).toMatchObject({ code: 0, stdout: 'ada@example.com\n' });
+    expect(logout.code).toBe(0);
+    expect(logout.stderr).toContain('Signed out');
+    expect(after.code).toBe(3);
+  });
+
+  it('a keychain that refuses the write fails the login instead of storing an unusable one', async () => {
+    const { login, whoami } = await loginThenWhoami(
+      broken('calls', "Couldn't access platform secure storage: the keychain is locked"),
+    );
+    expect(login.code).toBe(3);
+    expect(login.stderr).toContain('ROOSTER_KEYRING=off');
+    expect(login.stderr).not.toContain('Signed in');
+    expect(whoami.code).toBe(3);
+  });
+
+  it('classifies errors: unreachable backends versus refusals', () => {
+    for (const message of [
+      NO_SERVICE,
+      'org.freedesktop.DBus.Error.NoServer: Failed to connect to socket',
+      'DBus error: org.freedesktop.DBus.Error.Spawn.ExecFailed',
+      "Couldn't access platform storage: KeyRevoked",
+      'Platform not supported',
+    ]) {
+      expect(isStoreUnreachable(new Error(message)), message).toBe(true);
+    }
+    for (const message of [
+      "Couldn't access platform secure storage: the keychain is locked",
+      'User interaction is not allowed.',
+      'org.freedesktop.DBus.Error.AccessDenied: denied',
+      'Access is denied.',
+      'something else',
+    ]) {
+      expect(isStoreUnreachable(new Error(message)), message).toBe(false);
     }
   });
 });

@@ -7,7 +7,12 @@ import { localeFromEnv, resolveLocale, t, withLocale } from './i18n.ts';
 import type { Io } from './io.ts';
 import { stripAnsi } from './output/color.ts';
 import { NO_GLOBALS, Runtime, withRuntime } from './runtime.ts';
-import { CredentialStoreUnavailable, CredentialsChanging, type loadKeyring } from './secrets.ts';
+import {
+  CredentialStoreUnavailable,
+  CredentialsChanging,
+  KeychainRefused,
+  type loadKeyring,
+} from './secrets.ts';
 
 export interface RunOptions {
   /** Tests replace the keychain. */
@@ -64,7 +69,9 @@ export async function runCli(
 async function report(runtime: Runtime, error: unknown): Promise<ExitCode> {
   let failure: CliError;
   if (error instanceof CliError) failure = error;
-  else if (error instanceof CredentialStoreUnavailable) {
+  else if (error instanceof KeychainRefused) {
+    failure = new CliError(EXIT.auth, t('auth.keychainRefused', { reason: error.message }));
+  } else if (error instanceof CredentialStoreUnavailable) {
     failure = new CliError(EXIT.auth, t('auth.keychainUnavailable'));
   } else if (error instanceof CredentialsChanging) {
     failure = new CliError(EXIT.conflict, t('auth.credentialsChanging'));

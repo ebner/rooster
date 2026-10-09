@@ -47,6 +47,36 @@ export class CredentialsChanging extends Error {
   }
 }
 
+/** A keychain that exists but refused to store a login (locked, access denied). */
+export class KeychainRefused extends Error {
+  constructor(cause: unknown) {
+    super((cause as Error)?.message ?? String(cause), { cause });
+    this.name = 'KeychainRefused';
+  }
+}
+
+/**
+ * Whether a keychain error means there is no usable platform store at all (the backend
+ * service can't be reached or isn't supported), as opposed to a store that refuses access.
+ * `@napi-rs/keyring` reports both as generic errors, so this reads the message; anything not
+ * recognised counts as a refusal, which fails closed.
+ */
+export function isStoreUnreachable(error: unknown): boolean {
+  const message =
+    error instanceof Error ? `${error.message} ${String(error.cause ?? '')}` : String(error);
+  return STORE_UNREACHABLE.some((re) => re.test(message));
+}
+
+const STORE_UNREACHABLE = [
+  /org\.freedesktop\.DBus\.Error\.(ServiceUnknown|NoServer|NameHasNoOwner|NotSupported|Spawn\.\w+|NoReply|Disconnected|FileNotFound|BadAddress)/,
+  /secret service/i,
+  /org\.freedesktop\.secrets/,
+  /D-?Bus (session )?(bus )?(is )?(not available|unavailable)|no D-?Bus/i,
+  /DBUS_SESSION_BUS_ADDRESS/,
+  /platform (is )?not supported|not supported on this platform/i,
+  /\bKeyRevoked\b|\bKeyExpired\b/,
+];
+
 /** A logout that could not make the stored login unusable locally. */
 export class CredentialRemovalError extends Error {
   constructor(
@@ -155,6 +185,8 @@ export class FileSecretStore {
  */
 export class LayeredSecretStore implements SecretStore {
   private keyring: Promise<KeyringFactory | null> | undefined;
+  /** This process found no usable platform store (see `keychain`). */
+  private noStore = false;
 
   constructor(
     private readonly file: FileSecretStore,
@@ -163,9 +195,23 @@ export class LayeredSecretStore implements SecretStore {
     private readonly now: () => number = Date.now,
   ) {}
 
-  private keychain(profile: string): Promise<KeyringEntry | null> {
+  /**
+   * The profile's keychain entry, or null when there is no usable platform store: the addon
+   * is missing, its backend can't be initialised (creating the entry throws, e.g. Linux
+   * keyutils or Secret Service unavailable), or an earlier call in this process found it
+   * unreachable. Remembered per process, so reads and writes agree.
+   */
+  private async keychain(profile: string): Promise<KeyringEntry | null> {
+    if (this.noStore) return null;
     this.keyring ??= this.loadKeyringFn();
-    return this.keyring.then((factory) => (factory === null ? null : factory(SERVICE, profile)));
+    const factory = await this.keyring;
+    if (factory === null) return null;
+    try {
+      return factory(SERVICE, profile);
+    } catch {
+      this.noStore = true;
+      return null;
+    }
   }
 
   /**
@@ -184,7 +230,12 @@ export class LayeredSecretStore implements SecretStore {
     let raw: string | undefined | null;
     try {
       raw = await keychain.getPassword();
-    } catch {
+    } catch (error) {
+      if (isStoreUnreachable(error)) {
+        this.noStore = true;
+        return undefined;
+      }
+      // A store that exists but refuses this read (locked, denied): unknown, never empty.
       return UNKNOWN;
     }
     if (raw === undefined || raw === null || raw === '') return undefined;
@@ -250,17 +301,21 @@ export class LayeredSecretStore implements SecretStore {
       server: serverOrigin(server),
       at: await this.nextAt(profile),
     };
-    try {
-      const keychain = await this.keychain(profile);
-      if (keychain !== null) {
+    const keychain = await this.keychain(profile);
+    if (keychain !== null) {
+      try {
         await keychain.setPassword(JSON.stringify(credential));
         // An older file entry is outranked anyway; remove it so the secret isn't kept twice,
         // but never one written since by another process.
         this.tryRemoveFileOlderThan(profile, credential.at);
         return 'keychain';
+      } catch (error) {
+        // A keychain that exists but refuses the write (locked, denied) would also refuse the
+        // reads that decide which login is current: report it instead of a login no later
+        // command could use.
+        if (!isStoreUnreachable(error)) throw new KeychainRefused(error);
+        this.noStore = true;
       }
-    } catch {
-      // Fall through to the file.
     }
     this.onFallback();
     this.file.put(profile, credential);
@@ -298,7 +353,12 @@ export class LayeredSecretStore implements SecretStore {
       if (keychain === null) return true;
       await keychain.deletePassword();
       return true;
-    } catch {
+    } catch (error) {
+      // An unreachable store holds nothing this process could have written.
+      if (isStoreUnreachable(error)) {
+        this.noStore = true;
+        return true;
+      }
       return false;
     }
   }
