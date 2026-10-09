@@ -215,8 +215,8 @@ The identity was redrawn in October 2026 (ADR 0026). The mark, the name, the ico
 |---|---|
 | Sign-in, invite, not invited | `stack` logo, mark 64 px, drawn in |
 | Loading screen (`index.html`, until the first render) | `stack` logo (`logo-stack.svg`), static |
-| Desktop sidebar | `row` logo, mark 24 px |
-| Collapsed sidebar (rail) | mark, 24 px |
+| Desktop sidebar | `row` logo, mark 28 px (the name 12.6 px, so the head reads about twice the name's height) |
+| Collapsed sidebar (rail) | mark, 28 px |
 | Phone header | mark, 24 px, before the org switcher or title |
 | Root 404 and error pages | `row` logo, mark 32 px, linking to the start page |
 | Empty views | mark, 96 px, muted: the line in `--color-border-strong`, the comb still amber |
@@ -325,7 +325,7 @@ Height 20 px, `--radius-xs`, 6 px horizontal padding, `--text-xs`, weight 500, t
 - **Bulk bar:** floating bottom-centre with a 24 px offset, n-900 background, white text, `--radius-lg`, `--shadow-lg`, height 48. Its buttons are ghost-inverse.
 
 ### 3.12 Focus
-`:focus-visible` gets `outline: 2px solid var(--color-border-focus); outline-offset: 2px; border-radius: inherit`. A TaskRow in Navigate uses an **inset** ring (`outline-offset: -2px`) so it doesn't overlap the neighbouring rows. Focus is never removed without a replacement.
+`:focus-visible` gets `outline: 2px solid var(--color-border-focus); outline-offset: 2px; border-radius: inherit`. A TaskRow in Navigate and a sidebar item use an **inset** ring (`outline-offset: -2px`), so it doesn't overlap the neighbouring rows or get clipped by the scrolling container. A launcher that opens the palette with a pointer does not take focus back when the palette closes; from the keyboard it does. Focus is never removed without a replacement.
 
 ### 3.13 Avatars
 Circle; sizes 16 / 20 / 24 / 32 / 40. The image comes from OIDC `picture` or an upload. The fallback is initials on a tag-palette background, chosen by a hash of the user ID. The org avatar is a rounded square (`--radius-xs`) with emoji or initials.

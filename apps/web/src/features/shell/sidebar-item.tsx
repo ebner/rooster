@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Button as AriaButton, Link as AriaLink } from 'react-aria-components';
+import { Button as AriaButton, Link as AriaLink, type PressEvent } from 'react-aria-components';
 import { cn } from '../../lib/cn';
 import { iconStrokeWidth } from '../../ui/button';
 import { Kbd } from '../../ui/kbd';
@@ -13,7 +13,9 @@ export const sidebarItemClass = cn(
   'transition-colors duration-(--dur-fast) ease-standard',
   'hover:bg-bg-muted hover:text-text pressed:bg-bg-muted',
   'data-disabled:cursor-not-allowed data-disabled:text-text-disabled data-disabled:hover:bg-transparent',
-  'outline-offset-0 focus-ring:outline-2 focus-ring:outline-border-focus',
+  // Inset, like a TaskRow's (03 §3.12): the items are stacked in a scroll container, which
+  // would clip an outer ring at its edges.
+  '-outline-offset-2 focus-ring:outline-2 focus-ring:outline-border-focus',
 );
 
 export const sidebarItemActiveClass = 'bg-bg-muted font-medium text-text';
@@ -24,7 +26,7 @@ export interface SidebarItemProps {
   leading?: ReactNode;
   label: string;
   href?: string;
-  onPress?: () => void;
+  onPress?: (event: PressEvent) => void;
   count?: number | undefined;
   /** Spoken instead of the bare number (e.g. "3 unread"); the rail shows a dot for it. */
   countLabel?: string | undefined;

@@ -5,6 +5,12 @@ export type PaletteMode = 'command' | 'search';
 export interface OpenPaletteOptions {
   query?: string;
   mode?: PaletteMode;
+  /**
+   * Whether closing returns focus to the element focused now. Default true. A launcher pressed
+   * with a pointer passes false: focus would otherwise land on the launcher, and closing with
+   * Esc (a key) would light its focus ring although the user never moved focus there.
+   */
+  returnFocus?: boolean;
 }
 
 /**
@@ -38,11 +44,15 @@ export function paletteReturnFocus(): Element | null {
   return returnFocus;
 }
 
-export function openPalette({ query = '', mode = 'command' }: OpenPaletteOptions = {}): void {
+export function openPalette({
+  query = '',
+  mode = 'command',
+  returnFocus: restore = true,
+}: OpenPaletteOptions = {}): void {
   const active = globalThis.document?.activeElement ?? null;
   // Re-opening from inside the palette keeps the original return target.
   if (!usePaletteStore.getState().open) {
-    returnFocus = active && active !== document.body ? active : null;
+    returnFocus = restore && active && active !== document.body ? active : null;
   }
   usePaletteStore.setState((s) => ({
     open: true,

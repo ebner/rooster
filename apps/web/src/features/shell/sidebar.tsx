@@ -170,7 +170,7 @@ export function Sidebar({
           label={t('sidebar.search')}
           shortcut={primaryKeys('search')}
           rail={rail}
-          onPress={() => openPalette()}
+          onPress={(event) => openPalette({ returnFocus: event.pointerType === 'keyboard' })}
         />
         <InboxEntry rail={rail} />
 
