@@ -629,11 +629,10 @@ describe('notifications (WP 6.5, FR-NOT-1/4)', () => {
     ]);
   });
 
-  it('an in-app pref switched off creates nothing; other channels are 422 until Phase 7', async () => {
-    const { a, b, org } = await team();
+  it('an in-app pref switched off creates nothing when no other channel reaches the user', async () => {
+    const { a, b, org, db } = await team();
     const prefs = await b.ok<NotificationPrefs>('GET', '/api/v1/me/notification-prefs');
-    expect(prefs.prefs).toHaveLength(18);
-    expect(prefs.prefs.every((p) => p.enabled)).toBe(true);
+    expect(prefs.prefs).toHaveLength(20);
     const put = await b.ok<NotificationPrefs>('PUT', '/api/v1/me/notification-prefs', {
       prefs: [{ type: 'assigned', channel: 'inapp', enabled: false }],
     });
@@ -642,14 +641,8 @@ describe('notifications (WP 6.5, FR-NOT-1/4)', () => {
     );
     await createTask(a, { title: 'Quiet', assigneeId: b.userId }, org.id);
     expect((await notifications(b)).items).toEqual([]);
-    const bad = await b.call('PUT', '/api/v1/me/notification-prefs', {
-      prefs: [
-        { type: 'assigned', channel: 'inapp', enabled: true },
-        { type: 'assigned', channel: 'email', enabled: false },
-      ],
-    });
-    expect(bad.status).toBe(422);
-    expect(((await bad.json()) as Problem).errors?.map((e) => e.path)).toEqual(['prefs.1.channel']);
+    // No push device and no SMTP: nothing else could deliver it, so no row at all.
+    expect(db.orm.select().from(notification).all()).toEqual([]);
   });
 
   it('marks read and unread by id or all, with the count on every stream of the user', async () => {

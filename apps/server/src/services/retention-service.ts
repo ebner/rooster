@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, isNotNull, lt } from 'drizzle-orm';
 import { comment, placement, task, taskGroup, verification } from '../db/schema/index.ts';
 import { immediate, type ServiceDeps } from './context.ts';
 import type { IdempotencyStore } from './idempotency-store.ts';
+import { purgeJobRuns } from './job-runs.ts';
 import type { NotificationService } from './notification-service.ts';
 import type { PlacementService } from './placement-service.ts';
 import { pruneIndex } from './search-index.ts';
@@ -16,11 +17,14 @@ export interface PurgeReport {
   notifications: number;
   idempotency: number;
   verifications: number;
+  /** `job_run` claims older than 30 days (P7). */
+  jobRuns: number;
 }
 
 /**
  * The daily purge job (04 §4.6): Trash older than 30 days (tasks, groups and deleted
- * comments), read notifications older than 90 days, expired idempotency keys, and expired
+ * comments), read notifications older than 90 days, `job_run` claims older than 30 days,
+ * expired idempotency keys, and expired
  * better-auth `verification` rows (OAuth state and PKCE verifiers that abandoned sign-ins
  * leave behind).
  */
@@ -79,7 +83,8 @@ export class RetentionService {
         .where(and(isNotNull(comment.deletedAt), lt(comment.deletedAt, cutoff)))
         .run().changes;
       const notifications = this.notifications.purgeRead(tx, now);
-      return { tasks, groups: groups.length, comments, notifications };
+      const jobRuns = purgeJobRuns(tx, now);
+      return { tasks, groups: groups.length, comments, notifications, jobRuns };
     });
     const verifications = this.deps.db.orm
       .delete(verification)

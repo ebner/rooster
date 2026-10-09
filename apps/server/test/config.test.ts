@@ -110,6 +110,39 @@ describe('parseConfig', () => {
     );
   });
 
+  it('P7: validates the mail sender, the VAPID keys and the VAPID subject', () => {
+    const errors = errorsOf({
+      ...TEST_ENV,
+      ROOSTER_SMTP_URL: 'smtp://mail.example.com',
+      ROOSTER_MAIL_FROM: 'Rooster <not an address>',
+      ROOSTER_VAPID_PUBLIC: 'too-short',
+      ROOSTER_VAPID_PRIVATE: 'also-short',
+      ROOSTER_VAPID_SUBJECT: 'admin@example.com',
+    });
+    expect(errors.map((e) => e.split(':')[0]).sort()).toEqual([
+      'ROOSTER_MAIL_FROM',
+      'ROOSTER_VAPID_PRIVATE',
+      'ROOSTER_VAPID_PUBLIC',
+      'ROOSTER_VAPID_SUBJECT',
+    ]);
+    const ok = parseConfig({
+      ...TEST_ENV,
+      ROOSTER_SMTP_URL: 'smtps://u:p@smtp.example.com:465',
+      ROOSTER_MAIL_FROM: ' Rooster <rooster@example.com> ',
+      ROOSTER_VAPID_PUBLIC:
+        'BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM',
+      ROOSTER_VAPID_PRIVATE: 'tUxbf-Mx9Ex4QgiRbWvt-Q1j0yAfGfgFFUFvcNt7ZnU',
+      ROOSTER_VAPID_SUBJECT: 'https://tasks.example.com',
+    });
+    expect(ok.ok).toBe(true);
+    if (!ok.ok) return;
+    expect(ok.config.smtp?.from).toBe('Rooster <rooster@example.com>');
+    expect(ok.config.vapidSubject).toBe('https://tasks.example.com');
+    // Without a subject: the first admin, as mailto: (08 §3).
+    const fallback = parseConfig({ ...TEST_ENV });
+    expect(fallback.ok && fallback.config.vapidSubject).toBe('mailto:admin@example.com');
+  });
+
   it('requires at least one sign-in provider', () => {
     const errors = errorsOf({
       ...TEST_ENV,

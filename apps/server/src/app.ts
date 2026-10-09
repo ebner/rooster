@@ -32,10 +32,12 @@ import { registerMeRoutes } from './routes/me.ts';
 import { registerMetaRoutes } from './routes/meta.ts';
 import { registerOrgRoutes } from './routes/orgs.ts';
 import { ProblemSchema } from './routes/problem.ts';
+import { registerPushRoutes } from './routes/push.ts';
 import { registerSearchRoutes } from './routes/search.ts';
 import { registerTagRoutes } from './routes/tags.ts';
 import { registerTaskRoutes } from './routes/tasks.ts';
-import { createServices, type Services } from './services/index.ts';
+import { registerUnsubscribeRoutes } from './routes/unsubscribe.ts';
+import { createServices, type DeliveryTransports, type Services } from './services/index.ts';
 
 export interface AppDeps {
   config: Config;
@@ -52,6 +54,8 @@ export interface AppDeps {
   apiRateLimit?: RateLimitOptions | false;
   /** SSE timings; tests shorten them. Defaults: 25 s heartbeat, 50 ms coalescing. */
   sse?: { heartbeatMs?: number; coalesceMs?: number };
+  /** Push and SMTP transports (P7); tests inject fakes. */
+  transports?: DeliveryTransports;
 }
 
 export const OPENAPI_PATH = '/api/v1/openapi.json';
@@ -90,7 +94,7 @@ export function createApp(deps: AppDeps): App {
   const { config, db, logger, version } = deps;
   const clock = deps.clock ?? Date.now;
   const events = new EventBus(logger);
-  const services = createServices({ db, config, logger, clock, events });
+  const services = createServices({ db, config, logger, clock, events, ...deps.transports });
   const hub = new SseHub(events, {
     version,
     gitSha: config.gitSha,
@@ -126,7 +130,12 @@ export function createApp(deps: AppDeps): App {
 
   registerHealthRoutes(app, { db, migrationsDir: deps.migrationsDir });
   registerAuthRoutes(app, { auth, config });
-  registerMetaRoutes(app, { config, version, clock });
+  registerMetaRoutes(app, {
+    config,
+    version,
+    clock,
+    features: { email: () => services.mail.enabled(), push: () => services.push.enabled() },
+  });
   registerMeRoutes(app, services);
   registerOrgRoutes(app, services);
   registerInviteRoutes(app, services, { config, clock });
@@ -137,6 +146,8 @@ export function createApp(deps: AppDeps): App {
   registerSearchRoutes(app, services);
   registerExportRoutes(app, services);
   registerCollabRoutes(app, services);
+  registerPushRoutes(app, services);
+  registerUnsubscribeRoutes(app, { services, config, clock });
   registerEventRoutes(app, { hub, services });
 
   app.openAPIRegistry.register('Problem', ProblemSchema);

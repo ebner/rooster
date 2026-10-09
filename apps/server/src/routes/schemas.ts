@@ -46,6 +46,8 @@ import {
   orgSchema,
   placementSchema,
   prefsSchema,
+  pushSubscriptionCreateSchema,
+  pushSubscriptionSchema,
   reindexResultSchema,
   searchHitSchema,
   sessionSchema,
@@ -67,6 +69,7 @@ import {
   taskPatchSchema,
   taskSchema,
   trashPageSchema,
+  vapidPublicKeySchema,
 } from '@rooster/core/schemas';
 import { named, z } from '../lib/openapi.ts';
 
@@ -209,3 +212,11 @@ export const NotificationMarkResultSchema = named(
 );
 export const NotificationPrefsSchema = named(notificationPrefsSchema, 'NotificationPrefs');
 export const NotificationPrefsPutSchema = named(notificationPrefsPutSchema, 'NotificationPrefsPut');
+
+// Phase 7: notification delivery (06 §2.6, §2.10; ADR 0033).
+export const VapidPublicKeySchema = named(vapidPublicKeySchema, 'VapidPublicKey');
+export const PushSubscriptionCreateSchema = named(
+  pushSubscriptionCreateSchema,
+  'PushSubscriptionCreate',
+);
+export const PushSubscriptionSchema = named(pushSubscriptionSchema, 'PushSubscription');

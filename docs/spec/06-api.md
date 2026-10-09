@@ -103,7 +103,7 @@
 | GET `/notifications?unread=true&cursor` | Paged. | 6 |
 | POST `/notifications/read` | `{ids}` or `{all: true}`; `/notifications/unread` does the inverse. | 6 |
 | GET/PUT `/me/notification-prefs` | A matrix `[{type, channel, enabled}]` plus `{reminderTime, digestTime}`. | 6/7 |
-| GET `/unsubscribe/:token` (outside `/api/v1`, **no auth**) | The token is HMAC-signed (with `AUTH_SECRET`) over `{userId, type}` and never expires. It disables that email category and renders a small localised confirmation page. A `POST` to the same URL supports the `List-Unsubscribe-Post` one-click header (RFC 8058). | 7 |
+| GET/POST `/unsubscribe/:token` (outside `/api/v1`, **no auth**) | The token is HMAC-signed (with `AUTH_SECRET`) over `{userId, category}` and never expires. **GET only shows** a small localised page with an "Unsubscribe" button, because mail scanners open links in advance (ADR 0035). **POST** (the button, or RFC 8058 one-click via `List-Unsubscribe-Post`) disables that email category and renders the confirmation. | 7 |
 | GET `/push/vapid-public-key` · POST/DELETE `/me/push-subscriptions` | Web Push. | 7 |
 
 ### 2.7 Attachments

@@ -39,6 +39,9 @@ if (reindexed !== null) {
   );
 }
 
+// 08 §2 step 5: VAPID keys exist from the first boot on (unless set in the environment).
+app.services.push.ensureKeys();
+
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
   logger.info(
     { port: info.port, version: VERSION, gitSha: config.gitSha, instanceId },
@@ -67,6 +70,10 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   }
 
   scheduler.stop();
+  // Pushes and emails already handed to the queue get a moment to finish.
+  if (!(await app.services.deliveries.drain(SHUTDOWN_GRACE_MS))) {
+    logger.warn({ graceMs: SHUTDOWN_GRACE_MS }, 'deliveries did not finish in time');
+  }
   db.close();
   logger.info('shutdown complete');
   process.exit(0);

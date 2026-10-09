@@ -6,6 +6,7 @@ import type { App } from '../src/app.ts';
 import type { AppDb } from '../src/db/client.ts';
 import { user } from '../src/db/schema/index.ts';
 import type { Actor } from '../src/services/index.ts';
+import { subscriptionBody } from './delivery-fakes.ts';
 import {
   addSession,
   asJar,
@@ -54,6 +55,8 @@ interface Fixture {
   commentId: string;
   deletedCommentId: string;
   backupName: string;
+  /** The owner's push subscription. */
+  pushSubscriptionId: string;
   jars: Record<Exclude<ActorKind, 'anonymous' | 'readOnlyPat'>, CookieJar>;
   sessions: Record<Exclude<ActorKind, 'anonymous' | 'readOnlyPat'>, string>;
 }
@@ -419,6 +422,35 @@ const ROWS: Record<string, Row> = {
     }),
     expect: signedIn(200),
   },
+  // Phase 7: delivery (06 §2.6, §2.10). Subscriptions are the caller's own: anyone else's is
+  // 404, like a group.
+  'GET /api/v1/push/vapid-public-key': {
+    request: () => ({ path: '/api/v1/push/vapid-public-key' }),
+    expect: signedIn(200),
+  },
+  'GET /api/v1/me/push-subscriptions': {
+    request: () => ({ path: '/api/v1/me/push-subscriptions' }),
+    expect: signedIn(200),
+  },
+  'POST /api/v1/me/push-subscriptions': {
+    request: (_f, actor) => ({
+      path: '/api/v1/me/push-subscriptions',
+      body: subscriptionBody(actor),
+    }),
+    expect: signedIn(201),
+  },
+  'DELETE /api/v1/me/push-subscriptions/{id}': {
+    request: (f) => ({ path: `/api/v1/me/push-subscriptions/${f.pushSubscriptionId}` }),
+    expect: owned(204),
+  },
+  'POST /api/v1/me/push-subscriptions/{id}/test': {
+    request: (f) => ({ path: `/api/v1/me/push-subscriptions/${f.pushSubscriptionId}/test` }),
+    expect: owned(204),
+  },
+  'POST /api/v1/admin/push-keys/regenerate': {
+    request: () => ({ path: '/api/v1/admin/push-keys/regenerate' }),
+    expect: adminOnly(200),
+  },
 };
 
 const dataDirs: (() => void)[] = [];
@@ -461,6 +493,7 @@ function fixture(): Fixture {
     value: 'listed@example.com',
   });
   const backup = app.services.backups.createManual(adminActor);
+  const subscription = app.services.push.subscribe(ownerActor, subscriptionBody('owner'), null);
 
   const meta = { editTime: Date.now(), clientId: null, client: null };
   const { groups, tasks } = app.services;
@@ -510,6 +543,7 @@ function fixture(): Fixture {
     commentId: comment.id,
     deletedCommentId: deletedComment.id,
     backupName: backup.name,
+    pushSubscriptionId: subscription.id,
     jars: {
       owner: owner.jar,
       member: member.jar,

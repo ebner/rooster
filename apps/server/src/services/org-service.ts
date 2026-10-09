@@ -76,9 +76,19 @@ export type MemberJoinedHook = (
   input: { orgId: string; userId: string; inviterId: string | null },
 ) => void;
 
+/**
+ * Runs inside the transaction that created an email invite; true when an invite email will
+ * go out after commit (P7, SMTP configured).
+ */
+export type EmailInviteHook = (
+  tx: Tx,
+  invite: { email: string; orgId: string; inviterId: string; url: string; expiresAt: number },
+) => boolean;
+
 export interface OrgServiceOptions {
   memberRemovalSteps?: readonly MemberRemovalStep[];
   onMemberJoined?: MemberJoinedHook;
+  onEmailInvite?: EmailInviteHook;
 }
 
 const personalOrgConflict = () =>
@@ -171,6 +181,7 @@ function toInvitePreview(invite: ResolvedInvite, now: number): InvitePreview {
 export class OrgService {
   private readonly removalSteps: readonly MemberRemovalStep[];
   private readonly onMemberJoined: MemberJoinedHook | undefined;
+  private readonly onEmailInvite: EmailInviteHook | undefined;
 
   constructor(
     private readonly deps: ServiceDeps,
@@ -178,6 +189,7 @@ export class OrgService {
   ) {
     this.removalSteps = options.memberRemovalSteps ?? [];
     this.onMemberJoined = options.onMemberJoined;
+    this.onEmailInvite = options.onEmailInvite;
   }
 
   private now(): number {
@@ -575,14 +587,22 @@ export class OrgService {
             createdAt: now,
           })
           .run();
-        const token = emailInviteToken(this.deps.config.authSecret, id);
+        const url = this.inviteUrl(emailInviteToken(this.deps.config.authSecret, id));
         this.emit(tx, 'invite.created', {
           orgId: org.id,
           actorId: actor.userId,
           subjects: [id],
           audiences: [this.invitesChanged(tx, org.id)],
         });
-        return { id, kind: 'email', url: this.inviteUrl(token), expiresAt };
+        const emailed =
+          this.onEmailInvite?.(tx, {
+            email,
+            orgId: org.id,
+            inviterId: actor.userId,
+            url,
+            expiresAt,
+          }) ?? false;
+        return { id, kind: 'email', url, expiresAt, emailed };
       }
       const token = randomToken();
       tx.insert(inviteLink)
@@ -605,7 +625,7 @@ export class OrgService {
         subjects: [id],
         audiences: [this.invitesChanged(tx, org.id)],
       });
-      return { id, kind: 'link', url: this.inviteUrl(token), expiresAt };
+      return { id, kind: 'link', url: this.inviteUrl(token), expiresAt, emailed: false };
     });
   }
 

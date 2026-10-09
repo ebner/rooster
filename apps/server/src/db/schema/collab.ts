@@ -77,10 +77,16 @@ export const notification = sqliteTable(
     pushedAt: integer('pushed_at'),
     createdAt: integer('created_at').notNull(),
   },
-  (t) => [index('notification_inbox').on(t.userId, t.readAt, sql`${t.createdAt} DESC`)],
+  (t) => [
+    index('notification_inbox').on(t.userId, t.readAt, sql`${t.createdAt} DESC`),
+    // The email batch job's queue (P7): notifications waiting for an email.
+    index('notification_email_pending')
+      .on(t.userId, t.createdAt)
+      .where(sql`emailed_at IS NULL AND json_extract(data, '$.emailPending') = 1`),
+  ],
 );
 
-/** The event × channel preference matrix (FR-NOT-4); a missing cell means enabled. */
+/** The event × channel preference matrix (FR-NOT-4); a missing cell has its default (ADR 0033). */
 export const notificationPref = sqliteTable(
   'notification_pref',
   {

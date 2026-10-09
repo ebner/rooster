@@ -11,6 +11,7 @@ import { runMigrations } from '../src/db/migrate.ts';
 import { session, user } from '../src/db/schema/index.ts';
 import { createLogger, type Logger } from '../src/lib/logger.ts';
 import { randomToken, signCookieValue } from '../src/lib/tokens.ts';
+import { FakeMail, FakePush } from './delivery-fakes.ts';
 import type { MockIdp } from './mock-idp.ts';
 
 export const BASE_URL = 'http://localhost:3000';
@@ -50,22 +51,28 @@ export function createTestApp(
     clock?: () => number;
     apiRateLimit?: AppDeps['apiRateLimit'];
     sse?: AppDeps['sse'];
+    /** Fakes by default: tests never reach a push service or an SMTP server. */
+    push?: FakePush;
+    mail?: FakeMail;
   } = {},
-): { app: App; db: AppDb; config: Config } {
+): { app: App; db: AppDb; config: Config; push: FakePush; mail: FakeMail } {
   const config = testConfig({ ROOSTER_WEB_DIR: '/nonexistent/web', ...options.env });
   const db = options.db ?? createTestDb();
   const logger = options.logger ?? createLogger('silent');
+  const push = options.push ?? new FakePush();
+  const mail = options.mail ?? new FakeMail();
   const app = createApp({
     config,
     db,
     logger,
     version: '0.0.0-test',
     authRateLimit: false,
+    transports: { pushSender: push.sender, mailTransport: config.smtp === null ? null : mail },
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.apiRateLimit === undefined ? {} : { apiRateLimit: options.apiRateLimit }),
     ...(options.sse === undefined ? {} : { sse: options.sse }),
   });
-  return { app, db, config };
+  return { app, db, config, push, mail };
 }
 
 /** A logger whose JSON lines are collected in `lines`. */

@@ -980,6 +980,104 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/push/vapid-public-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The VAPID public key for `pushManager.subscribe({applicationServerKey})`
+         * @description Keys exist from the first boot on (generated unless set in the environment). After an admin regenerates them, existing subscriptions are gone and the browser must subscribe again with the new key.
+         */
+        get: operations["getVapidPublicKey"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/push-subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My subscribed devices, newest first, with their last successful push */
+        get: operations["listPushSubscriptions"];
+        put?: never;
+        /**
+         * Subscribe this browser (upsert by endpoint)
+         * @description Send `PushSubscription.toJSON()` plus an optional device label. The endpoint must be https on a known Web Push service (FCM, Mozilla, Apple, WNS), otherwise `422`. Subscribing an endpoint that already exists updates its keys and moves it to the caller.
+         */
+        post: operations["createPushSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/push-subscriptions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unsubscribe one of my devices */
+        delete: operations["deletePushSubscription"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/push-subscriptions/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a test push to one of my devices and wait for the push service
+         * @description `204` once the push service accepted it. `410 push_gone`: the push service no longer knows the subscription, which is deleted (subscribe again). `502 push_failed`: any other refusal or timeout.
+         */
+        post: operations["testPushSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/push-keys/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace the VAPID keys and delete every push subscription (instance admins)
+         * @description Devices subscribe again with the new key when the app next opens. Keys set through `ROOSTER_VAPID_PUBLIC`/`_PRIVATE` cannot be replaced here (`409 push_keys_from_env`).
+         */
+        post: operations["regeneratePushKeys"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/events": {
         parameters: {
             query?: never;
@@ -1834,6 +1932,24 @@ export interface components {
                 channel: "inapp" | "push" | "email";
                 enabled: boolean;
             }[];
+        };
+        VapidPublicKey: {
+            publicKey: string;
+        };
+        PushSubscription: {
+            id: string;
+            userAgent: string | null;
+            createdAt: number;
+            lastOkAt: number | null;
+        };
+        PushSubscriptionCreate: {
+            /** Format: uri */
+            endpoint: string;
+            keys: {
+                p256dh: string;
+                auth: string;
+            };
+            userAgent?: string;
         };
     };
     responses: never;
@@ -3017,7 +3133,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -3076,7 +3192,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -3791,7 +3907,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -4512,7 +4628,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -4602,7 +4718,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -4692,7 +4808,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -5021,7 +5137,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -5120,7 +5236,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -5204,7 +5320,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -5815,7 +5931,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -5903,7 +6019,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -6187,7 +6303,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -6271,7 +6387,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -6361,7 +6477,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -6447,7 +6563,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -6542,7 +6658,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -6637,7 +6753,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Gone: the invite can no longer be used, or the task is deleted */
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -6935,6 +7051,393 @@ export interface operations {
             };
             /** @description Not allowed (owner or admin only, or a cross-origin request) */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getVapidPublicKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VapidPublicKey"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listPushSubscriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Devices */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushSubscription"][];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createPushSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushSubscriptionCreate"];
+            };
+        };
+        responses: {
+            /** @description The subscription */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushSubscription"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deletePushSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Push subscription ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    testPushSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Push subscription ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sent */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gone: the invite can no longer be used, the task is deleted, or the push subscription expired */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description An upstream service (e.g. the push service) refused the request */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    regeneratePushKeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VapidPublicKey"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed (owner or admin only, or a cross-origin request) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

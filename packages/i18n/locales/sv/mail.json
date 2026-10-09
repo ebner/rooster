@@ -1,1 +1,72 @@
-{}
+{
+  "someone": "Någon",
+  "quote": "”{text}”",
+  "event": {
+    "assigned": "{actor} tilldelade dig en uppgift",
+    "comment": "{actor} kommenterade en uppgift du följer",
+    "mention": "{actor} nämnde dig",
+    "completed": "{actor} slutförde en uppgift du skapade",
+    "due_changed": "{actor} ändrade förfallodatum för din uppgift till {date}",
+    "due_removed": "{actor} tog bort förfallodatumet för din uppgift",
+    "invite_accepted": "{actor} gick med i {org}"
+  },
+  "category": {
+    "assigned": "tilldelningar",
+    "comment": "kommentarer på uppgifter du följer",
+    "mention": "omnämnanden",
+    "completed": "slutförda uppgifter",
+    "due_changed": "ändrade förfallodatum",
+    "invite_accepted": "accepterade inbjudningar",
+    "digest": "den dagliga sammanfattningen"
+  },
+  "action": {
+    "openTask": "Öppna uppgiften",
+    "openInbox": "Öppna inkorgen",
+    "openToday": "Öppna Idag"
+  },
+  "footer": {
+    "reason": "Du får det här mejlet eftersom du använder rooster på {host}.",
+    "unsubscribe": "Sluta få mejl om {category}",
+    "settings": "Inställningar för aviseringar"
+  },
+  "batch": {
+    "subject": "{count, plural, one {# ny avisering} other {# nya aviseringar}}",
+    "heading": "Nytt i din inkorg"
+  },
+  "digest": {
+    "subject": "Din dag: {date}",
+    "heading": "Din dag",
+    "overdue": "Försenade",
+    "dueToday": "Förfaller idag",
+    "inbox": "Nytt i din inkorg",
+    "more": "{count, plural, one {och # uppgift till} other {och # uppgifter till}}"
+  },
+  "invite": {
+    "subject": "{inviter} har bjudit in dig till {org}",
+    "subjectAnonymous": "Du är inbjuden till {org}",
+    "heading": "Gå med i {org} på rooster",
+    "body": "{inviter} har bjudit in dig att samarbeta i {org}.",
+    "bodyAnonymous": "Du är inbjuden att samarbeta i {org}.",
+    "accept": "Tacka ja",
+    "link": "Eller klistra in den här länken i webbläsaren:",
+    "expires": "Inbjudan gäller till och med {date}.",
+    "ignore": "Om du inte väntade dig den här inbjudan kan du bortse från mejlet."
+  },
+  "push": {
+    "reminder": "{count, plural, one {# uppgift idag} other {# uppgifter idag}}",
+    "reminderMore": "{count, plural, one {och # till} other {och # till}}",
+    "testTitle": "Pushaviseringar fungerar",
+    "testBody": "Den här enheten visar aviseringar från rooster."
+  },
+  "unsubscribe": {
+    "confirmTitle": "Sluta få mejl",
+    "confirmBody": "Vill du sluta få mejl om {category}? Dina övriga aviseringar påverkas inte.",
+    "confirmButton": "Sluta få mejl om {category}",
+    "title": "Avregistrerad",
+    "body": "Du får inte längre mejl om {category}.",
+    "settings": "Du kan slå på dem igen under Inställningar → Aviseringar.",
+    "open": "Öppna rooster",
+    "invalidTitle": "Ogiltig länk",
+    "invalidBody": "Den här avregistreringslänken är inte giltig. Du kan ändra dina mejlinställningar under Inställningar → Aviseringar."
+  }
+}

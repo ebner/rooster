@@ -3,6 +3,7 @@ import { expect } from 'vitest';
 import type { App, AppDeps } from '../src/app.ts';
 import type { AppDb } from '../src/db/client.ts';
 import type { Actor } from '../src/services/index.ts';
+import type { FakeMail, FakePush } from './delivery-fakes.ts';
 import { asJar, type CookieJar, createTestApp, createUserWithSession } from './helpers.ts';
 
 export interface Caller {
@@ -29,6 +30,8 @@ export interface Caller {
 export interface ListCtx {
   app: App;
   db: AppDb;
+  push: FakePush;
+  mail: FakeMail;
   /** A signed-in user with a personal org (default groups: Today, Prio, Upcoming). */
   user(email: string, name?: string): Caller;
 }
@@ -39,9 +42,11 @@ export function listCtx(
     env?: Record<string, string>;
     apiRateLimit?: AppDeps['apiRateLimit'];
     sse?: AppDeps['sse'];
+    db?: AppDb;
   } = {},
 ): ListCtx {
-  const { app, db } = createTestApp({
+  const { app, db, push, mail } = createTestApp({
+    ...(options.db === undefined ? {} : { db: options.db }),
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.env === undefined ? {} : { env: options.env }),
     ...(options.sse === undefined ? {} : { sse: options.sse }),
@@ -79,7 +84,7 @@ export function listCtx(
     };
     return { userId: u.userId, jar: u.jar, actor, call, ok };
   };
-  return { app, db, user };
+  return { app, db, push, mail, user };
 }
 
 export const myList = (c: Caller, org = 'personal', query = '') =>

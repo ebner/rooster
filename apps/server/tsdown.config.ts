@@ -14,6 +14,10 @@ const scalarBundle = join(
 // packages — is inlined so the image needs no node_modules beyond these.
 export const NATIVE_DEPS = ['better-sqlite3'];
 
+// `@react-email/render` imports prettier for its `pretty` option, which is never used
+// (src/mail/render.ts); a throwing stub keeps prettier out of the bundle.
+const prettierStub = fileURLToPath(new URL('./src/mail/prettier-stub.ts', import.meta.url));
+
 export default defineConfig({
   entry: ['src/main.ts', 'src/healthcheck.ts'],
   outDir: 'dist',
@@ -22,6 +26,13 @@ export default defineConfig({
   target: 'node24',
   dts: false,
   clean: true,
+  // The image runs with NODE_ENV=production (docker/Dockerfile); fixing it at build time lets
+  // the bundler drop the development builds of React that CJS packages select at runtime.
+  define: { 'process.env.NODE_ENV': JSON.stringify('production') },
+  alias: {
+    'prettier/standalone': prettierStub,
+    'prettier/plugins/html': prettierStub,
+  },
   deps: {
     alwaysBundle: (id) => !NATIVE_DEPS.some((dep) => id === dep || id.startsWith(`${dep}/`)),
     onlyBundle: false,

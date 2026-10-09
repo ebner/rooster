@@ -46,7 +46,8 @@ describe('GET /api/v1/meta', () => {
       version: '0.0.0-test',
       gitSha: 'abc1234',
       providers: [{ id: 'google', name: 'Google' }],
-      features: { email: false, push: false, s3: false },
+      // Push is always on: VAPID keys are generated when the environment has none (P7).
+      features: { email: false, push: true, s3: false },
       serverTime: 1_767_225_600_000,
     });
     // Read per request, not at boot (P4 clock-skew estimation).
@@ -67,7 +68,7 @@ describe('GET /api/v1/meta', () => {
       },
     });
     const body = (await (await app.request('/api/v1/meta')).json()) as { features: unknown };
-    expect(body.features).toEqual({ email: true, push: false, s3: true });
+    expect(body.features).toEqual({ email: true, push: true, s3: true });
   });
 });
 

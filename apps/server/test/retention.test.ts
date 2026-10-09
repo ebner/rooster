@@ -113,7 +113,14 @@ describe('trash purge (05 §4.5)', () => {
       services: ctx.app.services,
       config: testConfig({ ROOSTER_BACKUP_CRON: '0 3 * * *' }),
     });
-    expect(scheduler.jobs()).toEqual(['pragma-optimize', 'purge', 'backup']);
+    expect(scheduler.jobs()).toEqual([
+      'pragma-optimize',
+      'purge',
+      'due-reminders',
+      'email-digest',
+      'email-batch',
+      'backup',
+    ]);
     await scheduler.run('purge');
     scheduler.stop();
     const off = createScheduler(captureLogger().logger);
@@ -122,7 +129,13 @@ describe('trash purge (05 §4.5)', () => {
       services: ctx.app.services,
       config: testConfig({ ROOSTER_BACKUP_CRON: 'off' }),
     });
-    expect(off.jobs()).toEqual(['pragma-optimize', 'purge']);
+    expect(off.jobs()).toEqual([
+      'pragma-optimize',
+      'purge',
+      'due-reminders',
+      'email-digest',
+      'email-batch',
+    ]);
     off.stop();
   });
 });

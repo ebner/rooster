@@ -442,6 +442,9 @@ importers:
       '@rooster/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@rooster/tokens':
+        specifier: workspace:*
+        version: link:../../packages/tokens
       '@scalar/hono-api-reference':
         specifier: 'catalog:'
         version: 0.12.9(hono@4.13.13)

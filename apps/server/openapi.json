@@ -4068,6 +4068,87 @@
         "required": [
           "prefs"
         ]
+      },
+      "VapidPublicKey": {
+        "type": "object",
+        "properties": {
+          "publicKey": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "publicKey"
+        ]
+      },
+      "PushSubscription": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "userAgent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastOkAt": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "userAgent",
+          "createdAt",
+          "lastOkAt"
+        ]
+      },
+      "PushSubscriptionCreate": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "maxLength": 2048,
+            "format": "uri"
+          },
+          "keys": {
+            "type": "object",
+            "properties": {
+              "p256dh": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "auth": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "required": [
+              "p256dh",
+              "auth"
+            ]
+          },
+          "userAgent": {
+            "type": "string",
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "endpoint",
+          "keys"
+        ]
       }
     },
     "parameters": {}
@@ -5535,7 +5616,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5609,7 +5690,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6472,7 +6553,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7365,7 +7446,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7627,7 +7708,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7741,7 +7822,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8138,7 +8219,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8263,7 +8344,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8360,7 +8441,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9140,7 +9221,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9253,7 +9334,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9672,7 +9753,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9786,7 +9867,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9881,7 +9962,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9985,7 +10066,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10099,7 +10180,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10211,7 +10292,7 @@
             }
           },
           "410": {
-            "description": "Gone: the invite can no longer be used, or the task is deleted",
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10579,6 +10660,449 @@
           },
           "403": {
             "description": "Not allowed (owner or admin only, or a cross-origin request)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not JSON",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/push/vapid-public-key": {
+      "get": {
+        "tags": [
+          "push"
+        ],
+        "operationId": "getVapidPublicKey",
+        "summary": "The VAPID public key for `pushManager.subscribe({applicationServerKey})`",
+        "description": "Keys exist from the first boot on (generated unless set in the environment). After an admin regenerates them, existing subscriptions are gone and the browser must subscribe again with the new key.",
+        "responses": {
+          "200": {
+            "description": "The key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapidPublicKey"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/push-subscriptions": {
+      "get": {
+        "tags": [
+          "push"
+        ],
+        "operationId": "listPushSubscriptions",
+        "summary": "My subscribed devices, newest first, with their last successful push",
+        "responses": {
+          "200": {
+            "description": "Devices",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PushSubscription"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "push"
+        ],
+        "operationId": "createPushSubscription",
+        "summary": "Subscribe this browser (upsert by endpoint)",
+        "description": "Send `PushSubscription.toJSON()` plus an optional device label. The endpoint must be https on a known Web Push service (FCM, Mozilla, Apple, WNS), otherwise `422`. Subscribing an endpoint that already exists updates its keys and moves it to the caller.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushSubscriptionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The subscription",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushSubscription"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed (owner or admin only, or a cross-origin request)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not JSON",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/push-subscriptions/{id}": {
+      "delete": {
+        "tags": [
+          "push"
+        ],
+        "operationId": "deletePushSubscription",
+        "summary": "Unsubscribe one of my devices",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Push subscription ID"
+            },
+            "required": true,
+            "description": "Push subscription ID",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed (owner or admin only, or a cross-origin request)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not JSON",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/push-subscriptions/{id}/test": {
+      "post": {
+        "tags": [
+          "push"
+        ],
+        "operationId": "testPushSubscription",
+        "summary": "Send a test push to one of my devices and wait for the push service",
+        "description": "`204` once the push service accepted it. `410 push_gone`: the push service no longer knows the subscription, which is deleted (subscribe again). `502 push_failed`: any other refusal or timeout.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Push subscription ID"
+            },
+            "required": true,
+            "description": "Push subscription ID",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Sent"
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed (owner or admin only, or a cross-origin request)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Gone: the invite can no longer be used, the task is deleted, or the push subscription expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not JSON",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An upstream service (e.g. the push service) refused the request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/push-keys/regenerate": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "regeneratePushKeys",
+        "summary": "Replace the VAPID keys and delete every push subscription (instance admins)",
+        "description": "Devices subscribe again with the new key when the app next opens. Keys set through `ROOSTER_VAPID_PUBLIC`/`_PRIVATE` cannot be replaced here (`409 push_keys_from_env`).",
+        "responses": {
+          "200": {
+            "description": "The new key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapidPublicKey"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed (owner or admin only, or a cross-origin request)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current state",
             "content": {
               "application/problem+json": {
                 "schema": {

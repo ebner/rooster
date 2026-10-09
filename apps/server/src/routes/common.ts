@@ -6,17 +6,18 @@ import { parseOpMeta } from '../lib/request-meta.ts';
 import type { Actor, OpMeta } from '../services/index.ts';
 import { ProblemSchema } from './problem.ts';
 
-type ProblemStatus = 401 | 403 | 404 | 409 | 410 | 415 | 422 | 429 | 503;
+type ProblemStatus = 401 | 403 | 404 | 409 | 410 | 415 | 422 | 429 | 502 | 503;
 
 const STATUS_TEXT: Record<ProblemStatus, string> = {
   401: 'Not signed in',
   403: 'Not allowed (owner or admin only, or a cross-origin request)',
   404: 'Not found, or not a member (existence is never revealed)',
   409: 'Conflicts with the current state',
-  410: 'Gone: the invite can no longer be used, or the task is deleted',
+  410: 'Gone: the invite can no longer be used, the task is deleted, or the push subscription expired',
   415: 'Not JSON',
   422: 'Validation failed',
   429: 'Rate limited; retry after the Retry-After header',
+  502: 'An upstream service (e.g. the push service) refused the request',
   503: 'The server is shutting down; retry shortly',
 };
 

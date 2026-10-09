@@ -1,1 +1,72 @@
-{}
+{
+  "someone": "Someone",
+  "quote": "“{text}”",
+  "event": {
+    "assigned": "{actor} assigned a task to you",
+    "comment": "{actor} commented on a task you follow",
+    "mention": "{actor} mentioned you",
+    "completed": "{actor} completed a task you created",
+    "due_changed": "{actor} changed the due date of your task to {date}",
+    "due_removed": "{actor} removed the due date of your task",
+    "invite_accepted": "{actor} joined {org}"
+  },
+  "category": {
+    "assigned": "assignments",
+    "comment": "comments on tasks you follow",
+    "mention": "mentions",
+    "completed": "completed tasks",
+    "due_changed": "due date changes",
+    "invite_accepted": "accepted invites",
+    "digest": "the daily digest"
+  },
+  "action": {
+    "openTask": "Open task",
+    "openInbox": "Open inbox",
+    "openToday": "Open Today"
+  },
+  "footer": {
+    "reason": "You get this email because you use rooster at {host}.",
+    "unsubscribe": "Unsubscribe from emails about {category}",
+    "settings": "Notification settings"
+  },
+  "batch": {
+    "subject": "{count, plural, one {# new notification} other {# new notifications}}",
+    "heading": "New in your inbox"
+  },
+  "digest": {
+    "subject": "Your day: {date}",
+    "heading": "Your day",
+    "overdue": "Overdue",
+    "dueToday": "Due today",
+    "inbox": "New in your Inbox",
+    "more": "{count, plural, one {and # more task} other {and # more tasks}}"
+  },
+  "invite": {
+    "subject": "{inviter} invited you to {org}",
+    "subjectAnonymous": "You are invited to {org}",
+    "heading": "Join {org} on rooster",
+    "body": "{inviter} invited you to work together in {org}.",
+    "bodyAnonymous": "You are invited to work together in {org}.",
+    "accept": "Accept invite",
+    "link": "Or paste this link into your browser:",
+    "expires": "The invite is valid until {date}.",
+    "ignore": "If you weren’t expecting this invite, you can ignore this email."
+  },
+  "push": {
+    "reminder": "{count, plural, one {# task today} other {# tasks today}}",
+    "reminderMore": "{count, plural, one {and # more} other {and # more}}",
+    "testTitle": "Push notifications work",
+    "testBody": "This device will show notifications from rooster."
+  },
+  "unsubscribe": {
+    "confirmTitle": "Unsubscribe from emails",
+    "confirmBody": "Do you want to stop getting emails about {category}? Your other notifications stay as they are.",
+    "confirmButton": "Unsubscribe from {category}",
+    "title": "Unsubscribed",
+    "body": "You will no longer get emails about {category}.",
+    "settings": "You can turn them back on in Settings → Notifications.",
+    "open": "Open rooster",
+    "invalidTitle": "Link not valid",
+    "invalidBody": "This unsubscribe link is not valid. You can change your email settings in Settings → Notifications."
+  }
+}

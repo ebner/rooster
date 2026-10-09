@@ -25,21 +25,29 @@ const metaRoute = createRoute({
 
 export function registerMetaRoutes(
   app: OpenAPIHono<AppEnv>,
-  deps: { config: Config; version: string; clock: () => number },
+  deps: {
+    config: Config;
+    version: string;
+    clock: () => number;
+    /** What delivery can actually do (P7): SMTP configured; VAPID keys present. */
+    features: { email: () => boolean; push: () => boolean };
+  },
 ): void {
-  const { config, version, clock } = deps;
-  const body: Omit<Meta, 'serverTime'> = {
+  const { config, version, clock, features } = deps;
+  const body: Omit<Meta, 'serverTime' | 'features'> = {
     version,
     gitSha: config.gitSha,
     providers: configuredProviders(config),
-    features: {
-      email: config.smtp !== null,
-      push: config.vapid !== null,
-      s3: config.s3 !== null,
-    },
   };
   app.openapi(metaRoute, (c) => {
     c.header('Cache-Control', 'no-store');
-    return c.json({ ...body, serverTime: clock() }, 200);
+    return c.json(
+      {
+        ...body,
+        features: { email: features.email(), push: features.push(), s3: config.s3 !== null },
+        serverTime: clock(),
+      },
+      200,
+    );
   });
 }

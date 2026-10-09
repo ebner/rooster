@@ -18,6 +18,7 @@
     "@react-email/render": "catalog:",
     "@rooster/core": "workspace:*",
     "@rooster/i18n": "workspace:*",
+    "@rooster/tokens": "workspace:*",
     "@scalar/hono-api-reference": "catalog:",
     "better-auth": "catalog:",
     "better-sqlite3": "catalog:",

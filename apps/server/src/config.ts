@@ -117,6 +117,37 @@ const backupCron = z
     return pattern;
   });
 
+/** A base64url VAPID key that decodes to `bytes` bytes (P-256: 65 public, 32 private). */
+const vapidKey = (bytes: number) =>
+  z
+    .string()
+    .optional()
+    .refine(
+      (v) =>
+        v === undefined ||
+        (/^[A-Za-z0-9_-]+={0,2}$/.test(v) && Buffer.from(v, 'base64url').length === bytes),
+      `must be a base64url P-256 key of ${bytes} bytes (generate with: npx web-push generate-vapid-keys)`,
+    );
+
+/** RFC 8292: the push service's contact for this server, a mailto: or https: URL. */
+const vapidSubject = z
+  .string()
+  .optional()
+  .refine((v) => v === undefined || /^(mailto:\S+@\S+|https:\/\/\S+)$/.test(v), {
+    error: 'must be a mailto: or https:// URL',
+  });
+
+/** `Name <address>` or a bare address. */
+const mailFrom = z
+  .string()
+  .optional()
+  .refine(
+    (v) => v === undefined || /^(?:[^<>]*<[^<>\s]+@[^<>\s]+>|[^<>\s]+@[^<>\s]+)$/.test(v.trim()),
+    {
+      error: 'must be an email address, optionally as "Name <address>"',
+    },
+  );
+
 const envSchema = z.object({
   ROOSTER_BASE_URL: z
     .url({ protocol: /^https?$/, error: 'must be an absolute http(s) URL' })
@@ -137,10 +168,10 @@ const envSchema = z.object({
   ROOSTER_SMTP_URL: z
     .url({ protocol: /^smtps?$/, error: 'must be an smtp:// or smtps:// URL' })
     .optional(),
-  ROOSTER_MAIL_FROM: z.string().optional(),
-  ROOSTER_VAPID_PUBLIC: z.string().optional(),
-  ROOSTER_VAPID_PRIVATE: z.string().optional(),
-  ROOSTER_VAPID_SUBJECT: z.string().optional(),
+  ROOSTER_MAIL_FROM: mailFrom,
+  ROOSTER_VAPID_PUBLIC: vapidKey(65),
+  ROOSTER_VAPID_PRIVATE: vapidKey(32),
+  ROOSTER_VAPID_SUBJECT: vapidSubject,
   ROOSTER_UPLOAD_MAX_MB: intInRange(25, 1, 10_240),
   ROOSTER_S3_ENDPOINT: z.url().optional(),
   ROOSTER_S3_REGION: z.string().optional(),
@@ -210,7 +241,7 @@ function toConfig(env: Env) {
     logLevel: env.ROOSTER_LOG_LEVEL,
     smtp:
       env.ROOSTER_SMTP_URL !== undefined && env.ROOSTER_MAIL_FROM !== undefined
-        ? { url: env.ROOSTER_SMTP_URL, from: env.ROOSTER_MAIL_FROM }
+        ? { url: env.ROOSTER_SMTP_URL, from: env.ROOSTER_MAIL_FROM.trim() }
         : null,
     vapid:
       env.ROOSTER_VAPID_PUBLIC !== undefined && env.ROOSTER_VAPID_PRIVATE !== undefined
