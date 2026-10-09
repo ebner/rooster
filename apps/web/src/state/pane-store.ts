@@ -36,7 +36,15 @@ function readWidth(): number | null {
 }
 
 /** What the pane should focus once it renders the task (O / Tab+Enter, Tab+R). */
-export type PaneFocusTarget = 'title' | 'description' | 'subtask' | 'tags' | 'date';
+/** `assignee` opens the pane's assignee picker; `comment` focuses the composer (P6). */
+export type PaneFocusTarget =
+  | 'title'
+  | 'description'
+  | 'subtask'
+  | 'tags'
+  | 'date'
+  | 'assignee'
+  | 'comment';
 
 export interface PaneState {
   /** Full screen (Tab+X, ⤢): the pane takes the main area, the sidebar stays. */
