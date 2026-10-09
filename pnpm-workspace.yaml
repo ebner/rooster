@@ -38,6 +38,12 @@ catalog:
   web-push: 3.6.7                # P7 Web Push (VAPID), 04 §2
   '@types/web-push': 3.6.4
   nodemailer: 10.0.16             # P7 email over SMTP, 04 §2 (ships its own types)
+  '@better-auth/api-key': 1.7.7   # P8 PATs (04 §2), matches better-auth
+  # cli (P8, 04 §2)
+  citty: 0.2.2
+  '@clack/prompts': 1.8.1
+  '@napi-rs/keyring': 2.1.0       # native; the CLI loads it lazily and falls back to a 0600 file
+  smol-toml: 1.9.0                # config.toml
   '@react-email/render': 2.1.0   # P7 email templates: React to HTML + plain text, 04 §2 (the components package is deprecated)
   # web
   react: 19.3.0

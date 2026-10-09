@@ -1,5 +1,6 @@
 import svAdmin from '../locales/sv/admin.json' with { type: 'json' };
 import svAuth from '../locales/sv/auth.json' with { type: 'json' };
+import svCli from '../locales/sv/cli.json' with { type: 'json' };
 import svCollab from '../locales/sv/collab.json' with { type: 'json' };
 import svCommon from '../locales/sv/common.json' with { type: 'json' };
 import svDates from '../locales/sv/dates.json' with { type: 'json' };
@@ -39,4 +40,5 @@ export const sv = {
   collab: svCollab,
   inbox: svInbox,
   mail: svMail,
+  cli: svCli,
 } as const;

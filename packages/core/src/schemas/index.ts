@@ -5,6 +5,7 @@ export * from './common.ts';
 export * from './delivery.ts';
 export * from './events.ts';
 export * from './export.ts';
+export * from './grants.ts';
 export * from './list.ts';
 export * from './org.ts';
 export * from './search.ts';

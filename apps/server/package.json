@@ -13,6 +13,7 @@
     "db:generate": "drizzle-kit generate && node scripts/strictify-migrations.mjs"
   },
   "dependencies": {
+    "@better-auth/api-key": "catalog:",
     "@hono/node-server": "catalog:",
     "@hono/zod-openapi": "catalog:",
     "@react-email/render": "catalog:",

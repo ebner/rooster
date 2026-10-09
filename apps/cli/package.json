@@ -1,0 +1,38 @@
+{
+  "name": "@rooster/cli",
+  "version": "1.1.0",
+  "description": "The rooster command line: tasks from your terminal, scripts and CI (docs/spec/07-cli.md).",
+  "type": "module",
+  "bin": {
+    "rooster": "./dist/rooster.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsx src/main.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@clack/prompts": "catalog:",
+    "@napi-rs/keyring": "catalog:",
+    "@rooster/api-client": "workspace:*",
+    "@rooster/core": "workspace:*",
+    "@rooster/i18n": "workspace:*",
+    "@rooster/tokens": "workspace:*",
+    "citty": "catalog:",
+    "smol-toml": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsdown": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,5 +1,6 @@
 import enAdmin from '../locales/en/admin.json' with { type: 'json' };
 import enAuth from '../locales/en/auth.json' with { type: 'json' };
+import enCli from '../locales/en/cli.json' with { type: 'json' };
 import enCollab from '../locales/en/collab.json' with { type: 'json' };
 import enCommon from '../locales/en/common.json' with { type: 'json' };
 import enDates from '../locales/en/dates.json' with { type: 'json' };
@@ -39,4 +40,5 @@ export const en = {
   collab: enCollab,
   inbox: enInbox,
   mail: enMail,
+  cli: enCli,
 } as const;
