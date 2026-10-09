@@ -1,3 +1,4 @@
+import { inboxOf } from '@rooster/core/reducers';
 import type { Task } from '@rooster/core/schemas';
 import { type SmartView, selectView } from '@rooster/core/views';
 import { useQueryClient } from '@tanstack/react-query';
@@ -13,17 +14,22 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { everyoneKey, useEveryone, useEveryoneStatus } from '../../data/everyone';
 import { myListKey, useListPipeline, useMyList, useMyListStatus } from '../../data/list';
 import { useMe } from '../../data/me';
+import { useOrgMembers } from '../../data/orgs';
 import { syncEngine } from '../../data/sync/engine';
 import { useTags } from '../../data/tags';
+import type { OrgMember } from '../../data/types';
 import { cn } from '../../lib/cn';
+import { preloadWhenIdle } from '../../lib/lazy';
 import {
   type Draft,
   persistShowCompleted,
   selectedIds,
   useListStore,
 } from '../../state/list-store';
+import type { PaneFocusTarget } from '../../state/pane-store';
 import { useSyncStore } from '../../state/sync-store';
 import { setTags, useTagsStore } from '../../state/tags-store';
 import { iconStrokeWidth } from '../../ui/button';
@@ -41,6 +47,12 @@ import {
 import { useViewerDateContext } from '../dates';
 import { type PaletteCommands, usePaletteCommands } from '../palette/commands';
 import type { PaneControls } from '../pane/pane-controls';
+import { useEveryoneFilters } from '../people/everyone-filters';
+import { everyoneSections, sectionAssignee } from '../people/everyone-model';
+import { buildEveryoneRows } from '../people/everyone-rows';
+import { LazyAssigneePicker } from '../people/lazy';
+import { MemberSectionHeader } from '../people/member-section-header';
+import { sortMembers } from '../people/members';
 import { toggleCheatSheet } from '../shell/cheat-sheet';
 import { AddGroupRowView, AddSubtaskRowView, AddTaskRow, FirstRunHint } from './add-row';
 import { announce, ListLiveRegion } from './announcer';
@@ -55,7 +67,7 @@ import { buildViewRows } from './model/view-rows';
 import { PullToRefresh } from './pull-to-refresh';
 import { SectionHeader } from './section-header';
 import { TaskRow } from './task-row';
-import { ListDnd } from './use-list-dnd';
+import { type AssignDrop, ListDnd } from './use-list-dnd';
 import { ViewEmptyState } from './view-empty';
 
 /** Rows map straight to their memoised components (no wrapper per row). */
@@ -74,7 +86,11 @@ function rowElement(row: Row) {
     case 'addSubtask':
       return <AddSubtaskRowView key={row.id} row={row} />;
     case 'section':
-      return <SectionHeader key={row.id} row={row} />;
+      return row.assigneeId !== undefined ? (
+        <MemberSectionHeader key={row.id} row={row} />
+      ) : (
+        <SectionHeader key={row.id} row={row} />
+      );
     case 'empty':
       return <ViewEmptyState key={row.id} row={row} />;
   }
@@ -120,6 +136,10 @@ interface ListRowsProps {
   clock: ViewClock | null;
   /** Written with the sections on screen (the controller adds drafts to them). */
   viewRef: RefObject<ViewModel | null>;
+  /** Everyone's tasks (02 §11): its members (me first), else null. */
+  everyone: readonly OrgMember[] | null;
+  /** Written with Everyone's tasks by ID (the controller's `extraTasks`). */
+  extraRef: RefObject<Readonly<Record<string, Task>> | null>;
 }
 
 /**
@@ -133,8 +153,14 @@ const ListRows = memo(function ListRows({
   view,
   clock,
   viewRef,
+  everyone,
+  extraRef,
 }: ListRowsProps) {
+  const { i18n } = useTranslation();
   const list = useMyList(orgId);
+  const everyoneList = useEveryone(orgId, everyone !== null).data;
+  const everyoneFilters = useEveryoneFilters();
+  const dateCtx = useViewerDateContext();
   const drafts = useListStore((s) => s.drafts);
   const showCompleted = useListStore((s) => s.showCompleted);
   const hiding = useListStore((s) => s.hiding);
@@ -154,7 +180,42 @@ const ListRows = memo(function ListRows({
       ...clock,
     });
   }, [view, clock, list.data, userId, showCompleted, holding]);
-  viewRef.current = view && sections ? { view, sections } : null;
+  const everyoneById = useMemo(
+    () => (everyoneList ? Object.fromEntries(everyoneList.map((t) => [t.id, t])) : null),
+    [everyoneList],
+  );
+  extraRef.current = everyone ? everyoneById : null;
+  const memberSections = useMemo(() => {
+    if (!everyone || !everyoneList) return null;
+    return everyoneSections(everyoneList, {
+      viewerId: userId,
+      members: everyone,
+      locale: i18n.language,
+      filters: { due: everyoneFilters.due, members: everyoneFilters.members },
+      tagIds: tagFilter,
+      due: { today: dateCtx.today, nowMs: dateCtx.nowMs, viewerTz: dateCtx.timezone },
+      // 02 §11: open tasks only; a task completed here keeps its row through the hold.
+      showCompleted: false,
+      keep: hiding,
+    });
+  }, [
+    everyone,
+    everyoneList,
+    userId,
+    i18n.language,
+    everyoneFilters.due,
+    everyoneFilters.members,
+    tagFilter,
+    dateCtx.today,
+    dateCtx.nowMs,
+    dateCtx.timezone,
+    hiding,
+  ]);
+  viewRef.current = memberSections
+    ? { view: 'everyone', sections: memberSections }
+    : view && sections
+      ? { view, sections }
+      : null;
   const rows = useMemo(() => {
     if (!list.data) return [];
     const draftTask = (draft: Draft) => {
@@ -170,6 +231,19 @@ const ListRows = memo(function ListRows({
       }
       return task;
     };
+    if (memberSections && everyoneById) {
+      return buildEveryoneRows(
+        memberSections,
+        {
+          // My list carries parents for breadcrumbs that are not open rows here.
+          tasks: { ...list.data.tasks, ...everyoneById },
+          drafts,
+          draftTask,
+          inboxId: inboxOf(list.data)?.id ?? '',
+        },
+        rowCache.current.cache,
+      );
+    }
     if (view && sections) {
       return buildViewRows(
         list.data,
@@ -187,6 +261,8 @@ const ListRows = memo(function ListRows({
     list.data,
     view,
     sections,
+    memberSections,
+    everyoneById,
     drafts,
     showCompleted,
     hiding,
@@ -280,6 +356,10 @@ export interface MyListViewProps {
   pane?: PaneControls | undefined;
   /** A smart view of the same list (02 §10); My tasks when absent. */
   view?: SmartView | undefined;
+  /** A shared org (P6): assignment and `@name`; false hides them all (FR-COL-6). */
+  shared?: boolean | undefined;
+  /** Everyone's tasks (02 §11, shared orgs) instead of My tasks or a smart view. */
+  everyone?: boolean | undefined;
 }
 
 /** Keys pressed with focus in the pane are the pane's (02 §9.1). */
@@ -308,9 +388,31 @@ function listOnly(handlers: ShortcutHandlers): ShortcutHandlers {
  * drafts, selection and the bulk bar, drag and drop, and every list key bound to the
  * controller. All writes go through the mutation pipeline.
  */
-export function MyListView({ orgId, userId, label, pane, view }: MyListViewProps) {
+export function MyListView({
+  orgId,
+  userId,
+  label,
+  pane,
+  view,
+  shared = false,
+  everyone: everyoneView = false,
+}: MyListViewProps) {
   const { t } = useTranslation('list');
-  const status = useMyListStatus(orgId);
+  const everyone = shared && everyoneView;
+  const myStatus = useMyListStatus(orgId);
+  const everyoneStatus = useEveryoneStatus(orgId, everyone);
+  const status = {
+    ready: myStatus.ready && everyoneStatus.ready,
+    error: myStatus.error ?? everyoneStatus.error,
+  };
+  // Shared orgs only: a personal org has nobody to assign to (FR-COL-6).
+  const membersData = useOrgMembers(shared ? orgId : undefined).data;
+  const members = useMemo(
+    () => (shared ? sortMembers(membersData ?? [], userId) : null),
+    [shared, membersData, userId],
+  );
+  const membersRef = useRef(members);
+  membersRef.current = members;
   const pipeline = useListPipeline();
   const queryClient = useQueryClient();
   const dateCtx = useViewerDateContext();
@@ -326,6 +428,8 @@ export function MyListView({ orgId, userId, label, pane, view }: MyListViewProps
   const rowsRef = useRef<readonly Row[]>([]);
   /** Written by `ListRows`: the smart view's sections on screen. */
   const viewRef = useRef<ViewModel | null>(null);
+  /** Written by `ListRows`: Everyone's tasks by ID. */
+  const extraRef = useRef<Readonly<Record<string, Task>> | null>(null);
   const dateRef = useRef(dateCtx);
   dateRef.current = dateCtx;
   const prefs = useMe().data?.prefs;
@@ -359,8 +463,10 @@ export function MyListView({ orgId, userId, label, pane, view }: MyListViewProps
           close: () => paneRef.current?.close(),
         },
         view: () => viewRef.current,
+        extraTasks: () => extraRef.current ?? undefined,
+        ...(shared ? { members: () => membersRef.current ?? [] } : {}),
       }),
-    [orgId, userId, pipeline, t],
+    [orgId, userId, pipeline, t, shared],
   );
 
   const context = useMemo<ListContextValue>(
@@ -368,13 +474,19 @@ export function MyListView({ orgId, userId, label, pane, view }: MyListViewProps
       controller,
       dateCtx,
       parseTitles: prefsRef.current.parseTitles,
-      dragEnabled: !view,
+      dragEnabled: !view && !everyone,
       onOpenTask: (id, focus) => paneRef.current?.open(id, focus ? 'title' : null),
       mobile,
       view,
+      shared,
+      everyone,
     }),
-    [controller, dateCtx, prefs?.parseTitleDates, mobile, view],
+    [controller, dateCtx, prefs?.parseTitleDates, mobile, view, shared, everyone],
   );
+
+  useEffect(() => {
+    if (shared) preloadWhenIdle([LazyAssigneePicker.preload]);
+  }, [shared]);
 
   // Selection mode is a phone mode; it ends when the layout grows past it.
   useEffect(() => {
@@ -394,9 +506,12 @@ export function MyListView({ orgId, userId, label, pane, view }: MyListViewProps
     () => async () => {
       // 02 §13.2: flush the outbox (through the leader tab) and refetch.
       syncEngine()?.syncNow();
-      await queryClient.invalidateQueries({ queryKey: myListKey(orgId) });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: myListKey(orgId) }),
+        everyone ? queryClient.invalidateQueries({ queryKey: everyoneKey(orgId) }) : null,
+      ]);
     },
-    [queryClient, orgId],
+    [queryClient, orgId, everyone],
   );
 
   // D-29: the open pane follows the selection; a multi-selection closes it (02 §3.3).
@@ -425,7 +540,7 @@ export function MyListView({ orgId, userId, label, pane, view }: MyListViewProps
       hiding: {},
       selectionMode: false,
     });
-  }, [orgId, view]);
+  }, [orgId, view, everyone]);
 
   useEffect(
     () =>
@@ -458,10 +573,19 @@ export function MyListView({ orgId, userId, label, pane, view }: MyListViewProps
     return row?.kind === 'task' && !row.draft ? row : null;
   };
 
-  const openPane = (focus: 'title' | 'description' | null) => {
+  const openPane = (focus: PaneFocusTarget | null) => {
     const row = cursorTask();
     if (!row || !pane) return false;
     pane.open(row.id, focus);
+  };
+  /** Tab+A / A (02 §6): the assignee picker on the selection; shared orgs only. */
+  const openAssign = () => {
+    if (!shared) return false;
+    const ids = controller.selectedTaskIds();
+    if (ids.length === 0) return false;
+    useListStore
+      .getState()
+      .set({ popover: { kind: 'assign', rowId: ids.length > 1 ? 'bulk' : (ids[0] as string) } });
   };
   const openTagPicker = () => {
     const ids = controller.selectedTaskIds();
@@ -516,14 +640,15 @@ export function MyListView({ orgId, userId, label, pane, view }: MyListViewProps
           useListStore.getState().set({ popover: { kind: 'date', rowId: row.id } });
         }),
       moveToNavigate: () => {
-        if (controller.selectedTaskIds().length === 0) return false;
+        // Everyone's tasks has no groups of mine to move other people's tasks into.
+        if (everyone || controller.selectedTaskIds().length === 0) return false;
         useListStore
           .getState()
           .set({ popover: { kind: 'moveTo', rowId: useListStore.getState().cursor ?? '' } });
       },
       moveTo: () =>
         withTitle(() => {
-          if (controller.selectedTaskIds().length === 0) return false;
+          if (everyone || controller.selectedTaskIds().length === 0) return false;
           useListStore
             .getState()
             .set({ popover: { kind: 'moveTo', rowId: useListStore.getState().cursor ?? '' } });
@@ -554,6 +679,11 @@ export function MyListView({ orgId, userId, label, pane, view }: MyListViewProps
       addSubtask: () => withTitle(() => controller.addSubtask() || undefined),
       tagPickerNavigate: () => openTagPicker(),
       tagPicker: () => withTitle(() => openTagPicker()),
+      assignNavigate: () => openAssign(),
+      assign: () => withTitle(() => openAssign()),
+      // P6: the comment composer is the pane's (02 §9.2).
+      commentNavigate: () => openPane('comment'),
+      focusComment: () => withTitle(() => openPane('comment')),
       duplicate: () => withTitle(() => (controller.duplicate().length > 0 ? undefined : false)),
       openPane: () => openPane('title'),
       openPaneFocus: () => withTitle(() => openPane('title')),
@@ -607,9 +737,28 @@ export function MyListView({ orgId, userId, label, pane, view }: MyListViewProps
         view={view ?? null}
         clock={clock}
         viewRef={viewRef}
+        everyone={everyone ? members : null}
+        extraRef={extraRef}
       />
     ),
-    [orgId, userId, view, clock],
+    [orgId, userId, view, clock, everyone, members],
+  );
+  // 02 §11: a drag between member sections reassigns; the picker is the keyboard path.
+  const assignDrop = useMemo<AssignDrop | undefined>(
+    () =>
+      everyone
+        ? {
+            sectionOf: (row) =>
+              row.kind === 'task' || row.kind === 'add' || row.kind === 'section'
+                ? (row.sectionId ?? null)
+                : null,
+            commit: (ids, sectionId) => {
+              const assigneeId = sectionAssignee(sectionId);
+              return assigneeId !== undefined && controller.assign(ids, assigneeId);
+            },
+          }
+        : undefined,
+    [everyone, controller],
   );
   const ids = selectedCount > 1 && !mobile ? controller.selectedTaskIds() : [];
   const moveAnchor =
@@ -625,6 +774,17 @@ export function MyListView({ orgId, userId, label, pane, view }: MyListViewProps
           )
       : null;
   const tagIds = popover?.kind === 'tag' ? controller.selectedTaskIds() : [];
+  const assignAnchor =
+    popover?.kind === 'assign' && !mobile && members
+      ? popover.rowId === 'bulk'
+        ? (document.querySelector('[data-bulk-assign]') ??
+          root.current?.querySelector(
+            `[data-row-id="${useListStore.getState().cursor}"] [data-focus-target]`,
+          ))
+        : root.current?.querySelector(
+            `[data-row-id="${popover.rowId}"] [data-focus-target], [data-row-id="${popover.rowId}"] input`,
+          )
+      : null;
 
   if (status.error && !status.ready) {
     return (
@@ -668,6 +828,7 @@ export function MyListView({ orgId, userId, label, pane, view }: MyListViewProps
           rootRef={root}
           reorder={context.dragEnabled}
           onLongPress={onLongPress}
+          assignDrop={assignDrop}
         >
           {rowsElement}
         </ListDnd>
@@ -678,9 +839,13 @@ export function MyListView({ orgId, userId, label, pane, view }: MyListViewProps
           rootRef={root}
           layerRef={layer}
           canAdd={view !== 'overdue'}
+          members={members}
           swipePrefs={{
-            swipeLeft: prefs?.swipeLeft ?? 'date',
-            swipeRight: prefs?.swipeRight ?? 'complete',
+            // Everyone's tasks has no groups of mine to move other people's tasks into.
+            swipeLeft:
+              everyone && prefs?.swipeLeft === 'move' ? 'none' : (prefs?.swipeLeft ?? 'date'),
+            swipeRight:
+              everyone && prefs?.swipeRight === 'move' ? 'none' : (prefs?.swipeRight ?? 'complete'),
           }}
         />
       )}
@@ -692,6 +857,14 @@ export function MyListView({ orgId, userId, label, pane, view }: MyListViewProps
       )}
       {tagAnchor && tagIds.length > 0 && (
         <RowTagPicker anchor={tagAnchor} ids={tagIds} controller={controller} />
+      )}
+      {assignAnchor && members && (
+        <RowAssigneePicker
+          anchor={assignAnchor}
+          ids={controller.selectedTaskIds()}
+          members={members}
+          controller={controller}
+        />
       )}
       <ListLiveRegion />
       <SyncMarker />
@@ -736,6 +909,49 @@ export function RowTagPicker({
         onToggle={(tagId) => controller.toggleTag(ids, tagId)}
         onCreate={(name) => controller.createTagFor(ids, name)}
         onClose={close}
+      />
+    </Suspense>
+  );
+}
+
+/** The assignee picker for the selected rows (Tab+A / A, the bulk bar's Assign). */
+export function RowAssigneePicker({
+  anchor,
+  ids,
+  members,
+  controller,
+}: {
+  anchor: Element;
+  ids: string[];
+  members: readonly OrgMember[];
+  controller: ListController;
+}) {
+  const { t } = useTranslation('people');
+  const tasks = ids.map((id) => controller.task(id)).filter((x): x is Task => x !== undefined);
+  const first = tasks[0];
+  const current =
+    first && tasks.every((task) => task.assigneeId === first.assigneeId)
+      ? first.assigneeId
+      : undefined;
+  const close = () => {
+    controller.ui().set({ popover: null, focusSeq: controller.ui().focusSeq + 1 });
+  };
+  if (tasks.length === 0) return null;
+  return (
+    <Suspense fallback={null}>
+      <LazyAssigneePicker
+        anchor={anchor}
+        members={members}
+        meId={controller.deps.userId}
+        current={current}
+        label={
+          tasks.length === 1
+            ? t('picker.label', { title: first?.title ?? '' })
+            : t('picker.labelMany', { count: tasks.length })
+        }
+        onPick={(assigneeId) => controller.assign(ids, assigneeId)}
+        onClose={close}
+        placement={anchor.closest('[data-bulk-bar]') ? 'top' : 'bottom start'}
       />
     </Suspense>
   );

@@ -54,7 +54,8 @@
     "moveTo": "Flytta till",
     "delete": "Ta bort",
     "clear": "Avmarkera",
-    "tag": "Tagga"
+    "tag": "Tagga",
+    "assign": "Tilldela"
   },
   "header": {
     "showCompleted": "Visa klara",
@@ -101,7 +102,8 @@
     "over": "{title} är på plats {position} av {total} i {group}.",
     "moved": "Flyttad till {group}, plats {position} av {total}.",
     "groupMoved": "Gruppen {group} flyttad till plats {position} av {total}.",
-    "cancelled": "Flytten avbröts."
+    "cancelled": "Flytten avbröts.",
+    "pickedUpAssign": "Plockade upp {count, plural, one {{title}} other {# uppgifter}}. Släpp på en person för att tilldela."
   },
   "error": {
     "couldNotSave": "Kunde inte spara – {reason}",
@@ -140,7 +142,8 @@
       "groups": "Grupper",
       "dates": "Datumväljare",
       "pane": "Detaljpanel",
-      "editor": "Beskrivningsredigerare"
+      "editor": "Beskrivningsredigerare",
+      "inbox": "Inkorg"
     },
     "search": "Sök",
     "toggleSidebar": "Visa eller dölj sidofältet",
@@ -222,7 +225,10 @@
     "editorStrike": "Genomstruken",
     "editorCode": "Kod i text",
     "editorLink": "Länk (med markerad text)",
-    "editorToolbar": "Gå till formateringsverktygen"
+    "editorToolbar": "Gå till formateringsverktygen",
+    "postComment": "Skicka kommentar",
+    "toggleRead": "Markera som läst eller oläst",
+    "markAllRead": "Markera alla som lästa"
   },
   "dev": {
     "section": "Listan Mina uppgifter",
@@ -255,5 +261,14 @@
     "rowLabel": "Taggar: {names}",
     "suggestions": "Förslag på taggar",
     "create": "Skapa ”{name}”"
+  },
+  "assign": {
+    "toOther": "{count, plural, one {Uppgiften tilldelades {name}} other {# uppgifter tilldelades {name}}} · nu i hens inkorg",
+    "toMe": "{count, plural, one {Uppgiften tilldelades dig} other {# uppgifter tilldelades dig}} · nu i din inkorg",
+    "unassigned": "{count, plural, one {Uppgiften har ingen ansvarig längre} other {# uppgifter har ingen ansvarig längre}}",
+    "createdFor": "{count, plural, one {Uppgiften lades} other {# uppgifter lades}} i inkorgen för {name}",
+    "createdUnassigned": "{count, plural, one {Uppgiften lades till} other {# uppgifter lades till}} utan ansvarig",
+    "someone": "någon",
+    "suggestions": "Personer"
   }
 }

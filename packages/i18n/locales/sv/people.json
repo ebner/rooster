@@ -1,1 +1,60 @@
-{}
+{
+  "unassigned": "Ingen ansvarig",
+  "unknownMember": "Tidigare medlem",
+  "picker": {
+    "label": "Tilldela ”{title}”",
+    "labelMany": "Tilldela {count, plural, one {# uppgift} other {# uppgifter}}",
+    "labelField": "Välj ansvarig",
+    "list": "Tilldela till",
+    "filter": "Filtrera personer",
+    "placeholder": "Tilldela till…",
+    "empty": "Ingen med det namnet",
+    "you": "(du)",
+    "current": "Nuvarande ansvarig"
+  },
+  "field": {
+    "label": "Ansvarig: {name}"
+  },
+  "row": {
+    "assignee": "Ansvarig: {name}"
+  },
+  "filter": {
+    "label": "Filtrera på datum och person",
+    "button": "Datum och personer",
+    "active": "{count, plural, one {# filter} other {# filter}}",
+    "due": "Förfallodatum",
+    "dueOption": {
+      "any": "Alla datum",
+      "overdue": "Försenade",
+      "week": "Kommande 7 dagar",
+      "nodate": "Utan datum"
+    },
+    "dueAnnounce": "Visar uppgifter med förfallodatum: {due}",
+    "members": "Personer",
+    "membersAnnounce": "{count, plural, =0 {Visar alla} one {Visar # person} other {Visar # personer}}",
+    "clear": "Rensa filtren",
+    "cleared": "Filtren har rensats"
+  },
+  "dev": {
+    "section": "Tilldelning och Allas uppgifter",
+    "picker": "Välj ansvarig (öppen, förankrad)",
+    "sheet": "Välj ansvarig (telefon)",
+    "openSheet": "Öppna arket",
+    "field": "Fältet Ansvarig (panel och ark)",
+    "rows": "Rader med ansvarigs avatar",
+    "everyone": "Avsnitt i Allas uppgifter",
+    "filters": "Filterknappen",
+    "people": {
+      "anna": "Anna Lindqvist",
+      "bob": "Bo Martinsson",
+      "chen": "Chen Wei"
+    },
+    "tasks": {
+      "budget": "Gå igenom budgeten för Q4",
+      "invoice": "Skicka fakturan",
+      "offsite": "Boka lokal till konferensen",
+      "slides": "Skissa bilderna till kickoffen",
+      "minutes": "Skriv mötesprotokollet"
+    }
+  }
+}

@@ -1,9 +1,10 @@
 import { orderedGroups } from '@rooster/core/reducers';
 import type { Task } from '@rooster/core/schemas';
-import { Calendar, CheckCircle2, FolderInput, Hash, Trash2, X } from 'lucide-react';
+import { Calendar, CheckCircle2, FolderInput, Hash, Trash2, UserRound, X } from 'lucide-react';
 import { type RefObject, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMyList } from '../../data/list';
+import type { OrgMember } from '../../data/types';
 import { cn } from '../../lib/cn';
 import { selectedIds, useListUi } from '../../state/list-store';
 import { useTagsStore } from '../../state/tags-store';
@@ -15,6 +16,7 @@ import type { SwipeRevealAction } from '../../ui/swipe-reveal';
 import { useEditingFocus, useKeyboardInset } from '../../ui/use-media';
 import { type DueValue, noDue, sameDue, useDateLabel } from '../dates';
 import { QuickDateSheet } from '../dates/quick-date-sheet';
+import { AssigneeSheet } from '../people/assignee-sheet';
 import { TagSheet } from '../tags/tag-sheet';
 import { announce } from './announcer';
 import type { ListController } from './controller';
@@ -56,6 +58,8 @@ export interface MobileListChromeProps {
   swipePrefs: SwipePrefs;
   /** Overdue takes no inline adds (02 §10): no FAB. */
   canAdd?: boolean;
+  /** A shared org's members (me first): the assign sheet. Null in a personal org (FR-COL-6). */
+  members?: readonly OrgMember[] | null;
 }
 
 /**
@@ -69,6 +73,7 @@ export function MobileListChrome({
   layerRef,
   swipePrefs,
   canAdd = true,
+  members = null,
 }: MobileListChromeProps) {
   const { t } = useTranslation('mobile');
   const { t: tList } = useTranslation('list');
@@ -98,7 +103,11 @@ export function MobileListChrome({
 
   // ------------------------------------------------------------------ popover sheets
   const sheetIds =
-    popover && (popover.kind === 'date' || popover.kind === 'moveTo' || popover.kind === 'tag')
+    popover &&
+    (popover.kind === 'date' ||
+      popover.kind === 'moveTo' ||
+      popover.kind === 'tag' ||
+      popover.kind === 'assign')
       ? popover.rowId === 'bulk' || selectionMode
         ? controller.selectedTaskIds()
         : [popover.rowId]
@@ -113,6 +122,11 @@ export function MobileListChrome({
   const applied = allTags
     .filter((tag) => sheetTasks.length > 0 && sheetTasks.every((x) => x?.tagIds.includes(tag.id)))
     .map((tag) => tag.id);
+  const firstAssignee = sheetTasks[0]?.assigneeId;
+  const currentAssignee =
+    firstAssignee !== undefined && sheetTasks.every((x) => x?.assigneeId === firstAssignee)
+      ? firstAssignee
+      : undefined;
 
   // ------------------------------------------------------------------ the draft's accessory bar
   const keyboard = useKeyboardInset();
@@ -191,6 +205,7 @@ export function MobileListChrome({
         <SelectionBars
           count={selectedCount}
           controller={controller}
+          canAssign={members !== null}
           onDone={() => controller.exitSelectionMode()}
         />
       )}
@@ -221,6 +236,20 @@ export function MobileListChrome({
         onToggle={(tagId) => controller.toggleTag(sheetIds, tagId)}
         onCreate={(name) => controller.createTagFor(sheetIds, name)}
       />
+      {members && (
+        <AssigneeSheet
+          isOpen={popover?.kind === 'assign' && sheetIds.length > 0}
+          onOpenChange={(open) => !open && closePopover()}
+          members={members}
+          meId={controller.deps.userId}
+          current={currentAssignee}
+          subject={subject}
+          onPick={(assigneeId) => {
+            controller.assign(sheetIds, assigneeId);
+            if (selectionMode) controller.exitSelectionMode();
+          }}
+        />
+      )}
     </>
   );
 }
@@ -232,15 +261,18 @@ export function MobileListChrome({
 function SelectionBars({
   count,
   controller,
+  canAssign,
   onDone,
 }: {
   count: number;
   controller: ListController;
+  /** A shared org: Assign replaces Move to (five actions fit the bar). */
+  canAssign: boolean;
   onDone: () => void;
 }) {
   const { t } = useTranslation('mobile');
   const { t: tList } = useTranslation('list');
-  const bulk = (kind: 'date' | 'moveTo' | 'tag') =>
+  const bulk = (kind: 'date' | 'moveTo' | 'tag' | 'assign') =>
     controller.ui().set({ popover: { kind, rowId: 'bulk' } });
   const disabled = count === 0;
   const actions = [
@@ -254,7 +286,19 @@ function SelectionBars({
       },
     },
     { id: 'date', label: tList('bulk.date'), icon: Calendar, onPress: () => bulk('date') },
-    { id: 'move', label: tList('bulk.moveTo'), icon: FolderInput, onPress: () => bulk('moveTo') },
+    canAssign && controller.isEveryone()
+      ? {
+          id: 'assign',
+          label: tList('bulk.assign'),
+          icon: UserRound,
+          onPress: () => bulk('assign'),
+        }
+      : {
+          id: 'move',
+          label: tList('bulk.moveTo'),
+          icon: FolderInput,
+          onPress: () => bulk('moveTo'),
+        },
     { id: 'tag', label: tList('bulk.tag'), icon: Hash, onPress: () => bulk('tag') },
     {
       id: 'delete',

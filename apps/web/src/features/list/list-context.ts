@@ -21,6 +21,13 @@ export interface ListContextValue {
   mobile?: boolean | undefined;
   /** A smart view (02 §10): drafts read `>Group`; there are no groups to make with a colon. */
   view?: SmartView | undefined;
+  /**
+   * A shared org (P6): new tasks read `@name`, and rows can show assignees. False in a
+   * personal org, which shows no collaboration UI (FR-COL-6).
+   */
+  shared?: boolean | undefined;
+  /** Everyone's tasks (02 §11): every row shows its assignee; no groups to make or move to. */
+  everyone?: boolean | undefined;
 }
 
 export const ListContext = createContext<ListContextValue | null>(null);

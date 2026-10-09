@@ -9,6 +9,7 @@ import {
   type Draft,
   groupRowId,
 } from '../../../state/list-store';
+import type { Person } from '../../people/members';
 
 export interface GroupRow {
   kind: 'group';
@@ -71,6 +72,13 @@ export interface SectionRow {
   /** Open tasks in the section. */
   count: number;
   first: boolean;
+  /**
+   * Everyone's tasks (02 §11): the assignee the section stands for (null: Unassigned). Its
+   * header shows the avatar and name instead of a date.
+   */
+  assigneeId?: string | null;
+  /** The member, when known (null: Unassigned, or someone no longer in the org). */
+  person?: Person | null;
 }
 
 /** An empty smart view (02 §14): the illustration and the view's text. */

@@ -1,1 +1,60 @@
-{}
+{
+  "unassigned": "Unassigned",
+  "unknownMember": "Former member",
+  "picker": {
+    "label": "Assign “{title}”",
+    "labelMany": "Assign {count, plural, one {# task} other {# tasks}}",
+    "labelField": "Choose the assignee",
+    "list": "Assign to",
+    "filter": "Filter people",
+    "placeholder": "Assign to…",
+    "empty": "Nobody by that name",
+    "you": "(you)",
+    "current": "Current assignee"
+  },
+  "field": {
+    "label": "Assignee: {name}"
+  },
+  "row": {
+    "assignee": "Assigned to {name}"
+  },
+  "filter": {
+    "label": "Filter by due date and person",
+    "button": "Due & people",
+    "active": "{count, plural, one {# filter} other {# filters}}",
+    "due": "Due",
+    "dueOption": {
+      "any": "Any date",
+      "overdue": "Overdue",
+      "week": "Next 7 days",
+      "nodate": "No date"
+    },
+    "dueAnnounce": "Showing tasks due: {due}",
+    "members": "People",
+    "membersAnnounce": "{count, plural, =0 {Showing everyone} one {Showing # person} other {Showing # people}}",
+    "clear": "Clear filters",
+    "cleared": "Filters cleared"
+  },
+  "dev": {
+    "section": "Assignment and Everyone’s tasks",
+    "picker": "Assignee picker (open, anchored)",
+    "sheet": "Assignee sheet (phone)",
+    "openSheet": "Open the sheet",
+    "field": "Assignee field (pane and sheet variants)",
+    "rows": "Rows with assignee avatars",
+    "everyone": "Everyone's tasks sections",
+    "filters": "Filter button",
+    "people": {
+      "anna": "Anna Lindqvist",
+      "bob": "Bob Marsh",
+      "chen": "Chen Wei"
+    },
+    "tasks": {
+      "budget": "Review the Q4 budget",
+      "invoice": "Send the invoice",
+      "offsite": "Book the offsite venue",
+      "slides": "Draft the kickoff slides",
+      "minutes": "Write the meeting minutes"
+    }
+  }
+}

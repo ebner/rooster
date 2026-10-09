@@ -1,4 +1,4 @@
-import { Calendar, CheckCircle2, FolderInput, Hash, Trash2, X } from 'lucide-react';
+import { Calendar, CheckCircle2, FolderInput, Hash, Trash2, UserRound, X } from 'lucide-react';
 import { Suspense, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { primaryKeys } from '../../keymap';
@@ -13,7 +13,8 @@ import { useListContext } from './list-context';
 
 /**
  * 03 §3.11 / 02 §3.3: with ≥ 2 tasks selected, a floating bar at the bottom centre:
- * "3 selected · Complete · Date · Move to · Delete · ✕". Tag and Assign arrive with P3/P6.
+ * "3 selected · Complete · Date · Move to · Tag · Assign · Delete · ✕". Assign shows in shared
+ * orgs only (FR-COL-6); Everyone's tasks has no Move to (no groups of mine there).
  */
 export function BulkBar({
   ids,
@@ -24,7 +25,7 @@ export function BulkBar({
   className?: string | undefined;
 }) {
   const { t } = useTranslation('list');
-  const { controller, dateCtx } = useListContext();
+  const { controller, dateCtx, shared = false, everyone = false } = useListContext();
   const dateRef = useRef<HTMLButtonElement>(null);
   const moveRef = useRef<HTMLButtonElement>(null);
   const [dateOpen, setDateOpen] = useState(false);
@@ -77,15 +78,17 @@ export function BulkBar({
       >
         <span className="max-tablet:sr-only">{t('bulk.date')}</span>
       </Button>
-      <Button
-        ref={moveRef}
-        variant="ghost-inverse"
-        size="sm"
-        icon={FolderInput}
-        onPress={() => controller.ui().set({ popover: { kind: 'moveTo', rowId: 'bulk' } })}
-      >
-        <span className="max-tablet:sr-only">{t('bulk.moveTo')}</span>
-      </Button>
+      {!everyone && (
+        <Button
+          ref={moveRef}
+          variant="ghost-inverse"
+          size="sm"
+          icon={FolderInput}
+          onPress={() => controller.ui().set({ popover: { kind: 'moveTo', rowId: 'bulk' } })}
+        >
+          <span className="max-tablet:sr-only">{t('bulk.moveTo')}</span>
+        </Button>
+      )}
       <Button
         data-bulk-tag
         variant="ghost-inverse"
@@ -95,6 +98,17 @@ export function BulkBar({
       >
         <span className="max-tablet:sr-only">{t('bulk.tag')}</span>
       </Button>
+      {shared && (
+        <Button
+          data-bulk-assign
+          variant="ghost-inverse"
+          size="sm"
+          icon={UserRound}
+          onPress={() => controller.ui().set({ popover: { kind: 'assign', rowId: 'bulk' } })}
+        >
+          <span className="max-tablet:sr-only">{t('bulk.assign')}</span>
+        </Button>
+      )}
       <Button
         variant="ghost-inverse"
         size="sm"

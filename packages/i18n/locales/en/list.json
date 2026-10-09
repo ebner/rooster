@@ -54,7 +54,8 @@
     "moveTo": "Move to",
     "delete": "Delete",
     "clear": "Clear selection",
-    "tag": "Tag"
+    "tag": "Tag",
+    "assign": "Assign"
   },
   "header": {
     "showCompleted": "Show completed",
@@ -101,7 +102,8 @@
     "over": "{title} is at position {position} of {total} in {group}.",
     "moved": "Moved to {group}, position {position} of {total}.",
     "groupMoved": "Moved group {group} to position {position} of {total}.",
-    "cancelled": "Drop cancelled."
+    "cancelled": "Drop cancelled.",
+    "pickedUpAssign": "Picked up {count, plural, one {{title}} other {# tasks}}. Drop on a person to assign."
   },
   "error": {
     "couldNotSave": "Couldn’t save – {reason}",
@@ -140,7 +142,8 @@
       "groups": "Groups",
       "dates": "Date picker",
       "pane": "Detail pane",
-      "editor": "Description editor"
+      "editor": "Description editor",
+      "inbox": "Inbox"
     },
     "search": "Search",
     "toggleSidebar": "Toggle sidebar",
@@ -222,7 +225,10 @@
     "editorStrike": "Strikethrough",
     "editorCode": "Inline code",
     "editorLink": "Link (with text selected)",
-    "editorToolbar": "Focus the formatting toolbar"
+    "editorToolbar": "Focus the formatting toolbar",
+    "postComment": "Post comment",
+    "toggleRead": "Mark as read or unread",
+    "markAllRead": "Mark all read"
   },
   "dev": {
     "section": "My tasks list",
@@ -255,5 +261,14 @@
     "rowLabel": "Tags: {names}",
     "suggestions": "Tag suggestions",
     "create": "Create “{name}”"
+  },
+  "assign": {
+    "toOther": "{count, plural, one {Assigned to {name}} other {# tasks assigned to {name}}} · moved to their Inbox",
+    "toMe": "{count, plural, one {Assigned to you} other {# tasks assigned to you}} · moved to your Inbox",
+    "unassigned": "{count, plural, one {Task unassigned} other {# tasks unassigned}}",
+    "createdFor": "{count, plural, one {Added} other {# tasks added}} to {name}’s Inbox",
+    "createdUnassigned": "{count, plural, one {Added} other {# tasks added}} without an assignee",
+    "someone": "someone",
+    "suggestions": "People"
   }
 }

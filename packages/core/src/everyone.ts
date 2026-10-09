@@ -31,7 +31,7 @@ export const EVERYONE_DUE_FILTERS = ['any', 'overdue', 'week', 'nodate'] as cons
 export type EveryoneDueFilter = (typeof EVERYONE_DUE_FILTERS)[number];
 
 export interface EveryoneFilters {
-  /** Only tasks carrying every one of these tags (AND, like the server's `tag`). */
+  /** Tasks carrying any of these tags (OR, like the list's tag filter that drives it). */
   tagIds?: readonly string[] | undefined;
   /** Default `any`. */
   due?: EveryoneDueFilter | undefined;
@@ -119,7 +119,8 @@ export function matchesEveryoneFilters(
   due?: DueContext,
 ): boolean {
   if (task.completedAt !== null && !filters.showCompleted) return false;
-  if (filters.tagIds?.some((id) => !task.tagIds.includes(id))) return false;
+  const tags = filters.tagIds ?? [];
+  if (tags.length > 0 && !task.tagIds.some((id) => tags.includes(id))) return false;
   switch (filters.due ?? 'any') {
     case 'any':
       return true;

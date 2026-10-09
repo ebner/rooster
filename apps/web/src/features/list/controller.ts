@@ -33,6 +33,9 @@ import {
 import { type UndoEntry, useUndoStore } from '../../state/undo-store';
 import { toast } from '../../ui/toast';
 import type { ViewerDateContext } from '../dates';
+import { resolveAssigneeToken } from '../people/assignee-token';
+import { sectionAssignee } from '../people/everyone-model';
+import type { Person } from '../people/members';
 import { announce } from './announcer';
 import {
   groupStepTarget,
@@ -79,16 +82,30 @@ export interface ControllerDeps {
   rootTaskId?: string;
   /** A smart view (02 §10): the view and the sections on screen, read live. */
   view?: () => ViewModel | null;
+  /**
+   * Tasks outside My tasks this list shows (Everyone's tasks, a task opened from there), read
+   * live: commands, undo and the inverse ops see them as if they were in the list state.
+   */
+  extraTasks?: () => Readonly<Record<string, Task>> | undefined;
+  /**
+   * Shared orgs (P6): the members `@name` resolves against and the toasts name. Absent in a
+   * personal org, where nothing is assigned (FR-COL-6).
+   */
+  members?: () => readonly Person[];
 }
 
-/** What the controller needs of a smart view: drafts inherit their section's date. */
+/**
+ * What the controller needs of a smart view: drafts inherit their section's date. In
+ * Everyone's tasks (02 §11) the sections are the assignees (`memberSectionId`), and drafts
+ * are created for the section's member.
+ */
 export interface ViewModel {
-  view: SmartView;
+  view: SmartView | 'everyone';
   sections: readonly ViewSection[];
 }
 
-/** A parsed title plus the `>Group` it names (smart views). */
-type ParsedLine = ParsedTitle & { groupId?: string };
+/** A parsed title plus the `>Group` (smart views) and `@name` (new tasks) it names. */
+type ParsedLine = ParsedTitle & { groupId?: string; assigneeId?: string };
 
 export interface CommitResult {
   /** The input should show this text again (an emptied existing title). */
@@ -120,8 +137,26 @@ export class ListController {
     return this.deps.orgId;
   }
 
+  private merged: {
+    base: ListState;
+    extra: Readonly<Record<string, Task>>;
+    state: ListState;
+  } | null = null;
+
+  /** The list state, plus the tasks of `extraTasks` that are not in it (or deleted from it). */
   state(): ListState | undefined {
-    return this.deps.pipeline.view(this.deps.orgId);
+    const base = this.deps.pipeline.view(this.deps.orgId);
+    const extra = this.deps.extraTasks?.();
+    if (!base || !extra) return base;
+    const cached = this.merged;
+    if (cached && cached.base === base && cached.extra === extra) return cached.state;
+    const tasks: Record<string, Task> = {};
+    for (const [id, task] of Object.entries(extra)) {
+      if (!base.deletedTasks[id]) tasks[id] = task;
+    }
+    const state = { ...base, tasks: Object.assign(tasks, base.tasks) };
+    this.merged = { base, extra, state };
+    return state;
   }
 
   private get t(): Translate {
@@ -172,6 +207,11 @@ export class ListController {
     return this.viewModel() !== null;
   }
 
+  /** Everyone's tasks (02 §11): sections are assignees, not dates. */
+  isEveryone(): boolean {
+    return this.viewModel()?.view === 'everyone';
+  }
+
   /** The section to add to: `preferred` when it takes adds, else the first that does. */
   private addSection(preferred?: string): ViewSection | undefined {
     const sections = this.viewModel()?.sections ?? [];
@@ -220,15 +260,32 @@ export class ListController {
     return state ? resolveGroupToken(raw, Object.values(state.groups), ignored) : null;
   }
 
-  /** Parses a title; in a smart-view draft a `>Group` token picks the group and is removed. */
-  private parseLine(raw: string, ignored: readonly Span[], groupTokens: boolean): ParsedLine {
+  /**
+   * Parses a title; in a smart-view draft a `>Group` token picks the group, and in a new task
+   * of a shared org an `@name` token picks the assignee (02 §3.4). Both are removed.
+   */
+  private parseLine(
+    raw: string,
+    ignored: readonly Span[],
+    groupTokens: boolean,
+    assigneeTokens = false,
+  ): ParsedLine {
     const ctx = this.deps.dateContext();
-    const hit = groupTokens ? this.groupToken(raw, ignored) : null;
+    const members = assigneeTokens ? this.deps.members?.() : undefined;
+    const who = members ? resolveAssigneeToken(raw, members, this.deps.userId, ignored) : null;
+    const text = who ? blankSpan(raw, who) : raw;
+    const assignee = who ? { assigneeId: who.userId } : {};
+    const hit = groupTokens ? this.groupToken(text, ignored) : null;
     if (hit) {
-      const parsed = parseTitle(blankSpan(raw, hit), ctx, ignored, this.parseTitles());
-      if (parsed.title !== '') return { ...parsed, groupId: hit.groupId };
+      const parsed = parseTitle(blankSpan(text, hit), ctx, ignored, this.parseTitles());
+      if (parsed.title !== '') return { ...parsed, groupId: hit.groupId, ...assignee };
     }
-    return parseTitle(raw, ctx, ignored, this.parseTitles());
+    const parsed = parseTitle(text, ctx, ignored, this.parseTitles());
+    if (!who) return parsed;
+    // A title made only of the token keeps it as text (a task called "@anna" stays that).
+    return parsed.title !== ''
+      ? { ...parsed, ...assignee }
+      : parseTitle(raw, ctx, ignored, this.parseTitles());
   }
 
   // -------------------------------------------------------------------------------------
@@ -613,7 +670,12 @@ export class ListController {
    */
   commitTitle(rowId: string, raw: string, ignored: readonly Span[] = []): CommitResult {
     const draft = this.store().drafts.find((d) => d.id === rowId);
-    const parsed = this.parseLine(raw, ignored, Boolean(draft?.sectionId && !draft.parentId));
+    const parsed = this.parseLine(
+      raw,
+      ignored,
+      Boolean(draft?.sectionId && !draft.parentId && !this.isEveryone()),
+      Boolean(draft),
+    );
     if (draft) {
       if (parsed.title === '') return {};
       this.createFromDraft(draft, [parsed]);
@@ -706,17 +768,46 @@ export class ListController {
           ...(p.due ?? (i === 0 && draft.due ? draft.due : {})),
           ...(tagIds.length > 0 ? { tagIds } : {}),
           ...(newNames.length > 0 ? { tagNames: newNames } : {}),
+          ...this.assigneeField(p.assigneeId),
         }),
       );
-      afterId = id;
+      // A task for someone else lands in their Inbox, not here: the next one follows mine.
+      if (!this.forSomeoneElse(p.assigneeId)) afterId = id;
     });
     this.store().removeDraft(draft.id);
-    this.run(
-      parsed.length === 1
-        ? this.t('undo.created')
-        : this.t('undo.createdMany', { count: parsed.length }),
-      specs,
-    );
+    const label = this.createdLabel(parsed);
+    this.run(label, specs, { toast: this.createdElsewhere(parsed) });
+  }
+
+  /** `assigneeId` for a create body: only another member (the server defaults to me). */
+  private assigneeField(assigneeId: string | null | undefined): { assigneeId?: string | null } {
+    return assigneeId === undefined || assigneeId === this.deps.userId ? {} : { assigneeId };
+  }
+
+  private forSomeoneElse(assigneeId: string | null | undefined): boolean {
+    return assigneeId !== undefined && assigneeId !== this.deps.userId;
+  }
+
+  private memberName(userId: string): string {
+    return this.deps.members?.().find((m) => m.userId === userId)?.name ?? this.t('assign.someone');
+  }
+
+  /** Tasks created for someone else (or unassigned) get a toast saying where they went. */
+  private createdElsewhere(parsed: readonly ParsedLine[]): boolean {
+    return parsed.some((p) => this.forSomeoneElse(p.assigneeId));
+  }
+
+  /** "Added to Anna's Inbox" when every new task went to one other member (02 §11). */
+  private createdLabel(parsed: readonly ParsedLine[]): string {
+    const others = new Set(parsed.map((p) => p.assigneeId));
+    const only = others.size === 1 ? [...others][0] : undefined;
+    if (only === null) return this.t('assign.createdUnassigned', { count: parsed.length });
+    if (only !== undefined && only !== this.deps.userId) {
+      return this.t('assign.createdFor', { count: parsed.length, name: this.memberName(only) });
+    }
+    return parsed.length === 1
+      ? this.t('undo.created')
+      : this.t('undo.createdMany', { count: parsed.length });
   }
 
   /**
@@ -730,7 +821,14 @@ export class ListController {
     if (!state) return;
     const specs: ListOpSpec[] = [];
     let previous = draft.afterId;
-    parsed.forEach((p, i) => {
+    // Everyone's tasks (02 §11): a draft under a member is created for that member.
+    const sectionMember = draft.parentId ? undefined : sectionAssignee(draft.sectionId);
+    const lines = parsed.map((p) =>
+      p.assigneeId === undefined && sectionMember !== undefined
+        ? { ...p, assigneeId: sectionMember as string }
+        : p,
+    );
+    lines.forEach((p, i) => {
       const id = i === 0 ? draft.id : uuidv7();
       createdHere.add(id);
       const { ids: tagIds, newNames } = this.resolveTags(p.tags ?? []);
@@ -738,6 +836,9 @@ export class ListController {
       let where: Partial<TaskCreateBody>;
       if (draft.parentId) {
         where = { parentId: draft.parentId };
+      } else if (this.forSomeoneElse(p.assigneeId)) {
+        // The server puts it at the top of their Inbox (or nowhere, unassigned).
+        where = this.assigneeField(p.assigneeId);
       } else {
         const inGroup = tasksInGroup(state, groupId);
         const anchor = inGroup.findIndex((t) => t.id === previous);
@@ -760,12 +861,8 @@ export class ListController {
       previous = id;
     });
     this.store().removeDraft(draft.id);
-    this.run(
-      parsed.length === 1
-        ? this.t('undo.created')
-        : this.t('undo.createdMany', { count: parsed.length }),
-      specs,
-    );
+    const label = this.createdLabel(lines);
+    this.run(label, specs, { toast: this.createdElsewhere(lines) });
   }
 
   /** Enter / Shift+Enter in Edit. */
@@ -903,7 +1000,9 @@ export class ListController {
     const row = this.rows().find((r) => r.id === rowId);
     const inView = Boolean(draft?.sectionId ?? (row?.kind === 'task' && row.sectionId));
     const parsed = lines
-      .map((line) => this.parseLine(line, [], inView && !draft?.parentId))
+      .map((line) =>
+        this.parseLine(line, [], inView && !draft?.parentId && !this.isEveryone(), true),
+      )
       .filter((p) => p.title !== '');
     if (parsed.length === 0) return;
     if (!draft && row?.kind === 'task' && row.sectionId) {
@@ -923,6 +1022,50 @@ export class ListController {
     }
     this.createFromDraft(draft, parsed);
     this.store().navigate(draft.id);
+  }
+
+  // -------------------------------------------------------------------------------------
+  // Assigning (FR-COL-1, FR-COL-2)
+  // -------------------------------------------------------------------------------------
+
+  /**
+   * Tab+A / A, the picker, the bulk bar and a reassign drag: one patch for one task, the bulk
+   * op for several, with undo. Tasks that already have `assigneeId` are skipped; returns
+   * whether anything changed. Rows that leave this list hand the selection on, as a delete does.
+   */
+  assign(ids: readonly string[], assigneeId: string | null): boolean {
+    const live = ids.filter((id) => {
+      const task = this.task(id);
+      return task !== undefined && task.assigneeId !== assigneeId;
+    });
+    if (live.length === 0) return false;
+    const rows = this.rows();
+    // My tasks and the smart views list my tasks only; a subtask row under its parent stays.
+    const leaving =
+      this.isEveryone() || assigneeId === this.deps.userId
+        ? []
+        : live.filter((id) => {
+            const row = rows.find((r) => r.id === id);
+            return row?.kind === 'task' && row.parentId === null;
+          });
+    const cursor = this.store().cursor;
+    const next = cursor && leaving.includes(cursor) ? this.nextNavigableAfter(leaving) : undefined;
+    const specs =
+      live.length === 1
+        ? [listOps.patchTask(live[0] as string, { assigneeId })]
+        : chunk(live).map((part) =>
+            listOps.bulk(this.orgId, { op: 'assign', ids: part, args: { assigneeId } }),
+          );
+    this.run(this.assignedLabel(live.length, assigneeId), specs, { toast: true });
+    if (next !== undefined) this.store().select(next);
+    return true;
+  }
+
+  /** "Assigned to Anna · moved to their Inbox" (02 §11), "Assigned to you", "Unassigned". */
+  private assignedLabel(count: number, assigneeId: string | null): string {
+    if (assigneeId === null) return this.t('assign.unassigned', { count });
+    if (assigneeId === this.deps.userId) return this.t('assign.toMe', { count });
+    return this.t('assign.toOther', { count, name: this.memberName(assigneeId) });
   }
 
   // -------------------------------------------------------------------------------------

@@ -3,12 +3,14 @@ import { useNavigate, useParams, useRouter } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMyListSelect } from '../../data/list';
+import { useOrgMembers } from '../../data/orgs';
 import type { Org } from '../../data/types';
 import { useListStore } from '../../state/list-store';
 import { usePaneStore } from '../../state/pane-store';
 import { isMobileViewport } from '../../ui/use-media';
 import { ShowCompletedMenuItem, ShowCompletedToggle } from '../list/header-actions';
 import { MyListView } from '../list/my-list-view';
+import { EveryoneFilterButton } from '../people/everyone-filters';
 import { ViewBody, ViewHeader } from '../shell/app-shell';
 import { type OrgViewId, paths } from '../shell/paths';
 import { TagFilterButton } from '../tags/tag-filter';
@@ -102,8 +104,17 @@ export function TasksScreen({
   const fullScreen = usePaneStore((s) => s.fullScreen);
   const viewRef = useRef(view);
   viewRef.current = view;
-  const tabs = useViewTabs(orgSlug, view);
-  const title = t(`view.${view}`);
+  const shared = !org.isPersonal;
+  // FR-COL-6: a personal org has no Everyone's tasks; its URL shows My tasks.
+  const everyone = view === 'everyone' && shared;
+  const tabs = useViewTabs(org, orgSlug, everyone || view !== 'everyone' ? view : 'my');
+  const title = t(`view.${everyone || view !== 'everyone' ? view : 'my'}`);
+  const members = useOrgMembers(everyone ? org.id : undefined).data;
+  useEffect(() => {
+    if (view === 'everyone' && !shared && !taskId) {
+      void navigate({ href: paths.orgView(orgSlug, 'my'), replace: true });
+    }
+  }, [view, shared, taskId, navigate, orgSlug]);
 
   const focusList = focusListCursor;
 
@@ -169,15 +180,30 @@ export function TasksScreen({
             title={title}
             context={org.name}
             actions={
-              <>
-                <TagFilterButton orgId={org.id} />
-                <ShowCompletedToggle />
-              </>
+              everyone ? (
+                <>
+                  <EveryoneFilterButton members={members ?? []} meId={userId} />
+                  <TagFilterButton orgId={org.id} />
+                </>
+              ) : (
+                <>
+                  <TagFilterButton orgId={org.id} />
+                  <ShowCompletedToggle />
+                </>
+              )
             }
             mobile={{
               switcher: true,
-              actions: <TagFilterButton orgId={org.id} />,
-              menu: <ShowCompletedMenuItem />,
+              actions: everyone ? (
+                <>
+                  <EveryoneFilterButton members={members ?? []} meId={userId} />
+                  <TagFilterButton orgId={org.id} />
+                </>
+              ) : (
+                <TagFilterButton orgId={org.id} />
+              ),
+              // Everyone's tasks lists open tasks only (02 §11).
+              menu: everyone ? undefined : <ShowCompletedMenuItem />,
               views: tabs,
             }}
           />
@@ -188,6 +214,8 @@ export function TasksScreen({
               label={title}
               pane={pane}
               view={view === 'my' || view === 'everyone' ? undefined : view}
+              shared={shared}
+              everyone={everyone}
             />
           </ViewBody>
         </>

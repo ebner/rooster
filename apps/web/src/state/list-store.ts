@@ -55,7 +55,7 @@ export interface KeyboardDrag {
 }
 
 export interface ListPopover {
-  kind: 'moveTo' | 'date' | 'groupDelete' | 'groupMenu' | 'tag';
+  kind: 'moveTo' | 'date' | 'groupDelete' | 'groupMenu' | 'tag' | 'assign';
   /** The row the popover is anchored to. */
   rowId: string;
 }

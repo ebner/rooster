@@ -118,7 +118,7 @@ describe('selectEveryone (02 §11)', () => {
     expect(sections[1]?.taskIds).toEqual(['u1']);
   });
 
-  it('filters by tag (AND) and due', () => {
+  it('filters by tag (OR) and due', () => {
     const tagged = [
       task('t1', { tagIds: ['x', 'y'] }),
       task('t2', { tagIds: ['x'] }),
@@ -129,7 +129,8 @@ describe('selectEveryone (02 §11)', () => {
     ];
     const mine = (filters: EveryoneContext['filters']) =>
       selectEveryone(tagged, { ...base, filters })[0]?.taskIds;
-    expect(mine({ tagIds: ['x', 'y'] })).toEqual(['t1']);
+    expect(mine({ tagIds: ['x', 'y'] })).toEqual(['t1', 't2']);
+    expect(mine({ tagIds: ['y'] })).toEqual(['t1']);
     expect(mine({ due: 'overdue' })).toEqual(['t3', 't4']);
     expect(mine({ due: 'week' })).toEqual(['t4', 't5']);
     expect(mine({ due: 'nodate' })).toEqual(['t1', 't2']);

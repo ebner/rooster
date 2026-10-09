@@ -33,6 +33,7 @@ import {
   groupIdOfRow,
   groupRowId,
   isGroupRowId,
+  sectionRowId,
   useListUi,
 } from '../../state/list-store';
 import { announce } from './announcer';
@@ -272,8 +273,21 @@ function scrollParent(el: Element | null): HTMLElement | null {
   return document.scrollingElement as HTMLElement | null;
 }
 
+/**
+ * Everyone's tasks (02 §11): the only drag there reassigns. Rows drop onto a section (an
+ * assignee), never between rows; the section's header lights up.
+ */
+export interface AssignDrop {
+  /** The section a row belongs to, or null where nothing can be dropped. */
+  sectionOf: (row: Row) => string | null;
+  /** Assigns the dragged tasks to the section's assignee; false when nothing changed. */
+  commit: (ids: readonly string[], sectionId: string) => boolean;
+}
+
 interface DragSession {
   kind: 'task' | 'group' | 'subtask';
+  /** An assign drag (Everyone's tasks): the section it started in and the one it is over. */
+  assign: { from: string | null; to: string | null } | null;
   /** Task ids, or the dragged group id. */
   ids: string[];
   /** The pointer in viewport coordinates, from the input events themselves. */
@@ -384,6 +398,7 @@ export const ListDnd = memo(function ListDnd({
   reorder = true,
   compact = false,
   onLongPress,
+  assignDrop,
   children,
 }: {
   rowsRef: RefObject<readonly Row[]>;
@@ -399,8 +414,13 @@ export const ListDnd = memo(function ListDnd({
   compact?: boolean;
   /** A touch long-press released without moving (02 §13.2: enters selection mode). */
   onLongPress?: ((rowId: string) => void) | undefined;
+  /** Everyone's tasks: drags reassign instead of reordering (`reorder` is then ignored). */
+  assignDrop?: AssignDrop | undefined;
   children: ReactNode;
 }) {
+  const assignRef = useRef(assignDrop);
+  assignRef.current = assignDrop;
+  const lifts = reorder || Boolean(assignDrop);
   const pressed = useRef<string | null>(null);
   const { t } = useTranslation('list');
   const { controller } = useListContext();
@@ -429,6 +449,12 @@ export const ListDnd = memo(function ListDnd({
     const rowId = el?.dataset.rowId;
     const row = rowId ? rowById(rowId) : undefined;
     if (!el || !row) return;
+    if (s.assign) {
+      const to = assignRef.current?.sectionOf(row) ?? null;
+      s.assign.to = to !== null && to !== s.assign.from ? to : null;
+      setDrop(s.assign.to ? { rowId: sectionRowId(s.assign.to), edge: 'inside' } : null);
+      return;
+    }
     const rect = el.getBoundingClientRect();
     const upper = s.pointer.y < rect.top + rect.height / 2;
     if (s.kind === 'group') {
@@ -569,8 +595,13 @@ export const ListDnd = memo(function ListDnd({
       ?.querySelector(`[data-row-id="${CSS.escape(id)}"]`)
       ?.getBoundingClientRect();
     const rect = rowRect ?? active.rect.current.initial;
+    const pressedRowModel = rowById(id);
     const s: DragSession = {
       kind,
+      assign:
+        assignRef.current && kind === 'task' && pressedRowModel
+          ? { from: assignRef.current.sectionOf(pressedRowModel), to: null }
+          : null,
       ids,
       start,
       pointer: start,
@@ -591,7 +622,7 @@ export const ListDnd = memo(function ListDnd({
       s.pointer = { x, y };
       s.moved = Math.max(s.moved, Math.hypot(x - s.start.x, y - s.start.y));
       placeLayer(s);
-      if (!reorder) return;
+      if (!lifts) return;
       computeDrop(s);
       autoScroll(s);
     };
@@ -602,7 +633,7 @@ export const ListDnd = memo(function ListDnd({
     };
     // Scrolling moves the rows under a still pointer.
     const onScroll = () => {
-      if (session.current === s && reorder) computeDrop(s);
+      if (session.current === s && lifts) computeDrop(s);
     };
     const options = { capture: true, passive: true };
     if (touch) window.addEventListener('touchmove', onTouchMove, options);
@@ -614,7 +645,7 @@ export const ListDnd = memo(function ListDnd({
       window.removeEventListener('scroll', onScroll, options);
     };
     if (touch) navigator.vibrate?.(10);
-    if (!reorder) return;
+    if (!lifts) return;
     const state = controller.state();
     const name =
       kind === 'group'
@@ -634,7 +665,9 @@ export const ListDnd = memo(function ListDnd({
       dragCollapsed: kind === 'group',
       popover: null,
     });
-    if (kind !== 'group') {
+    if (s.assign) {
+      announce(t('dnd.pickedUpAssign', { title: name, count: ids.length }));
+    } else if (kind !== 'group') {
       const order = dragOrder(rowsRef.current, ids);
       const moving = new Set(ids);
       const slot = dropSlots(order, moving)[currentSlot(order, moving)];
@@ -657,8 +690,14 @@ export const ListDnd = memo(function ListDnd({
       if (id) onLongPress(id);
       return;
     }
-    if (!reorder) {
+    if (!lifts) {
       finish();
+      return;
+    }
+    if (s?.assign) {
+      const to = s.assign.to;
+      finish();
+      if (!to || !assignRef.current?.commit(s.ids, to)) announce(t('dnd.cancelled'));
       return;
     }
     const drop = controller.ui().drop;
@@ -715,7 +754,7 @@ export const ListDnd = memo(function ListDnd({
         rootRef={rootRef}
         pressed={pressed}
         enabled={enabled}
-        reorder={reorder}
+        reorder={lifts}
       >
         {children}
       </DragSurface>

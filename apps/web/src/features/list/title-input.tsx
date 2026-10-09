@@ -1,3 +1,4 @@
+import { assigneeTokenAt } from '@rooster/core/dates';
 import { TASK_TITLE_MAX } from '@rooster/core/limits';
 import {
   type ClipboardEvent,
@@ -14,6 +15,9 @@ import { cn } from '../../lib/cn';
 import { detectPlatform } from '../../lib/platform';
 import type { Caret } from '../../state/list-store';
 import { useTagsStore } from '../../state/tags-store';
+import { Avatar } from '../../ui/avatar';
+import { memberHandle, resolveAssigneeToken, suggestMembers } from '../people/assignee-token';
+import type { Person } from '../people/members';
 import { TagDot } from '../tags/tag-dot';
 import { type TagOption, tagOptions } from '../tags/tag-options';
 import type { CommitResult } from './controller';
@@ -74,11 +78,20 @@ interface Highlight {
   tags: Span[];
   /** `>Group` in a smart-view draft (02 §3.4). */
   group: Span | null;
+  /** `@name` in a new task of a shared org (02 §3.4, P6). */
+  assignee: Span | null;
 }
 
 interface Suggest {
   token: Span & { name: string };
   options: TagOption[];
+  active: number;
+}
+
+/** The `@name` autocomplete: org members (02 §3.4). */
+interface MemberSuggest {
+  token: Span & { query: string };
+  options: Person[];
   active: number;
 }
 
@@ -132,7 +145,7 @@ export function TitleInput({
   className,
 }: TitleInputProps) {
   const { t } = useTranslation('list');
-  const { controller, dateCtx, parseTitles, view } = useListContext();
+  const { controller, dateCtx, parseTitles, view, shared, everyone } = useListContext();
   const input = useRef<HTMLInputElement>(null);
   const mirror = useRef<HTMLDivElement>(null);
   const committed = useRef(false);
@@ -142,8 +155,10 @@ export function TitleInput({
     span: null,
     tags: [],
     group: null,
+    assignee: null,
   });
   const [suggest, setSuggest] = useState<Suggest | null>(null);
+  const [memberSuggest, setMemberSuggest] = useState<MemberSuggest | null>(null);
   const tagsById = useTagsStore((s) => s.byId);
   const [colonChip, setColonChip] = useState<'off' | 'shown' | 'declined'>('off');
   const [pasteLines, setPasteLines] = useState<string[] | null>(null);
@@ -155,24 +170,74 @@ export function TitleInput({
     return Boolean(view && draft?.sectionId && !draft.parentId);
   };
 
+  /** A new task in a shared org: `@name` picks its assignee (02 §3.4); none in personal orgs. */
+  const members = (): readonly Person[] => {
+    if (!shared || !controller.ui().drafts.some((d) => d.id === rowId)) return [];
+    return controller.deps.members?.() ?? [];
+  };
+
   const reparse = () => {
     const text = input.current?.value ?? '';
     const skip = ignoredSpans(text, ignored.current);
     const groups = Object.values(controller.state()?.groups ?? {});
-    const group = groupTokens() ? resolveGroupToken(text, groups, skip) : null;
+    const who = resolveAssigneeToken(text, members(), controller.deps.userId, skip);
+    const withoutWho = who ? blankSpan(text, who) : text;
+    const group = groupTokens() ? resolveGroupToken(withoutWho, groups, skip) : null;
     // A group named like a date ("Today") is the group, not a date phrase.
-    const dateText = group ? blankSpan(text, group) : text;
+    const dateText = group ? blankSpan(withoutWho, group) : withoutWho;
     const match = parseTitles ? findTitleDate(dateText, dateCtx, skip) : null;
     setHighlight({
       text,
       span: match ? { start: match.start, end: match.end } : null,
       tags: findTagTokens(text, skip),
       group: group ? { start: group.start, end: group.end } : null,
+      assignee: who ? { start: who.start, end: who.end } : null,
     });
+  };
+
+  /** The member autocomplete for the `@partial` token at the caret (02 §3.4). */
+  const updateMemberSuggest = () => {
+    const el = input.current;
+    const all = members();
+    const token =
+      el && el.selectionStart === el.selectionEnd && all.length > 0
+        ? assigneeTokenAt(el.value, el.selectionStart ?? 0)
+        : null;
+    if (!token) {
+      setMemberSuggest(null);
+      return;
+    }
+    const options = suggestMembers(token.query, all, controller.deps.userId).slice(0, 8);
+    setMemberSuggest((current) =>
+      options.length === 0
+        ? null
+        : {
+            token,
+            options,
+            active:
+              current && current.token.start === token.start
+                ? Math.min(current.active, options.length - 1)
+                : 0,
+          },
+    );
+  };
+
+  const acceptMember = (member: Person | undefined) => {
+    const el = input.current;
+    if (!el || !memberSuggest || !member) return;
+    const { start, end } = memberSuggest.token;
+    const insert = `${memberHandle(member, members())} `;
+    const after = el.value.slice(end).replace(/^ /, '');
+    el.value = `${el.value.slice(0, start)}${insert}${after}`.slice(0, TASK_TITLE_MAX);
+    const caretAt = Math.min(start + insert.length, el.value.length);
+    el.setSelectionRange(caretAt, caretAt);
+    setMemberSuggest(null);
+    reparse();
   };
 
   /** The autocomplete for the `#partial` token at the caret (02 §3.4). */
   const updateSuggest = () => {
+    updateMemberSuggest();
     const el = input.current;
     if (!el || el.selectionStart !== el.selectionEnd) {
       setSuggest(null);
@@ -278,6 +343,28 @@ export function TitleInput({
       }
       backspaceLatch = false;
     }
+    if (memberSuggest) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const step = event.key === 'ArrowDown' ? 1 : -1;
+        const count = memberSuggest.options.length;
+        setMemberSuggest({
+          ...memberSuggest,
+          active: (memberSuggest.active + step + count) % count,
+        });
+        return;
+      }
+      if ((event.key === 'Enter' || event.key === 'Tab') && !event.shiftKey) {
+        event.preventDefault();
+        acceptMember(memberSuggest.options[memberSuggest.active]);
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMemberSuggest(null);
+        return;
+      }
+    }
     if (suggest) {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
@@ -329,7 +416,7 @@ export function TitleInput({
     if (matches(native, 'newBelow', platform) || matches(native, 'newAbove', platform)) {
       event.preventDefault();
       const trimmed = el.value.trim();
-      if (!event.shiftKey && !view && trimmed.length > 1 && trimmed.endsWith(':')) {
+      if (!event.shiftKey && !view && !everyone && trimmed.length > 1 && trimmed.endsWith(':')) {
         if (colonChip === 'shown') {
           committed.current = true;
           setColonChip('off');
@@ -366,7 +453,9 @@ export function TitleInput({
     if (matches(native, 'deleteEmpty', platform)) {
       const at = el.selectionStart ?? 0;
       const collapsed = at === el.selectionEnd;
-      const span = [highlight.span, highlight.group].find((s) => s && at === s.end);
+      const span = [highlight.span, highlight.group, highlight.assignee].find(
+        (s) => s && at === s.end,
+      );
       if (collapsed && span && highlight.text === el.value) {
         // 02 §8.1: Backspace right after a token cancels it instead of deleting a character.
         event.preventDefault();
@@ -406,7 +495,9 @@ export function TitleInput({
   const onClick = (event: MouseEvent<HTMLInputElement>) => {
     // Clicking the highlighted phrase cancels it for this edit (02 §8.1).
     const at = event.currentTarget.selectionStart ?? -1;
-    const span = [highlight.span, highlight.group].find((s) => s && at > s.start && at < s.end);
+    const span = [highlight.span, highlight.group, highlight.assignee].find(
+      (s) => s && at > s.start && at < s.end,
+    );
     if (span && highlight.text === value()) {
       ignored.current = [...ignored.current, value().slice(span.start, span.end)];
       reparse();
@@ -415,6 +506,7 @@ export function TitleInput({
 
   const onBlur = () => {
     setSuggest(null);
+    setMemberSuggest(null);
     if (committed.current) return;
     // A sheet from the accessory bar has focus for a moment; the edit resumes after it.
     if (controller.ui().suspendedEdit === rowId) return;
@@ -425,9 +517,15 @@ export function TitleInput({
     if (mirror.current && input.current) mirror.current.scrollLeft = input.current.scrollLeft;
   };
 
-  const { text, span, group } = highlight;
-  const marks = [span, group, ...highlight.tags].filter((m): m is Span => m !== null);
+  const { text, span, group, assignee } = highlight;
+  const marks = [span, group, assignee, ...highlight.tags].filter((m): m is Span => m !== null);
   const listId = `tag-suggest-${rowId}`;
+  const memberListId = `member-suggest-${rowId}`;
+  const open = memberSuggest
+    ? { id: memberListId, active: memberSuggest.active }
+    : suggest
+      ? { id: listId, active: suggest.active }
+      : null;
   return (
     <div className={cn('relative flex min-w-0 flex-1 items-center', className)}>
       {marks.length > 0 && (
@@ -447,7 +545,46 @@ export function TitleInput({
           )}
         </div>
       )}
-      {suggest && (
+      {memberSuggest && (
+        <div
+          id={memberListId}
+          role="listbox"
+          aria-label={t('assign.suggestions')}
+          data-overlay
+          data-testid="member-suggest"
+          className="absolute top-full left-0 z-(--z-popover) mt-1 flex w-date-popover flex-col rounded-md border border-border bg-bg-elevated p-1 shadow-md"
+        >
+          {memberSuggest.options.map((member, index) => (
+            <div
+              key={member.userId}
+              id={`${memberListId}-${index}`}
+              role="option"
+              tabIndex={-1}
+              aria-selected={index === memberSuggest.active}
+              onPointerDown={(e) => {
+                // Keep focus (and the edit) in the title.
+                e.preventDefault();
+                acceptMember(member);
+              }}
+              onKeyDown={() => undefined}
+              className={cn(
+                'flex h-control cursor-default items-center gap-2 rounded-sm px-2 text-sm text-text',
+                index === memberSuggest.active && 'bg-bg-muted',
+              )}
+            >
+              <Avatar
+                id={member.userId}
+                name={member.name}
+                src={member.image ?? undefined}
+                size={20}
+                decorative
+              />
+              <span className="min-w-0 flex-1 truncate">{member.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {suggest && !memberSuggest && (
         <div
           id={listId}
           role="listbox"
@@ -503,9 +640,9 @@ export function TitleInput({
         }}
         role="combobox"
         aria-autocomplete="list"
-        aria-expanded={suggest !== null}
-        aria-controls={suggest ? listId : undefined}
-        aria-activedescendant={suggest ? `${listId}-${suggest.active}` : undefined}
+        aria-expanded={open !== null}
+        aria-controls={open?.id}
+        aria-activedescendant={open ? `${open.id}-${open.active}` : undefined}
         onInput={onInput}
         onPaste={onPaste}
         onClick={onClick}

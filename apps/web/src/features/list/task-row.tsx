@@ -6,6 +6,7 @@ import { type ListUiState, useListUi } from '../../state/list-store';
 import { iconStrokeWidth } from '../../ui/button';
 import { TaskCheckbox } from '../../ui/task-checkbox';
 import { DateCell, type DueValue } from '../dates';
+import { RowAssignee } from '../people/assignee-avatar';
 import { DropLine } from './drop-line';
 import { GridCell, GridRow } from './grid';
 import { useListContext } from './list-context';
@@ -96,6 +97,8 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
     onOpenTask,
     baseLevel = 2,
     mobile = false,
+    shared,
+    everyone = false,
   } = useListContext();
   const { id, task, draft, level, expandable, expanded, breadcrumb } = row;
   const subtaskRow = compact || level > 2;
@@ -109,6 +112,13 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
   const hiding = flags & flag.collapsing ? 'collapsing' : flags & flag.hold ? 'hold' : undefined;
   const editing = useListUi((s) => (s.editing?.rowId === id ? s.editing : null));
   const done = task.completedAt !== null;
+  // FR-TASK-10: in Everyone's tasks, and on subtasks someone else does.
+  const assignee =
+    shared !== false &&
+    task.assigneeId !== null &&
+    (everyone || (task.parentId !== null && task.assigneeId !== controller.deps.userId))
+      ? task.assigneeId
+      : null;
 
   const handleKeys = useKeyboardDragHandle(id);
 
@@ -304,6 +314,7 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
             <RowTagChips task={task} />
             <DescriptionIndicator task={task} />
             <SubtaskCounter task={task} />
+            {assignee !== null && <RowAssignee orgId={controller.orgId} assigneeId={assignee} />}
           </span>
         )}
       </GridCell>
