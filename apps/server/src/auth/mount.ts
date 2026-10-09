@@ -217,6 +217,17 @@ async function tokenRequest(
     return refreshLocks.run(hashOAuthToken(token), async () => {
       const check = services.grants.checkOAuthRefresh(token);
       if (!check.ok) return tokenError('invalid_grant', check.description);
+      // A `scope` is judged against the grant, whose scopes the responses report (the provider
+      // would judge it against the request's). Within the grant, the provider just reissues;
+      // the response reports the grant's scopes, which are what is enforced.
+      const scope = fields.get('scope');
+      if (scope !== undefined && check.grantId !== null) {
+        if (!services.grants.oauthScopeCovered(check.grantId, scope)) {
+          return tokenError('invalid_scope', 'The scope is wider than this authorization.');
+        }
+        fields.delete('scope');
+        init.body = new URLSearchParams([...fields]).toString();
+      }
       return withGrantScope(await forward(), check.grantId, services);
     });
   }

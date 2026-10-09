@@ -281,7 +281,8 @@ describe('review round 1: consent narrowing (8, 9)', () => {
     const res = await user.call('POST', '/api/v1/oauth/consent', {
       accept: true,
       oauthQuery: oauthQueryOf(page),
-      scopes: ['admin', 'groups:write'],
+      // Neither is, nor implies, what the app asked for.
+      scopes: ['admin', 'notifications:read'],
       constraints: { orgs: 'all' },
     });
     expect(res.status).toBe(422);
@@ -332,5 +333,77 @@ describe('review round 1: consent narrowing (8, 9)', () => {
       constraints: existing.constraints,
     });
     expect(back.searchParams.get('code')).not.toBeNull();
+  });
+});
+
+describe('review round 2', () => {
+  /** A refresh with a `scope` parameter. */
+  const refreshWith = (ctx: OAuthCtx, token: string, scope: string) =>
+    rawToken(
+      ctx,
+      new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: token,
+        client_id: CLIENT_ID,
+        scope,
+      }).toString(),
+    );
+
+  it('#1 a refresh with exactly the advertised scope succeeds (write, and read-only narrowing)', async () => {
+    const ctx = oauthCtx();
+    const user = ctx.user('ada@example.com');
+    const write = await connect(
+      ctx,
+      user,
+      { scope: 'tasks:write offline_access' },
+      { scopes: ['tasks:write'] },
+    );
+    expect(write.scope).toBe('tasks:read tasks:write offline_access');
+    const again = await refreshWith(ctx, write.refresh ?? '', write.scope);
+    expect(again.status, JSON.stringify(again.body)).toBe(200);
+    expect(again.body.scope).toBe(write.scope);
+    // Wider than the grant: refused by rooster, the token stays usable.
+    const wider = await refreshWith(ctx, String(again.body.refresh_token), 'tasks:delete');
+    expect(wider).toMatchObject({ status: 400, body: { error: 'invalid_scope' } });
+    expect((await refreshWith(ctx, String(again.body.refresh_token), 'admin')).body.error).toBe(
+      'invalid_scope',
+    );
+
+    const other = oauthCtx();
+    const bob = other.user('bob@example.com');
+    const narrowed = await connect(
+      other,
+      bob,
+      { scope: 'tasks:write offline_access' },
+      { scopes: ['tasks:read'] },
+    );
+    expect(narrowed.scope).toBe('tasks:read offline_access');
+    const ok = await refreshWith(other, narrowed.refresh ?? '', narrowed.scope);
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.scope).toBe('tasks:read offline_access');
+    // What the user did not approve stays out of reach, even though it was requested.
+    expect(
+      (await refreshWith(other, String(ok.body.refresh_token), 'tasks:write')).body.error,
+    ).toBe('invalid_scope');
+  });
+
+  it('#2 a minimised step-up approval counts its implied scopes, and grants no more', async () => {
+    const ctx = oauthCtx();
+    const user = ctx.user('ada@example.com');
+    await connect(ctx, user, { scope: 'tasks:delete' }, { scopes: ['tasks:delete'] });
+    const page = await authorize(ctx, user, { scope: 'tasks:write notifications:read' });
+    expect(page.pathname).toBe('/oauth/consent');
+    // Notifications unticked; the web sends the minimal set, which implies writing.
+    const back = await allow(user, page, { scopes: ['tasks:delete'] });
+    expect(back.searchParams.get('code')).not.toBeNull();
+    expect(grantsOf(ctx, user.userId)[0]?.scopes).toBe('tasks:delete');
+
+    // Without an existing delete grant, `tasks:delete` approved for a write request grants
+    // writing only.
+    const fresh = oauthCtx();
+    const bob = fresh.user('bob@example.com');
+    const asked = await authorize(fresh, bob, { scope: 'tasks:write' });
+    await allow(bob, asked, { scopes: ['tasks:delete'] });
+    expect(grantsOf(fresh, bob.userId)[0]?.scopes).toBe('tasks:write');
   });
 });

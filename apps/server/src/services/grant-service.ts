@@ -417,6 +417,28 @@ export class GrantService {
     };
   }
 
+  /**
+   * Whether every scope of a refresh request's `scope` is within the grant (implied scopes
+   * spelled out, as token responses report them, plus `offline_access`).
+   */
+  oauthScopeCovered(grantId: string, scope: string): boolean {
+    const row = this.deps.db.orm
+      .select({ scopes: accessGrant.scopes })
+      .from(accessGrant)
+      .where(eq(accessGrant.id, grantId))
+      .get();
+    if (row === undefined) return false;
+    const covered = expandScopes(parseScopes(row.scopes));
+    return scope
+      .split(' ')
+      .filter((s) => s !== '')
+      .every(
+        (s) =>
+          s === 'offline_access' ||
+          (isGrantScope(s) && !OAUTH_EXCLUDED_SCOPES.includes(s) && covered.has(s)),
+      );
+  }
+
   /** Whether an access token row is still usable (an OAuth event stream's heartbeat). */
   private oauthTokenActive(tokenId: string): boolean {
     const row = this.deps.db.orm
@@ -1333,7 +1355,10 @@ export class GrantService {
     return immediate(this.deps.db, (tx) => {
       const req = this.consentQuery(tx, query);
       const requested = expandScopes(req.scopes);
-      const approved = decision.scopes.filter(
+      // What the user approved, implied scopes included (the web sends a minimal set, e.g.
+      // `tasks:delete` standing for writing and reading too), kept where the app asked for it
+      // (implied scopes of the request count); `tasks:delete` only when asked for literally.
+      const approved = [...expandScopes(decision.scopes)].filter(
         (s) =>
           !OAUTH_EXCLUDED_SCOPES.includes(s) &&
           requested.has(s) &&
