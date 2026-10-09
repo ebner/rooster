@@ -4,6 +4,7 @@ import {
   precacheAndRoute,
 } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
+import { resubscribeAfterChange, type SubscriptionChange } from './features/pwa/push-resubscribe';
 import { type PushData, pushTargetPath } from './features/pwa/push-target';
 
 declare const self: ServiceWorkerGlobalScope & {
@@ -19,7 +20,14 @@ precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
 /** Server-owned paths: never answered with the SPA shell. `/api/*` is never cached at all. */
-const serverPaths = [/^\/api(\/|$)/, /^\/ical(\/|$)/, /^\/_dev(\/|$)/, /^\/(healthz|readyz)$/];
+// Server-rendered pages (the email unsubscribe page, P7) must reach the server, not the app shell.
+const serverPaths = [
+  /^\/api(\/|$)/,
+  /^\/ical(\/|$)/,
+  /^\/unsubscribe(\/|$)/,
+  /^\/_dev(\/|$)/,
+  /^\/(healthz|readyz)$/,
+];
 
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL('/index.html'), { denylist: serverPaths }),
@@ -29,7 +37,8 @@ self.addEventListener('message', (event) => {
   if ((event.data as { type?: string } | null)?.type === 'SKIP_WAITING') void self.skipWaiting();
 });
 
-// P7 web push: the payload names the task; a click focuses an open window or opens one.
+// P7 web push (ADR 0033): the server localises title and body; every kind (`notification`,
+// `due_reminder`, `test`) shows as it comes. A click focuses an open window or opens one.
 self.addEventListener('push', (event) => {
   let data: PushData = {};
   try {
@@ -52,6 +61,26 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const path = pushTargetPath(event.notification.data, self.location.origin);
   event.waitUntil(focusOrOpen(new URL(path, self.location.origin).href));
+});
+
+// The push service rotated this browser's subscription: register the new one. Without a
+// session (signed out) the POST fails, and the app re-subscribes on its next open instead.
+self.addEventListener('pushsubscriptionchange', (event) => {
+  const change = event as unknown as ExtendableEvent & SubscriptionChange;
+  change.waitUntil(
+    resubscribeAfterChange(
+      change,
+      self.registration.pushManager,
+      (body) =>
+        fetch('/api/v1/me/push-subscriptions', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'X-Rooster-Client': 'web' },
+          body,
+        }),
+      self.navigator.userAgent,
+    ).catch(() => false),
+  );
 });
 
 async function focusOrOpen(url: string): Promise<void> {

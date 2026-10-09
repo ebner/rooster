@@ -20,6 +20,20 @@ import { isEditingText } from './update-gate';
 /** The update toast stays until acted on (the browser caps timers at ~24.8 days). */
 const updateToastMs = 24 * 60 * 60 * 1000;
 const installToastMs = 12_000;
+const resyncDelayMs = 3_000;
+const noUpdateHandlers = { onNeedRefresh: () => {}, onControllerChange: () => {} };
+
+/** Some user turned push on in this browser (`data/push.ts` marker); cheap, no import. */
+function hasPushMarker(): boolean {
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      if (localStorage.key(i)?.endsWith('.pushDevice')) return true;
+    }
+  } catch {
+    // Blocked storage: nothing was marked either.
+  }
+  return false;
+}
 
 export interface PwaRootProps {
   /** In-app navigation for notification clicks (the router lives outside this tree). */
@@ -108,6 +122,25 @@ export function PwaRoot({ navigate }: PwaRootProps) {
       });
     }
     return unlisten;
+  }, []);
+
+  // 08 key rotation: where push is on, re-subscribe with new VAPID keys on open. Loaded after
+  // the first paint and only when this browser turned push on (10 §4: not in the initial JS).
+  useEffect(() => {
+    let cancelled = false;
+    void registerServiceWorker(noUpdateHandlers).then((controls) => {
+      unregisterServiceWorkerHandlers(noUpdateHandlers);
+      if (!controls || cancelled || !hasPushMarker()) return;
+      setTimeout(() => {
+        if (cancelled) return;
+        import('../../data/push')
+          .then((push) => push.resyncPush())
+          .catch((error: unknown) => console.warn('rooster: push re-subscribe failed', error));
+      }, resyncDelayMs);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // A notification click focused this window (sw.ts): open the task in place.

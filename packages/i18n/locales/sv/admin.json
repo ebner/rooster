@@ -57,5 +57,17 @@
       "pre-migrate": "Före uppdatering"
     },
     "bytes": "{value} {unit}"
+  },
+  "pushKeys": {
+    "title": "Pushnycklar",
+    "description": "Nycklarna som servern signerar pushaviseringar med.",
+    "regenerateTitle": "Skapa nya pushnycklar",
+    "regenerateBody": "Gör det här om nycklarna kan ha läckt. Alla enheter slutar få push tills de öppnas igen.",
+    "regenerate": "Skapa nya pushnycklar",
+    "confirmBody": "Nya nycklar tar bort alla användares pushprenumerationer. Enheterna prenumererar igen nästa gång rooster öppnas på dem, om push fortfarande är tillåtet där.",
+    "confirm": "Skapa nya nycklar",
+    "cancel": "Avbryt",
+    "done": "Nya pushnycklar har skapats",
+    "failed": "Det gick inte att skapa nya pushnycklar. Försök igen."
   }
 }

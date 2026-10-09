@@ -94,3 +94,17 @@ export function useCreateBackup(): MutationResult<void, Backup> {
 export function backupDownloadUrl(name: string): string {
   return `/api/v1/admin/backups/${encodeURIComponent(name)}`;
 }
+
+/**
+ * `POST /admin/push-keys/regenerate` (06 §2.10, 08 key rotation): new VAPID keys; every push
+ * subscription is dropped, and devices re-subscribe on their next open.
+ */
+export function useRegeneratePushKeys(): MutationResult<void> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      await unwrap(api.POST('/api/v1/admin/push-keys/regenerate'));
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['push'] }),
+  });
+}

@@ -10,12 +10,15 @@ import {
   useCreateBackup,
   useDisplayPrefs,
   useMe,
+  useRegeneratePushKeys,
   useRemoveAllowlistEntry,
+  useServerFeatures,
   useSetUserDisabled,
 } from '../../data';
 import { AdminPage } from '../../features/admin/admin-page';
 import { AllowlistSection } from '../../features/admin/allowlist-section';
 import { BackupsSection } from '../../features/admin/backups-section';
+import { PushKeysSection } from '../../features/admin/push-keys-section';
 import { UsersSection } from '../../features/admin/users-section';
 import { ViewBody, ViewHeader } from '../../features/shell/app-shell';
 import { toast } from '../../ui/toast';
@@ -40,6 +43,8 @@ function AdminRoute() {
   const setDisabled = useSetUserDisabled();
   const backups = useBackups();
   const createBackup = useCreateBackup();
+  const features = useServerFeatures();
+  const regeneratePushKeys = useRegeneratePushKeys();
 
   if (!me.data) return null;
   const now = Date.now();
@@ -80,6 +85,16 @@ function AdminRoute() {
                   .catch(() => toast({ message: t('backups.failed'), tone: 'danger' }))
               }
             />
+          }
+          pushKeys={
+            features.data?.push && (
+              <PushKeysSection
+                onRegenerate={async () => {
+                  await regeneratePushKeys.mutateAsync();
+                  toast({ message: t('pushKeys.done') });
+                }}
+              />
+            )
           }
           users={
             <UsersSection

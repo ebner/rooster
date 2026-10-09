@@ -8,7 +8,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 /** The API server started by `pnpm dev` (apps/server); e2e points it at its own server. */
 const apiTarget = process.env.ROOSTER_API_TARGET ?? 'http://localhost:3000';
-const proxied = ['/api', '/healthz', '/readyz', '/ical'];
+const proxied = ['/api', '/healthz', '/readyz', '/ical', '/unsubscribe'];
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
   version: string;
 };

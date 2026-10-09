@@ -2,12 +2,16 @@ import { useTranslation } from 'react-i18next';
 import { BottomSheet } from '../../ui/bottom-sheet';
 import { ToastView } from '../../ui/toast';
 import { Group, Section } from '../dev-ui/layout';
+import { DeliveryKitchenGroups } from '../settings/delivery-kitchen-groups';
 import { InstallAppSection } from './install-app-section';
 import { IosInstallSteps } from './ios-install-sheet';
 import { SessionExpired } from './sync-status';
 import { UpdateChip } from './update-chip';
 
-/** `/_dev/ui`: the Phase 4 PWA surfaces (the sync pill states are in the Sync pill section). */
+/**
+ * `/_dev/ui`: the Phase 4 PWA surfaces (the sync pill states are in the Sync pill section)
+ * and Phase 7 delivery: the notification matrix, push devices and push keys.
+ */
 export function PwaKitchenSection() {
   const { t } = useTranslation('dev');
   const { t: tp } = useTranslation('pwa');
@@ -43,6 +47,7 @@ export function PwaKitchenSection() {
           <InstallAppSection />
         </div>
       </Group>
+      <DeliveryKitchenGroups />
     </Section>
   );
 }

@@ -4,6 +4,7 @@ import type {
   NotificationMarkResult,
   NotificationPage,
   NotificationPref,
+  Prefs,
 } from '@rooster/core/schemas';
 import {
   type InfiniteData,
@@ -15,9 +16,10 @@ import {
 } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { api, unwrap } from './http';
+import { toMe } from './mappers';
 import { queryKeys } from './query-keys';
 import { subscribeSseNotifications } from './sync/events';
-import type { MutationResult, QueryResult } from './types';
+import type { Me, MutationResult, QueryResult } from './types';
 
 export type NotificationFilter = 'all' | 'unread';
 export type NotificationPages = InfiniteData<NotificationPage, string | null>;
@@ -213,5 +215,36 @@ export function useUpdateNotificationPrefs(): MutationResult<
       queryClient.setQueryData(queryKeys.notificationPrefs, context?.before);
     },
     onSuccess: (prefs) => queryClient.setQueryData(queryKeys.notificationPrefs, prefs),
+  });
+}
+
+/** The `user.prefs` keys of Settings → Notifications (FR-NOT-2/3). */
+export type DeliveryPrefs = Pick<Prefs, 'reminderTime' | 'digestTime' | 'emailMode'>;
+
+/**
+ * `PATCH /me` `{prefs}` for the reminder and digest times and the email mode: optimistic on
+ * the cached `/me`, rolled back on failure. Online-only settings (hard rule 4).
+ */
+export function useUpdateDeliveryPrefs(): MutationResult<Partial<DeliveryPrefs>> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (prefs: Partial<DeliveryPrefs>) => {
+      const me = await unwrap(api.PATCH('/api/v1/me', { body: { prefs } }));
+      queryClient.setQueryData(queryKeys.me, toMe(me));
+    },
+    onMutate: async (patch) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.me });
+      const before = queryClient.getQueryData<Me>(queryKeys.me);
+      if (before?.prefs) {
+        queryClient.setQueryData<Me>(queryKeys.me, {
+          ...before,
+          prefs: { ...before.prefs, ...patch },
+        });
+      }
+      return { before };
+    },
+    onError: (_error, _patch, context) => {
+      if (context?.before) queryClient.setQueryData(queryKeys.me, context.before);
+    },
   });
 }

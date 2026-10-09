@@ -1,3 +1,5 @@
+import { serviceWorkerEnabled } from './sw-enabled';
+
 /**
  * What an update check found: `found` a new worker is installing or waiting (`onNeedRefresh`
  * follows), `current` the active worker is the server's latest, `unknown` no answer (offline,
@@ -23,11 +25,7 @@ export interface ServiceWorkerHandlers {
   onControllerChange: () => void;
 }
 
-/** Off in `vite` dev (stale workers there only get in the way) unless VITE_PWA_DEV=1. */
-export function serviceWorkerEnabled(): boolean {
-  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return false;
-  return import.meta.env.PROD || import.meta.env.VITE_PWA_DEV === '1';
-}
+export { serviceWorkerEnabled } from './sw-enabled';
 
 const hourlyMs = 60 * 60 * 1000;
 

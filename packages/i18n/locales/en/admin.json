@@ -57,5 +57,17 @@
       "pre-migrate": "Before update"
     },
     "bytes": "{value} {unit}"
+  },
+  "pushKeys": {
+    "title": "Push keys",
+    "description": "The keys this server signs push notifications with.",
+    "regenerateTitle": "Regenerate push keys",
+    "regenerateBody": "Use this if the keys may have leaked. Every device stops getting push until it is opened again.",
+    "regenerate": "Regenerate push keys",
+    "confirmBody": "New keys remove every push subscription of every user. Devices subscribe again the next time rooster opens on them, if push is still allowed there.",
+    "confirm": "Regenerate keys",
+    "cancel": "Cancel",
+    "done": "Push keys regenerated",
+    "failed": "Couldn’t regenerate the push keys. Try again."
   }
 }

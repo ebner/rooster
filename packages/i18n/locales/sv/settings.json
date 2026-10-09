@@ -102,7 +102,10 @@
       "multiUseCount": "{count, plural, =0 {Återanvändbar · inte använd än} one {Återanvändbar · använd en gång} other {Återanvändbar · använd # gånger}}",
       "expires": "Går ut {date}",
       "revoke": "Återkalla",
-      "revoked": "Inbjudan har återkallats"
+      "revoked": "Inbjudan har återkallats",
+      "descriptionEmail": "Bjud in via e-post eller dela en länk.",
+      "sent": "Inbjudan har skickats till {email}",
+      "sentNote": "Inbjudan är på väg till {email}. Du kan också dela den här länken:"
     },
     "danger": {
       "title": "Farozon",
@@ -173,8 +176,8 @@
     "failed": "Det gick inte. Kontrollera anslutningen och försök igen."
   },
   "notifications": {
-    "title": "Aviseringar i appen",
-    "body": "Välj vad som hamnar i din inkorg. Du aviseras aldrig om dina egna ändringar.",
+    "title": "Aviseringar",
+    "body": "Välj hur du får veta om ändringar, per händelse och kanal. Du aviseras aldrig om dina egna ändringar.",
     "loadFailed": "Det gick inte att läsa in aviseringsinställningarna.",
     "event": "Händelse",
     "inapp": "I appen",
@@ -185,7 +188,59 @@
       "mention": "Någon nämner mig",
       "completed": "Någon slutför en uppgift jag skapade",
       "due_changed": "Någon ändrar förfallodatum för min uppgift",
-      "invite_accepted": "Någon tackar ja till min inbjudan"
-    }
+      "invite_accepted": "Någon tackar ja till min inbjudan",
+      "digest": "Daglig sammanfattning",
+      "due_reminder": "Påminnelse om dagens uppgifter"
+    },
+    "push": "Push",
+    "email": "E-post",
+    "timingTitle": "Tider",
+    "timingBody": "Tiderna gäller i din tidszon.",
+    "reminderTime": "Tid för påminnelsen",
+    "reminderTimeHint": "När påminnelsen är på listar en pushavisering dagens uppgifter.",
+    "digestTime": "Tid för den dagliga sammanfattningen",
+    "digestTimeHint": "Ett e-postmeddelande med det som förfaller idag, det som är försenat och det som är nytt i inkorgen.",
+    "emailMode": "Aviseringar via e-post",
+    "emailModeHint": "Var 15:e minut samlar aviseringarna i ett e-postmeddelande.",
+    "emailImmediate": "Direkt",
+    "emailBatch": "Var 15:e minut"
+  },
+  "push": {
+    "title": "Push på den här enheten",
+    "body": "Få aviseringar på den här enheten även när rooster är stängt. Slå på push för varje telefon och dator för sig.",
+    "on": "Push är på för den här enheten.",
+    "turnOn": "Slå på push för den här enheten",
+    "turnOff": "Stäng av",
+    "enabled": "Push är på för den här enheten",
+    "disabled": "Push är av för den här enheten",
+    "enableFailed": "Det gick inte att slå på push. Försök igen.",
+    "unsupportedService": "Webbläsarens pushtjänst stöds inte, så push kan inte slås på här. Prova Chrome, Edge, Firefox eller Safari.",
+    "blockedTitle": "Aviseringar är blockerade",
+    "blockedBody": "Webbläsaren blockerar aviseringar från rooster. Tillåt dem i webbplatsinställningarna (ikonen bredvid adressen) och läs sedan in sidan igen.",
+    "blockedIos": "Tillåt aviseringar för rooster i appen Inställningar under Notiser och öppna sedan rooster igen.",
+    "iosTitle": "Installera rooster först",
+    "iosBody": "Lägg först till rooster på hemskärmen; push fungerar bara i den installerade appen.",
+    "iosSteps": "Så installerar du",
+    "unsupported": "Pushaviseringar är inte tillgängliga i den här webbläsaren.",
+    "devicesTitle": "Dina enheter",
+    "noDevices": "Inga enheter än.",
+    "lastDelivered": "Senast levererad {when}",
+    "neverDelivered": "Inget levererat än",
+    "test": "Skicka test",
+    "testNamed": "Skicka en testavisering till {name}",
+    "testSent": "Testaviseringen har skickats",
+    "testFailed": "Det gick inte att skicka testaviseringen. Försök igen.",
+    "remove": "Ta bort",
+    "removeNamed": "Ta bort {name}",
+    "removed": "Enheten har tagits bort",
+    "testGone": "Enheten prenumererar inte längre och har tagits bort. Slå på push där igen."
+  },
+  "dev": {
+    "matrix": "Aviseringsmatris (alla kanaler)",
+    "matrixNoEmail": "Aviseringsmatris utan e-post (ingen SMTP)",
+    "matrixPhone": "Aviseringsmatris på en telefon",
+    "devices": "Push på den här enheten och enheter",
+    "pushStates": "Pushlägen: blockerad, iOS-tips, stöds inte, laddar",
+    "pushKeys": "Skapa nya pushnycklar"
   }
 }

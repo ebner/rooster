@@ -28,8 +28,14 @@ export function useOrgInvites(orgId: string | undefined): QueryResult<OrgInvite[
   });
 }
 
-/** `POST /orgs/:orgId/invites` (email or link invite); resolves with the URL to copy. */
-export function useCreateInvite(): MutationResult<CreateInviteInput, CreatedInvite> {
+/** The create response; `emailed` when the server sent the invite email (SMTP set up, P7). */
+export type CreatedInviteResult = CreatedInvite & { emailed: boolean };
+
+/**
+ * `POST /orgs/:orgId/invites` (email or link invite); resolves with the URL to copy, which
+ * is shown even when the invite went out by email (AC-7.3).
+ */
+export function useCreateInvite(): MutationResult<CreateInviteInput, CreatedInviteResult> {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: CreateInviteInput) => {
@@ -43,7 +49,12 @@ export function useCreateInvite(): MutationResult<CreateInviteInput, CreatedInvi
           body,
         }),
       );
-      return { id: created.id, kind: created.kind, url: created.url };
+      return {
+        id: created.id,
+        kind: created.kind,
+        url: created.url,
+        emailed: created.emailed === true,
+      };
     },
     onSuccess: async (_data, input) => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.orgInvites(input.orgId) });

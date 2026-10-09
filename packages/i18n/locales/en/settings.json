@@ -102,7 +102,10 @@
       "multiUseCount": "{count, plural, =0 {Reusable · not used yet} one {Reusable · used once} other {Reusable · used # times}}",
       "expires": "Expires {date}",
       "revoke": "Revoke",
-      "revoked": "Invite revoked"
+      "revoked": "Invite revoked",
+      "descriptionEmail": "Invite by email or share a link.",
+      "sent": "Invite sent to {email}",
+      "sentNote": "The invite is on its way to {email}. You can also share this link:"
     },
     "danger": {
       "title": "Danger zone",
@@ -173,8 +176,8 @@
     "failed": "Couldn’t do that. Check your connection and try again."
   },
   "notifications": {
-    "title": "In-app notifications",
-    "body": "Choose what shows up in your inbox. You never get notified about your own changes.",
+    "title": "Notifications",
+    "body": "Choose how you hear about changes, per event and channel. You never get notified about your own changes.",
     "loadFailed": "Couldn’t load your notification settings.",
     "event": "Event",
     "inapp": "In app",
@@ -185,7 +188,59 @@
       "mention": "Someone mentions me",
       "completed": "Someone completes a task I created",
       "due_changed": "Someone changes the due date of my task",
-      "invite_accepted": "Someone accepts my invite"
-    }
+      "invite_accepted": "Someone accepts my invite",
+      "digest": "Daily digest",
+      "due_reminder": "Due reminder"
+    },
+    "push": "Push",
+    "email": "Email",
+    "timingTitle": "Timing",
+    "timingBody": "Times are in your timezone.",
+    "reminderTime": "Due reminder time",
+    "reminderTimeHint": "When the due reminder is on, a push lists the tasks due that day.",
+    "digestTime": "Daily digest time",
+    "digestTimeHint": "An email with what’s due today, what’s overdue and what’s new in your inbox.",
+    "emailMode": "Notification emails",
+    "emailModeHint": "Every 15 minutes collects the notifications in one email.",
+    "emailImmediate": "Immediately",
+    "emailBatch": "Every 15 minutes"
+  },
+  "push": {
+    "title": "Push on this device",
+    "body": "Get notifications on this device even when rooster is closed. Turn push on for each phone or computer separately.",
+    "on": "Push is on for this device.",
+    "turnOn": "Turn on push for this device",
+    "turnOff": "Turn off",
+    "enabled": "Push is on for this device",
+    "disabled": "Push is off for this device",
+    "enableFailed": "Couldn’t turn on push. Try again.",
+    "unsupportedService": "This browser’s push service isn’t supported, so push can’t be turned on here. Try Chrome, Edge, Firefox or Safari.",
+    "blockedTitle": "Notifications are blocked",
+    "blockedBody": "Your browser blocks notifications from rooster. Allow them in the site settings (the icon next to the address), then reload this page.",
+    "blockedIos": "Allow notifications for rooster in the Settings app under Notifications, then open rooster again.",
+    "iosTitle": "Install rooster first",
+    "iosBody": "Add rooster to your Home Screen first; push works only in the installed app.",
+    "iosSteps": "How to install",
+    "unsupported": "Push notifications aren’t available in this browser.",
+    "devicesTitle": "Your devices",
+    "noDevices": "No devices yet.",
+    "lastDelivered": "Last delivery {when}",
+    "neverDelivered": "Nothing delivered yet",
+    "test": "Send test",
+    "testNamed": "Send a test notification to {name}",
+    "testSent": "Test notification sent",
+    "testFailed": "Couldn’t send the test notification. Try again.",
+    "remove": "Remove",
+    "removeNamed": "Remove {name}",
+    "removed": "Device removed",
+    "testGone": "That device is no longer subscribed and was removed. Turn push on there again."
+  },
+  "dev": {
+    "matrix": "Notification matrix (every channel)",
+    "matrixNoEmail": "Notification matrix without email (no SMTP)",
+    "matrixPhone": "Notification matrix on a phone",
+    "devices": "Push on this device and devices",
+    "pushStates": "Push states: blocked, iOS hint, unsupported, loading",
+    "pushKeys": "Regenerate push keys"
   }
 }

@@ -91,6 +91,18 @@ test('the service worker never answers the API and serves the shell for app path
   expect(fromSw.cached).toContain('/icons/icon-192.png');
 });
 
+test('the service worker leaves the email unsubscribe page to the server', async ({ page }) => {
+  await signInAs(page, uniqueEmail('pwa.unsubscribe'));
+  await swActive(page);
+  await page.reload();
+  expect(await controlled(page)).toBe(true);
+  // A link from an email, opened where the app is installed: the server's page, not the shell.
+  const response = await page.goto('/unsubscribe/not-a-valid-token');
+  expect(response?.status()).toBe(404);
+  expect(response?.fromServiceWorker()).toBe(false);
+  await expect(page.locator('[data-testid="app-shell"], #root:not(:empty)')).toHaveCount(0);
+});
+
 test('AC-1.0.1 served scripts carry no source map reference', async ({ page, request }) => {
   await page.goto('/login');
   const scripts = await page

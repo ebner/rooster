@@ -21,6 +21,27 @@ export function useMe(): QueryResult<Me> {
   return useQuery(meQueryOptions);
 }
 
+/** What the server can deliver (`GET /meta` `features`): AC-7.3 hides email without SMTP. */
+export interface ServerFeatures {
+  email: boolean;
+  push: boolean;
+}
+
+/**
+ * `GET /meta` → `features`. Its own key under `meta`: the login page caches the providers
+ * under `['meta']` itself. The configuration only changes with a restart.
+ */
+export function useServerFeatures(): QueryResult<ServerFeatures> {
+  return useQuery({
+    queryKey: [...queryKeys.meta, 'features'],
+    queryFn: async () => {
+      const { features } = await unwrap(api.GET('/api/v1/meta'));
+      return { email: features.email, push: features.push };
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
 /** `PATCH /me`. */
 export function useUpdateProfile(): MutationResult<ProfilePatch> {
   const queryClient = useQueryClient();

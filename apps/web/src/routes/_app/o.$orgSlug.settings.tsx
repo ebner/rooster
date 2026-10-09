@@ -11,6 +11,7 @@ import {
   useOrgMembers,
   useRemoveMember,
   useRevokeInvite,
+  useServerFeatures,
   useUpdateMemberRole,
   useUpdateOrg,
 } from '../../data';
@@ -39,6 +40,7 @@ function OrgSettingsRoute() {
   const updateRole = useUpdateMemberRole();
   const removeMember = useRemoveMember();
   const createInvite = useCreateInvite();
+  const features = useServerFeatures();
   const revokeInvite = useRevokeInvite();
   const deleteOrg = useDeleteOrg();
   const tags = useTags(orgId);
@@ -84,6 +86,7 @@ function OrgSettingsRoute() {
             }
           }}
           onCreateInvite={(draft) => createInvite.mutateAsync({ ...draft, orgId })}
+          inviteEmailEnabled={features.data?.email === true}
           onRevokeInvite={(inviteId) =>
             revokeInvite
               .mutateAsync({ orgId, inviteId })

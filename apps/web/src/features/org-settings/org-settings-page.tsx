@@ -18,7 +18,9 @@ export interface OrgSettingsPageProps {
   onUpdateOrg: (patch: OrgPatch) => void;
   onChangeRole: (userId: string, role: OrgRole) => void;
   onRemoveMember: (userId: string) => Promise<void> | void;
-  onCreateInvite: (draft: InviteDraft) => Promise<CreatedInvite>;
+  onCreateInvite: (draft: InviteDraft) => Promise<CreatedInvite & { emailed?: boolean }>;
+  /** Invite emails go out (SMTP configured, `/meta` features.email; AC-7.3). */
+  inviteEmailEnabled?: boolean;
   onRevokeInvite: (inviteId: string) => void;
   onDeleteOrg: (confirmName: string) => Promise<void>;
   onLeaveOrg: () => Promise<void>;
@@ -38,6 +40,7 @@ export function OrgSettingsPage({
   onChangeRole,
   onRemoveMember,
   onCreateInvite,
+  inviteEmailEnabled = false,
   onRevokeInvite,
   onDeleteOrg,
   onLeaveOrg,
@@ -69,6 +72,7 @@ export function OrgSettingsPage({
           <InvitesSection
             invites={invites}
             onCreate={onCreateInvite}
+            emailEnabled={inviteEmailEnabled}
             onRevoke={onRevokeInvite}
             prefs={prefs}
             now={now}

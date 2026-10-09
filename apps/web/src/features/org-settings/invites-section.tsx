@@ -19,7 +19,9 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 
 export interface InvitesSectionProps {
   invites: readonly OrgInvite[];
-  onCreate: (draft: InviteDraft) => Promise<CreatedInvite>;
+  onCreate: (draft: InviteDraft) => Promise<CreatedInvite & { emailed?: boolean }>;
+  /** The server sends invite emails (`/meta` features.email); otherwise every invite is a link. */
+  emailEnabled?: boolean;
   onRevoke: (inviteId: string) => void;
   prefs: DisplayPrefs;
   now: number;
@@ -41,15 +43,25 @@ export async function copyInviteUrl(url: string, messages: { ok: string; failed:
   }
 }
 
-/** Email and link invites (FR-ORG-3). In P1 both produce a link to copy. */
-export function InvitesSection({ invites, onCreate, onRevoke, prefs, now }: InvitesSectionProps) {
+/**
+ * Email and link invites (FR-ORG-3). With SMTP the server emails an email invite (P7);
+ * without it, or for a link invite, the user copies the link (AC-7.3).
+ */
+export function InvitesSection({
+  invites,
+  onCreate,
+  emailEnabled = false,
+  onRevoke,
+  prefs,
+  now,
+}: InvitesSectionProps) {
   const { t } = useTranslation('settings');
   const copyMessages = { ok: t('org.invites.copied'), failed: t('org.invites.copyFailed') };
   return (
     <SettingsSection
       id="invites"
       title={t('org.invites.title')}
-      description={t('org.invites.description')}
+      description={emailEnabled ? t('org.invites.descriptionEmail') : t('org.invites.description')}
     >
       <CreateInviteForm onCreate={onCreate} copyMessages={copyMessages} />
       <div className="flex flex-col gap-2">
@@ -125,7 +137,11 @@ function CreateInviteForm({ onCreate, copyMessages }: CreateInviteFormProps) {
   const [expiry, setExpiry] = useState<Expiry>('7');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | undefined>();
-  const [created, setCreated] = useState<{ url: string; email: string | null } | null>(null);
+  const [created, setCreated] = useState<{
+    url: string;
+    email: string | null;
+    emailed: boolean;
+  } | null>(null);
   const emailInvalid = kind === 'email' && email.trim() !== '' && !emailPattern.test(email.trim());
 
   const submit = async (event: FormEvent) => {
@@ -140,7 +156,10 @@ function CreateInviteForm({ onCreate, copyMessages }: CreateInviteFormProps) {
           ? { kind, email: email.trim(), role, expiresInDays }
           : { kind, role, multiUse: use === 'multi', expiresInDays };
       const result = await onCreate(draft);
-      setCreated({ url: result.url, email: kind === 'email' ? email.trim() : null });
+      const invitee = kind === 'email' ? email.trim() : null;
+      const emailed = invitee !== null && result.emailed === true;
+      setCreated({ url: result.url, email: invitee, emailed });
+      if (emailed) toast({ message: t('org.invites.sent', { email: invitee }) });
       setEmail('');
     } catch {
       setError(t('org.invites.createFailed'));
@@ -229,7 +248,9 @@ function CreateInviteForm({ onCreate, copyMessages }: CreateInviteFormProps) {
         <div className="flex flex-col gap-2" role="status">
           <p className="text-sm text-text-secondary">
             {created.email
-              ? t('org.invites.createdEmail', { email: created.email })
+              ? created.emailed
+                ? t('org.invites.sentNote', { email: created.email })
+                : t('org.invites.createdEmail', { email: created.email })
               : t('org.invites.createdLink')}
           </p>
           <div className="flex gap-2">

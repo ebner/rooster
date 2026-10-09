@@ -9,6 +9,8 @@ export interface PushData {
   taskId?: string;
   /** Collapses repeated notifications about the same thing. */
   tag?: string;
+  /** `notification`, `due_reminder` or `test` (ADR 0033); every kind is shown the same way. */
+  kind?: string;
 }
 
 const slugOrId = /^[\w-]{1,100}$/;
