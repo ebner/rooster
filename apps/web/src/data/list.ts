@@ -10,26 +10,16 @@ import type { QueryResult } from './types';
 export { type DroppedOp, ListPipeline, myListKey } from './pipeline/pipeline';
 export type { ListTransport } from './pipeline/transport';
 
-const clientIdKey = 'rooster.clientId';
+/**
+ * X-Rooster-Client-Id (06 §1): one per tab, new on every page load. The SSE hub echoes it as
+ * `origin`, and a tab skips refetching changes it made itself. A per-profile id (shared by all
+ * tabs) made every tab skip changes another tab sent, so a tab that missed the cross-tab
+ * confirmation (e.g. frozen in the background on Android) never caught up.
+ */
+const clientId = uuidv7();
 
-let cachedClientId: string | null = null;
-
-/** X-Rooster-Client-Id: one per browser profile, kept across reloads where storage allows. */
 export function getClientId(): string {
-  cachedClientId ??= readClientId();
-  return cachedClientId;
-}
-
-function readClientId(): string {
-  try {
-    const stored = globalThis.localStorage?.getItem(clientIdKey);
-    if (stored) return stored;
-    const id = uuidv7();
-    globalThis.localStorage?.setItem(clientIdKey, id);
-    return id;
-  } catch {
-    return uuidv7();
-  }
+  return clientId;
 }
 
 /**

@@ -31,6 +31,7 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 - **Larger logo** in the desktop sidebar and the collapsed rail.
 
 ### Fixed
+- **A tab woken from the background now shows changes made in another tab meanwhile.** Every tab of a browser shared one client id, so each tab took the others' changes for its own and skipped refreshing; a tab frozen by Android could stay stale until reload. Each tab now has its own id.
 - Closing search (Esc) after opening it with the mouse no longer leaves a focus ring on the sidebar's Search item. When you do use the keyboard, the ring is now drawn inside the item, so its top edge is no longer cut off.
 - A task due at a time that happens twice when the clocks go back (such as 02:30 on 25 October in Sweden) now counts as due at the first of the two, whatever time zone the server runs in. Before, a server in UTC used the second one.
 
