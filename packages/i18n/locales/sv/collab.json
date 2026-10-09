@@ -1,1 +1,67 @@
-{}
+{
+  "someone": "Någon",
+  "justNow": "nyss",
+  "followers": {
+    "label": "{count, plural, one {# följare: {names}} other {# följare: {names}}}",
+    "follow": "Följ",
+    "following": "Följer"
+  },
+  "composer": {
+    "label": "Kommentar",
+    "placeholder": "Skriv en kommentar… Skriv @ för att nämna någon",
+    "post": "Skicka kommentar",
+    "suggestions": "Personer att nämna"
+  },
+  "comment": {
+    "edited": "redigerad",
+    "sending": "Skickar…",
+    "actions": "Åtgärder för kommentaren",
+    "edit": "Redigera kommentar",
+    "delete": "Ta bort kommentar",
+    "editLabel": "Redigera kommentar",
+    "cancel": "Avbryt",
+    "save": "Spara"
+  },
+  "feed": {
+    "earlier": "Visa tidigare",
+    "noComments": "Inga kommentarer än.",
+    "loadFailed": "Det gick inte att läsa in aktiviteten."
+  },
+  "activity": {
+    "system": "Rooster",
+    "you": "Du",
+    "toYou": "dig",
+    "noDate": "inget datum",
+    "quote": "”{text}”",
+    "created": "skapade uppgiften",
+    "renamed": "döpte om uppgiften till",
+    "due_changed": "ändrade förfallodatum till",
+    "due_removed": "tog bort förfallodatumet",
+    "assigned": "tilldelade uppgiften till",
+    "unassigned": "tog bort ansvarig",
+    "tookIt": "tog uppgiften",
+    "completed": "slutförde uppgiften",
+    "reopened": "öppnade uppgiften igen",
+    "description_edited": "redigerade beskrivningen",
+    "subtask_added": "{count, plural, one {lade till deluppgiften {titles}} other {lade till # deluppgifter: {titles}}}",
+    "moved_under": "gjorde uppgiften till en deluppgift",
+    "moved_top": "gjorde uppgiften till en egen uppgift",
+    "restored": "återställde uppgiften",
+    "attachment_added": "{count, plural, one {bifogade {files}} other {bifogade # filer: {files}}}",
+    "via": {
+      "cli": "via kommandoraden",
+      "tui": "via terminalappen",
+      "mcp": "via en AI-assistent",
+      "import": "via import"
+    }
+  },
+  "dev": {
+    "section": "Kommentarer, aktivitet och inkorg",
+    "feed": "Aktivitetsflöde",
+    "composer": "Kommentarsfält",
+    "followers": "Följare",
+    "inbox": "Inkorgsposter",
+    "sidebar": "Inkorg i sidofältet",
+    "prefs": "Aviseringsinställningar"
+  }
+}

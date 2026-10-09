@@ -17,7 +17,7 @@ import {
 } from '@dnd-kit/sortable';
 import type { Locale } from '@rooster/i18n/core';
 import type { TagColor } from '@rooster/tokens';
-import { PanelLeftClose, PanelLeftOpen, Plus, Search } from 'lucide-react';
+import { Bell, PanelLeftClose, PanelLeftOpen, Plus, Search } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { Popover as AriaPopover, Dialog, DialogTrigger } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
@@ -27,9 +27,10 @@ import { cn } from '../../lib/cn';
 import { IconButton } from '../../ui/icon-button';
 import { Logo, LogoMark } from '../../ui/logo';
 import { overlayOffsetPx, popoverMotion, popoverSurface } from '../../ui/popover';
+import { useInboxNav } from '../collab/inbox-nav';
 import { openPalette } from '../palette/store';
 import { CreateOrgForm } from './create-org-form';
-import type { OrgViewId } from './paths';
+import { type OrgViewId, paths } from './paths';
 import { reorderIntent } from './reorder';
 import { SidebarItem } from './sidebar-item';
 import { type OrgCounts, SidebarOrgSection } from './sidebar-org-section';
@@ -64,7 +65,7 @@ export interface SidebarProps {
 const verticalOnly: Modifier = ({ transform }) => ({ ...transform, x: 0 });
 
 /**
- * 02 §2 / 03 §3.10: logo, Search, one section per org (drag to reorder), the
+ * 02 §2 / 03 §3.10: logo, Search, Inbox, one section per org (drag to reorder), the
  * "New organisation" entry and the user menu. 248 px wide, or a 56 px icon rail.
  */
 export function Sidebar({
@@ -171,6 +172,7 @@ export function Sidebar({
           rail={rail}
           onPress={() => openPalette()}
         />
+        <InboxEntry rail={rail} />
 
         <div className={cn('mt-4 flex flex-col', rail ? 'gap-3' : 'gap-4')}>
           <DndContext
@@ -214,6 +216,24 @@ export function Sidebar({
         />
       </div>
     </nav>
+  );
+}
+
+/** 02 §2: the Inbox under Search, with the unread count (a dot in the rail). */
+function InboxEntry({ rail }: { rail: boolean }) {
+  const { t } = useTranslation('shell');
+  const { unread, active } = useInboxNav();
+  return (
+    <SidebarItem
+      icon={Bell}
+      label={t('sidebar.inbox')}
+      href={paths.inbox}
+      count={unread}
+      countLabel={unread ? t('sidebar.unread', { count: unread }) : undefined}
+      isActive={active}
+      rail={rail}
+      data-testid="sidebar-inbox"
+    />
   );
 }
 

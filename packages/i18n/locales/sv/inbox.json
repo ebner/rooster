@@ -1,1 +1,31 @@
-{}
+{
+  "title": "Inkorg",
+  "system": "Rooster",
+  "justNow": "nyss",
+  "unread": "Oläst:",
+  "excerpt": "”{text}”",
+  "markRead": "Markera som läst",
+  "markUnread": "Markera som oläst",
+  "markAllRead": "Markera alla som lästa",
+  "markFailed": "Det gick inte att uppdatera inkorgen. Kontrollera anslutningen och försök igen.",
+  "loadFailed": "Det gick inte att läsa in inkorgen.",
+  "loadMore": "Visa fler",
+  "filter": {
+    "label": "Visa",
+    "all": "Alla",
+    "unread": "{count, plural, =0 {Olästa} other {Olästa (#)}}"
+  },
+  "empty": {
+    "all": "Inget här än. Omnämnanden, tilldelningar och kommentarer på uppgifter du följer hamnar här.",
+    "unread": "Du har läst allt."
+  },
+  "type": {
+    "assigned": "tilldelade dig en uppgift",
+    "comment": "kommenterade en uppgift du följer",
+    "mention": "nämnde dig",
+    "completed": "slutförde en uppgift du skapade",
+    "due_changed": "ändrade förfallodatum för din uppgift till",
+    "due_removed": "tog bort förfallodatumet för din uppgift",
+    "invite_accepted": "gick med i {org}"
+  }
+}

@@ -1,6 +1,7 @@
 import { memo, Suspense, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { lazyWithPreload, preloadWhenIdle } from '../../lib/lazy';
+import { LazyPaneActivity } from '../collab/lazy';
 import { LazyDatePanel, LazyDatePopover } from '../dates/lazy';
 import { LazyGroupDeletePopover, LazyMoveToPopover, LazyTagPicker } from '../list/lazy';
 
@@ -12,9 +13,9 @@ const MarkdownEditor = lazyWithPreload(() =>
 let prefetched = false;
 
 /**
- * Warms the lazily loaded interaction chunks (editor, date picker, tag picker, menus) once the
- * app is idle, so their first open needs no network, also offline before the service worker
- * has cached them. Mounted by the tasks screen.
+ * Warms the lazily loaded interaction chunks (editor, date picker, tag picker, menus, the
+ * activity feed) once the app is idle, so their first open needs no network, also offline
+ * before the service worker has cached them. Mounted by the tasks screen.
  */
 export function InteractionPrefetch() {
   useEffect(() => {
@@ -27,6 +28,7 @@ export function InteractionPrefetch() {
       LazyTagPicker.preload,
       LazyMoveToPopover.preload,
       LazyGroupDeletePopover.preload,
+      LazyPaneActivity.preload,
     ]);
   }, []);
   return null;

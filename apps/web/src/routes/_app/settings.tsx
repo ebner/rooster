@@ -14,9 +14,11 @@ function SettingsRoute() {
     ? 'security'
     : pathname.endsWith('/behaviour')
       ? 'behaviour'
-      : pathname.endsWith('/data')
-        ? 'data'
-        : 'profile';
+      : pathname.endsWith('/notifications')
+        ? 'notifications'
+        : pathname.endsWith('/data')
+          ? 'data'
+          : 'profile';
   return (
     <>
       <ViewHeader title={t('title')} />

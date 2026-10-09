@@ -43,7 +43,8 @@
     "created": "Created",
     "createdBy": "Created by {name} · {ago}",
     "you": "you",
-    "justNow": "just now"
+    "justNow": "just now",
+    "assignee": "Assignee"
   },
   "description": {
     "label": "Description",
@@ -58,5 +59,12 @@
   "dev": {
     "section": "Detail pane",
     "live": "Pane on the in-memory list"
+  },
+  "activity": {
+    "heading": "Activity",
+    "filter": "Show in the feed",
+    "commentsOnly": "Comments only",
+    "all": "All activity",
+    "commentDeleted": "Comment deleted"
   }
 }

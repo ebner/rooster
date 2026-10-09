@@ -1,1 +1,67 @@
-{}
+{
+  "someone": "Someone",
+  "justNow": "just now",
+  "followers": {
+    "label": "{count, plural, one {# follower: {names}} other {# followers: {names}}}",
+    "follow": "Follow",
+    "following": "Following"
+  },
+  "composer": {
+    "label": "Comment",
+    "placeholder": "Write a comment… Type @ to mention someone",
+    "post": "Post comment",
+    "suggestions": "People to mention"
+  },
+  "comment": {
+    "edited": "edited",
+    "sending": "Sending…",
+    "actions": "Comment actions",
+    "edit": "Edit comment",
+    "delete": "Delete comment",
+    "editLabel": "Edit comment",
+    "cancel": "Cancel",
+    "save": "Save"
+  },
+  "feed": {
+    "earlier": "Load earlier",
+    "noComments": "No comments yet.",
+    "loadFailed": "Couldn’t load the activity."
+  },
+  "activity": {
+    "system": "Rooster",
+    "you": "You",
+    "toYou": "you",
+    "noDate": "no date",
+    "quote": "“{text}”",
+    "created": "created this task",
+    "renamed": "renamed this task to",
+    "due_changed": "changed the due date to",
+    "due_removed": "removed the due date",
+    "assigned": "assigned this task to",
+    "unassigned": "removed the assignee",
+    "tookIt": "took this task",
+    "completed": "completed this task",
+    "reopened": "reopened this task",
+    "description_edited": "edited the description",
+    "subtask_added": "{count, plural, one {added the subtask {titles}} other {added # subtasks: {titles}}}",
+    "moved_under": "made this a subtask",
+    "moved_top": "made this a top-level task",
+    "restored": "restored this task",
+    "attachment_added": "{count, plural, one {attached {files}} other {attached # files: {files}}}",
+    "via": {
+      "cli": "via the CLI",
+      "tui": "via the terminal app",
+      "mcp": "via an AI assistant",
+      "import": "via import"
+    }
+  },
+  "dev": {
+    "section": "Comments, activity and inbox",
+    "feed": "Activity feed",
+    "composer": "Comment composer",
+    "followers": "Followers",
+    "inbox": "Inbox items",
+    "sidebar": "Sidebar inbox",
+    "prefs": "Notification preferences"
+  }
+}

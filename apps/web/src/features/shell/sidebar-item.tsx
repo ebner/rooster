@@ -26,6 +26,8 @@ export interface SidebarItemProps {
   href?: string;
   onPress?: () => void;
   count?: number | undefined;
+  /** Spoken instead of the bare number (e.g. "3 unread"); the rail shows a dot for it. */
+  countLabel?: string | undefined;
   /** Rose count (Overdue, 03 §3.10). */
   countTone?: 'default' | 'danger';
   shortcut?: string | undefined;
@@ -36,6 +38,7 @@ export interface SidebarItemProps {
   /** Extra tooltip context in the rail, e.g. the org name. */
   railHint?: string | undefined;
   'data-force'?: string;
+  'data-testid'?: string;
 }
 
 /** A sidebar navigation row: a link when it has `href`, otherwise a button. */
@@ -46,6 +49,7 @@ export function SidebarItem({
   href,
   onPress,
   count,
+  countLabel,
   countTone = 'default',
   shortcut,
   isActive = false,
@@ -53,34 +57,52 @@ export function SidebarItem({
   rail = false,
   railHint,
   'data-force': force,
+  'data-testid': testId,
 }: SidebarItemProps) {
   const className = cn(
     sidebarItemClass,
     isActive && sidebarItemActiveClass,
     rail && 'justify-center px-0',
   );
+  const counted = count !== undefined && count > 0;
+  const icon =
+    leading ??
+    (Icon && <Icon className="size-5 shrink-0" strokeWidth={iconStrokeWidth} aria-hidden />);
   const content = (
     <>
-      {leading ??
-        (Icon && <Icon className="size-5 shrink-0" strokeWidth={iconStrokeWidth} aria-hidden />)}
+      {rail && counted && countLabel ? (
+        <span className="relative inline-flex shrink-0">
+          {icon}
+          <span
+            aria-hidden
+            data-testid="sidebar-dot"
+            className="absolute -end-0.5 -top-0.5 size-2 rounded-full bg-bg-accent ring-2 ring-bg-sidebar"
+          />
+        </span>
+      ) : (
+        icon
+      )}
       {!rail && <span className="min-w-0 flex-1 truncate text-start">{label}</span>}
-      {!rail && count !== undefined && count > 0 && (
+      {!rail && counted && (
         <span
           className={cn(
             'shrink-0 text-xs tabular-nums',
             countTone === 'danger' ? 'font-medium text-text-danger' : 'text-text-secondary',
           )}
         >
-          {count}
+          <span aria-hidden={countLabel ? true : undefined}>{count}</span>
+          {countLabel && <span className="sr-only">{countLabel}</span>}
         </span>
       )}
       {!rail && shortcut && <Kbd shortcut={shortcut} className="shrink-0" />}
     </>
   );
+  const railName = [label, railHint, counted ? countLabel : undefined].filter(Boolean).join(' · ');
   const common = {
     className,
     ...(force ? { 'data-force': force } : {}),
-    ...(rail ? { 'aria-label': railHint ? `${label} · ${railHint}` : label } : {}),
+    ...(testId ? { 'data-testid': testId } : {}),
+    ...(rail ? { 'aria-label': railName } : {}),
   };
   const element = href ? (
     <AriaLink
@@ -98,11 +120,7 @@ export function SidebarItem({
   );
   if (!rail || isDisabled) return element;
   return (
-    <Tooltip
-      content={railHint ? `${label} · ${railHint}` : label}
-      shortcut={shortcut}
-      placement="end"
-    >
+    <Tooltip content={railName} shortcut={shortcut} placement="end">
       {element}
     </Tooltip>
   );

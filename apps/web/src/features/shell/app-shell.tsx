@@ -7,6 +7,7 @@ import { useListStore } from '../../state/list-store';
 import { MenuItem, MenuSeparator } from '../../ui/menu';
 import { useBreakpoint, useEditingFocus, useIsMobile } from '../../ui/use-media';
 import { useKeymapHandlers } from '../../use-keymap';
+import { LiveInbox } from '../collab/inbox-nav';
 import { PaletteHost } from '../palette/palette-host';
 import { openPalette, togglePalette } from '../palette/store';
 import { SyncStatus } from '../pwa/sync-status';
@@ -31,7 +32,7 @@ export interface MobileShell {
   /** Resolve to close the sheet; throw to show the error in the form. */
   onCreateOrg: (input: CreateOrgInput) => Promise<void>;
   onSignOut: () => void;
-  /** The bottom nav (My tasks · Search · Settings). */
+  /** The bottom nav (My tasks · Search · Inbox · Settings). */
   nav: ReactNode;
 }
 
@@ -111,71 +112,78 @@ export function AppShell({ renderSidebar, children, navKey, mobile }: AppShellPr
 
   if (phoneFrame && mobile) {
     return (
-      <ShellContext.Provider value={context}>
-        {/*
-         * Fixed to the layout viewport rather than `h-dvh` in the flow: the nav stays flush with
-         * the bottom even when `dvh` and the standalone window disagree, and a document scroll
-         * cannot move the frame (the document itself is locked, theme.css).
-         */}
-        <div className="fixed inset-0 flex flex-col overflow-hidden bg-bg-app" data-shell="mobile">
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-y-none">
-            {children}
-          </main>
-          {/* The keyboard and selection mode's bulk bar take the nav's place (02 §13). */}
-          {!editingFocus && !selectionMode && mobile.nav}
-          <OrgSwitcherSheet
-            isOpen={orgsOpen}
-            onOpenChange={setOrgsOpen}
-            orgs={mobile.orgs}
-            activeOrgId={mobile.activeOrg?.id}
-            onSelect={mobile.onSelectOrg}
-            onCreateOrg={mobile.onCreateOrg}
-          />
-          <CheatSheet />
-          <PaletteHost />
-        </div>
-      </ShellContext.Provider>
+      <LiveInbox>
+        <ShellContext.Provider value={context}>
+          {/*
+           * Fixed to the layout viewport rather than `h-dvh` in the flow: the nav stays flush with
+           * the bottom even when `dvh` and the standalone window disagree, and a document scroll
+           * cannot move the frame (the document itself is locked, theme.css).
+           */}
+          <div
+            className="fixed inset-0 flex flex-col overflow-hidden bg-bg-app"
+            data-shell="mobile"
+          >
+            <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-y-none">
+              {children}
+            </main>
+            {/* The keyboard and selection mode's bulk bar take the nav's place (02 §13). */}
+            {!editingFocus && !selectionMode && mobile.nav}
+            <OrgSwitcherSheet
+              isOpen={orgsOpen}
+              onOpenChange={setOrgsOpen}
+              orgs={mobile.orgs}
+              activeOrgId={mobile.activeOrg?.id}
+              onSelect={mobile.onSelectOrg}
+              onCreateOrg={mobile.onCreateOrg}
+            />
+            <CheatSheet />
+            <PaletteHost />
+          </div>
+        </ShellContext.Provider>
+      </LiveInbox>
     );
   }
 
   return (
-    <ShellContext.Provider value={context}>
-      <div className="flex h-dvh overflow-hidden bg-bg-app">
-        {/* Before the sidebar: same layer, so the expanded sidebar paints over it. */}
-        {tablet && railOpen && (
-          <div
-            aria-hidden
-            data-testid="rail-scrim"
-            onClick={() => setRailOpen(false)}
-            className="fixed inset-0 z-(--z-sidebar) bg-overlay animate-fade-in"
-          />
-        )}
-        <div className="relative z-(--z-sidebar) hidden shrink-0 border-e border-border tablet:block">
-          {tablet
-            ? renderSidebar({
-                collapsed: true,
-                onToggleCollapsed: () => setRailOpen(true),
-                inDrawer: false,
-              })
-            : renderSidebar({ collapsed, onToggleCollapsed: toggleCollapsed, inDrawer: false })}
+    <LiveInbox>
+      <ShellContext.Provider value={context}>
+        <div className="flex h-dvh overflow-hidden bg-bg-app">
+          {/* Before the sidebar: same layer, so the expanded sidebar paints over it. */}
           {tablet && railOpen && (
             <div
-              className="absolute inset-y-0 start-0 z-(--z-sidebar) shadow-lg animate-fade-in"
-              data-testid="rail-expanded"
-            >
-              {renderSidebar({
-                collapsed: false,
-                onToggleCollapsed: () => setRailOpen(false),
-                inDrawer: false,
-              })}
-            </div>
+              aria-hidden
+              data-testid="rail-scrim"
+              onClick={() => setRailOpen(false)}
+              className="fixed inset-0 z-(--z-sidebar) bg-overlay animate-fade-in"
+            />
           )}
+          <div className="relative z-(--z-sidebar) hidden shrink-0 border-e border-border tablet:block">
+            {tablet
+              ? renderSidebar({
+                  collapsed: true,
+                  onToggleCollapsed: () => setRailOpen(true),
+                  inDrawer: false,
+                })
+              : renderSidebar({ collapsed, onToggleCollapsed: toggleCollapsed, inDrawer: false })}
+            {tablet && railOpen && (
+              <div
+                className="absolute inset-y-0 start-0 z-(--z-sidebar) shadow-lg animate-fade-in"
+                data-testid="rail-expanded"
+              >
+                {renderSidebar({
+                  collapsed: false,
+                  onToggleCollapsed: () => setRailOpen(false),
+                  inDrawer: false,
+                })}
+              </div>
+            )}
+          </div>
+          <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">{children}</main>
+          <CheatSheet />
+          <PaletteHost />
         </div>
-        <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">{children}</main>
-        <CheatSheet />
-        <PaletteHost />
-      </div>
-    </ShellContext.Provider>
+      </ShellContext.Provider>
+    </LiveInbox>
   );
 }
 

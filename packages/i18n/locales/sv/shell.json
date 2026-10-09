@@ -4,7 +4,9 @@
     "search": "Sök",
     "newOrg": "Ny organisation",
     "collapse": "Fäll ihop sidofältet",
-    "expand": "Fäll ut sidofältet"
+    "expand": "Fäll ut sidofältet",
+    "inbox": "Inkorg",
+    "unread": "{count, plural, one {# oläst} other {# olästa}}"
   },
   "view": {
     "my": "Mina uppgifter",

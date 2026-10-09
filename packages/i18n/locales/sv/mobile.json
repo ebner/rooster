@@ -63,7 +63,9 @@
     "label": "Huvudmeny",
     "myTasks": "Mina uppgifter",
     "search": "Sök",
-    "settings": "Inställningar"
+    "settings": "Inställningar",
+    "inbox": "Inkorg",
+    "unread": "{count, plural, one {# oläst} other {# olästa}}"
   },
   "dev": {
     "section": "Mobillayout",

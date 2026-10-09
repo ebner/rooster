@@ -1,5 +1,5 @@
-import type { SseHello, SseInvalidate } from '@rooster/core/schemas';
-import { parseSseHello, parseSseInvalidate } from '@rooster/core/sse';
+import type { SseHello, SseInvalidate, SseNotification } from '@rooster/core/schemas';
+import { parseSseHello, parseSseInvalidate, parseSseNotification } from '@rooster/core/sse';
 import type { SseState } from '../../state/sync-store';
 
 export const eventsUrl = '/api/v1/events';
@@ -79,12 +79,36 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+type NotificationListener = (event: SseNotification) => void;
+
+const notificationListeners = new Set<NotificationListener>();
+
+/**
+ * The P6 `event: notification` (unread count plus a preview) for whoever shows it: the badge
+ * writes the count into the inbox cache (`data/notifications.ts`). Returns the unsubscribe.
+ */
+export function subscribeSseNotifications(listener: NotificationListener): () => void {
+  notificationListeners.add(listener);
+  return () => {
+    notificationListeners.delete(listener);
+  };
+}
+
+function publishNotification(event: SseNotification): void {
+  for (const listener of notificationListeners) listener(event);
+}
+
+/** The inbox's query root: every `notification` event refreshes the loaded lists. */
+export const notificationsKey = ['notifications'] as const;
+
 export interface EventStreamOptions {
   clientId: string;
   invalidate: (key: readonly string[]) => void;
   /** Every (re)connect: refetch active queries and flush the outbox (04 §4.5, §6.2). */
   onConnect: () => void;
   onHello: (hello: SseHello) => void;
+  /** Default: `subscribeSseNotifications` listeners. */
+  onNotification?: NotificationListener;
   onState: (state: SseState) => void;
   factory?: EventSourceFactory;
   url?: string;
@@ -201,6 +225,7 @@ export class EventStream {
     };
     source.addEventListener('hello', (event) => this.onHello(event.data));
     source.addEventListener('invalidate', (event) => this.onInvalidate(event.data));
+    source.addEventListener('notification', (event) => this.onNotification(event.data));
   }
 
   private onHello(data: string): void {
@@ -213,6 +238,17 @@ export class EventStream {
     if (!event) return;
     const keys = invalidationKeys(event, this.options.clientId);
     for (const key of keys) this.options.invalidate(key);
+  }
+
+  /**
+   * The unread count goes to the listeners first (the badge updates without a refetch); the
+   * loaded inbox pages are then invalidated for the new item or the changed read state.
+   */
+  private onNotification(data: string): void {
+    const event = parse(data, parseSseNotification);
+    if (!event) return;
+    (this.options.onNotification ?? publishNotification)(event);
+    this.options.invalidate(notificationsKey);
   }
 
   private scheduleRetry(): void {

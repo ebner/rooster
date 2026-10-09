@@ -43,7 +43,8 @@
     "created": "Skapad",
     "createdBy": "Skapad av {name} · {ago}",
     "you": "dig",
-    "justNow": "just nu"
+    "justNow": "just nu",
+    "assignee": "Ansvarig"
   },
   "description": {
     "label": "Beskrivning",
@@ -58,5 +59,12 @@
   "dev": {
     "section": "Detaljpanel",
     "live": "Panel på listan i minnet"
+  },
+  "activity": {
+    "heading": "Aktivitet",
+    "filter": "Visa i flödet",
+    "commentsOnly": "Bara kommentarer",
+    "all": "All aktivitet",
+    "commentDeleted": "Kommentaren togs bort"
   }
 }

@@ -1,1 +1,31 @@
-{}
+{
+  "title": "Inbox",
+  "system": "Rooster",
+  "justNow": "just now",
+  "unread": "Unread:",
+  "excerpt": "“{text}”",
+  "markRead": "Mark as read",
+  "markUnread": "Mark as unread",
+  "markAllRead": "Mark all read",
+  "markFailed": "Couldn’t update the inbox. Check your connection and try again.",
+  "loadFailed": "Couldn’t load your inbox.",
+  "loadMore": "Show more",
+  "filter": {
+    "label": "Show",
+    "all": "All",
+    "unread": "{count, plural, =0 {Unread} other {Unread (#)}}"
+  },
+  "empty": {
+    "all": "Nothing here yet. Mentions, assignments and comments on tasks you follow show up here.",
+    "unread": "You’re all caught up."
+  },
+  "type": {
+    "assigned": "assigned a task to you",
+    "comment": "commented on a task you follow",
+    "mention": "mentioned you",
+    "completed": "completed a task you created",
+    "due_changed": "changed the due date of your task to",
+    "due_removed": "removed the due date of your task",
+    "invite_accepted": "joined {org}"
+  }
+}

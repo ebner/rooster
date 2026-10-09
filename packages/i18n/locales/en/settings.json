@@ -171,5 +171,21 @@
     "cancel": "Cancel",
     "loadMore": "Show more",
     "failed": "Couldn’t do that. Check your connection and try again."
+  },
+  "notifications": {
+    "title": "In-app notifications",
+    "body": "Choose what shows up in your inbox. You never get notified about your own changes.",
+    "loadFailed": "Couldn’t load your notification settings.",
+    "event": "Event",
+    "inapp": "In app",
+    "cell": "{event}: {channel}",
+    "type": {
+      "assigned": "A task is assigned to me",
+      "comment": "Someone comments on a task I follow",
+      "mention": "Someone mentions me",
+      "completed": "Someone completes a task I created",
+      "due_changed": "Someone changes the due date of my task",
+      "invite_accepted": "Someone accepts my invite"
+    }
   }
 }

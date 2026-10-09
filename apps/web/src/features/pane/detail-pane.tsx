@@ -1,5 +1,6 @@
+import { uuidv7 } from '@rooster/core/ids';
 import { ancestorsOf, type ListState, listOps, orderedGroups } from '@rooster/core/reducers';
-import type { Task } from '@rooster/core/schemas';
+import type { Comment, Task } from '@rooster/core/schemas';
 import {
   Check,
   ChevronDown,
@@ -27,6 +28,7 @@ import { formatTimeAgo } from '../../lib/format';
 import { createListStore } from '../../state/list-store';
 import { type PaneFocusTarget, usePaneStore } from '../../state/pane-store';
 import { useTagsStore } from '../../state/tags-store';
+import { useUndoStore } from '../../state/undo-store';
 import { Button, iconStrokeWidth } from '../../ui/button';
 import { ChipGroup } from '../../ui/chip';
 import { IconButton } from '../../ui/icon-button';
@@ -38,15 +40,21 @@ import {
   MenuTrigger,
   SubmenuTrigger,
 } from '../../ui/menu';
+import { SegmentedControl } from '../../ui/segmented-control';
 import { Select } from '../../ui/select';
+import { SkeletonRows } from '../../ui/skeleton';
 import { toast } from '../../ui/toast';
-import { useIsMobile } from '../../ui/use-media';
+import { useIsMobile, useKeyboardInset } from '../../ui/use-media';
 import {
   eventZone,
   type ShortcutHandler,
   type ShortcutHandlers,
   useKeymapHandlers,
 } from '../../use-keymap';
+import { useActivityFilter } from '../collab/activity-filter';
+import { CommentComposer, type CommentComposerHandle } from '../collab/comment-composer';
+import { FollowerStack, FollowToggle } from '../collab/followers';
+import { LazyPaneActivity } from '../collab/lazy';
 import { DateCell, DateLabel, type DueValue, useViewerDateContext } from '../dates';
 import { QuickDateSheet } from '../dates/quick-date-sheet';
 import { completionHoldMs, ListController, type Translate } from '../list/controller';
@@ -55,6 +63,7 @@ import { GroupSheet } from '../list/group-sheet';
 import { LazyTagPicker } from '../list/lazy';
 import type { ListContextValue } from '../list/list-context';
 import type { Row } from '../list/model/rows';
+import { AssigneeField } from '../people/assignee-field';
 import { TagSheet } from '../tags/tag-sheet';
 import { DescriptionField } from './description-field';
 import type { PaneControls } from './pane-controls';
@@ -163,6 +172,13 @@ function PaneContent({
   const [tagsOpen, setTagsOpen] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
+  const [assigneeOpen, setAssigneeOpen] = useState(false);
+  const [activityFilter, setActivityFilter] = useActivityFilter(userId);
+  const composerRef = useRef<CommentComposerHandle>(null);
+  const keyboard = useKeyboardInset();
+  const me = useMe().data;
+  // FR-COL-6: personal orgs hide the assignee and the followers (comments stay).
+  const shared = me?.orgs.find((o) => o.id === orgId)?.isPersonal === false;
   const mobile = useIsMobile();
   const dateRef = useRef(dateCtx);
   dateRef.current = dateCtx;
@@ -221,6 +237,9 @@ function PaneContent({
     } else if (target === 'tags') setTagsOpen(true);
     else if (target === 'date') setDateOpen(true);
     else if (target === 'subtask') controller.addSubtask(taskId);
+    else if (target === 'assignee') {
+      if (shared) setAssigneeOpen(true);
+    } else if (target === 'comment') composerRef.current?.focus();
   };
 
   const commitTitle = () => titleRef.current?.commit();
@@ -248,6 +267,30 @@ function PaneContent({
   const copyId = async () => {
     if (await copyText(taskId)) toast({ message: t('toolbar.idCopied') });
   };
+
+  // Comments and follow go through the pipeline (ADR 0028): they work offline and sync later.
+  const postComment = (body: string) =>
+    pipeline.enqueue(orgId, [listOps.createComment(taskId, { id: uuidv7(), body })], { userId });
+  const editComment = (comment: Comment, body: string) =>
+    pipeline.enqueue(orgId, [listOps.patchComment(comment.id, taskId, { body })], { userId });
+  const deleteComment = (comment: Comment) => {
+    const remove = listOps.deleteComment(comment.id, taskId);
+    pipeline.enqueue(orgId, [remove], { userId });
+    // Undone by the restore route (06 §2.6, ADR 0028), from the toast or with Ctrl+Z.
+    const entry = {
+      orgId,
+      label: t('activity.commentDeleted'),
+      inverseOps: [listOps.restoreComment(comment.id, taskId)],
+      redoOps: [remove],
+    };
+    useUndoStore.getState().push(entry);
+    toast({
+      message: entry.label,
+      action: { label: tList('undo.action'), onAction: () => controller.undoEntry(entry) },
+    });
+  };
+  const setFollowing = (following: boolean) =>
+    pipeline.enqueue(orgId, [listOps.setFollowing(taskId, following)], { userId });
 
   /**
    * The phone sheet's ‹ back and swipe down (02 §13.4): it slides away (250 ms), then the
@@ -281,6 +324,25 @@ function PaneContent({
   // Stable callbacks: the editor (the pane's heaviest part) re-renders only for a new value.
   const latest = useRef({ leavePane, toggleComplete });
   latest.current = { leavePane, toggleComplete };
+  const inComposer = (event: KeyboardEvent) =>
+    event.target instanceof Element && event.target.closest('[data-comment-composer]') !== null;
+  const memberList = members.data;
+  const person = useCallback(
+    (id: string) => {
+      const member = memberList?.find((m) => m.userId === id);
+      if (member) return { name: member.name, image: member.image };
+      return id === me?.user.id ? { name: me.user.name, image: me.user.image } : undefined;
+    },
+    [memberList, me?.user],
+  );
+  // Everyone but the author can be mentioned (FR-COL-3); personal orgs have no one else.
+  const candidates = useMemo(
+    () =>
+      (memberList ?? [])
+        .filter((m) => m.userId !== userId)
+        .map((m) => ({ userId: m.userId, name: m.name, email: m.email, image: m.image })),
+    [memberList, userId],
+  );
   const descriptionCallbacks = useMemo(
     () => ({
       onChange: (markdown: string) =>
@@ -306,8 +368,12 @@ function PaneContent({
         controller.addSubtask(taskId);
       },
       focusDescription: () => applyFocus('description'),
-      openPaneFocus: () => applyFocus('title'),
+      // Tab+Enter in the comment composer posts (02 §9.2 item 8, keymap `postComment`).
+      openPaneFocus: (event) =>
+        inComposer(event) ? composerRef.current?.submit() : applyFocus('title'),
       paneFullScreen: () => pane.toggleFullScreen(),
+      assign: () => applyFocus('assignee'),
+      focusComment: () => applyFocus('comment'),
     }),
   );
 
@@ -345,6 +411,12 @@ function PaneContent({
   const tagItems = task.tagIds.flatMap((id) => {
     const tag = tagsById[id];
     return tag ? [{ id: tag.id, name: tag.name, color: tag.color }] : [];
+  });
+  const followerIds = detail.data?.followers ?? [];
+  const following = followerIds.includes(userId);
+  const followers = followerIds.flatMap((id) => {
+    const found = person(id);
+    return found ? [{ id, name: found.name, image: found.image }] : [];
   });
   const due: DueValue = {
     dueDate: task.dueDate,
@@ -514,6 +586,17 @@ function PaneContent({
             className="flex flex-col text-md"
             data-testid="sheet-props"
           >
+            {shared && (
+              <MobileProp label={t('props.assignee')}>
+                <AssigneeField
+                  orgId={orgId}
+                  task={task}
+                  variant="sheet"
+                  isOpen={assigneeOpen}
+                  onOpenChange={setAssigneeOpen}
+                />
+              </MobileProp>
+            )}
             <MobileProp label={t('props.due')}>
               <PropButton onPress={() => setDateOpen(true)} data-testid="sheet-due">
                 {task.dueDate ? (
@@ -572,6 +655,22 @@ function PaneContent({
             aria-label={t('props.label')}
             className="grid grid-cols-[var(--w-label-col)_minmax(0,1fr)] items-center gap-x-3 text-sm"
           >
+            {shared && (
+              <>
+                <dt className="flex h-property-row items-center text-text-muted">
+                  {t('props.assignee')}
+                </dt>
+                <dd className="flex h-property-row min-w-0 items-center">
+                  <AssigneeField
+                    orgId={orgId}
+                    task={task}
+                    variant="pane"
+                    isOpen={assigneeOpen}
+                    onOpenChange={setAssigneeOpen}
+                  />
+                </dd>
+              </>
+            )}
             <dt className="flex h-property-row items-center text-text-muted">{t('props.due')}</dt>
             <dd className="flex h-property-row min-w-0 items-center">
               <DateCell
@@ -704,7 +803,60 @@ function PaneContent({
             onEscapeOut={leavePane}
           />
         </section>
+
+        <section aria-labelledby="pane-activity-heading" className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 id="pane-activity-heading" className="text-sm font-semibold text-text">
+              {t('activity.heading')}
+            </h2>
+            <SegmentedControl
+              label={t('activity.filter')}
+              hideLabel
+              options={[
+                { id: 'comments', label: t('activity.commentsOnly') },
+                { id: 'all', label: t('activity.all') },
+              ]}
+              value={activityFilter}
+              onChange={setActivityFilter}
+            />
+          </div>
+          <Suspense fallback={<SkeletonRows count={2} />}>
+            <LazyPaneActivity
+              orgId={orgId}
+              taskId={taskId}
+              viewerId={userId}
+              filter={activityFilter}
+              person={person}
+              locale={display.locale}
+              dateCtx={dateCtx}
+              onEdit={editComment}
+              onDelete={deleteComment}
+            />
+          </Suspense>
+        </section>
       </div>
+      <footer
+        className="shrink-0 border-t border-border bg-bg-elevated px-6 pt-3 pb-3 max-tablet:px-4 max-tablet:pb-safe"
+        style={mobile && keyboard > 0 ? { marginBottom: keyboard, paddingBottom: 0 } : undefined}
+        data-testid="pane-composer"
+      >
+        <CommentComposer
+          ref={composerRef}
+          taskId={taskId}
+          candidates={candidates}
+          onPost={postComment}
+          onEscape={mobile ? undefined : leavePane}
+          touch={mobile}
+          footer={
+            shared ? (
+              <>
+                <FollowerStack followers={followers} />
+                <FollowToggle following={following} onToggle={setFollowing} />
+              </>
+            ) : null
+          }
+        />
+      </footer>
       {mobile && (
         <>
           <QuickDateSheet

@@ -63,7 +63,9 @@
     "label": "Primary",
     "myTasks": "My tasks",
     "search": "Search",
-    "settings": "Settings"
+    "settings": "Settings",
+    "inbox": "Inbox",
+    "unread": "{count, plural, one {# unread} other {# unread}}"
   },
   "dev": {
     "section": "Phone layout",

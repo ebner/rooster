@@ -13,6 +13,8 @@ export interface BottomNavItem {
   isDisabled?: boolean | undefined;
   /** Unread count (the P6 Inbox tab). */
   badge?: number | undefined;
+  /** What screen readers hear for the badge, e.g. "3 unread". */
+  badgeLabel?: string | undefined;
 }
 
 export interface BottomNavProps {
@@ -34,7 +36,7 @@ const itemClass = cn(
 
 /**
  * The phone's bottom navigation (02 §13.1): 64 px plus the safe area, icons with labels, the
- * active tab in the accent colour. P4 ships My tasks · Search · Settings; P6 adds Inbox.
+ * active tab in the accent colour: My tasks · Search · Inbox · Settings.
  */
 export function BottomNav({
   label,
@@ -64,12 +66,19 @@ export function BottomNav({
                 aria-hidden
               />
               {item.badge !== undefined && item.badge > 0 && (
-                <span className="absolute -end-2 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-bg-accent px-1 text-xs text-text-on-accent tabular-nums">
-                  {item.badge}
+                <span
+                  aria-hidden
+                  data-testid="bottom-nav-badge"
+                  className="absolute -end-2 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-bg-accent px-1 text-xs text-text-on-accent tabular-nums"
+                >
+                  {item.badge > 99 ? '99+' : item.badge}
                 </span>
               )}
             </span>
             <span className="max-w-full truncate px-1">{item.label}</span>
+            {item.badge !== undefined && item.badge > 0 && (
+              <span className="sr-only">{item.badgeLabel ?? item.badge}</span>
+            )}
           </>
         );
         // Accent text only passes contrast on white, so a pressed active tab darkens it.
@@ -81,6 +90,7 @@ export function BottomNav({
         return item.href ? (
           <AriaLink
             key={item.id}
+            data-testid={`bottom-nav-${item.id}`}
             href={item.href}
             isDisabled={item.isDisabled ?? false}
             className={className}
@@ -92,6 +102,7 @@ export function BottomNav({
         ) : (
           <AriaButton
             key={item.id}
+            data-testid={`bottom-nav-${item.id}`}
             isDisabled={item.isDisabled ?? false}
             {...(item.onPress ? { onPress: item.onPress } : {})}
             className={className}

@@ -171,5 +171,21 @@
     "cancel": "Avbryt",
     "loadMore": "Visa fler",
     "failed": "Det gick inte. Kontrollera anslutningen och försök igen."
+  },
+  "notifications": {
+    "title": "Aviseringar i appen",
+    "body": "Välj vad som hamnar i din inkorg. Du aviseras aldrig om dina egna ändringar.",
+    "loadFailed": "Det gick inte att läsa in aviseringsinställningarna.",
+    "event": "Händelse",
+    "inapp": "I appen",
+    "cell": "{event}: {channel}",
+    "type": {
+      "assigned": "En uppgift tilldelas mig",
+      "comment": "Någon kommenterar en uppgift jag följer",
+      "mention": "Någon nämner mig",
+      "completed": "Någon slutför en uppgift jag skapade",
+      "due_changed": "Någon ändrar förfallodatum för min uppgift",
+      "invite_accepted": "Någon tackar ja till min inbjudan"
+    }
   }
 }

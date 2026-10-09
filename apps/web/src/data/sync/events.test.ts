@@ -8,6 +8,7 @@ import {
   serverIsNewer,
   sseLongBackoffMs,
   ssePauseHiddenMs,
+  subscribeSseNotifications,
 } from './events';
 
 const org = '01900000-0000-7000-8000-0000000000aa';
@@ -169,6 +170,33 @@ describe('EventStream', () => {
     expect(latest().closed).toBe(false);
     events.stop();
     expect(latest().closed).toBe(true);
+    vi.useRealTimers();
+  });
+
+  test('a notification updates the unread count, then invalidates the inbox', () => {
+    const { handlers, latest } = stream();
+    const seen: string[] = [];
+    handlers.invalidate.mockImplementation((key: readonly string[]) => seen.push(key.join()));
+    const unsubscribe = subscribeSseNotifications((event) =>
+      seen.push(`count ${event.unreadCount}`),
+    );
+    latest().open();
+    const notification = {
+      id: '01900000-0000-7000-8000-000000000001',
+      orgId: org,
+      type: 'mention',
+      taskId: '01900000-0000-7000-8000-000000000002',
+      actorName: 'Anna',
+      title: 'Write Q4 plan',
+    };
+    latest().emit('notification', { unreadCount: 3, notification });
+    latest().emit('notification', { unreadCount: 2, notification: null });
+    latest().emit('notification', { unreadCount: -1, notification: null });
+    expect(seen).toEqual(['count 3', 'notifications', 'count 2', 'notifications']);
+    unsubscribe();
+    latest().emit('notification', { unreadCount: 1, notification: null });
+    expect(seen.at(-1)).toBe('notifications');
+    expect(seen).not.toContain('count 1');
     vi.useRealTimers();
   });
 });

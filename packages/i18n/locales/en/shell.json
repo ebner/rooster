@@ -4,7 +4,9 @@
     "search": "Search",
     "newOrg": "New organisation",
     "collapse": "Collapse sidebar",
-    "expand": "Expand sidebar"
+    "expand": "Expand sidebar",
+    "inbox": "Inbox",
+    "unread": "{count, plural, one {# unread} other {# unread}}"
   },
   "view": {
     "my": "My tasks",

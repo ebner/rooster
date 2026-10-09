@@ -19,6 +19,8 @@ import type { Platform } from './lib/platform';
  * - `drag`: handled by a focused drag handle.
  * - `picker`: handled inside the date popover (matched by `event.code`, 02 §7).
  * - `editor`: handled by the description editor itself (features/editor, 02 §9.2).
+ * - `composer`: handled by the comment composer itself (features/collab, 02 §9.2 item 8). Its
+ *   Tab+Enter arrives as the `openPaneFocus` chord, which the pane turns into "post".
  * - `palette`: no keys; a command only the palette runs (`keys: []`, skipped by the cheat sheet).
  */
 export type ShortcutScope =
@@ -29,6 +31,7 @@ export type ShortcutScope =
   | 'drag'
   | 'picker'
   | 'editor'
+  | 'composer'
   | 'palette';
 
 /**
@@ -45,7 +48,8 @@ export type ShortcutSection =
   | 'groups'
   | 'pane'
   | 'editor'
-  | 'dates';
+  | 'dates'
+  | 'inbox';
 
 export interface ShortcutDefinition {
   /** Alternatives; the first is the one shown in tooltips and menus. */
@@ -171,6 +175,13 @@ export const keymap = {
   editorCode: { keys: ['Mod+E'], scope: 'editor', section: 'editor' },
   editorLink: { keys: ['Mod+K'], scope: 'editor', section: 'editor' },
   editorToolbar: { keys: ['Alt+F10'], scope: 'editor', section: 'editor' },
+
+  // The comment composer (features/collab binds them; 02 §9.2 item 8).
+  postComment: { keys: ['Mod+Enter', 'Tab+Enter'], scope: 'composer', section: 'pane' },
+
+  // The inbox (FR-NOT-1); ↑/↓ (K/J), Home/End move between notifications, Enter opens one.
+  toggleRead: { keys: ['U'], scope: 'navigate', section: 'inbox' },
+  markAllRead: { keys: ['Shift+U'], scope: 'navigate', section: 'inbox' },
 
   // Date popover quick chips (features/dates/quick-dates.ts matches them by code).
   dateToday: { keys: ['Alt+T'], scope: 'picker', section: 'dates' },
