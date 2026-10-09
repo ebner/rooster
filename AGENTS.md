@@ -13,7 +13,7 @@ When documents conflict, the precedence is **00 > 05 > 06 > 02 > 03 > others**. 
 ## Repository map
 Entries marked *(planned)* do not exist yet. Create them in the phase that introduces them.
 - `apps/server`: Hono API.
-  - `src/main.ts`: boot (config → db → pre-migration backup → migrate → app → listen → scheduler).
+  - `src/main.ts`: boot (config → db → pre-update backup on a version change or pending migrations (ADR 0023) → migrate → app → listen → scheduler).
   - `src/app.ts`: the pure `createApp(deps)`, used by tests.
   - `src/config.ts`: zod env schema. **Every env var lives here and in `.env.example`.**
   - `src/lib/`: errors (problem+json), logger, request id/log (invite tokens redacted), security headers, SPA serving (never `*.map` or dot-paths), graceful close, `body-limit.ts` (64 KB `/api/auth`, 1 MB `/api/v1`), `client-ip.ts` (right-most `ROOSTER_TRUSTED_PROXY_HOPS` entry), `log-safe-error.ts` (**log errors through `logSafeError`**: SQL parameters are user content).
@@ -39,7 +39,7 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
     - list (My tasks and the smart views: rows incl. subtasks and tag chips, editing model, DnD (own body-level drag preview, no self-adjacent drop targets; ADR 0018), bulk bar, `controller` holding every command incl. `makeSubtaskOf`; the UI store is injectable via `ListStoreContext`). Phones: `mobile-list-chrome.tsx` (FAB, accessory bar, selection mode, sheets), `swipe-rows.tsx` + `gestures.ts` (swipes), `pull-to-refresh.tsx`; ADR 0011.
     - pane (the detail pane: split/overlay (tablet: with scrim)/full screen, and the phone's full-screen sheet with `SheetHeader`; its state lives in the URL `/o/:slug/t/:taskId`)
     - tags (picker, chips, `#tag` token)
-    - editor (`MarkdownEditor` on Tiptap, `markdown.ts` converter, a 40-sample round-trip corpus)
+    - editor (`MarkdownEditor` on Tiptap, `markdown.ts` converter, a 40-sample round-trip corpus; Ctrl/⌘+click opens links, ADR 0022)
     - dates (`DateLabel`, `DateCell`, `DatePopover` incl. start-date ranges, `useViewerDateContext`)
   - **Bundle budget (10 §4, ADR 0016):** UI that appears only on interaction (popovers, the editor, the palette, the better-auth client) is loaded with `lazyWithPreload` (`src/lib/lazy.ts`) and warmed by `InteractionPrefetch`. On the initial route, import constants from `@rooster/core/limits` and i18n helpers from `@rooster/i18n/core`; value imports from `@rooster/core/schemas` or `@rooster/i18n` pull in zod or every catalog. `pnpm bundle:check` fails CI above 450 KB gzip.
   - `src/data/`: **the only place that talks to the API.** TanStack Query hooks over `createRoosterClient()`, query keys in `query-keys.ts`, problem+json mapped to `ApiError` in `errors.ts`, and better-auth client calls in `auth.ts` / `auth-client.ts`. Components take props; route components call `src/data` hooks.

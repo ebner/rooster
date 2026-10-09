@@ -2,9 +2,24 @@
 
 All notable changes to rooster are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [SemVer](https://semver.org/). Container images are tagged `x.y.z`, `x.y` and `x`.
 
-**Downgrades:** migrations are forward-only. To go back to an older version, restore the automatic pre-migration backup that the newer version wrote to `/data/backups/` before migrating (see [operations §7](docs/spec/08-operations.md#7-backups--restore)). Each release lists its migrations below.
+**Downgrades:** migrations are forward-only. To go back to an older version, restore the automatic "Before update" backup (`pre-migrate-*.db`) that the newer version wrote to `/data/backups/` when it first started (see [operations §7](docs/spec/08-operations.md#7-backups--restore)). Each release lists its migrations below.
 
 ## [Unreleased]
+
+### Changed
+- **New accent colour:** amber replaces the coral-red accent (buttons, selection, focus rings, the app icon), so red is left for things that really need attention, such as overdue dates and delete buttons. "Tomorrow" dates are now orange (ADR 0024).
+- **Backups before every update:** the server now writes a "Before update" backup whenever it starts with a different version, not only when the database schema changes (ADR 0023). The first start after upgrading takes one.
+
+### Added
+- **Description indicator:** rows show a small lines icon when the task has a description (ADR 0025). The API's task objects gain `hasDescription`.
+- **Opening links in descriptions:** Ctrl+click (⌘+click on a Mac) opens a link in a new tab; holding the key shows the hand cursor, and links have a tooltip (ADR 0022).
+
+### Fixed
+- Choosing **Organisation settings** or **Invite** in an organisation's ⋯ menu in the sidebar no longer moves that organisation down the list.
+- **"+ Add task", "+ Add subtask" and "+ Add group"** now highlight on hover like other rows and buttons.
+
+### Migrations
+- None.
 
 ## [1.0.2] - 2026-10-09
 
