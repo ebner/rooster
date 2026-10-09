@@ -17,7 +17,6 @@ import {
 } from '@rooster/core/search';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, type SQL, sql } from 'drizzle-orm';
 import { member, tag as tagTable, task, user } from '../db/schema/index.ts';
-import { AppError } from '../lib/errors.ts';
 import { type Actor, immediate, readOnly, type ServiceDeps, type Tx } from './context.ts';
 import {
   authorizeOrg,
@@ -25,7 +24,7 @@ import {
   type ReadableCondition,
   readableTaskCondition,
   readFilter,
-  requireBrowserSession,
+  requireAdminAccess,
   requireScope,
 } from './grant-access.ts';
 import { chunked, liveTasksById, taskDtos } from './list-access.ts';
@@ -315,8 +314,7 @@ export class SearchService {
 
   /** `POST /admin/search/reindex` (ADR 0012): instance admins only. */
   reindex(actor: Actor): ReindexResult {
-    requireBrowserSession(actor);
-    if (!actor.isAdmin) throw new AppError('forbidden', 403, 'Only instance admins can do that.');
+    requireAdminAccess(actor);
     return this.rebuild();
   }
 

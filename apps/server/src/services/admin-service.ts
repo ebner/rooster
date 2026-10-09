@@ -16,20 +16,15 @@ import {
   type ServiceDeps,
   type Tx,
 } from './context.ts';
-import { requireBrowserSession } from './grant-access.ts';
+import { requireAdminAccess } from './grant-access.ts';
 import { notFound } from './org-access.ts';
-
-function requireAdmin(actor: Actor): void {
-  if (!actor.isAdmin) throw new AppError('forbidden', 403, 'Only instance admins can do that.');
-}
 
 /** Instance administration: the sign-in allowlist and users (FR-AUTH-8, WP 1.6). */
 export class AdminService {
   constructor(private readonly deps: ServiceDeps) {}
 
   listAllowlist(actor: Actor): AllowlistEntry[] {
-    requireBrowserSession(actor);
-    requireAdmin(actor);
+    requireAdminAccess(actor);
     return immediate(this.deps.db, (tx) =>
       tx
         .select({
@@ -45,8 +40,7 @@ export class AdminService {
   }
 
   addAllowlist(actor: Actor, input: AllowlistCreate): AllowlistEntry {
-    requireBrowserSession(actor);
-    requireAdmin(actor);
+    requireAdminAccess(actor);
     return immediate(this.deps.db, (tx) => {
       const value = input.value.trim().toLowerCase();
       // `value` is COLLATE NOCASE, so this also catches case variants.
@@ -72,8 +66,7 @@ export class AdminService {
   }
 
   removeAllowlist(actor: Actor, id: string): void {
-    requireBrowserSession(actor);
-    requireAdmin(actor);
+    requireAdminAccess(actor);
     immediate(this.deps.db, (tx) => {
       const result = tx.delete(allowlistEntry).where(eq(allowlistEntry.id, id)).run();
       if (result.changes === 0) throw notFound('Allowlist entry');
@@ -81,8 +74,7 @@ export class AdminService {
   }
 
   listUsers(actor: Actor): AdminUser[] {
-    requireBrowserSession(actor);
-    requireAdmin(actor);
+    requireAdminAccess(actor);
     return immediate(this.deps.db, (tx) =>
       tx
         .select()
@@ -95,8 +87,7 @@ export class AdminService {
 
   /** Disabling also deletes every session, so the user is signed out everywhere at once. */
   setDisabled(actor: Actor, userId: string, disabled: boolean): AdminUser {
-    requireBrowserSession(actor);
-    requireAdmin(actor);
+    requireAdminAccess(actor);
     if (disabled && userId === actor.userId) {
       throw new AppError('cannot_disable_self', 409, 'You cannot deactivate your own account.');
     }

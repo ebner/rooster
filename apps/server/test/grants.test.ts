@@ -3,7 +3,7 @@ import { defaultKeyHasher } from '@better-auth/api-key';
 import type { Activity, Grant, Me, MyList, Task, TokenCreated } from '@rooster/core/schemas';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { DEVICE_FLOW_PATHS } from '../src/auth/mount.ts';
+import { DEVICE_FLOW_PATHS, OAUTH_CLIENT_PATHS } from '../src/auth/mount.ts';
 import { accessGrant, apikey, session } from '../src/db/schema/index.ts';
 import { deviceLabel, GRANT_TOUCH_MS } from '../src/services/grant-service.ts';
 import {
@@ -547,7 +547,9 @@ describe('non-browser credentials stay out of /api/auth (default deny)', () => {
       }));
     expect(endpoints.length).toBeGreaterThan(30);
     for (const { path, methods } of endpoints) {
-      if (DEVICE_FLOW_PATHS.has(path)) continue;
+      // The device flow and the OAuth client endpoints (token, revoke, register) ignore
+      // non-Basic credentials (oauth.test.ts).
+      if (DEVICE_FLOW_PATHS.has(path) || OAUTH_CLIENT_PATHS.has(path)) continue;
       for (const method of methods.length === 0 || methods.includes('*')
         ? ['GET', 'POST']
         : methods) {

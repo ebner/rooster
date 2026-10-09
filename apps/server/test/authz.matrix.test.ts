@@ -8,9 +8,19 @@ import { eq } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { App } from '../src/app.ts';
 import type { AppDb } from '../src/db/client.ts';
-import { accessGrant, deviceCode, session, user } from '../src/db/schema/index.ts';
+import {
+  accessGrant,
+  account,
+  deviceCode,
+  oauthAccessToken,
+  oauthClient,
+  session,
+  user,
+} from '../src/db/schema/index.ts';
 import { randomToken } from '../src/lib/tokens.ts';
+import { OAUTH_ACCESS_PREFIX } from '../src/services/grant-service.ts';
 import type { Actor } from '../src/services/index.ts';
+import { hashOAuthToken } from '../src/services/oauth-grants.ts';
 import { subscriptionBody } from './delivery-fakes.ts';
 import {
   addSession,
@@ -26,7 +36,9 @@ import {
  * Browser actors (cookies), then the owner's non-browser credentials (P8, 11 §7): a
  * `tasks:read` PAT; a PAT with every scope writing only in group A of the shared org; one
  * reaching only the owner's personal org; a CLI device session with every scope everywhere;
- * an expired and a revoked PAT; and the owner's browser session token sent as a bearer.
+ * an expired and a revoked PAT; the owner's browser session token sent as a bearer; and (P9)
+ * an OAuth access token for `/api/v1` with every scope everywhere, and one issued for `/mcp`
+ * (wrong audience). The `admin` capability has its own matrix (admin-capability.test.ts).
  */
 const ACTORS = [
   'anonymous',
@@ -42,6 +54,8 @@ const ACTORS = [
   'expiredPat',
   'revokedPat',
   'browserBearer',
+  'oauthApp',
+  'mcpAudienceToken',
 ] as const;
 type ActorKind = (typeof ACTORS)[number];
 type TokenActor = Exclude<
@@ -57,6 +71,8 @@ const TOKEN_ACTORS: ReadonlySet<ActorKind> = new Set<TokenActor>([
   'expiredPat',
   'revokedPat',
   'browserBearer',
+  'oauthApp',
+  'mcpAudienceToken',
 ]);
 
 type Expected = number;
@@ -80,6 +96,7 @@ const grants = (
   writeInGroupPat: Expected,
   otherOrgPat: Expected,
   device: Expected,
+  oauthApp: Expected = device,
 ): Pick<Record<ActorKind, Expected>, TokenActor> => ({
   readOnlyPat,
   writeInGroupPat,
@@ -88,6 +105,9 @@ const grants = (
   expiredPat: 401,
   revokedPat: 401,
   browserBearer: 401,
+  oauthApp,
+  // A token is accepted only by the resource it was issued for (11 §4.3).
+  mcpAudienceToken: 401,
 });
 
 /** Settings, org administration, admin, export, tokens and push need the browser (11 §2.1). */
@@ -122,6 +142,10 @@ interface Fixture {
   /** Another grant of the owner (the target of grant edits), and a pending device code. */
   spareGrantId: string;
   userCode: string;
+  /** A signed authorization request of an app (the consent screen's input). */
+  oauthQuery: string;
+  /** One of the owner's two linked sign-in identities. */
+  identityId: string;
   jars: Record<CookieActor, CookieJar>;
   sessions: Record<CookieActor, string>;
   /** Bearer credentials of the token actors. */
@@ -153,6 +177,8 @@ const everyone = (status: number): Record<ActorKind, Expected> => ({
   expiredPat: status,
   revokedPat: status,
   browserBearer: status,
+  oauthApp: status,
+  mcpAudienceToken: status,
 });
 
 /** Any signed-in, enabled user. */
@@ -554,8 +580,8 @@ const ROWS: Record<string, Row> = {
       path: '/api/v1/me/tokens',
       body: { name: 'Script', scopes: ['tasks:read'], constraints: { orgs: 'all' } },
     }),
-    // A CLI device may mint a PAT within its own grant (07 §4); PATs may not.
-    expect: { ...signedIn(201), ...grants(403, 403, 403, 201) },
+    // A CLI device may mint a PAT within its own grant (07 §4); PATs and apps may not.
+    expect: { ...signedIn(201), ...grants(403, 403, 403, 201, 403) },
   },
   // Any signed-in browser may review and decide an unclaimed device code.
   'GET /api/v1/device/{userCode}': {
@@ -572,6 +598,29 @@ const ROWS: Record<string, Row> = {
   'POST /api/v1/device/{userCode}/deny': {
     request: (f) => ({ path: `/api/v1/device/${f.userCode}/deny` }),
     expect: { ...signedIn(204), ...SESSION_ONLY },
+  },
+  // Phase 9: the OAuth consent screen and linked identities, browser only (ADR 0042).
+  'GET /api/v1/oauth/consent': {
+    request: (f) => ({
+      path: `/api/v1/oauth/consent?oauth_query=${encodeURIComponent(f.oauthQuery)}`,
+    }),
+    expect: { ...signedIn(200), ...SESSION_ONLY },
+  },
+  'POST /api/v1/oauth/consent': {
+    request: (f) => ({
+      path: '/api/v1/oauth/consent',
+      body: { accept: false, oauthQuery: f.oauthQuery },
+    }),
+    expect: { ...signedIn(200), ...SESSION_ONLY },
+  },
+  'GET /api/v1/me/identities': {
+    request: () => ({ path: '/api/v1/me/identities' }),
+    expect: { ...signedIn(200), ...SESSION_ONLY },
+  },
+  'DELETE /api/v1/me/identities/{id}': {
+    request: (f) => ({ path: `/api/v1/me/identities/${f.identityId}` }),
+    // The owner's own identity (one of two); anyone else's is 404.
+    expect: { ...owned(204), ...SESSION_ONLY },
   },
   'GET /api/v1/tasks/resolve': {
     request: (f) => ({ path: `/api/v1/tasks/resolve?ref=${f.taskId}` }),
@@ -706,6 +755,89 @@ async function fixture(): Promise<Fixture> {
     })
     .run();
 
+  // P9: an OAuth app of the owner (every app scope, everywhere) with a token per resource, a
+  // signed authorization request for the consent routes, and two linked identities.
+  const appClientId = 'matrix-app';
+  db.orm
+    .insert(oauthClient)
+    .values({
+      id: uuidv7(),
+      clientId: appClientId,
+      name: 'Matrix app',
+      redirectUris: JSON.stringify(['https://app.example.com/callback']),
+      tokenEndpointAuthMethod: 'none',
+      grantTypes: JSON.stringify(['authorization_code', 'refresh_token']),
+      responseTypes: JSON.stringify(['code']),
+      scopes: JSON.stringify([...ALL_SCOPES, 'offline_access']),
+      createdAt: new Date(now),
+      updatedAt: new Date(now),
+    })
+    .run();
+  const appGrantId = uuidv7();
+  db.orm
+    .insert(accessGrant)
+    .values({
+      id: appGrantId,
+      userId: owner.userId,
+      kind: 'oauth',
+      clientId: appClientId,
+      label: 'Matrix app',
+      scopes: ALL_SCOPES.join(' '),
+      constraints: '{"orgs":"all"}',
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
+  const appToken = (resource: string) => {
+    const raw = randomToken();
+    db.orm
+      .insert(oauthAccessToken)
+      .values({
+        id: uuidv7(),
+        token: hashOAuthToken(raw),
+        clientId: appClientId,
+        userId: owner.userId,
+        referenceId: appGrantId,
+        resources: JSON.stringify([resource]),
+        scopes: JSON.stringify(ALL_SCOPES),
+        createdAt: new Date(now),
+        expiresAt: new Date(now + 900_000),
+      })
+      .run();
+    return `${OAUTH_ACCESS_PREFIX}${raw}`;
+  };
+  const authorize = await app.request(
+    `/api/auth/oauth2/authorize?${new URLSearchParams({
+      response_type: 'code',
+      client_id: appClientId,
+      redirect_uri: 'https://app.example.com/callback',
+      scope: 'tasks:read',
+      resource: `${TEST_ENV.ROOSTER_BASE_URL}/mcp`,
+      code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+      code_challenge_method: 'S256',
+    })}`,
+    { headers: { cookie: owner.jar.header() } },
+  );
+  const consentPage = new URL(authorize.headers.get('location') ?? '', TEST_ENV.ROOSTER_BASE_URL);
+  if (consentPage.pathname !== '/oauth/consent') throw new Error(`authorize: ${consentPage.href}`);
+  const identity = (providerId: string) => {
+    const id = uuidv7();
+    db.orm
+      .insert(account)
+      .values({
+        id,
+        accountId: `${providerId}-${owner.userId}`,
+        providerId,
+        userId: owner.userId,
+        createdAt: new Date(now),
+        updatedAt: new Date(now),
+      })
+      .run();
+    return id;
+  };
+  identity('google');
+  const identityId = identity('dev');
+
   // A disabled user whose session somehow survived must still be rejected.
   db.orm.update(user).set({ disabledAt: Date.now() }).where(eq(user.id, disabled.userId)).run();
   const disabledJar = new CookieJar();
@@ -738,6 +870,8 @@ async function fixture(): Promise<Fixture> {
     pushSubscriptionId: subscription.id,
     spareGrantId: spare.grant.id,
     userCode,
+    oauthQuery: consentPage.search.slice(1),
+    identityId,
     tokens: {
       readOnlyPat: readOnlyPat.token,
       writeInGroupPat: writeInGroupPat.token,
@@ -746,6 +880,8 @@ async function fixture(): Promise<Fixture> {
       expiredPat: expiredPat.token,
       revokedPat: revokedPat.token,
       browserBearer: browserToken,
+      oauthApp: appToken(`${TEST_ENV.ROOSTER_BASE_URL}/api/v1`),
+      mcpAudienceToken: appToken(`${TEST_ENV.ROOSTER_BASE_URL}/mcp`),
     },
     jars: {
       owner: owner.jar,

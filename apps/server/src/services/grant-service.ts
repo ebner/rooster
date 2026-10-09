@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { defaultKeyHasher } from '@better-auth/api-key';
 import {
+  ADMIN_SCOPE,
   expandScopes,
   GRANT_SCOPES,
   type GrantConstraints,
@@ -9,24 +10,35 @@ import {
   isGrantScope,
   isNarrowing,
   minimalScopes,
+  OAUTH_EXCLUDED_SCOPES,
 } from '@rooster/core/grants';
 import { uuidv7 } from '@rooster/core/ids';
-import type {
-  DeviceApprove,
-  DeviceRequest,
-  Grant,
-  GrantKind,
-  GrantPatch,
-  SseNotification,
-  TokenCreate,
-  TokenCreated,
+import {
+  type DeviceApprove,
+  type DeviceRequest,
+  type Grant,
+  type GrantKind,
+  type GrantPatch,
+  grantConstraintsSchema,
+  type OAuthConsentDecision,
+  type OAuthConsentRequest,
+  SESSION_ONLY_IDLE_MS,
+  type SseNotification,
+  type TokenCreate,
+  type TokenCreated,
 } from '@rooster/core/schemas';
-import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lt, max, notInArray, or, sql } from 'drizzle-orm';
+import type { OAuthResource } from '../auth/oauth-bearer.ts';
+import { resourceOf, resourceUri } from '../auth/oauth-metadata.ts';
 import {
   accessGrant,
   apikey,
   deviceCode,
   member,
+  oauthAccessToken,
+  oauthConsent,
+  oauthRefreshToken,
+  oauthResource,
   organization,
   session,
   taskGroup,
@@ -47,6 +59,17 @@ import {
 } from './context.ts';
 import { selfAudience } from './event-audience.ts';
 import { canReadNotification, requireBrowserSession, visibleKeys } from './grant-access.ts';
+import {
+  authorizationCodeValue,
+  clientInfo,
+  deleteGrantArtifacts,
+  deleteStaleConsents,
+  findClient,
+  hashOAuthToken,
+  isLoopbackRedirect,
+  jsonList,
+  NO_GRANT_REFERENCE,
+} from './oauth-grants.ts';
 
 const DAY_MS = 86_400_000;
 /** `last_used_at`/`last_used_ip` are written at most this often per grant (11 §2.4). */
@@ -55,6 +78,13 @@ export const GRANT_TOUCH_MS = 60_000;
 /** The CLI's client id for the device flow (07 §2). */
 export const CLI_CLIENT_ID = 'rooster-cli';
 const CLI_CLIENT_NAME = 'rooster CLI';
+
+/**
+ * OAuth access and refresh tokens carry these prefixes (the plugin adds them and does not store
+ * them; auth.ts configures the same values).
+ */
+export const OAUTH_ACCESS_PREFIX = 'rooster_at_';
+export const OAUTH_REFRESH_PREFIX = 'rooster_rt_';
 
 /** PATs are `rooster_pat_` + 48 random letters and digits (04 §4.4). */
 export const PAT_PREFIX = 'rooster_pat_';
@@ -68,6 +98,32 @@ export const GRANTS_KEY = ['grants'] as const;
 type GrantRow = typeof accessGrant.$inferSelect;
 
 const grantNotFound = () => new AppError('not_found', 404, 'Grant not found.');
+const consentNotFound = () =>
+  new AppError(
+    'not_found',
+    404,
+    'That authorization request is unknown or has expired. Start again in the app.',
+  );
+const adminOnly = () =>
+  new AppError('admin_only_scope', 403, 'Only instance admins can grant the "admin" permission.');
+
+/** The outcome of an OAuth token request check (the mount answers `invalid_grant` on `false`). */
+export type OAuthTokenCheck = { ok: true } | { ok: false; description: string };
+
+/** What `applyOAuthConsent` changed, to finish or undo it around the provider's answer. */
+export interface PreparedConsent {
+  grantId: string;
+  clientId: string;
+  /** The grant row before the decision; null when the decision created the grant. */
+  previous: GrantRow | null;
+  /** The `scope` to hand the provider: the requested scopes the grant covers. */
+  pluginScope: string;
+  /** Every resource consented for this grant, the new one included. */
+  resources: string[];
+}
+
+/** The capabilities an OAuth client may get, in contract order. */
+const ALL_OAUTH_SCOPES = GRANT_SCOPES.filter((s) => !OAUTH_EXCLUDED_SCOPES.includes(s));
 const deviceNotFound = () =>
   new AppError('not_found', 404, 'That code is unknown or has expired. Start again in the CLI.');
 
@@ -173,14 +229,44 @@ export class GrantService {
   }
 
   private toActorGrant(row: GrantRow): ActorGrant {
+    const scopes = parseScopes(row.scopes);
     return {
       id: row.id,
       kind: row.kind,
       clientId: row.clientId,
-      scopes: parseScopes(row.scopes),
+      // An OAuth grant never carries `admin` (ADR 0041), whatever the row says.
+      scopes:
+        row.kind === 'oauth' ? scopes.filter((s) => !OAUTH_EXCLUDED_SCOPES.includes(s)) : scopes,
       constraints: parseConstraints(row.constraints),
       updatedAt: row.updatedAt,
     };
+  }
+
+  /**
+   * "This session only" (ADR 0041 §3): the grant's last use is its newest token issuance (a
+   * code exchange or a refresh, each of which writes a fresh token row), else its consent.
+   * Past `idle_timeout_ms` since then, the grant is over.
+   */
+  private idleExpired(row: GrantRow, now: number): boolean {
+    if (row.idleTimeoutMs === null) return false;
+    const db = this.deps.db.orm;
+    const refreshed = db
+      .select({ at: max(oauthRefreshToken.createdAt) })
+      .from(oauthRefreshToken)
+      .where(eq(oauthRefreshToken.referenceId, row.id))
+      .get()?.at;
+    const issued = db
+      .select({ at: max(oauthAccessToken.createdAt) })
+      .from(oauthAccessToken)
+      .where(eq(oauthAccessToken.referenceId, row.id))
+      .get()?.at;
+    const last = Math.max(row.updatedAt, refreshed?.getTime() ?? 0, issued?.getTime() ?? 0);
+    return now - last > row.idleTimeoutMs;
+  }
+
+  /** A live OAuth grant: unrevoked, unexpired and not idle-expired. */
+  private liveOAuth(row: GrantRow | undefined, now: number): row is GrantRow {
+    return this.live(row, now) && row.kind === 'oauth' && !this.idleExpired(row, now);
   }
 
   /** Whether the session is a CLI device session (linked to a grant). */
@@ -280,6 +366,202 @@ export class GrantService {
     return { ...base, via: 'pat', sessionId: row.id, grant: this.toActorGrant(row) };
   }
 
+  /**
+   * The actor of an OAuth access token (`rooster_at_…`) at `resource` (11 §4.3): the hashed
+   * token must exist, be unexpired and unrevoked, be bound to exactly this resource, and point
+   * (`referenceId`) at a live OAuth grant of the same user and client. Scopes and constraints
+   * are the grant's, read on every request. Null answers `401`.
+   */
+  resolveOAuthToken(token: string, resource: OAuthResource, ip: string | null): Actor | null {
+    if (!token.startsWith(OAUTH_ACCESS_PREFIX)) return null;
+    const now = this.now();
+    const db = this.deps.db.orm;
+    const hash = hashOAuthToken(token.slice(OAUTH_ACCESS_PREFIX.length));
+    const row = db.select().from(oauthAccessToken).where(eq(oauthAccessToken.token, hash)).get();
+    if (row === undefined || row.revoked !== null || row.expiresAt === null) return null;
+    if (row.expiresAt.getTime() <= now || row.referenceId === null) return null;
+    const resources = jsonList(row.resources);
+    if (resources.length !== 1 || resources[0] !== resourceUri(this.deps.config, resource)) {
+      return null;
+    }
+    const grant = db.select().from(accessGrant).where(eq(accessGrant.id, row.referenceId)).get();
+    if (!this.live(grant, now) || grant.kind !== 'oauth') return null;
+    if (grant.userId !== row.userId || grant.clientId !== row.clientId) return null;
+    if (
+      grant.idleTimeoutMs !== null &&
+      now - (row.createdAt?.getTime() ?? 0) > grant.idleTimeoutMs
+    ) {
+      return null;
+    }
+    const base = this.userActor(grant.userId);
+    if (base === null) return null;
+    this.touch(grant, ip, now);
+    return {
+      ...base,
+      via: 'oauth',
+      sessionId: grant.id,
+      grant: { ...this.toActorGrant(grant), resource },
+    };
+  }
+
+  /**
+   * The protected resources (RFC 8707) as the provider's `oauthResource` rows: `<base>/mcp` and
+   * `<base>/api/v1`, with the access token lifetime. Rows of an earlier base URL are disabled,
+   * so no new token names them. Run once when the auth instance is built; a database without
+   * the table (not migrated yet) is skipped.
+   */
+  seedOAuthResources(accessTokenTtlS: number): void {
+    const resources = (['mcp', 'api'] as const).map((r) => ({
+      identifier: resourceUri(this.deps.config, r),
+      name: r === 'mcp' ? 'rooster MCP' : 'rooster API',
+    }));
+    try {
+      immediate(this.deps.db, (tx) => {
+        const now = new Date(this.now());
+        const ours = resources.map((r) => r.identifier);
+        tx.update(oauthResource)
+          .set({ disabled: true, updatedAt: now })
+          .where(and(notInArray(oauthResource.identifier, ours), eq(oauthResource.disabled, false)))
+          .run();
+        for (const r of resources) {
+          tx.insert(oauthResource)
+            .values({
+              id: uuidv7(),
+              ...r,
+              accessTokenTtl: accessTokenTtlS,
+              disabled: false,
+              createdAt: now,
+              updatedAt: now,
+            })
+            .onConflictDoUpdate({
+              target: oauthResource.identifier,
+              set: {
+                name: r.name,
+                accessTokenTtl: accessTokenTtlS,
+                disabled: false,
+                updatedAt: now,
+              },
+            })
+            .run();
+        }
+      });
+    } catch (error) {
+      const cause = (error as { cause?: unknown }).cause;
+      if (!/no such table/i.test(`${String(error)} ${String(cause)}`)) throw error;
+    }
+  }
+
+  /** The user's live OAuth grant for a client, if any (the provider's consent handoff). */
+  liveOAuthGrantId(userId: string, clientId: string): string | null {
+    const row = this.deps.db.orm
+      .select()
+      .from(accessGrant)
+      .where(
+        and(
+          eq(accessGrant.userId, userId),
+          eq(accessGrant.clientId, clientId),
+          eq(accessGrant.kind, 'oauth'),
+          isNull(accessGrant.revokedAt),
+        ),
+      )
+      .get();
+    return this.liveOAuth(row, this.now()) ? row.id : null;
+  }
+
+  /**
+   * `POST /api/auth/oauth2/token` with `grant_type=authorization_code`, before the provider
+   * redeems the code: the code must carry a live OAuth grant of its user and client. A code
+   * without one means the grant handoff failed, which must never mint a token.
+   */
+  checkOAuthCode(code: string): OAuthTokenCheck {
+    const value = readOnly(this.deps.db, (tx) => authorizationCodeValue(tx, code));
+    // Unknown or used codes are the provider's to answer (replay handling included).
+    if (value === null) return { ok: true };
+    const grantId = value.referenceId;
+    if (typeof grantId !== 'string' || grantId === NO_GRANT_REFERENCE) {
+      this.deps.logger.error('OAuth authorization code without a rooster grant');
+      return { ok: false, description: 'The authorization has no grant; authorize again.' };
+    }
+    const row = this.deps.db.orm
+      .select()
+      .from(accessGrant)
+      .where(eq(accessGrant.id, grantId))
+      .get();
+    if (
+      !this.liveOAuth(row, this.now()) ||
+      row.userId !== value.userId ||
+      row.clientId !== value.query?.client_id
+    ) {
+      return { ok: false, description: 'The authorization was revoked or has expired.' };
+    }
+    return { ok: true };
+  }
+
+  /**
+   * `POST /api/auth/oauth2/token` with `grant_type=refresh_token`, before the provider rotates
+   * it (11 §2.4, ADR 0041):
+   * - a refresh token that was already rotated (or revoked) is reuse: the whole grant is
+   *   revoked, with its tokens and consent;
+   * - "this session only": a refresh token unused for `idle_timeout_ms` ends the grant;
+   * - a token whose grant is no longer live is refused.
+   */
+  checkOAuthRefresh(refreshToken: string): OAuthTokenCheck {
+    if (!refreshToken.startsWith(OAUTH_REFRESH_PREFIX)) return { ok: true };
+    const now = this.now();
+    const hash = hashOAuthToken(refreshToken.slice(OAUTH_REFRESH_PREFIX.length));
+    const row = this.deps.db.orm
+      .select()
+      .from(oauthRefreshToken)
+      .where(eq(oauthRefreshToken.token, hash))
+      .get();
+    if (row === undefined) return { ok: true };
+    const grant =
+      row.referenceId === null
+        ? undefined
+        : this.deps.db.orm
+            .select()
+            .from(accessGrant)
+            .where(eq(accessGrant.id, row.referenceId))
+            .get();
+    if (row.revoked !== null) {
+      this.deps.logger.warn(
+        { grantId: grant?.id ?? null },
+        'OAuth refresh token reused: revoking the grant',
+      );
+      this.revokeOAuthGrant(grant, row.referenceId);
+      return { ok: false, description: 'The refresh token was already used; authorize again.' };
+    }
+    if (grant === undefined || !this.live(grant, now) || grant.kind !== 'oauth') {
+      return { ok: false, description: 'The authorization was revoked or has expired.' };
+    }
+    if (grant.userId !== row.userId || grant.clientId !== row.clientId) {
+      return { ok: false, description: 'The authorization was revoked or has expired.' };
+    }
+    if (
+      grant.idleTimeoutMs !== null &&
+      now - (row.createdAt?.getTime() ?? 0) > grant.idleTimeoutMs
+    ) {
+      this.revokeOAuthGrant(grant, grant.id);
+      return { ok: false, description: 'The session ended after a day without use.' };
+    }
+    return { ok: true };
+  }
+
+  /** Revokes an OAuth grant outside a user request (refresh reuse, idle expiry). */
+  private revokeOAuthGrant(grant: GrantRow | undefined, referenceId: string | null): void {
+    immediate(this.deps.db, (tx) => {
+      const ids = [grant?.id ?? referenceId].filter((id): id is string => typeof id === 'string');
+      deleteGrantArtifacts(tx, ids);
+      if (grant === undefined || grant.revokedAt !== null) return;
+      const now = this.now();
+      tx.update(accessGrant)
+        .set({ revokedAt: now, updatedAt: now })
+        .where(eq(accessGrant.id, grant.id))
+        .run();
+      this.emitGrants(tx, grant.userId, grant.id, [grant.id]);
+    });
+  }
+
   /** Whether a grant still authorises its stream (checked on every SSE heartbeat). */
   private grantActive(grantId: string, userId: string): boolean {
     const row = this.deps.db.orm
@@ -287,7 +569,13 @@ export class GrantService {
       .from(accessGrant)
       .where(eq(accessGrant.id, grantId))
       .get();
-    return this.live(row, this.now()) && row.userId === userId && this.userActor(userId) !== null;
+    const now = this.now();
+    return (
+      this.live(row, now) &&
+      (row.kind !== 'oauth' || !this.idleExpired(row, now)) &&
+      row.userId === userId &&
+      this.userActor(userId) !== null
+    );
   }
 
   streamAccess(actor: Actor): StreamAccess {
@@ -303,7 +591,7 @@ export class GrantService {
         orgs === 'all' ? [] : orgs.filter((o) => o.read !== 'all').map((o) => o.orgId),
       isValid: () =>
         this.grantActive(grant.id, userId) &&
-        (actor.via === 'pat' || this.sessionActive(userId, sessionId)),
+        (actor.via === 'pat' || actor.via === 'oauth' || this.sessionActive(userId, sessionId)),
       filterKeys: (org, keys, prior) =>
         readOnly(this.deps.db, (tx) => visibleKeys(tx, actor, org, keys, prior)),
       // The count is recomputed for the orgs the grant reaches; a new notification elsewhere
@@ -325,6 +613,11 @@ export class GrantService {
 
   // --- Connected apps (11 §3.2) ----------------------------------------------------------------
 
+  private clientOf(tx: Tx, clientId: string): Grant['client'] {
+    const client = findClient(tx, clientId);
+    return client === undefined ? null : clientInfo(client);
+  }
+
   private toDto(tx: Tx, actor: Actor, row: GrantRow): Grant {
     const key =
       row.kind === 'pat'
@@ -345,9 +638,9 @@ export class GrantService {
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       expiresAt: row.expiresAt,
-      // P9 (WP 9.3) fills these for OAuth grants.
-      idleTimeoutMs: null,
-      client: null,
+      idleTimeoutMs: row.idleTimeoutMs,
+      client:
+        row.kind === 'oauth' && row.clientId !== null ? this.clientOf(tx, row.clientId) : null,
       lastUsedAt: row.lastUsedAt,
       lastUsedIp: row.lastUsedIp,
       current: actor.grant?.id === row.id,
@@ -457,6 +750,7 @@ export class GrantService {
       constraints: GrantConstraints;
       expiresInDays?: number | undefined;
       createdByGrantId?: string | null;
+      idleTimeoutMs?: number | null;
     },
   ): GrantRow {
     const now = this.now();
@@ -475,26 +769,27 @@ export class GrantService {
       lastUsedAt: null,
       lastUsedIp: null,
       createdByGrantId: input.createdByGrantId ?? null,
+      idleTimeoutMs: input.idleTimeoutMs ?? null,
     };
     tx.insert(accessGrant).values(row).run();
     return row;
   }
 
-  private emitGrants(tx: Tx, actor: Actor, grantId: string, ended: readonly string[] = []): void {
+  private emitGrants(tx: Tx, userId: string, grantId: string, ended: readonly string[] = []): void {
     emitAfterCommit(this.deps, tx, {
       // Grant changes are user-level, like settings.
       type: 'user.updated',
       orgId: null,
-      actorId: actor.userId,
+      actorId: userId,
       subjects: [grantId],
-      audiences: [selfAudience(actor.userId, null, [[...GRANTS_KEY]])],
+      audiences: [selfAudience(userId, null, [[...GRANTS_KEY]])],
     });
     if (ended.length > 0) {
       // Streams opened with the grant reconnect (and see the new constraints) or end.
       emitAfterCommit(this.deps, tx, {
         type: 'session.ended',
         orgId: null,
-        actorId: actor.userId,
+        actorId: userId,
         subjects: [...ended],
         audiences: [],
       });
@@ -524,6 +819,13 @@ export class GrantService {
       const currentConstraints = parseConstraints(row.constraints);
       if (patch.constraints !== undefined) {
         this.validateConstraints(tx, actor.userId, patch.constraints);
+      }
+      if (
+        patch.scopes?.includes(ADMIN_SCOPE) === true &&
+        !currentScopes.includes(ADMIN_SCOPE) &&
+        !actor.isAdmin
+      ) {
+        throw adminOnly();
       }
       if (row.kind === 'oauth') {
         const widened: string[] = [];
@@ -559,9 +861,19 @@ export class GrantService {
       if (patch.expiresAt !== undefined) changes.expiresAt = patch.expiresAt;
       changes.updatedAt = this.now();
       tx.update(accessGrant).set(changes).where(eq(accessGrant.id, row.id)).run();
+      // Narrowed app scopes: the provider's consent forgets the rest, so asking for them again
+      // shows the consent screen instead of silently minting a token without them.
+      if (row.kind === 'oauth' && changes.scopes !== undefined) {
+        this.syncConsentScopes(tx, row.id, parseScopes(changes.scopes));
+      }
       const next = { ...row, ...changes };
       const access = changes.scopes !== undefined || changes.constraints !== undefined;
-      this.emitGrants(tx, actor, row.id, access ? [row.id, ...this.sessionsOf(tx, row.id)] : []);
+      this.emitGrants(
+        tx,
+        actor.userId,
+        row.id,
+        access ? [row.id, ...this.sessionsOf(tx, row.id)] : [],
+      );
       return this.toDto(tx, actor, next);
     });
   }
@@ -583,7 +895,9 @@ export class GrantService {
       const sessions = this.sessionsOf(tx, row.id);
       if (sessions.length > 0) tx.delete(session).where(inArray(session.id, sessions)).run();
       tx.delete(apikey).where(sql`json_extract(${apikey.metadata}, '$.grantId') = ${row.id}`).run();
-      this.emitGrants(tx, actor, row.id, [row.id, ...sessions]);
+      // An app's tokens, consent and pending codes go with it (ADR 0041).
+      if (row.kind === 'oauth') deleteGrantArtifacts(tx, [row.id]);
+      this.emitGrants(tx, actor.userId, row.id, [row.id, ...sessions]);
     });
   }
 
@@ -596,6 +910,8 @@ export class GrantService {
    */
   async createToken(actor: Actor, input: TokenCreate): Promise<TokenCreated> {
     if (actor.grant !== null && actor.grant.kind !== 'device') requireBrowserSession(actor);
+    // `admin` only from an instance admin (ADR 0042 §1); a device must also hold it itself.
+    if (input.scopes.includes(ADMIN_SCOPE) && !actor.isAdmin) throw adminOnly();
     const minted = await mintToken();
     return immediate(this.deps.db, (tx) => {
       this.validateConstraints(tx, actor.userId, input.constraints);
@@ -632,7 +948,7 @@ export class GrantService {
           metadata: JSON.stringify({ grantId: row.id }),
         })
         .run();
-      this.emitGrants(tx, actor, row.id);
+      this.emitGrants(tx, actor.userId, row.id);
       return { token: minted.token, grant: this.toDto(tx, actor, row) };
     });
   }
@@ -690,9 +1006,14 @@ export class GrantService {
     return row;
   }
 
-  private requestedScopes(scope: string | null): GrantScope[] {
+  /**
+   * What a device asked for: everything when it named nothing. `admin` stays only for instance
+   * admins; anyone else's request loses it silently (ADR 0042 §1).
+   */
+  private requestedScopes(actor: Actor, scope: string | null): GrantScope[] {
     const scopes = parseScopes(scope);
-    return scopes.length > 0 ? scopes : [...GRANT_SCOPES];
+    const requested = scopes.length > 0 ? scopes : [...GRANT_SCOPES];
+    return actor.isAdmin ? requested : requested.filter((s) => s !== ADMIN_SCOPE);
   }
 
   /** GET /device/:userCode: what the CLI asks for, before the user approves (11 §3.1). */
@@ -704,7 +1025,7 @@ export class GrantService {
         userCode: row.userCode,
         clientId: row.clientId ?? CLI_CLIENT_ID,
         clientName: CLI_CLIENT_NAME,
-        requestedScopes: minimalScopes(this.requestedScopes(row.scope)),
+        requestedScopes: minimalScopes(this.requestedScopes(actor, row.scope)),
         expiresAt: row.expiresAt.getTime(),
       };
     });
@@ -719,8 +1040,15 @@ export class GrantService {
     requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => {
       const row = this.pendingDevice(tx, actor, userCode);
-      const requested = expandScopes(this.requestedScopes(row.scope));
-      if ([...expandScopes(input.scopes)].some((s) => !requested.has(s))) {
+      const requested = expandScopes(this.requestedScopes(actor, row.scope));
+      // A non-admin's `admin` is dropped, not refused (ADR 0042 §1).
+      const scopes = actor.isAdmin ? input.scopes : input.scopes.filter((s) => s !== ADMIN_SCOPE);
+      if (scopes.length === 0) {
+        throw new AppError('validation_failed', 422, 'Approve at least one capability.', [
+          { path: 'scopes', message: 'Nothing left to approve' },
+        ]);
+      }
+      if ([...expandScopes(scopes)].some((s) => !requested.has(s))) {
         throw new AppError('widening_not_allowed', 422, 'Approve at most what the CLI asked for.', [
           { path: 'scopes', message: 'Not requested by the device' },
         ]);
@@ -731,7 +1059,7 @@ export class GrantService {
         kind: 'device',
         clientId: row.clientId ?? CLI_CLIENT_ID,
         label: input.label ?? deviceLabel(row.userAgent),
-        scopes: input.scopes,
+        scopes,
         constraints: input.constraints,
         expiresInDays: input.expiresInDays,
       });
@@ -745,7 +1073,7 @@ export class GrantService {
         })
         .where(eq(deviceCode.id, row.id))
         .run();
-      this.emitGrants(tx, actor, grant.id);
+      this.emitGrants(tx, actor.userId, grant.id);
       return this.toDto(tx, actor, grant);
     });
   }
@@ -760,6 +1088,270 @@ export class GrantService {
         .where(eq(deviceCode.id, row.id))
         .run();
     });
+  }
+
+  // --- OAuth consent (11 §3.1, ADR 0041, ADR 0042 §4) ------------------------------------------
+
+  /**
+   * The authorization request behind a verified `oauth_query`: its client (already resolved by
+   * the provider, so in `oauthClient`), redirect URI, the one resource and the requested
+   * scopes. Anything else is the "unknown or expired" `404`.
+   */
+  private consentQuery(tx: Tx, query: URLSearchParams | null) {
+    if (query === null) throw consentNotFound();
+    const clientId = query.get('client_id');
+    const client = clientId === null ? undefined : findClient(tx, clientId);
+    const resources = query.getAll('resource');
+    const resource = resources.length === 1 ? (resources[0] as string) : null;
+    if (
+      clientId === null ||
+      client === undefined ||
+      client.disabled === true ||
+      resource === null ||
+      resourceOf(this.deps.config, resource) === null
+    ) {
+      throw consentNotFound();
+    }
+    const literal = (query.get('scope') ?? '').split(' ').filter((s) => s !== '');
+    const scopes = ALL_OAUTH_SCOPES.filter((s) => literal.includes(s));
+    return {
+      clientId,
+      client,
+      redirectUri: query.get('redirect_uri') ?? '',
+      resource,
+      literal,
+      scopes,
+      authorizationDetails: query.get('authorization_details'),
+    };
+  }
+
+  /** The user's unrevoked OAuth grant for a client (live or not). */
+  private oauthRow(tx: Tx, userId: string, clientId: string): GrantRow | undefined {
+    return tx
+      .select()
+      .from(accessGrant)
+      .where(
+        and(
+          eq(accessGrant.userId, userId),
+          eq(accessGrant.clientId, clientId),
+          eq(accessGrant.kind, 'oauth'),
+          isNull(accessGrant.revokedAt),
+        ),
+      )
+      .get();
+  }
+
+  /**
+   * RFC 9396 `authorization_details` of type `rooster_access` pre-fill the constraints (never
+   * scopes, so never `tasks:delete`). Unreadable or foreign orgs and groups: no pre-fill.
+   */
+  private consentPrefill(
+    tx: Tx,
+    userId: string,
+    raw: string | null,
+  ): OAuthConsentRequest['prefill'] {
+    if (raw === null || raw.length > 8192) return null;
+    let details: unknown;
+    try {
+      details = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+    const entry = (Array.isArray(details) ? details : []).find(
+      (d): d is Record<string, unknown> =>
+        d !== null && typeof d === 'object' && (d as { type?: unknown }).type === 'rooster_access',
+    );
+    if (entry === undefined) return null;
+    const parsed = grantConstraintsSchema.safeParse({ orgs: entry.orgs });
+    if (!parsed.success) return null;
+    try {
+      this.validateConstraints(tx, userId, parsed.data);
+    } catch {
+      return null;
+    }
+    return parsed.data;
+  }
+
+  /**
+   * GET /oauth/consent: what the consent screen shows (11 §3.1). `query` is the provider's
+   * signed query without its signature fields, or null when the signature or its expiry failed
+   * (the route verifies it).
+   */
+  oauthConsentRequest(
+    actor: Actor,
+    oauthQuery: string,
+    query: URLSearchParams | null,
+  ): OAuthConsentRequest {
+    requireBrowserSession(actor);
+    return readOnly(this.deps.db, (tx) => {
+      const req = this.consentQuery(tx, query);
+      const row = this.oauthRow(tx, actor.userId, req.clientId);
+      const existing = this.liveOAuth(row, this.now()) ? row : undefined;
+      const have = expandScopes(existing === undefined ? [] : parseScopes(existing.scopes));
+      return {
+        oauthQuery,
+        clientId: req.clientId,
+        client: clientInfo(req.client, req.redirectUri),
+        redirectUri: req.redirectUri,
+        loopback: isLoopbackRedirect(req.redirectUri),
+        resource: req.resource,
+        requestedScopes: req.scopes,
+        // Step-up only: a first request has nothing to be "new" against.
+        newScopes: existing === undefined ? [] : req.scopes.filter((s) => !have.has(s)),
+        existing: existing === undefined ? null : this.toDto(tx, actor, existing),
+        prefill: this.consentPrefill(tx, actor.userId, req.authorizationDetails),
+      };
+    });
+  }
+
+  /**
+   * POST /oauth/consent, Allow: creates the user's grant for the client, or updates the live one
+   * (step-up keeps what it had and adds what was approved now). Scopes are those approved and
+   * requested (implied ones count), minus `OAUTH_EXCLUDED_SCOPES`; `tasks:delete` needs both the
+   * request and the user's tick. "This session only" is an idle timeout instead of an expiry.
+   * The caller then answers the provider within the grant handoff, and calls
+   * `finishOAuthConsent` (or `undoOAuthConsent` if the provider failed).
+   */
+  applyOAuthConsent(
+    actor: Actor,
+    query: URLSearchParams | null,
+    decision: Extract<OAuthConsentDecision, { accept: true }>,
+  ): PreparedConsent {
+    requireBrowserSession(actor);
+    return immediate(this.deps.db, (tx) => {
+      const req = this.consentQuery(tx, query);
+      const requested = expandScopes(req.scopes);
+      const approved = decision.scopes.filter(
+        (s) =>
+          !OAUTH_EXCLUDED_SCOPES.includes(s) &&
+          requested.has(s) &&
+          (s !== 'tasks:delete' || req.scopes.includes('tasks:delete')),
+      );
+      if (approved.length === 0) {
+        throw new AppError('validation_failed', 422, 'Allow at least one requested capability.', [
+          { path: 'scopes', message: 'None of these was requested' },
+        ]);
+      }
+      this.validateConstraints(tx, actor.userId, decision.constraints);
+      const now = this.now();
+      const current = this.oauthRow(tx, actor.userId, req.clientId);
+      const live = this.liveOAuth(current, now) ? current : undefined;
+      const scopes = minimalScopes([...approved, ...(live ? parseScopes(live.scopes) : [])]);
+      const covered = expandScopes(scopes);
+      const pluginScopes = req.literal.filter(
+        (s) => s === 'offline_access' || covered.has(s as GrantScope),
+      );
+      if (!pluginScopes.some((s) => s !== 'offline_access')) {
+        throw new AppError('validation_failed', 422, 'Allow at least one requested capability.', [
+          { path: 'scopes', message: 'None of the requested capabilities is allowed' },
+        ]);
+      }
+      const sessionOnly = decision.sessionOnly === true;
+      const fields = {
+        label: clientInfo(req.client).name.slice(0, 100) || req.clientId.slice(0, 100),
+        scopes: scopes.join(' '),
+        constraints: JSON.stringify(decision.constraints),
+        expiresAt:
+          sessionOnly || decision.expiresInDays === undefined
+            ? null
+            : now + decision.expiresInDays * DAY_MS,
+        idleTimeoutMs: sessionOnly ? SESSION_ONLY_IDLE_MS : null,
+        updatedAt: now,
+      };
+      let grantId: string;
+      if (live !== undefined) {
+        tx.update(accessGrant).set(fields).where(eq(accessGrant.id, live.id)).run();
+        grantId = live.id;
+      } else {
+        if (current !== undefined) {
+          // Expired or idle but never revoked: it gives way (one live grant per user and app).
+          tx.update(accessGrant)
+            .set({ revokedAt: now, updatedAt: now })
+            .where(eq(accessGrant.id, current.id))
+            .run();
+          deleteGrantArtifacts(tx, [current.id]);
+        }
+        const row = this.insertGrant(tx, {
+          userId: actor.userId,
+          kind: 'oauth',
+          clientId: req.clientId,
+          label: fields.label,
+          scopes,
+          constraints: decision.constraints,
+          expiresInDays: sessionOnly ? undefined : decision.expiresInDays,
+          idleTimeoutMs: fields.idleTimeoutMs,
+        });
+        grantId = row.id;
+      }
+      deleteStaleConsents(tx, actor.userId, req.clientId, grantId);
+      const consented = tx
+        .select({ resources: oauthConsent.resources })
+        .from(oauthConsent)
+        .where(eq(oauthConsent.referenceId, grantId))
+        .all()
+        .flatMap((r) => jsonList(r.resources));
+      this.emitGrants(tx, actor.userId, grantId, live === undefined ? [] : [grantId]);
+      return {
+        grantId,
+        clientId: req.clientId,
+        previous: live ?? null,
+        pluginScope: pluginScopes.join(' '),
+        resources: [...new Set([...consented, req.resource])],
+      };
+    });
+  }
+
+  /** POST /oauth/consent, Deny: only checks the request is the user's to answer. */
+  checkOAuthDeny(actor: Actor, query: URLSearchParams | null): void {
+    requireBrowserSession(actor);
+    readOnly(this.deps.db, (tx) => this.consentQuery(tx, query));
+  }
+
+  /**
+   * After the provider recorded the consent: its scopes become everything the grant covers
+   * (so a later request for an implied scope skips the screen) and its resources every
+   * resource consented so far (a client using both `/mcp` and `/api/v1` is asked once each).
+   */
+  finishOAuthConsent(prepared: PreparedConsent): void {
+    immediate(this.deps.db, (tx) => {
+      const row = tx.select().from(accessGrant).where(eq(accessGrant.id, prepared.grantId)).get();
+      if (row === undefined) return;
+      this.syncConsentScopes(tx, row.id, parseScopes(row.scopes));
+      tx.update(oauthConsent)
+        .set({ resources: JSON.stringify(prepared.resources) })
+        .where(eq(oauthConsent.referenceId, row.id))
+        .run();
+    });
+  }
+
+  /** The provider failed after `applyOAuthConsent`: restore the grant as it was. */
+  undoOAuthConsent(actor: Actor, prepared: PreparedConsent): void {
+    immediate(this.deps.db, (tx) => {
+      if (prepared.previous === null) {
+        deleteGrantArtifacts(tx, [prepared.grantId]);
+        tx.delete(accessGrant).where(eq(accessGrant.id, prepared.grantId)).run();
+      } else {
+        const { id: _id, ...previous } = prepared.previous;
+        tx.update(accessGrant).set(previous).where(eq(accessGrant.id, prepared.grantId)).run();
+      }
+      this.emitGrants(tx, actor.userId, prepared.grantId, [prepared.grantId]);
+    });
+  }
+
+  /** The consent rows of a grant name exactly what it covers (plus `offline_access` if given). */
+  private syncConsentScopes(tx: Tx, grantId: string, scopes: readonly GrantScope[]): void {
+    const covered = [...expandScopes(scopes)].filter((s) => !OAUTH_EXCLUDED_SCOPES.includes(s));
+    for (const consent of tx
+      .select()
+      .from(oauthConsent)
+      .where(eq(oauthConsent.referenceId, grantId))
+      .all()) {
+      const offline = jsonList(consent.scopes).includes('offline_access');
+      tx.update(oauthConsent)
+        .set({ scopes: JSON.stringify(offline ? [...covered, 'offline_access'] : covered) })
+        .where(eq(oauthConsent.id, consent.id))
+        .run();
+    }
   }
 
   /**

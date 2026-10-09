@@ -8,6 +8,7 @@ import type { Services } from '../services/index.ts';
 import type { SignInRejection } from '../services/sign-in-policy.ts';
 import { AUTH_BASE_PATH, type Auth, CLIENT_IP_HEADER } from './auth.ts';
 import { clearInviteCookie } from './cookies.ts';
+import { resourceOf } from './oauth-metadata.ts';
 
 const REJECTIONS: ReadonlySet<string> = new Set<SignInRejection>([
   'not_invited',
@@ -43,6 +44,118 @@ export const DEVICE_FLOW_PATHS: ReadonlySet<string> = new Set([
   `${AUTH_BASE_PATH}/device/code`,
   DEVICE_TOKEN_PATH,
 ]);
+
+/** The OAuth provider's endpoints (ADR 0041); every other `/oauth2/*` path is a 404. */
+const OAUTH_PREFIX = `${AUTH_BASE_PATH}/oauth2/`;
+const OAUTH_ADMIN_PREFIX = `${AUTH_BASE_PATH}/admin/oauth2/`;
+const OAUTH_AUTHORIZE_PATH = `${AUTH_BASE_PATH}/oauth2/authorize`;
+const OAUTH_TOKEN_PATH = `${AUTH_BASE_PATH}/oauth2/token`;
+const OAUTH_REGISTER_PATH = `${AUTH_BASE_PATH}/oauth2/register`;
+
+/**
+ * The OAuth endpoints a client calls directly (ADR 0041 §1): exempt from the browser-only rule.
+ * They never see a cookie, and only `Authorization: Basic` (client authentication) is kept;
+ * registration keeps no credential at all, so it is always the anonymous kind.
+ */
+export const OAUTH_CLIENT_PATHS: ReadonlySet<string> = new Set([
+  OAUTH_TOKEN_PATH,
+  `${AUTH_BASE_PATH}/oauth2/revoke`,
+  OAUTH_REGISTER_PATH,
+]);
+
+/** Parameters of the provider's signed query that a resumed authorization must not repeat. */
+const SIGNED_QUERY_PARAMS = ['sig', 'exp', 'ba_iat', 'ba_pl', 'ba_param'];
+
+/**
+ * Stand-ins for a missing, repeated or foreign `resource` (RFC 8707 is optional in the provider,
+ * required here). No resource row has these identifiers, so the provider answers
+ * `invalid_target` the standard way: after validating the client and redirect URI, to the
+ * redirect URI, with `state` and `iss` (RFC 9207).
+ */
+const RESOURCE_REQUIRED = 'urn:rooster:error:resource-required';
+const RESOURCE_SINGLE = 'urn:rooster:error:exactly-one-resource';
+const RESOURCE_UNKNOWN = 'urn:rooster:error:unknown-resource';
+
+/** Without `scope`, the least: read, plus a refresh token. */
+const DEFAULT_OAUTH_SCOPE = 'tasks:read offline_access';
+
+/**
+ * Normalises an authorization request before the provider sees it: exactly one `resource`,
+ * one of rooster's two (else a stand-in the provider rejects with `invalid_target`), a default
+ * `scope`, and no leftovers of a signed query (a sign-in resumes with the query it was given).
+ */
+function normalizeAuthorize(params: URLSearchParams, config: Config): URLSearchParams {
+  const out = new URLSearchParams(params);
+  for (const name of SIGNED_QUERY_PARAMS) out.delete(name);
+  const resources = out.getAll('resource');
+  out.delete('resource');
+  if (resources.length === 0) out.set('resource', RESOURCE_REQUIRED);
+  else if (resources.length > 1) out.set('resource', RESOURCE_SINGLE);
+  else if (resourceOf(config, resources[0] as string) === null)
+    out.set('resource', RESOURCE_UNKNOWN);
+  else out.set('resource', resources[0] as string);
+  if ((out.get('scope') ?? '').trim() === '') out.set('scope', DEFAULT_OAUTH_SCOPE);
+  return out;
+}
+
+/** An RFC 6749 §5.2 error from the token endpoint. */
+function tokenError(error: string, description: string): Response {
+  return new Response(JSON.stringify({ error, error_description: description }), {
+    status: 400,
+    headers: {
+      'content-type': 'application/json',
+      'cache-control': 'no-store',
+      pragma: 'no-cache',
+    },
+  });
+}
+
+/** A token request's fields: form-encoded (RFC 6749) or JSON. Repeated fields are kept. */
+function tokenFields(body: ArrayBuffer, contentType: string): URLSearchParams | null {
+  const text = new TextDecoder().decode(body);
+  if (/^application\/x-www-form-urlencoded\b/i.test(contentType)) return new URLSearchParams(text);
+  if (/^application\/json\b/i.test(contentType)) {
+    try {
+      const value = JSON.parse(text) as unknown;
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+      const out = new URLSearchParams();
+      for (const [key, v] of Object.entries(value)) {
+        for (const item of Array.isArray(v) ? v : [v]) {
+          if (typeof item === 'string') out.append(key, item);
+        }
+      }
+      return out;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * rooster's checks before the provider handles a token request (ADR 0041): one `resource` at
+ * most; a code must carry a live grant; a refresh token must not be reused (reuse revokes the
+ * grant) nor idle past "this session only". Null lets the provider proceed.
+ */
+function checkTokenRequest(fields: URLSearchParams, services: Services): Response | null {
+  if (fields.getAll('resource').length > 1) {
+    return tokenError('invalid_target', 'Request one resource per token.');
+  }
+  const grantType = fields.get('grant_type');
+  if (grantType === 'authorization_code') {
+    const code = fields.get('code');
+    if (code === null) return null;
+    const check = services.grants.checkOAuthCode(code);
+    return check.ok ? null : tokenError('invalid_grant', check.description);
+  }
+  if (grantType === 'refresh_token') {
+    const token = fields.get('refresh_token');
+    if (token === null) return null;
+    const check = services.grants.checkOAuthRefresh(token);
+    return check.ok ? null : tokenError('invalid_grant', check.description);
+  }
+  return null;
+}
 
 /** Headers that carry a non-browser credential (a session token as bearer, a PAT, an API key). */
 const CREDENTIAL_HEADERS = ['authorization', 'x-api-key'] as const;
@@ -87,11 +200,22 @@ export function registerAuthRoutes(
   const { auth, config, services } = deps;
   app.on(['GET', 'POST'], `${AUTH_BASE_PATH}/*`, async (c) => {
     const raw = c.req.raw;
+    const path = c.req.path;
     const headers = new Headers(raw.headers);
     headers.delete(CLIENT_IP_HEADER);
-    if (DEVICE_FLOW_PATHS.has(c.req.path)) {
+    if (DEVICE_FLOW_PATHS.has(path)) {
       for (const name of CREDENTIAL_HEADERS) headers.delete(name);
       headers.delete('cookie');
+    } else if (OAUTH_CLIENT_PATHS.has(path)) {
+      headers.delete('cookie');
+      headers.delete('x-api-key');
+      const authorization = headers.get('authorization');
+      if (
+        path === OAUTH_REGISTER_PATH ||
+        (authorization !== null && !/^basic\s/i.test(authorization))
+      ) {
+        headers.delete('authorization');
+      }
     } else {
       if (CREDENTIAL_HEADERS.some((name) => headers.has(name))) return nonBrowser(c);
       if (headers.has('cookie')) {
@@ -100,11 +224,39 @@ export function registerAuthRoutes(
           return nonBrowser(c);
         }
       }
+      // Of the provider, only authorize is reachable from the browser.
+      // The provider's metadata is served filtered at the RFC 8414 path (routes/oauth.ts).
+      if (
+        (path.startsWith(OAUTH_PREFIX) && path !== OAUTH_AUTHORIZE_PATH) ||
+        path.startsWith(OAUTH_ADMIN_PREFIX) ||
+        path.startsWith(`${AUTH_BASE_PATH}/.well-known/`)
+      ) {
+        return problemResponse(c, 404, 'not_found', 'Not found.');
+      }
     }
     const ip = clientIp(c, config);
     if (ip !== null) headers.set(CLIENT_IP_HEADER, ip);
+    let url = raw.url;
     const init: RequestInit = { method: raw.method, headers };
     if (raw.method !== 'GET') init.body = await raw.arrayBuffer();
+    if (path === OAUTH_AUTHORIZE_PATH) {
+      if (raw.method === 'GET') {
+        const target = new URL(raw.url);
+        target.search = normalizeAuthorize(target.searchParams, config).toString();
+        url = target.toString();
+      } else if (init.body instanceof ArrayBuffer) {
+        const form = new URLSearchParams(new TextDecoder().decode(init.body));
+        init.body = normalizeAuthorize(form, config).toString();
+        headers.set('content-type', 'application/x-www-form-urlencoded');
+      }
+    }
+    if (path === OAUTH_TOKEN_PATH && init.body instanceof ArrayBuffer) {
+      const fields = tokenFields(init.body, headers.get('content-type') ?? '');
+      if (fields !== null) {
+        const refused = checkTokenRequest(fields, services);
+        if (refused !== null) return refused;
+      }
+    }
     if (
       c.req.path === DEVICE_TOKEN_PATH &&
       /^application\/x-www-form-urlencoded\b/i.test(headers.get('content-type') ?? '') &&
@@ -121,7 +273,7 @@ export function registerAuthRoutes(
       init.body = JSON.stringify(fields);
       headers.set('content-type', 'application/json');
     }
-    const res = withoutAuthToken(await auth.handler(new Request(raw.url, init)));
+    const res = withoutAuthToken(await auth.handler(new Request(url, init)));
     return c.req.path.startsWith(`${AUTH_BASE_PATH}/callback/`)
       ? rewriteCallback(res, config)
       : res;

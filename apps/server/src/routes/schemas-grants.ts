@@ -4,6 +4,11 @@ import {
   grantConstraintsSchema,
   grantPatchSchema,
   grantSchema,
+  linkedIdentitySchema,
+  oauthClientInfoSchema,
+  oauthConsentDecisionSchema,
+  oauthConsentRequestSchema,
+  oauthConsentResultSchema,
   tokenCreatedSchema,
   tokenCreateSchema,
 } from '@rooster/core/schemas';
@@ -122,3 +127,76 @@ export const DeviceApproveSchema = named(
     },
   },
 );
+
+// Phase 9 (11 §3.1, ADR 0042): the OAuth consent screen and linked sign-in identities.
+
+const clientInfoExample = {
+  name: 'Claude',
+  domain: 'claude.ai',
+  logoUri: 'https://claude.ai/logo.png',
+  clientUri: 'https://claude.ai',
+  verified: true,
+  dynamic: false,
+};
+
+export const OAuthClientInfoSchema = named(oauthClientInfoSchema, 'OAuthClientInfo', {
+  description:
+    'How an OAuth app presents itself: from its Client ID Metadata Document (`verified` when the metadata host equals the redirect host) or its Dynamic Client Registration (`dynamic`: "Unverified app").',
+  example: clientInfoExample,
+});
+
+export const OAuthConsentRequestSchema = named(
+  oauthConsentRequestSchema.extend({
+    client: OAuthClientInfoSchema,
+    existing: GrantSchema.nullable(),
+    prefill: GrantConstraintsSchema.nullable(),
+  }),
+  'OAuthConsentRequest',
+  {
+    example: {
+      oauthQuery: 'client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fclient.json&…&sig=…',
+      clientId: 'https://claude.ai/oauth/client.json',
+      client: clientInfoExample,
+      redirectUri: 'https://claude.ai/api/mcp/auth_callback',
+      loopback: false,
+      resource: 'https://rooster.example.com/mcp',
+      requestedScopes: ['tasks:write'],
+      newScopes: ['tasks:write'],
+      existing: null,
+      prefill: null,
+    },
+  },
+);
+
+export const OAuthConsentDecisionSchema = named(
+  oauthConsentDecisionSchema,
+  'OAuthConsentDecision',
+  {
+    description:
+      'Allow (`accept: true`, with the approved scopes, constraints and expiry or `sessionOnly`) or Deny (`accept: false`). `oauthQuery` is the signed query from `GET /oauth/consent`, unchanged.',
+    example: {
+      accept: true,
+      oauthQuery: 'client_id=…&sig=…',
+      scopes: ['tasks:write'],
+      constraints: constraintsExample,
+      expiresInDays: 90,
+    },
+  },
+);
+
+export const OAuthConsentResultSchema = named(oauthConsentResultSchema, 'OAuthConsentResult', {
+  example: {
+    redirectTo:
+      'https://claude.ai/api/mcp/auth_callback?code=…&state=…&iss=https%3A%2F%2Frooster.example.com%2Fapi%2Fauth',
+  },
+});
+
+export const LinkedIdentitySchema = named(linkedIdentitySchema, 'LinkedIdentity', {
+  example: {
+    id: '0199a1b2-0000-7000-8000-0000000000c1',
+    providerId: 'google',
+    providerName: 'Google',
+    email: 'ada@example.com',
+    createdAt: 1767225600000,
+  },
+});

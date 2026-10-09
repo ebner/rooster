@@ -20,6 +20,7 @@
     "@hono/zod-openapi": "catalog:",
     "@modelcontextprotocol/server": "catalog:",
     "@react-email/render": "catalog:",
+    "@rooster/api-client": "workspace:*",
     "@rooster/core": "workspace:*",
     "@rooster/i18n": "workspace:*",
     "@rooster/mcp": "workspace:*",

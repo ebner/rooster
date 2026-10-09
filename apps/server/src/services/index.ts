@@ -14,6 +14,7 @@ import { FollowerService } from './follower-service.ts';
 import { GrantService } from './grant-service.ts';
 import { GroupService } from './group-service.ts';
 import { IdempotencyStore } from './idempotency-store.ts';
+import { IdentityService } from './identity-service.ts';
 import { NotificationService } from './notification-service.ts';
 import { OrderingService } from './ordering-service.ts';
 import { OrgService, type OrgServiceOptions } from './org-service.ts';
@@ -31,8 +32,10 @@ export interface Services {
   users: UserService;
   admin: AdminService;
   signIn: SignInPolicy;
-  /** PATs, CLI devices and their grants (P8, 11 §2). */
+  /** PATs, CLI devices, OAuth apps and their grants (P8–P9, 11 §2). */
   grants: GrantService;
+  /** Linked sign-in identities (P9, FR-SET-3). */
+  identities: IdentityService;
   ordering: OrderingService;
   placements: PlacementService;
   groups: GroupService;
@@ -122,6 +125,7 @@ export function createServices(
       (userId, sessionId) => users.sessionActive(userId, sessionId),
       (actor) => notifications.unreadCountFor(actor),
     ),
+    identities: new IdentityService(deps),
     admin: new AdminService(deps),
     signIn: new SignInPolicy(deps, orgs),
     ordering,

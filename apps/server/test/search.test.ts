@@ -148,14 +148,14 @@ describe('index maintenance (every task write path)', () => {
     await createTask(a, { title: 'Two', description: 'second' });
     const gone = await createTask(a, { title: 'Gone' });
     await a.ok('DELETE', `/api/v1/tasks/${gone.id}`, undefined, 204);
-    // Roll the FTS migration (and the later 0005 to 0009) back by hand, then let the migrator
+    // Roll the FTS migration (and the later 0005 to 0010) back by hand, then let the migrator
     // apply them again.
     ctx.db.sqlite.exec(
-      'DROP TABLE task_fts; DROP TABLE comment; DROP TABLE activity; DROP TABLE follower; DROP TABLE notification; DROP TABLE notification_pref; DROP TABLE job_run; DROP TABLE push_subscription; DROP TABLE access_grant; DROP TABLE apikey; DROP TABLE deviceCode; DROP INDEX session_grant; ALTER TABLE session DROP COLUMN grant_id; DROP INDEX task_parent_any',
+      'DROP TABLE oauthAccessToken; DROP TABLE oauthRefreshToken; DROP TABLE oauthConsent; DROP TABLE oauthClientResource; DROP TABLE oauthResource; DROP TABLE oauthClientAssertion; DROP TABLE oauthClient; DROP TABLE task_fts; DROP TABLE comment; DROP TABLE activity; DROP TABLE follower; DROP TABLE notification; DROP TABLE notification_pref; DROP TABLE job_run; DROP TABLE push_subscription; DROP TABLE access_grant; DROP TABLE apikey; DROP TABLE deviceCode; DROP INDEX session_grant; ALTER TABLE session DROP COLUMN grant_id; DROP INDEX task_parent_any',
     );
     ctx.db.sqlite
       .prepare(
-        'DELETE FROM __drizzle_migrations WHERE created_at IN (SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 6)',
+        'DELETE FROM __drizzle_migrations WHERE created_at IN (SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 7)',
       )
       .run();
     runMigrations(ctx.db);

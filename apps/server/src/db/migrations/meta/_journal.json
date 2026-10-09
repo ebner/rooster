@@ -71,6 +71,13 @@
       "when": 1791557690675,
       "tag": "0009_task_parent_index",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1791572107486,
+      "tag": "0010_oauth_provider",
+      "breakpoints": true
     }
   ]
 }

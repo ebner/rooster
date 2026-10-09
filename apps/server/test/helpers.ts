@@ -54,6 +54,8 @@ export function createTestApp(
     /** Fakes by default: tests never reach a push service or an SMTP server. */
     push?: FakePush;
     mail?: FakeMail;
+    /** P9: the CIMD transport (tests never fetch client metadata from the network). */
+    cimdFetch?: AppDeps['cimdFetch'];
   } = {},
 ): { app: App; db: AppDb; config: Config; push: FakePush; mail: FakeMail } {
   const config = testConfig({ ROOSTER_WEB_DIR: '/nonexistent/web', ...options.env });
@@ -71,6 +73,7 @@ export function createTestApp(
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.apiRateLimit === undefined ? {} : { apiRateLimit: options.apiRateLimit }),
     ...(options.sse === undefined ? {} : { sse: options.sse }),
+    ...(options.cimdFetch === undefined ? {} : { cimdFetch: options.cimdFetch }),
   });
   return { app, db, config, push, mail };
 }

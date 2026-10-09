@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { Scalar } from '@scalar/hono-api-reference';
 import { actorMiddleware } from './auth/actor.ts';
-import { type Auth, createAuth, providerOrigins } from './auth/auth.ts';
+import { type Auth, type AuthDeps, createAuth, providerOrigins } from './auth/auth.ts';
 import { registerAuthRoutes } from './auth/mount.ts';
 import type { Config } from './config.ts';
 import type { AppDb } from './db/client.ts';
@@ -74,6 +74,8 @@ export interface AppDeps {
   validateResponses?: boolean;
   /** Push and SMTP transports (P7); tests inject fakes. */
   transports?: DeliveryTransports;
+  /** P9: the Client ID Metadata Document transport (default: the guarded fetch); tests inject one. */
+  cimdFetch?: AuthDeps['cimdFetch'];
 }
 
 export const OPENAPI_PATH = '/api/v1/openapi.json';
@@ -121,6 +123,7 @@ export function createApp(deps: AppDeps): App {
     services,
     clock,
     rateLimit: deps.authRateLimit,
+    cimdFetch: deps.cimdFetch,
   });
   const app = new OpenAPIHono<AppEnv>({ defaultHook: validationHook });
 

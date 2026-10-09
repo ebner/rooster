@@ -10,6 +10,10 @@ export const PROBLEM_CODES = {
   csrf_origin: { status: 403, detail: 'Cross-origin request rejected.' },
   forbidden_scope: { status: 403, detail: 'This token lacks the tasks:write capability.' },
   outside_grant: { status: 403, detail: 'This token may only write in the group Prio.' },
+  admin_only_scope: {
+    status: 403,
+    detail: 'Only instance admins can grant the "admin" permission.',
+  },
   invite_email_mismatch: {
     status: 403,
     detail: 'This invite was sent to a different email address.',
@@ -26,6 +30,10 @@ export const PROBLEM_CODES = {
     detail: 'The group has tasks: choose moveTasksTo or deleteTasks.',
   },
   last_owner: { status: 409, detail: 'An organisation needs at least one owner.' },
+  last_identity: {
+    status: 409,
+    detail: 'This is your only way to sign in; link another identity before removing it.',
+  },
   not_in_trash: { status: 409, detail: 'Only deleted tasks can be deleted permanently.' },
   not_subtask: { status: 409, detail: 'Only subtasks can be reordered among siblings.' },
   personal_org: {

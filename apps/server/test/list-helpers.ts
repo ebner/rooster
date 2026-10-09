@@ -43,6 +43,7 @@ export function listCtx(
     apiRateLimit?: AppDeps['apiRateLimit'];
     sse?: AppDeps['sse'];
     db?: AppDb;
+    cimdFetch?: AppDeps['cimdFetch'];
   } = {},
 ): ListCtx {
   const { app, db, push, mail } = createTestApp({
@@ -50,6 +51,7 @@ export function listCtx(
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.env === undefined ? {} : { env: options.env }),
     ...(options.sse === undefined ? {} : { sse: options.sse }),
+    ...(options.cimdFetch === undefined ? {} : { cimdFetch: options.cimdFetch }),
     apiRateLimit: options.apiRateLimit ?? false,
   });
   const user = (email: string, name?: string): Caller => {

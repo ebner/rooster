@@ -11,6 +11,8 @@ import type {
 } from '@rooster/core/schemas';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { App } from '../src/app.ts';
+import type { AppDb } from '../src/db/client.ts';
+import { account, oauthClient } from '../src/db/schema/index.ts';
 import { NAMED_SCHEMAS } from '../src/lib/openapi.ts';
 import { checkResponse, type RouteContract, routeContracts } from '../src/lib/response-contract.ts';
 import type { Actor } from '../src/services/index.ts';
@@ -36,6 +38,7 @@ interface FixtureOptions {
 
 interface Fixture {
   app: App;
+  db: AppDb;
   push: FakePush;
   orgId: string;
   orgSlug: string;
@@ -74,6 +77,9 @@ interface Fixture {
   /** Set by setups: a pending device request's user code, and a grant of the owner. */
   userCode: string;
   grantId: string;
+  /** Set by setups (P9): an app's signed authorization request, a linked identity. */
+  oauthQuery: string;
+  identityId: string;
 }
 
 interface Req {
@@ -176,6 +182,59 @@ async function deviceSession(
   const body = (await res.json()) as { access_token?: string };
   if (body.access_token === undefined) throw new Error(`device token: ${JSON.stringify(body)}`);
   return body.access_token;
+}
+
+/**
+ * P9: an app (an `oauthClient` row) and the owner's authorization request for it, as the
+ * provider signed it for the consent screen; stored in `f.oauthQuery`.
+ */
+async function startConsent(f: Fixture): Promise<void> {
+  f.db.orm
+    .insert(oauthClient)
+    .values({
+      id: uuidv7(),
+      clientId: 'contract-app',
+      name: 'Contract app',
+      redirectUris: JSON.stringify(['https://app.example.com/callback']),
+      tokenEndpointAuthMethod: 'none',
+      grantTypes: JSON.stringify(['authorization_code', 'refresh_token']),
+      responseTypes: JSON.stringify(['code']),
+      scopes: JSON.stringify([...ALL_SCOPES, 'offline_access']),
+    })
+    .run();
+  const res = await f.app.request(
+    `/api/auth/oauth2/authorize?${new URLSearchParams({
+      response_type: 'code',
+      client_id: 'contract-app',
+      redirect_uri: 'https://app.example.com/callback',
+      scope: 'tasks:read',
+      resource: `${BASE_URL}/mcp`,
+      code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+      code_challenge_method: 'S256',
+    })}`,
+    { headers: { cookie: f.jars.owner.header() } },
+  );
+  const page = new URL(res.headers.get('location') ?? '', BASE_URL);
+  if (page.pathname !== '/oauth/consent') throw new Error(`authorize: ${page.href}`);
+  f.oauthQuery = page.search.slice(1);
+}
+
+/** P9: a linked sign-in identity of the owner (stored in `f.identityId`). */
+function addIdentity(f: Fixture, providerId: string): string {
+  const id = uuidv7();
+  f.db.orm
+    .insert(account)
+    .values({
+      id,
+      accountId: `${providerId}-${f.ownerId}`,
+      providerId,
+      userId: f.ownerId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .run();
+  f.identityId = id;
+  return id;
 }
 
 /** A PAT that may write only in the owner's group B of the shared org. */
@@ -916,6 +975,14 @@ const SPECS: Record<string, Spec> = {
           bearer: f.bearer.read,
         }),
       },
+      {
+        status: 403,
+        code: 'admin_only_scope',
+        request: (f) => ({
+          path: `/api/v1/me/grants/${f.grantId}`,
+          body: { scopes: ['tasks:read', 'admin'] },
+        }),
+      },
     ],
   },
   'DELETE /api/v1/me/grants/{id}': {
@@ -945,6 +1012,14 @@ const SPECS: Record<string, Spec> = {
       body: { name: 'Script', scopes: ['tasks:read'], constraints: { orgs: 'all' } },
     }),
     cases: [
+      {
+        status: 403,
+        code: 'admin_only_scope',
+        request: () => ({
+          path: '/api/v1/me/tokens',
+          body: { name: 'Script', scopes: ['admin'], constraints: { orgs: 'all' } },
+        }),
+      },
       {
         status: 403,
         code: 'forbidden_scope',
@@ -1019,6 +1094,76 @@ const SPECS: Record<string, Spec> = {
     setup: async (f) => {
       await startDevice(f);
     },
+  },
+  // P9 (ADR 0042): the OAuth consent screen and linked identities.
+  'GET /api/v1/oauth/consent': {
+    ok: (f) => ({ path: `/api/v1/oauth/consent?oauth_query=${encodeURIComponent(f.oauthQuery)}` }),
+    setup: startConsent,
+    cases: [
+      {
+        status: 404,
+        name: 'a tampered query',
+        code: 'not_found',
+        request: (f) => ({
+          path: `/api/v1/oauth/consent?oauth_query=${encodeURIComponent(`${f.oauthQuery}&scope=tasks%3Adelete`)}`,
+        }),
+      },
+    ],
+  },
+  'POST /api/v1/oauth/consent': {
+    ok: (f) => ({
+      path: '/api/v1/oauth/consent',
+      body: {
+        accept: true,
+        oauthQuery: f.oauthQuery,
+        scopes: ['tasks:read'],
+        constraints: { orgs: 'all' },
+        sessionOnly: true,
+      },
+    }),
+    setup: startConsent,
+    cases: [
+      {
+        status: 200,
+        name: 'deny',
+        request: (f) => ({
+          path: '/api/v1/oauth/consent',
+          body: { accept: false, oauthQuery: f.oauthQuery },
+        }),
+      },
+      {
+        status: 404,
+        name: 'an unsigned query',
+        code: 'not_found',
+        request: () => ({
+          path: '/api/v1/oauth/consent',
+          body: { accept: false, oauthQuery: 'client_id=contract-app&sig=x' },
+        }),
+      },
+    ],
+  },
+  'GET /api/v1/me/identities': {
+    ok: () => ({ path: '/api/v1/me/identities' }),
+    setup: (f) => {
+      addIdentity(f, 'google');
+    },
+  },
+  'DELETE /api/v1/me/identities/{id}': {
+    ok: (f) => ({ path: `/api/v1/me/identities/${f.identityId}` }),
+    setup: (f) => {
+      addIdentity(f, 'google');
+      addIdentity(f, 'dev');
+    },
+    cases: [
+      {
+        status: 409,
+        code: 'last_identity',
+        setup: (f) => {
+          f.app.services.identities.unlink(f.actors.owner, f.identityId);
+          f.identityId = f.app.services.identities.list(f.actors.owner)[0]?.id ?? f.identityId;
+        },
+      },
+    ],
   },
   'GET /api/v1/tasks/resolve': {
     ok: (f) => ({ path: `/api/v1/tasks/resolve?ref=${f.taskSeq}&org=${f.orgId}` }),
@@ -1245,6 +1390,7 @@ function fixture(options: FixtureOptions = {}): Fixture {
     commentId: comment.id,
     deletedCommentId: deletedComment.id,
     trashedTaskCommentId: trashedComment.id,
+    db,
     backupName: backup.name,
     pushSubscriptionId: subscription.id,
     jars: {
@@ -1262,6 +1408,8 @@ function fixture(options: FixtureOptions = {}): Fixture {
     bearer: {},
     userCode: '',
     grantId: '',
+    oauthQuery: '',
+    identityId: '',
   };
 }
 

@@ -445,11 +445,13 @@ describe('P6 server fixes', () => {
         createdAt: Date.now(),
       })
       .run();
-    // Roll back 0008 (and the later 0009) and let the migrator apply them again.
-    ctx.db.sqlite.exec('DROP INDEX task_parent_any');
+    // Roll back 0008 (and the later 0009 and 0010) and let the migrator apply them again.
+    ctx.db.sqlite.exec(
+      'DROP TABLE oauthAccessToken; DROP TABLE oauthRefreshToken; DROP TABLE oauthConsent; DROP TABLE oauthClientResource; DROP TABLE oauthResource; DROP TABLE oauthClientAssertion; DROP TABLE oauthClient; ALTER TABLE access_grant DROP COLUMN idle_timeout_ms; DROP INDEX task_parent_any',
+    );
     ctx.db.sqlite
       .prepare(
-        'DELETE FROM __drizzle_migrations WHERE created_at IN (SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 2)',
+        'DELETE FROM __drizzle_migrations WHERE created_at IN (SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 3)',
       )
       .run();
     runMigrations(ctx.db);

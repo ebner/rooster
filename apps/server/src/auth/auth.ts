@@ -1,8 +1,10 @@
 import { apiKey } from '@better-auth/api-key';
-import { GRANT_SCOPES, isGrantScope } from '@rooster/core/grants';
+import { cimd } from '@better-auth/cimd';
+import { oauthProvider } from '@better-auth/oauth-provider';
+import { ALL_GRANT_SCOPES, isGrantScope, OAUTH_EXCLUDED_SCOPES } from '@rooster/core/grants';
 import { uuidv7 } from '@rooster/core/ids';
 import { isLocale } from '@rooster/i18n';
-import { betterAuth } from 'better-auth';
+import { type BetterAuthPlugin, betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError } from 'better-auth/api';
 import { bearer } from 'better-auth/plugins/bearer';
@@ -13,20 +15,47 @@ import {
 import { genericOAuth } from 'better-auth/plugins/generic-oauth';
 import { type Config, GOOGLE_PROVIDER_ID } from '../config.ts';
 import type { AppDb } from '../db/client.ts';
-import { account, apikey, deviceCode, session, user, verification } from '../db/schema/index.ts';
+import {
+  account,
+  apikey,
+  deviceCode,
+  oauthAccessToken,
+  oauthClient,
+  oauthClientAssertion,
+  oauthClientResource,
+  oauthConsent,
+  oauthRefreshToken,
+  oauthResource,
+  session,
+  user,
+  verification,
+} from '../db/schema/index.ts';
 import { localeFromAcceptLanguage, type ServerTextKey, serverText } from '../lib/i18n.ts';
 import type { Logger } from '../lib/logger.ts';
-import { CLI_CLIENT_ID, PAT_PREFIX } from '../services/grant-service.ts';
+import {
+  CLI_CLIENT_ID,
+  OAUTH_ACCESS_PREFIX,
+  OAUTH_REFRESH_PREFIX,
+  PAT_PREFIX,
+} from '../services/grant-service.ts';
 import type { Services } from '../services/index.ts';
 import type { SignInRejection } from '../services/sign-in-policy.ts';
+import { AUTH_BASE_PATH } from './auth-paths.ts';
+import { createCimdFetch } from './cimd-fetch.ts';
 import { readInviteToken, sessionCookieName } from './cookies.ts';
+import { consentReferenceId } from './oauth-handoff.ts';
 
-export const AUTH_BASE_PATH = '/api/auth';
+export { AUTH_BASE_PATH };
 
 /** Set by the `/api/auth/*` mount from the socket (or a trusted proxy); never from clients. */
 export const CLIENT_IP_HEADER = 'x-rooster-client-ip';
 
 const DAY_SECONDS = 86_400;
+
+/** The capabilities an OAuth client may be granted (ADR 0041, `OAUTH_EXCLUDED_SCOPES`). */
+export const OAUTH_GRANT_SCOPES = ALL_GRANT_SCOPES.filter(
+  (s) => !OAUTH_EXCLUDED_SCOPES.includes(s),
+);
 
 /** The longest `scope` a device code request may carry. */
 const DEVICE_SCOPE_MAX_BYTES = 512;
@@ -50,7 +79,45 @@ const DISABLED_PATHS = [
   '/api-key/delete',
   '/api-key/list',
   '/api-key/delete-all-expired-api-keys',
+  // The OAuth provider (ADR 0041): rooster answers consent through `/api/v1/oauth/consent`
+  // (server-side `auth.api.oauth2Consent`); introspection, UserInfo, client and consent CRUD,
+  // resource admin, prelogin, continue and end-session are not offered. The mount allows only
+  // authorize, token, revoke and (with DCR) register under `/oauth2/` (auth/mount.ts).
+  '/oauth2/consent',
+  '/oauth2/continue',
+  '/oauth2/introspect',
+  '/oauth2/userinfo',
+  '/oauth2/end-session',
+  '/oauth2/end-session/confirm',
+  '/oauth2/create-client',
+  '/oauth2/get-client',
+  '/oauth2/public-client',
+  '/oauth2/public-client-prelogin',
+  '/oauth2/get-clients',
+  '/oauth2/update-client',
+  '/oauth2/client/rotate-secret',
+  '/oauth2/delete-client',
+  '/oauth2/get-consent',
+  '/oauth2/get-consents',
+  '/oauth2/update-consent',
+  '/oauth2/delete-consent',
+  '/admin/oauth2/create-client',
+  '/admin/oauth2/update-client',
+  '/admin/oauth2/resources',
 ];
+
+/** Access tokens live 15 minutes (11 §2.4); the grant is read on every request anyway. */
+export const OAUTH_ACCESS_TOKEN_TTL_S = 15 * 60;
+
+/** The SPA routes the provider sends the browser to (11 §3.1). */
+export const OAUTH_CONSENT_PATH = '/oauth/consent';
+export const OAUTH_LOGIN_PATH = '/login';
+
+/**
+ * Scopes OAuth clients may request: the user capabilities minus `OAUTH_EXCLUDED_SCOPES`, plus
+ * `offline_access` for a refresh token. Never `openid`: with a nonce it waives PKCE.
+ */
+export const OAUTH_SCOPES: readonly string[] = [...OAUTH_GRANT_SCOPES, 'offline_access'];
 
 /**
  * The grant ID of the approved device code being redeemed, by endpoint context: set by the
@@ -78,6 +145,10 @@ export interface AuthDeps {
   clock: () => number;
   /** better-auth's limiter on `/api/auth/*` (30 requests/min per IP). Default on. */
   rateLimit?: boolean | undefined;
+  /** The CIMD transport (default: the guarded fetch of `cimd-fetch.ts`); tests inject one. */
+  cimdFetch?:
+    | ((input: string | URL | Request, init?: RequestInit) => Promise<Response>)
+    | undefined;
 }
 
 /** Endpoint context headers; better-auth passes `null` for calls outside a request. */
@@ -150,8 +221,9 @@ export function createAuth(deps: AuthDeps) {
         throw deviceError('invalid_scope', 'Unknown scope requested.');
       }
       // Stored canonical (known scopes, once each, in contract order); the plugin persists
-      // `request.scope` after this hook.
-      const canonical = GRANT_SCOPES.filter((s) => scopes.includes(s)).join(' ');
+      // `request.scope` after this hook. `admin` is accepted here and dropped at approval for
+      // anyone who is not an instance admin (ADR 0042 §1).
+      const canonical = ALL_GRANT_SCOPES.filter((s) => scopes.includes(s)).join(' ');
       request.scope = canonical === '' ? undefined : canonical;
       const userAgent = ctx.request?.headers.get('user-agent')?.slice(0, 200) ?? null;
       return { clientId: CLI_CLIENT_ID, deviceCodeFields: { userAgent } };
@@ -163,6 +235,8 @@ export function createAuth(deps: AuthDeps) {
     },
     getVerificationContext: () => undefined,
   };
+
+  services.grants.seedOAuthResources(OAUTH_ACCESS_TOKEN_TTL_S);
 
   return betterAuth({
     appName: 'rooster',
@@ -182,7 +256,21 @@ export function createAuth(deps: AuthDeps) {
     },
     database: drizzleAdapter(db.orm, {
       provider: 'sqlite',
-      schema: { user, session, account, verification, apikey, deviceCode },
+      schema: {
+        user,
+        session,
+        account,
+        verification,
+        apikey,
+        deviceCode,
+        oauthClient,
+        oauthResource,
+        oauthClientResource,
+        oauthRefreshToken,
+        oauthAccessToken,
+        oauthConsent,
+        oauthClientAssertion,
+      },
     }),
     // Users change their profile through PATCH /api/v1/me; accounts are never deleted.
     disabledPaths: DISABLED_PATHS,
@@ -232,6 +320,48 @@ export function createAuth(deps: AuthDeps) {
         maximumNameLength: 100,
         rateLimit: { enabled: false },
       }),
+      // The OAuth 2.1 authorization server (11 §4, ADR 0041). Opaque, hashed, prefixed tokens;
+      // authorization code + PKCE (S256) and refresh tokens only; the rooster grant rides on
+      // every code, token and consent as `referenceId` (oauth-handoff.ts). The mount adds what
+      // the plugin leaves optional: `resource` required, refresh reuse revokes the grant.
+      // Typed as a plain plugin: its endpoint metadata does not satisfy
+      // `exactOptionalPropertyTypes`. Its server-side API is `OAuthProviderApi` below.
+      oauthProvider({
+        loginPage: `${config.baseUrl}${OAUTH_LOGIN_PATH}`,
+        consentPage: `${config.baseUrl}${OAUTH_CONSENT_PATH}`,
+        scopes: [...OAUTH_SCOPES],
+        clientRegistrationDefaultScopes: [...OAUTH_SCOPES],
+        advertisedMetadata: { scopes_supported: [...OAUTH_SCOPES] },
+        grantTypes: ['authorization_code', 'refresh_token'],
+        disableJwtPlugin: true,
+        storeTokens: 'hashed',
+        prefix: {
+          opaqueAccessToken: OAUTH_ACCESS_PREFIX,
+          refreshToken: OAUTH_REFRESH_PREFIX,
+        },
+        accessTokenExpiresIn: OAUTH_ACCESS_TOKEN_TTL_S,
+        refreshTokenReuseInterval: 0,
+        // The two resources are rows seeded by `seedOAuthResources` (synchronously, so no
+        // background seeding outlives a closed database). Every client may ask for either; the
+        // user consents per request.
+        enforcePerClientResources: false,
+        allowDynamicClientRegistration: config.oauthDcr,
+        allowUnauthenticatedClientRegistration: config.oauthDcr,
+        postLogin: {
+          page: `${config.baseUrl}${OAUTH_CONSENT_PATH}`,
+          shouldRedirect: () => false,
+          consentReferenceId: ({ user: u }) =>
+            consentReferenceId(u?.id, (userId, clientId) =>
+              services.grants.liveOAuthGrantId(userId, clientId),
+            ),
+        },
+      }) as unknown as BetterAuthPlugin,
+      // Client ID Metadata Documents (11 §4.2): fetched through the IP-based guard.
+      cimd({
+        fetchClientMetadataResource: deps.cimdFetch ?? createCimdFetch(),
+        metadataProfile: 'mcp-2026-07-28',
+        metadataRevalidationInterval: '24h',
+      }) as unknown as BetterAuthPlugin,
     ],
     user: {
       additionalFields: {
@@ -364,3 +494,21 @@ export function createAuth(deps: AuthDeps) {
 }
 
 export type Auth = ReturnType<typeof createAuth>;
+
+/**
+ * The OAuth provider's server-side endpoints rooster calls (its plugin is typed as a plain
+ * `BetterAuthPlugin` above, so `auth.api` does not list them).
+ */
+export interface OAuthProviderApi {
+  oauth2Consent(input: {
+    headers: Headers;
+    /** The provider's authorize step needs a request (only its headers are read). */
+    request: Request;
+    body: { accept: boolean; scope?: string; oauth_query: string };
+  }): Promise<unknown>;
+  getOAuthServerConfig(): Promise<unknown>;
+}
+
+export function oauthProviderApi(auth: Auth): OAuthProviderApi {
+  return auth.api as unknown as OAuthProviderApi;
+}

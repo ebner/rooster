@@ -5,9 +5,11 @@ import { clientIp } from '../lib/client-ip.ts';
 import type { AppEnv } from '../lib/context.ts';
 import { problemResponse } from '../lib/errors.ts';
 import { inProcessActor } from '../lib/in-process.ts';
-import { PAT_PREFIX } from '../services/grant-service.ts';
+import { OAUTH_ACCESS_PREFIX, PAT_PREFIX } from '../services/grant-service.ts';
 import type { Actor, Services } from '../services/index.ts';
 import type { Auth } from './auth.ts';
+import { resolveOAuthBearer } from './oauth-bearer.ts';
+import { ADVERTISED_RESOURCE_SCOPES, wwwAuthenticate } from './oauth-metadata.ts';
 
 /**
  * Routes under `/api/v1` that work without a session: server metadata, the OpenAPI document,
@@ -36,6 +38,8 @@ function bearerToken(header: string | undefined): string | null {
  * unauthenticated` without one:
  * - `Authorization: Bearer rooster_pat_…`: a PAT, looked up by its hash (the PAT prefix tells
  *   it from a session token);
+ * - `Authorization: Bearer rooster_at_…`: an OAuth access token issued for `/api/v1` (P9; one
+ *   issued for `/mcp` is `401` here, with a `WWW-Authenticate` challenge);
  * - any other bearer token: a better-auth session through the `bearer` plugin (CLI devices);
  * - else the session cookie (the browser).
  * A session or PAT whose grant is revoked or expired, and a disabled user, get 401. Sliding
@@ -59,6 +63,18 @@ export function actorMiddleware(deps: {
     let actor: Actor | null = null;
     if (token?.startsWith(PAT_PREFIX)) {
       actor = deps.services.grants.resolvePat(await defaultKeyHasher(token), ip);
+    } else if (token?.startsWith(OAUTH_ACCESS_PREFIX)) {
+      // An OAuth access token works here only if it was issued for `/api/v1` (11 §4.3).
+      actor = await resolveOAuthBearer(deps.services, token, 'api', ip);
+      if (actor === null) {
+        c.header(
+          'WWW-Authenticate',
+          wwwAuthenticate(deps.config, 'api', {
+            error: 'invalid_token',
+            scope: [...ADVERTISED_RESOURCE_SCOPES],
+          }),
+        );
+      }
     } else {
       // A bearer request is judged by its token alone, never by a cookie riding along.
       const headers = new Headers(c.req.raw.headers);

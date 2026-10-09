@@ -5,7 +5,7 @@ import { dataPaths, PRIVATE_DIR_MODE } from '../db/boot.ts';
 import { backupDatabase } from '../db/migrate.ts';
 import { AppError } from '../lib/errors.ts';
 import type { Actor, ServiceDeps } from './context.ts';
-import { requireBrowserSession } from './grant-access.ts';
+import { requireAdminAccess } from './grant-access.ts';
 
 /** Manual and pre-migration snapshots are never rotated away below this count each. */
 export const KEEP_MANUAL = 10;
@@ -45,10 +45,6 @@ function kindOf(parsed: ParsedName): BackupKind {
   return new Date(parsed.createdAt).getUTCDay() === 0 ? 'weekly' : 'daily';
 }
 
-function requireAdmin(actor: Actor): void {
-  if (!actor.isAdmin) throw new AppError('forbidden', 403, 'Only instance admins can do that.');
-}
-
 const backupNotFound = () => new AppError('not_found', 404, 'Backup not found.');
 
 /**
@@ -77,8 +73,7 @@ export class BackupService {
 
   /** Newest first. */
   list(actor: Actor): Backup[] {
-    requireBrowserSession(actor);
-    requireAdmin(actor);
+    requireAdminAccess(actor);
     return this.entries().map(({ name, size, createdAt, kind }) => ({
       name,
       size,
@@ -89,8 +84,7 @@ export class BackupService {
 
   /** "Back up now" (manual kind). */
   createManual(actor: Actor): Backup {
-    requireBrowserSession(actor);
-    requireAdmin(actor);
+    requireAdminAccess(actor);
     const backup = this.snapshot('manual', this.deps.clock());
     this.rotate();
     return backup;
@@ -101,8 +95,7 @@ export class BackupService {
    * path such as `../rooster.db` can never resolve outside the backups folder.
    */
   file(actor: Actor, name: string): { path: string; size: number; name: string } {
-    requireBrowserSession(actor);
-    requireAdmin(actor);
+    requireAdminAccess(actor);
     if (parseName(name) === null) throw backupNotFound();
     const path = join(this.dir, name);
     const stat = statSync(path, { throwIfNoEntry: false });

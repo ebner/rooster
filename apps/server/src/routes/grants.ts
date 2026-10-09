@@ -51,7 +51,7 @@ const patchGrant = createRoute({
   request: { params: z.object({ id: idParam('id', 'Grant ID') }), body: body(GrantPatchSchema) },
   responses: {
     200: json(GrantSchema, 'The updated grant'),
-    ...problems(...AUTHED, 404, 'widening_not_allowed'),
+    ...problems(...AUTHED, 404, 'widening_not_allowed', 'admin_only_scope'),
   },
 });
 
@@ -74,11 +74,11 @@ const createToken = createRoute({
   operationId: 'createToken',
   summary: 'Create a personal access token (shown once)',
   description:
-    'Answers the token (`rooster_pat_…`) once, with its grant; send it as `Authorization: Bearer rooster_pat_…`. The browser session may create any PAT. A CLI device session (`rooster token create`) may create one within its own grant: scopes it has, narrower constraints and an expiry no later than its own, else `422 widening_not_allowed`; the PAT outlives a revoke of the device. A PAT cannot create PATs (`403 forbidden_scope`).',
+    'Answers the token (`rooster_pat_…`) once, with its grant; send it as `Authorization: Bearer rooster_pat_…`. The browser session may create any PAT. A CLI device session (`rooster token create`) may create one within its own grant: scopes it has, narrower constraints and an expiry no later than its own, else `422 widening_not_allowed`; the PAT outlives a revoke of the device. A PAT cannot create PATs (`403 forbidden_scope`). The `admin` capability needs an instance admin (`403 admin_only_scope`).',
   request: { body: body(TokenCreateSchema) },
   responses: {
     201: json(TokenCreatedSchema, 'The token and its grant'),
-    ...problems(...AUTHED, 'widening_not_allowed'),
+    ...problems(...AUTHED, 'widening_not_allowed', 'admin_only_scope'),
   },
 });
 
@@ -89,7 +89,7 @@ const getDevice = createRoute({
   operationId: 'getDeviceRequest',
   summary: 'What a CLI device asks for, before approval',
   description:
-    'Browser session only. The pending device request with this code: the client and the scopes it asked for (`scope` of its `/api/auth/device/code` request; all scopes when it sent none). Unknown, expired or already handled codes are `404`.',
+    'Browser session only. The pending device request with this code: the client and the scopes it asked for (`scope` of its `/api/auth/device/code` request; all scopes but `admin` when it sent none; `admin` only for instance admins). Unknown, expired or already handled codes are `404`.',
   request: { params: z.object({ userCode: userCodeParam }) },
   responses: { 200: json(DeviceRequestSchema, 'The pending request'), ...problems(401, 404) },
 });
@@ -101,7 +101,7 @@ const approveDevice = createRoute({
   operationId: 'approveDevice',
   summary: 'Approve a CLI device with the chosen scopes and constraints',
   description:
-    'Browser session only. Creates the device grant (scopes no wider than requested, else `422 widening_not_allowed`); the CLI’s next poll of `/api/auth/device/token` receives a bearer session tied to it. The default label is "rooster CLI on <device>" from the CLI’s User-Agent.',
+    'Browser session only. Creates the device grant (scopes no wider than requested, else `422 widening_not_allowed`; `admin` is dropped unless the user is an instance admin); the CLI’s next poll of `/api/auth/device/token` receives a bearer session tied to it. The default label is "rooster CLI on <device>" from the CLI’s User-Agent.',
   request: { params: z.object({ userCode: userCodeParam }), body: body(DeviceApproveSchema) },
   responses: {
     200: json(GrantSchema, 'The new grant'),

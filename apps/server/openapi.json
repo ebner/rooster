@@ -707,6 +707,409 @@
           }
         }
       },
+      "OAuthClientInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "logoUri": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "clientUri": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "verified": {
+            "type": "boolean"
+          },
+          "dynamic": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "domain",
+          "logoUri",
+          "clientUri",
+          "verified",
+          "dynamic"
+        ],
+        "description": "How an OAuth app presents itself: from its Client ID Metadata Document (`verified` when the metadata host equals the redirect host) or its Dynamic Client Registration (`dynamic`: \"Unverified app\").",
+        "example": {
+          "name": "Claude",
+          "domain": "claude.ai",
+          "logoUri": "https://claude.ai/logo.png",
+          "clientUri": "https://claude.ai",
+          "verified": true,
+          "dynamic": false
+        }
+      },
+      "OAuthConsentRequest": {
+        "type": "object",
+        "properties": {
+          "oauthQuery": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "client": {
+            "$ref": "#/components/schemas/OAuthClientInfo"
+          },
+          "redirectUri": {
+            "type": "string"
+          },
+          "loopback": {
+            "type": "boolean"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "requestedScopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "tasks:read",
+                "tasks:write",
+                "comments:write",
+                "tasks:assign",
+                "groups:write",
+                "tasks:delete",
+                "notifications:read",
+                "admin"
+              ]
+            }
+          },
+          "newScopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "tasks:read",
+                "tasks:write",
+                "comments:write",
+                "tasks:assign",
+                "groups:write",
+                "tasks:delete",
+                "notifications:read",
+                "admin"
+              ]
+            }
+          },
+          "existing": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Grant"
+              },
+              {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "prefill": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GrantConstraints"
+              },
+              {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            ]
+          }
+        },
+        "required": [
+          "oauthQuery",
+          "clientId",
+          "client",
+          "redirectUri",
+          "loopback",
+          "resource",
+          "requestedScopes",
+          "newScopes",
+          "existing",
+          "prefill"
+        ],
+        "example": {
+          "oauthQuery": "client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fclient.json&…&sig=…",
+          "clientId": "https://claude.ai/oauth/client.json",
+          "client": {
+            "name": "Claude",
+            "domain": "claude.ai",
+            "logoUri": "https://claude.ai/logo.png",
+            "clientUri": "https://claude.ai",
+            "verified": true,
+            "dynamic": false
+          },
+          "redirectUri": "https://claude.ai/api/mcp/auth_callback",
+          "loopback": false,
+          "resource": "https://rooster.example.com/mcp",
+          "requestedScopes": [
+            "tasks:write"
+          ],
+          "newScopes": [
+            "tasks:write"
+          ],
+          "existing": null,
+          "prefill": null
+        }
+      },
+      "OAuthConsentDecision": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "accept": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              },
+              "oauthQuery": {
+                "type": "string"
+              },
+              "scopes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "tasks:read",
+                    "tasks:write",
+                    "comments:write",
+                    "tasks:assign",
+                    "groups:write",
+                    "tasks:delete",
+                    "notifications:read",
+                    "admin"
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 8
+              },
+              "constraints": {
+                "type": "object",
+                "properties": {
+                  "orgs": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "all"
+                        ]
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "orgId": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                            },
+                            "read": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "all"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "groups": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 100
+                                    }
+                                  },
+                                  "required": [
+                                    "groups"
+                                  ]
+                                }
+                              ]
+                            },
+                            "write": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "none"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "all"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "groups": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 100
+                                    }
+                                  },
+                                  "required": [
+                                    "groups"
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "orgId",
+                            "read",
+                            "write"
+                          ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 50
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "orgs"
+                ]
+              },
+              "expiresInDays": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3650
+              },
+              "sessionOnly": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "accept",
+              "oauthQuery",
+              "scopes",
+              "constraints"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "accept": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              "oauthQuery": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "accept",
+              "oauthQuery"
+            ]
+          }
+        ],
+        "description": "Allow (`accept: true`, with the approved scopes, constraints and expiry or `sessionOnly`) or Deny (`accept: false`). `oauthQuery` is the signed query from `GET /oauth/consent`, unchanged.",
+        "example": {
+          "accept": true,
+          "oauthQuery": "client_id=…&sig=…",
+          "scopes": [
+            "tasks:write"
+          ],
+          "constraints": {
+            "orgs": [
+              {
+                "orgId": "0199a1b2-0000-7000-8000-000000000001",
+                "read": "all",
+                "write": {
+                  "groups": [
+                    "0199a1b2-0000-7000-8000-0000000000a1"
+                  ]
+                }
+              }
+            ]
+          },
+          "expiresInDays": 90
+        }
+      },
+      "OAuthConsentResult": {
+        "type": "object",
+        "properties": {
+          "redirectTo": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "redirectTo"
+        ],
+        "example": {
+          "redirectTo": "https://claude.ai/api/mcp/auth_callback?code=…&state=…&iss=https%3A%2F%2Frooster.example.com%2Fapi%2Fauth"
+        }
+      },
+      "LinkedIdentity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "providerName": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "providerId",
+          "providerName",
+          "email",
+          "createdAt"
+        ],
+        "example": {
+          "id": "0199a1b2-0000-7000-8000-0000000000c1",
+          "providerId": "google",
+          "providerName": "Google",
+          "email": "ada@example.com",
+          "createdAt": 1767225600000
+        }
+      },
       "Problem": {
         "type": "object",
         "properties": {
@@ -4559,6 +4962,7 @@
                   "tui",
                   "mcp",
                   "pat",
+                  "oauth",
                   "import",
                   "system"
                 ]
@@ -4615,6 +5019,7 @@
                   "tui",
                   "mcp",
                   "pat",
+                  "oauth",
                   "import",
                   "system"
                 ]
@@ -4682,6 +5087,7 @@
                   "tui",
                   "mcp",
                   "pat",
+                  "oauth",
                   "import",
                   "system"
                 ]
@@ -4791,6 +5197,7 @@
                   "tui",
                   "mcp",
                   "pat",
+                  "oauth",
                   "import",
                   "system"
                 ]
@@ -4866,6 +5273,7 @@
                   "tui",
                   "mcp",
                   "pat",
+                  "oauth",
                   "import",
                   "system"
                 ]
@@ -4922,6 +5330,7 @@
                   "tui",
                   "mcp",
                   "pat",
+                  "oauth",
                   "import",
                   "system"
                 ]
@@ -4978,6 +5387,7 @@
                   "tui",
                   "mcp",
                   "pat",
+                  "oauth",
                   "import",
                   "system"
                 ]
@@ -5034,6 +5444,7 @@
                   "tui",
                   "mcp",
                   "pat",
+                  "oauth",
                   "import",
                   "system"
                 ]
@@ -5102,6 +5513,7 @@
                   "tui",
                   "mcp",
                   "pat",
+                  "oauth",
                   "import",
                   "system"
                 ]
@@ -5177,6 +5589,7 @@
                   "tui",
                   "mcp",
                   "pat",
+                  "oauth",
                   "import",
                   "system"
                 ]
@@ -5233,6 +5646,7 @@
                   "tui",
                   "mcp",
                   "pat",
+                  "oauth",
                   "import",
                   "system"
                 ]
@@ -11859,7 +12273,7 @@
             }
           },
           "403": {
-            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`.",
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `admin_only_scope`.",
             "content": {
               "application/problem+json": {
                 "examples": {
@@ -11891,6 +12305,16 @@
                       "status": 403,
                       "detail": "Cross-origin request rejected.",
                       "code": "csrf_origin"
+                    }
+                  },
+                  "admin_only_scope": {
+                    "summary": "Only instance admins can grant the \"admin\" permission.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Only instance admins can grant the \"admin\" permission.",
+                      "code": "admin_only_scope"
                     }
                   }
                 },
@@ -12295,7 +12719,7 @@
         ],
         "operationId": "createToken",
         "summary": "Create a personal access token (shown once)",
-        "description": "Answers the token (`rooster_pat_…`) once, with its grant; send it as `Authorization: Bearer rooster_pat_…`. The browser session may create any PAT. A CLI device session (`rooster token create`) may create one within its own grant: scopes it has, narrower constraints and an expiry no later than its own, else `422 widening_not_allowed`; the PAT outlives a revoke of the device. A PAT cannot create PATs (`403 forbidden_scope`).",
+        "description": "Answers the token (`rooster_pat_…`) once, with its grant; send it as `Authorization: Bearer rooster_pat_…`. The browser session may create any PAT. A CLI device session (`rooster token create`) may create one within its own grant: scopes it has, narrower constraints and an expiry no later than its own, else `422 widening_not_allowed`; the PAT outlives a revoke of the device. A PAT cannot create PATs (`403 forbidden_scope`). The `admin` capability needs an instance admin (`403 admin_only_scope`).",
         "requestBody": {
           "required": true,
           "content": {
@@ -12345,7 +12769,7 @@
             }
           },
           "403": {
-            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`.",
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `admin_only_scope`.",
             "content": {
               "application/problem+json": {
                 "examples": {
@@ -12377,6 +12801,16 @@
                       "status": 403,
                       "detail": "Cross-origin request rejected.",
                       "code": "csrf_origin"
+                    }
+                  },
+                  "admin_only_scope": {
+                    "summary": "Only instance admins can grant the \"admin\" permission.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Only instance admins can grant the \"admin\" permission.",
+                      "code": "admin_only_scope"
                     }
                   }
                 },
@@ -12535,7 +12969,7 @@
         ],
         "operationId": "getDeviceRequest",
         "summary": "What a CLI device asks for, before approval",
-        "description": "Browser session only. The pending device request with this code: the client and the scopes it asked for (`scope` of its `/api/auth/device/code` request; all scopes when it sent none). Unknown, expired or already handled codes are `404`.",
+        "description": "Browser session only. The pending device request with this code: the client and the scopes it asked for (`scope` of its `/api/auth/device/code` request; all scopes but `admin` when it sent none; `admin` only for instance admins). Unknown, expired or already handled codes are `404`.",
         "parameters": [
           {
             "schema": {
@@ -12675,7 +13109,7 @@
         ],
         "operationId": "approveDevice",
         "summary": "Approve a CLI device with the chosen scopes and constraints",
-        "description": "Browser session only. Creates the device grant (scopes no wider than requested, else `422 widening_not_allowed`); the CLI’s next poll of `/api/auth/device/token` receives a bearer session tied to it. The default label is \"rooster CLI on <device>\" from the CLI’s User-Agent.",
+        "description": "Browser session only. Creates the device grant (scopes no wider than requested, else `422 widening_not_allowed`; `admin` is dropped unless the user is an instance admin); the CLI’s next poll of `/api/auth/device/token` receives a bearer session tied to it. The default label is \"rooster CLI on <device>\" from the CLI’s User-Agent.",
         "parameters": [
           {
             "schema": {
@@ -25213,6 +25647,757 @@
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/consent": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "operationId": "getOAuthConsent",
+        "summary": "What an app asks for, before the user allows it",
+        "description": "Browser session only. The authorization request behind the consent screen (`/oauth/consent`): the app, its redirect target, the resource, the requested capabilities (`newScopes`: those the existing grant lacks), the existing grant on step-up, and any `authorization_details` pre-fill. An unsigned, altered or expired query (10 minutes) is `404`.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 16384,
+              "description": "The query string the provider sent the browser to `/oauth/consent` with."
+            },
+            "required": true,
+            "description": "The query string the provider sent the browser to `/oauth/consent` with.",
+            "name": "oauth_query",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthConsentRequest"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "operationId": "decideOAuthConsent",
+        "summary": "Allow or deny an app",
+        "description": "Browser session only. Allow creates or updates my grant for the app (scopes no wider than requested; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthConsentDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Where to send the browser",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthConsentResult"
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  },
+                  "csrf_origin": {
+                    "summary": "Cross-origin request rejected.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Cross-origin request rejected.",
+                      "code": "csrf_origin"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body is too large (1 MB). Codes: `payload_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "payload_too_large": {
+                    "summary": "The request body exceeds the limit of 1024 KB.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Content Too Large",
+                      "status": 413,
+                      "detail": "The request body exceeds the limit of 1024 KB.",
+                      "code": "payload_too_large"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not JSON. Codes: `unsupported_media_type`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unsupported_media_type": {
+                    "summary": "Send JSON (application/json).",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unsupported Media Type",
+                      "status": 415,
+                      "detail": "Send JSON (application/json).",
+                      "code": "unsupported_media_type"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "idempotency_key_reuse": {
+                    "summary": "This Idempotency-Key was already used for a different request.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "This Idempotency-Key was already used for a different request.",
+                      "code": "idempotency_key_reuse"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/EditTime"
+          },
+          {
+            "$ref": "#/components/parameters/ClientId"
+          },
+          {
+            "$ref": "#/components/parameters/Client"
+          }
+        ]
+      }
+    },
+    "/api/v1/me/identities": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "operationId": "listIdentities",
+        "summary": "My linked sign-in identities",
+        "description": "Browser session only. Every identity provider account that signs in to this user, oldest first, with the provider’s display name and, when known, the email it vouched for.",
+        "responses": {
+          "200": {
+            "description": "Identities, oldest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LinkedIdentity"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/identities/{id}": {
+      "delete": {
+        "tags": [
+          "me"
+        ],
+        "operationId": "unlinkIdentity",
+        "summary": "Unlink a sign-in identity",
+        "description": "Browser session only. The identity can no longer be used to sign in; signed-in browsers stay signed in. The last identity cannot be removed (`409 last_identity`).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Identity ID"
+            },
+            "required": true,
+            "description": "Identity ID",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/EditTime"
+          },
+          {
+            "$ref": "#/components/parameters/ClientId"
+          },
+          {
+            "$ref": "#/components/parameters/Client"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Unlinked",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  },
+                  "csrf_origin": {
+                    "summary": "Cross-origin request rejected.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Cross-origin request rejected.",
+                      "code": "csrf_origin"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current state. Codes: `last_identity`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "last_identity": {
+                    "summary": "This is your only way to sign in; link another identity before removing it.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Conflict",
+                      "status": 409,
+                      "detail": "This is your only way to sign in; link another identity before removing it.",
+                      "code": "last_identity"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body is too large (1 MB). Codes: `payload_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "payload_too_large": {
+                    "summary": "The request body exceeds the limit of 1024 KB.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Content Too Large",
+                      "status": 413,
+                      "detail": "The request body exceeds the limit of 1024 KB.",
+                      "code": "payload_too_large"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not JSON. Codes: `unsupported_media_type`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unsupported_media_type": {
+                    "summary": "Send JSON (application/json).",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unsupported Media Type",
+                      "status": 415,
+                      "detail": "Send JSON (application/json).",
+                      "code": "unsupported_media_type"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "idempotency_key_reuse": {
+                    "summary": "This Idempotency-Key was already used for a different request.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "This Idempotency-Key was already used for a different request.",
+                      "code": "idempotency_key_reuse"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
               }
             }
           }

@@ -527,7 +527,7 @@ export interface paths {
         put?: never;
         /**
          * Create a personal access token (shown once)
-         * @description Answers the token (`rooster_pat_…`) once, with its grant; send it as `Authorization: Bearer rooster_pat_…`. The browser session may create any PAT. A CLI device session (`rooster token create`) may create one within its own grant: scopes it has, narrower constraints and an expiry no later than its own, else `422 widening_not_allowed`; the PAT outlives a revoke of the device. A PAT cannot create PATs (`403 forbidden_scope`).
+         * @description Answers the token (`rooster_pat_…`) once, with its grant; send it as `Authorization: Bearer rooster_pat_…`. The browser session may create any PAT. A CLI device session (`rooster token create`) may create one within its own grant: scopes it has, narrower constraints and an expiry no later than its own, else `422 widening_not_allowed`; the PAT outlives a revoke of the device. A PAT cannot create PATs (`403 forbidden_scope`). The `admin` capability needs an instance admin (`403 admin_only_scope`).
          */
         post: operations["createToken"];
         delete?: never;
@@ -545,7 +545,7 @@ export interface paths {
         };
         /**
          * What a CLI device asks for, before approval
-         * @description Browser session only. The pending device request with this code: the client and the scopes it asked for (`scope` of its `/api/auth/device/code` request; all scopes when it sent none). Unknown, expired or already handled codes are `404`.
+         * @description Browser session only. The pending device request with this code: the client and the scopes it asked for (`scope` of its `/api/auth/device/code` request; all scopes but `admin` when it sent none; `admin` only for instance admins). Unknown, expired or already handled codes are `404`.
          */
         get: operations["getDeviceRequest"];
         put?: never;
@@ -567,7 +567,7 @@ export interface paths {
         put?: never;
         /**
          * Approve a CLI device with the chosen scopes and constraints
-         * @description Browser session only. Creates the device grant (scopes no wider than requested, else `422 widening_not_allowed`); the CLI’s next poll of `/api/auth/device/token` receives a bearer session tied to it. The default label is "rooster CLI on <device>" from the CLI’s User-Agent.
+         * @description Browser session only. Creates the device grant (scopes no wider than requested, else `422 widening_not_allowed`; `admin` is dropped unless the user is an instance admin); the CLI’s next poll of `/api/auth/device/token` receives a bearer session tied to it. The default label is "rooster CLI on <device>" from the CLI’s User-Agent.
          */
         post: operations["approveDevice"];
         delete?: never;
@@ -1421,6 +1421,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/oauth/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What an app asks for, before the user allows it
+         * @description Browser session only. The authorization request behind the consent screen (`/oauth/consent`): the app, its redirect target, the resource, the requested capabilities (`newScopes`: those the existing grant lacks), the existing grant on step-up, and any `authorization_details` pre-fill. An unsigned, altered or expired query (10 minutes) is `404`.
+         */
+        get: operations["getOAuthConsent"];
+        put?: never;
+        /**
+         * Allow or deny an app
+         * @description Browser session only. Allow creates or updates my grant for the app (scopes no wider than requested; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.
+         */
+        post: operations["decideOAuthConsent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My linked sign-in identities
+         * @description Browser session only. Every identity provider account that signs in to this user, oldest first, with the provider’s display name and, when known, the email it vouched for.
+         */
+        get: operations["listIdentities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/identities/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unlink a sign-in identity
+         * @description Browser session only. The identity can no longer be used to sign in; signed-in browsers stay signed in. The last identity cannot be removed (`409 last_identity`).
+         */
+        delete: operations["unlinkIdentity"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1692,6 +1756,135 @@ export interface components {
                 actorName: string | null;
                 title: string | null;
             } | null;
+        };
+        /**
+         * @description How an OAuth app presents itself: from its Client ID Metadata Document (`verified` when the metadata host equals the redirect host) or its Dynamic Client Registration (`dynamic`: "Unverified app").
+         * @example {
+         *       "name": "Claude",
+         *       "domain": "claude.ai",
+         *       "logoUri": "https://claude.ai/logo.png",
+         *       "clientUri": "https://claude.ai",
+         *       "verified": true,
+         *       "dynamic": false
+         *     }
+         */
+        OAuthClientInfo: {
+            name: string;
+            domain: string;
+            /** Format: uri */
+            logoUri: string | null;
+            /** Format: uri */
+            clientUri: string | null;
+            verified: boolean;
+            dynamic: boolean;
+        };
+        /**
+         * @example {
+         *       "oauthQuery": "client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fclient.json&…&sig=…",
+         *       "clientId": "https://claude.ai/oauth/client.json",
+         *       "client": {
+         *         "name": "Claude",
+         *         "domain": "claude.ai",
+         *         "logoUri": "https://claude.ai/logo.png",
+         *         "clientUri": "https://claude.ai",
+         *         "verified": true,
+         *         "dynamic": false
+         *       },
+         *       "redirectUri": "https://claude.ai/api/mcp/auth_callback",
+         *       "loopback": false,
+         *       "resource": "https://rooster.example.com/mcp",
+         *       "requestedScopes": [
+         *         "tasks:write"
+         *       ],
+         *       "newScopes": [
+         *         "tasks:write"
+         *       ],
+         *       "existing": null,
+         *       "prefill": null
+         *     }
+         */
+        OAuthConsentRequest: {
+            oauthQuery: string;
+            clientId: string;
+            client: components["schemas"]["OAuthClientInfo"];
+            redirectUri: string;
+            loopback: boolean;
+            resource: string;
+            requestedScopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read" | "admin")[];
+            newScopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read" | "admin")[];
+            existing: components["schemas"]["Grant"] & (Record<string, never> | null);
+            prefill: components["schemas"]["GrantConstraints"] & (Record<string, never> | null);
+        };
+        /**
+         * @description Allow (`accept: true`, with the approved scopes, constraints and expiry or `sessionOnly`) or Deny (`accept: false`). `oauthQuery` is the signed query from `GET /oauth/consent`, unchanged.
+         * @example {
+         *       "accept": true,
+         *       "oauthQuery": "client_id=…&sig=…",
+         *       "scopes": [
+         *         "tasks:write"
+         *       ],
+         *       "constraints": {
+         *         "orgs": [
+         *           {
+         *             "orgId": "0199a1b2-0000-7000-8000-000000000001",
+         *             "read": "all",
+         *             "write": {
+         *               "groups": [
+         *                 "0199a1b2-0000-7000-8000-0000000000a1"
+         *               ]
+         *             }
+         *           }
+         *         ]
+         *       },
+         *       "expiresInDays": 90
+         *     }
+         */
+        OAuthConsentDecision: {
+            /** @enum {boolean} */
+            accept: true;
+            oauthQuery: string;
+            scopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read" | "admin")[];
+            constraints: {
+                orgs: "all" | {
+                    orgId: string;
+                    read: "all" | {
+                        groups: string[];
+                    };
+                    write: "none" | "all" | {
+                        groups: string[];
+                    };
+                }[];
+            };
+            expiresInDays?: number;
+            sessionOnly?: boolean;
+        } | {
+            /** @enum {boolean} */
+            accept: false;
+            oauthQuery: string;
+        };
+        /**
+         * @example {
+         *       "redirectTo": "https://claude.ai/api/mcp/auth_callback?code=…&state=…&iss=https%3A%2F%2Frooster.example.com%2Fapi%2Fauth"
+         *     }
+         */
+        OAuthConsentResult: {
+            redirectTo: string;
+        };
+        /**
+         * @example {
+         *       "id": "0199a1b2-0000-7000-8000-0000000000c1",
+         *       "providerId": "google",
+         *       "providerName": "Google",
+         *       "email": "ada@example.com",
+         *       "createdAt": 1767225600000
+         *     }
+         */
+        LinkedIdentity: {
+            id: string;
+            providerId: string;
+            providerName: string;
+            email: string | null;
+            createdAt: number;
         };
         /**
          * @example {
@@ -3398,7 +3591,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "oauth" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "created";
@@ -3408,7 +3601,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "oauth" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "renamed";
@@ -3421,7 +3614,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "oauth" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "due_changed";
@@ -3440,7 +3633,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "oauth" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "assigned";
@@ -3453,7 +3646,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "oauth" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "completed";
@@ -3463,7 +3656,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "oauth" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "reopened";
@@ -3473,7 +3666,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "oauth" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "description_edited";
@@ -3483,7 +3676,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "oauth" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "subtask_added";
@@ -3496,7 +3689,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "oauth" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "moved_parent";
@@ -3509,7 +3702,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "oauth" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "restored";
@@ -3519,7 +3712,7 @@ export interface components {
             taskId: string;
             actorId: string | null;
             /** @enum {string} */
-            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "import" | "system";
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "oauth" | "import" | "system";
             createdAt: number;
             /** @enum {string} */
             type: "attachment_added";
@@ -6475,7 +6668,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `admin_only_scope`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6585,7 +6778,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `admin_only_scope`. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -12016,6 +12209,340 @@ export interface operations {
             /** @description The server is shutting down; retry shortly. Codes: `unavailable`. */
             503: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getOAuthConsent: {
+        parameters: {
+            query: {
+                /** @description The query string the provider sent the browser to `/oauth/consent` with. */
+                oauth_query: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthConsentRequest"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    decideOAuthConsent: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OAuthConsentDecision"];
+            };
+        };
+        responses: {
+            /** @description Where to send the browser */
+            200: {
+                headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthConsentResult"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listIdentities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Identities, oldest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkedIdentity"][];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    unlinkIdentity: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
+            path: {
+                /** @description Identity ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unlinked */
+            204: {
+                headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicts with the current state. Codes: `last_identity`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {

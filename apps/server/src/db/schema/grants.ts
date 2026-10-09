@@ -33,6 +33,11 @@ export const accessGrant = sqliteTable(
      * revoking that grant leaves the PAT alone.
      */
     createdByGrantId: text('created_by_grant_id'),
+    /**
+     * P9 "This session only" (ADR 0041): an OAuth grant ends once its refresh token has gone
+     * unused this long. Null: no idle limit.
+     */
+    idleTimeoutMs: integer('idle_timeout_ms'),
   },
   (t) => [
     check('access_grant_kind', sql`kind IN ('pat','device','oauth')`),

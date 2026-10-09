@@ -1,4 +1,5 @@
 import {
+  ADMIN_SCOPE,
   canRead,
   canWrite,
   canWriteOrg,
@@ -45,6 +46,21 @@ const sessionOnly = () =>
 /** Settings, org administration, admin, export, tokens and push (11 §2.1). */
 export function requireBrowserSession(actor: Actor): void {
   if (actor.grant !== null) throw sessionOnly();
+}
+
+/**
+ * The admin routes (users, allowlist, backups, reindex; ADR 0041 §7): an instance admin, either
+ * in the browser or through a PAT or CLI device holding the `admin` capability. An OAuth app
+ * never qualifies. `actor.isAdmin` is computed per request from `ROOSTER_ADMIN_EMAILS`, so a
+ * demoted admin's tokens stop working at once.
+ */
+export function requireAdminAccess(actor: Actor): void {
+  if (actor.grant !== null) {
+    if (actor.grant.kind === 'oauth' || !hasScope(actor.grant.scopes, ADMIN_SCOPE)) {
+      throw forbiddenScope(ADMIN_SCOPE);
+    }
+  }
+  if (!actor.isAdmin) throw new AppError('forbidden', 403, 'Only instance admins can do that.');
 }
 
 export function requireScope(actor: Actor, scope: GrantScope): void {

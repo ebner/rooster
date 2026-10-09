@@ -17,6 +17,11 @@ export interface ActorGrant {
   constraints: GrantConstraints;
   /** `updated_at` of the grant: changes whenever its access is edited. */
   updatedAt: number;
+  /**
+   * P9, OAuth only: the protected resource the access token is bound to (11 §4.3). Activity
+   * records `via: 'mcp'` for `'mcp'` and `'oauth'` for `'api'` (11 §2.3).
+   */
+  resource?: 'mcp' | 'api';
 }
 
 /**

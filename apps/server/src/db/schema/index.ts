@@ -5,6 +5,15 @@ export { jobRun, pushSubscription } from './delivery.ts';
 export { accessGrant, apikey, deviceCode } from './grants.ts';
 export { idempotency } from './idempotency.ts';
 export { instanceSetting } from './instance-setting.ts';
+export {
+  oauthAccessToken,
+  oauthClient,
+  oauthClientAssertion,
+  oauthClientResource,
+  oauthConsent,
+  oauthRefreshToken,
+  oauthResource,
+} from './oauth.ts';
 export { invitation, inviteLink, member, organization, orgMemberPref } from './org.ts';
 export { tag, taskTag } from './tag.ts';
 export { placement, task, taskExpansion } from './task.ts';

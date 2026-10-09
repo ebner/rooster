@@ -19,6 +19,13 @@ const NON_STRICT_TABLES = new Set([
   'verification',
   'apikey',
   'deviceCode',
+  'oauthClient',
+  'oauthResource',
+  'oauthClientResource',
+  'oauthRefreshToken',
+  'oauthAccessToken',
+  'oauthConsent',
+  'oauthClientAssertion',
 ]);
 
 const here = dirname(fileURLToPath(import.meta.url));

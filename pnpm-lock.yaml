@@ -545,6 +545,9 @@ importers:
       '@react-email/render':
         specifier: 'catalog:'
         version: 2.1.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@rooster/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
       '@rooster/core':
         specifier: workspace:*
         version: link:../../packages/core
