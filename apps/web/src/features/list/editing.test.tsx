@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { ListTransportContext } from '../../data/list';
-import { createFixtureTransport } from '../../data/pipeline/fixture-transport';
+import { createFixtureTransport, type FixtureTask } from '../../data/pipeline/fixture-transport';
 import { queryKeys } from '../../data/query-keys';
 import { useListStore } from '../../state/list-store';
 import { useUndoStore } from '../../state/undo-store';
@@ -20,7 +20,7 @@ function KeymapRoot() {
   return null;
 }
 
-async function setup(tasks: Record<number, string[]> = { 1: ['Alpha', 'Beta'] }) {
+async function setup(tasks: Record<number, FixtureTask[]> = { 1: ['Alpha', 'Beta'] }) {
   const transport = createFixtureTransport({ userId, tasks });
   const sent: ListOp[] = [];
   const send = transport.send;
@@ -121,14 +121,24 @@ describe('editing model (02 §3.4–3.5)', () => {
     expect(titles()).toEqual(['Alpha', '[Beta]']);
   });
 
-  test('Backspace on an emptied task with unknown content keeps it and hints Tab+Delete', async () => {
-    const { sent } = await setup();
+  test('Backspace on an emptied task with a description keeps it and hints Tab+Delete', async () => {
+    const { sent } = await setup({ 1: [{ title: 'Alpha', description: 'Notes' }, 'Beta'] });
     editTitle('Alpha');
     type('');
     press('Backspace');
     expect(await screen.findByText('Use Tab+Delete to delete tasks with content')).toBeTruthy();
     expect(titles()).toEqual(['[]', 'Beta']);
     expect(sent).toEqual([]);
+  });
+
+  test('Backspace deletes an emptied loaded task that has no description', async () => {
+    const { sent } = await setup({ 1: ['Alpha', 'Beta'] });
+    editTitle('Beta');
+    type('');
+    press('Backspace');
+    await waitFor(() => expect(titles()).toEqual(['[Alpha]']));
+    expect(await screen.findByText('Task deleted')).toBeTruthy();
+    expect(sent.map((op) => op.kind)).toContain('task.delete');
   });
 
   test('a task created here and emptied is deleted by Backspace, with an undo toast', async () => {
