@@ -32,7 +32,6 @@ import { type RoosterServer, startServer } from './support/rooster-server.ts';
 
 describe('launchCommand', () => {
   const base = {
-    compiled: false,
     env: { PATH: '/usr/local/bin:/usr/bin' },
     platform: 'linux' as const,
     realpath: (p: string) => (p === '/usr/local/bin/rooster' ? '/opt/rooster/dist/rooster.mjs' : p),
@@ -52,7 +51,6 @@ describe('launchCommand', () => {
       launchCommand(
         {
           ...base,
-          compiled: true,
           execPath: '/dl/rooster-1.2.0-linux-x64',
           script: '/$bunfs/root/rooster-1.2.0-linux-x64',
         },
@@ -69,12 +67,31 @@ describe('launchCommand', () => {
     }
   });
 
-  it('a run from TypeScript sources (tsx) is refused rather than writing a command that fails', () => {
-    for (const script of ['/repo/apps/cli/src/main.ts', '/repo/x.mts', '/repo/x.tsx']) {
-      expect(() => launchCommand({ ...base, execPath: '/usr/bin/node', script }, 'agent')).toThrow(
-        SourceLaunchError,
-      );
+  it('a run from TypeScript sources (tsx, or Bun) is refused rather than writing a command that fails', () => {
+    for (const execPath of ['/usr/bin/node', '/home/a/.bun/bin/bun']) {
+      for (const script of ['/repo/apps/cli/src/main.ts', '/repo/x.mts', '/repo/x.tsx']) {
+        expect(() => launchCommand({ ...base, execPath, script }, 'agent')).toThrow(
+          SourceLaunchError,
+        );
+      }
     }
+  });
+
+  it('plain Bun running the bundled script keeps the script (Bun is not a compiled binary)', () => {
+    expect(
+      launchCommand(
+        {
+          ...base,
+          execPath: '/home/a/.bun/bin/bun',
+          script: '/repo/apps/cli/dist/rooster.mjs',
+          isExecutable: () => false,
+        },
+        'agent',
+      ),
+    ).toEqual({
+      command: '/home/a/.bun/bin/bun',
+      args: ['/repo/apps/cli/dist/rooster.mjs', 'mcp', '--profile', 'agent'],
+    });
   });
 
   it('an npm install is found on PATH by its real path', () => {
@@ -348,6 +365,85 @@ describe('writeFileAtomic', () => {
     ).toThrow(UnsafePathError);
     expect(readFileSync(file, 'utf8')).toBe('secret');
     expect(readdirSync(dirname(file))).toEqual(['config.json']);
+  });
+
+  it('cleanup after a swapped directory deletes nothing it cannot prove it created', () => {
+    const cfg = join(cli.home, 'cleanup', 'cfg');
+    const outside = join(cli.home, 'cleanup', 'outside');
+    mkdirSync(cfg, { recursive: true });
+    mkdirSync(outside, { recursive: true });
+    const file = join(cfg, 'mcp.json');
+    writeFileSync(file, '{"old":true}');
+    // Someone else's file with the very name this attempt's backup gets.
+    const unrelated = join(outside, 'mcp.json.19700101-000000.bak');
+    writeFileSync(unrelated, 'not ours');
+    const previous = readRegularFile(file);
+    let error: unknown;
+    try {
+      writeFileAtomic(file, '{"new":true}', {
+        previous,
+        newMode: 0o600,
+        backup: true,
+        now: 0,
+        beforeCommit: () => {
+          renameSync(cfg, `${cfg}-moved`);
+          symlinkSync(outside, cfg);
+        },
+      });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(UnsafePathError);
+    expect(readFileSync(unrelated, 'utf8')).toBe('not ours');
+    expect(readdirSync(outside)).toEqual(['mcp.json.19700101-000000.bak']);
+    // Its own backup and temp file stay in the moved folder, and the error lists them.
+    const moved = readdirSync(`${cfg}-moved`).sort();
+    expect(moved.filter((f) => f.endsWith('.bak'))).toEqual(['mcp.json.19700101-000000.bak']);
+    expect(moved.filter((f) => f.endsWith('.tmp'))).toHaveLength(1);
+    const leftovers = (error as UnsafePathError).leftovers;
+    expect(leftovers).toHaveLength(2);
+    expect(leftovers).toContain(join(cfg, 'mcp.json.19700101-000000.bak'));
+  });
+
+  it('a write that fails part-way removes the partial temp file', () => {
+    const file = join(cli.home, 'partial', 'config.json');
+    mkdirSync(dirname(file), { recursive: true });
+    const failing = (fd: number, b: Buffer, o: number, l: number) => {
+      if (o > 0) throw Object.assign(new Error('EFBIG'), { code: 'EFBIG' });
+      return writeSync(fd, b, o, Math.min(l, 4));
+    };
+    expect(() =>
+      writeFileAtomic(file, 'a long new content', {
+        previous: null,
+        newMode: 0o600,
+        backup: false,
+        now: 0,
+        write: failing,
+      }),
+    ).toThrow('EFBIG');
+    expect(readdirSync(dirname(file))).toEqual([]);
+  });
+
+  it('a backup that fails part-way is removed too, and the target is untouched', () => {
+    const file = join(cli.home, 'partial-backup', 'config.json');
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, 'original content');
+    const previous = readRegularFile(file);
+    const failing = (fd: number, b: Buffer, o: number, l: number) => {
+      if (o > 0) throw Object.assign(new Error('EFBIG'), { code: 'EFBIG' });
+      return writeSync(fd, b, o, Math.min(l, 4));
+    };
+    expect(() =>
+      writeFileAtomic(file, 'new', {
+        previous,
+        newMode: 0o600,
+        backup: true,
+        now: 0,
+        write: failing,
+      }),
+    ).toThrow('EFBIG');
+    expect(readdirSync(dirname(file))).toEqual(['config.json']);
+    expect(readFileSync(file, 'utf8')).toBe('original content');
   });
 
   it('noLinksBelow: a directory swapped for a link before the rename is caught', () => {

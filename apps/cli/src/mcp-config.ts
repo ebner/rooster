@@ -26,11 +26,10 @@ export interface LaunchContext {
   /** `process.execPath`: node, or the single-file binary itself. */
   execPath: string;
   /**
-   * Running as a Bun single-file binary (`process.versions.bun`), whatever the file is called
-   * (`rooster`, `rooster-1.2.0-linux-x64`, …).
+   * `process.argv[1]`: the script node (or Bun) runs. In a Bun single-file binary it is a path
+   * in Bun's virtual file system, which is how such a binary is recognised, whatever its file
+   * is called: `process.versions.bun` alone also exists when Bun runs an ordinary script.
    */
-  compiled: boolean;
-  /** `process.argv[1]`: the script node runs (absent in a compiled binary). */
   script: string | undefined;
   env: Readonly<Record<string, string | undefined>>;
   platform: NodeJS.Platform;
@@ -83,7 +82,7 @@ export function launchCommand(ctx: LaunchContext, profile: string): McpServerEnt
   const realpath = ctx.realpath ?? defaultRealpath;
   const isExecutable = ctx.isExecutable ?? defaultIsExecutable;
   const args = ['mcp', '--profile', profile];
-  if (ctx.compiled || (ctx.script !== undefined && BUNFS_RE.test(ctx.script))) {
+  if (ctx.script !== undefined && BUNFS_RE.test(ctx.script)) {
     return { command: ctx.execPath, args };
   }
   if (ctx.script !== undefined && SOURCE_RE.test(ctx.script))

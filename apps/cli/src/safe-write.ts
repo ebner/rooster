@@ -29,8 +29,14 @@ export class UnsafePathError extends Error {
   constructor(
     readonly path: string,
     readonly reason: UnsafeReason,
+    /**
+     * Files this attempt created but could not prove were still its own, in its own
+     * directory (the directory was moved or replaced): left in place, never deleted blindly.
+     */
+    public leftovers: readonly string[] = [],
+    options?: { cause?: unknown },
   ) {
-    super(`${reason}: ${path}`);
+    super(`${reason}: ${path}`, options);
     this.name = 'UnsafePathError';
   }
 }
@@ -110,6 +116,8 @@ export interface WriteOptions {
   noLinksBelow?: string;
   /** Tests: runs after the temp file is written and before the final checks. */
   beforeCommit?: () => void;
+  /** Tests: the `write(2)` used for the backup and the temp file. */
+  write?: Write;
 }
 
 export interface WriteResult {
@@ -152,19 +160,39 @@ export function writeAll(fd: number, data: Buffer, write: Write = writeSync): vo
   }
 }
 
-/** Creates `path` exclusively (never through a link) with exactly `mode`; returns its identity. */
-function writeExclusive(path: string, content: string, mode: number): Stats {
+/** A file this attempt created, by identity (taken right after the exclusive create). */
+interface Created {
+  path: string;
+  dev: number;
+  ino: number;
+}
+
+/**
+ * Creates `path` exclusively (never through a link) with exactly `mode` and writes `content`.
+ * The file is recorded in `created` as soon as it exists, before any byte is written, so a
+ * failed write or sync can still be cleaned up.
+ */
+function writeExclusive(
+  path: string,
+  content: string,
+  mode: number,
+  created: Created[],
+  write: Write | undefined,
+): Created {
   const fd = openSync(
     path,
     constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | NOFOLLOW,
     mode,
   );
   try {
+    const stat = fstatSync(fd);
+    const file = { path, dev: stat.dev, ino: stat.ino };
+    created.push(file);
     // The umask must not loosen or tighten what the file had.
     fchmodSync(fd, mode);
-    writeAll(fd, Buffer.from(content, 'utf8'));
+    writeAll(fd, Buffer.from(content, 'utf8'), write);
     fsyncSync(fd);
-    return fstatSync(fd);
+    return file;
   } finally {
     closeSync(fd);
   }
@@ -226,13 +254,36 @@ function checkPinned(pinned: readonly DirIdentity[], followLinks: boolean): void
   }
 }
 
-const unlinkQuietly = (path: string) => {
-  try {
-    unlinkSync(path);
-  } catch {
-    // Already gone or unreachable; the original error is what matters.
+/**
+ * Removes the files this attempt created, and only those: each one only while its directory
+ * is still the one it was created in (`dir`, by identity) and the path still names the very
+ * file created. Anything else stays where it is; the paths are returned so the error can say.
+ */
+function removeCreated(created: readonly Created[], dir: { dev: number; ino: number }): string[] {
+  const leftovers: string[] = [];
+  for (const file of created) {
+    const parent = statSync(dirname(file.path), { throwIfNoEntry: false });
+    const sameDir = parent !== undefined && parent.dev === dir.dev && parent.ino === dir.ino;
+    const self = lstatOrNull(file.path);
+    if (sameDir && self === null) continue;
+    if (
+      sameDir &&
+      self !== null &&
+      !self.isSymbolicLink() &&
+      self.dev === file.dev &&
+      self.ino === file.ino
+    ) {
+      try {
+        unlinkSync(file.path);
+        continue;
+      } catch {
+        // Reported below with the rest.
+      }
+    }
+    leftovers.push(file.path);
   }
-};
+  return leftovers;
+}
 
 /**
  * Replaces `path` with `content` atomically: a new temp file in the same directory (created
@@ -242,8 +293,11 @@ const unlinkQuietly = (path: string) => {
  * Nothing is written when, since `previous` was read, the target changed in any way (content,
  * mode, owner), appeared, or became a link; nor when a directory on the way was swapped (its
  * identity is pinned before the temp file is written and checked again just before the
- * rename), and a backup made for the attempt is removed again. Node has no `renameat`, so the
- * last check and the rename are two steps; the window between them is as small as it gets.
+ * rename). On any failure the files this attempt created (backup, temp) are removed, but only
+ * after proving by identity that they and their directory are still the ones created; what
+ * cannot be proven is left in place and listed in the error (`leftovers`). Node has no
+ * `renameat`, so the last check and the rename are two steps; the window between them is as
+ * small as it gets.
  */
 export function writeFileAtomic(path: string, content: string, options: WriteOptions): WriteResult {
   const dir = dirname(path);
@@ -266,23 +320,26 @@ export function writeFileAtomic(path: string, content: string, options: WriteOpt
   };
   checkAll();
 
+  // The directory every file of this attempt is created in, for the cleanup's check.
+  const home = statSync(dir);
+  const created: Created[] = [];
   let backup: string | null = null;
   const temp = join(dir, `.${basename(path)}.${process.pid}-${randomBytes(6).toString('hex')}.tmp`);
-  let tempWritten = false;
   try {
     if (options.backup && options.previous !== null && options.previous.text !== content) {
       for (let attempt = 0; backup === null; attempt++) {
         const candidate = `${path}.${stamp(options.now)}${attempt === 0 ? '' : `-${attempt}`}.bak`;
         try {
-          writeExclusive(candidate, options.previous.text, mode);
+          writeExclusive(candidate, options.previous.text, mode, created, options.write);
           backup = candidate;
         } catch (error) {
+          // Only an existing file (someone else's) is skipped; it was not created, so it is
+          // not in `created` and never touched.
           if ((error as NodeJS.ErrnoException).code !== 'EEXIST' || attempt >= 20) throw error;
         }
       }
     }
-    const written = writeExclusive(temp, content, mode);
-    tempWritten = true;
+    const written = writeExclusive(temp, content, mode, created, options.write);
     options.beforeCommit?.();
     checkAll();
     // The temp file must still be the one written, where it was written.
@@ -292,9 +349,13 @@ export function writeFileAtomic(path: string, content: string, options: WriteOpt
     }
     renameSync(temp, path);
   } catch (error) {
-    if (tempWritten) unlinkQuietly(temp);
-    if (backup !== null) unlinkQuietly(backup);
-    throw error;
+    const leftovers = removeCreated(created, home);
+    if (leftovers.length === 0) throw error;
+    if (error instanceof UnsafePathError) {
+      error.leftovers = leftovers;
+      throw error;
+    }
+    throw new UnsafePathError(path, 'changed', leftovers, { cause: error });
   }
   try {
     const dirFd = openSync(dir, constants.O_RDONLY);

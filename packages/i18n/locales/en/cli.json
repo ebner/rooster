@@ -421,7 +421,8 @@
         "json": "{path} isn’t valid JSON, so rooster left it alone. Fix it, or use --client print and add rooster by hand.",
         "shape": "{path} doesn’t have the expected shape (an object with mcpServers), so rooster left it alone. Use --client print and add rooster by hand."
       },
-      "fromSource": "Run from TypeScript sources ({script}), the agent’s client couldn’t start this rooster. Run setup with a built or installed rooster, e.g. node apps/cli/dist/rooster.mjs mcp setup."
+      "fromSource": "Run from TypeScript sources ({script}), the agent’s client couldn’t start this rooster. Run setup with a built or installed rooster, e.g. node apps/cli/dist/rooster.mjs mcp setup.",
+      "leftovers": "Files from this attempt were left where they were created, because their folder was moved or replaced meanwhile: {paths}"
     }
   },
   "skill": {

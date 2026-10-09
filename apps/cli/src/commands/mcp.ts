@@ -176,12 +176,18 @@ export async function writeClientConfig(
     });
     return { client, key, entry, file, status: merged.status, backup };
   } catch (error) {
-    if (error instanceof UnsafePathError) {
-      throw fail(`mcp.setup.unsafe.${error.reason}`, { path: error.path });
-    }
+    if (error instanceof UnsafePathError)
+      throw new CliError(EXIT.conflict, unsafePathMessage(error));
     if (error instanceof ConfigFormatError) throw fail(`mcp.setup.badConfig.${error.reason}`);
     throw error;
   }
+}
+
+/** Why a file was not written, plus any files the attempt had to leave behind. */
+export function unsafePathMessage(error: UnsafePathError): string {
+  const reason = t(`mcp.setup.unsafe.${error.reason}`, { path: error.path });
+  if (error.leftovers.length === 0) return reason;
+  return `${reason} ${t('mcp.setup.leftovers', { paths: error.leftovers.join(', ') })}`;
 }
 
 function reportSetup(runtime: Runtime, result: SetupResult): void {
@@ -286,7 +292,6 @@ function launchEntry(runtime: Runtime, profile: string): McpServerEntry {
     return launchCommand(
       {
         execPath: process.execPath,
-        compiled: typeof process.versions.bun === 'string',
         script: process.argv[1],
         env: runtime.io.env,
         platform: runtime.io.platform,

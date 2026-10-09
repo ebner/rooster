@@ -12,6 +12,7 @@ import {
   writeFileAtomic,
 } from '../safe-write.ts';
 import { CLI_VERSION } from '../version.ts';
+import { unsafePathMessage } from './mcp.ts';
 
 /** Where agents look for skills (11 §6.2): Claude's own folder, or the shared `.agents`. */
 export const SKILL_TARGETS = ['claude', 'agents'] as const;
@@ -116,10 +117,7 @@ const installCommand = defineCommand({
       );
     } catch (error) {
       if (error instanceof UnsafePathError) {
-        throw new CliError(
-          EXIT.conflict,
-          t(`mcp.setup.unsafe.${error.reason}`, { path: error.path }),
-        );
+        throw new CliError(EXIT.conflict, unsafePathMessage(error));
       }
       throw error;
     }
