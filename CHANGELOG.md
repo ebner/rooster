@@ -6,6 +6,15 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-09
+
+Collaboration, notification delivery and the command line (Phases 6 to 8).
+
+### Upgrade notes
+- Four migrations run on first start; the automatic "Before update" backup is written first, as for every version change.
+- Email is optional: set `ROOSTER_SMTP_URL` and `ROOSTER_MAIL_FROM` to send invites, notifications and the digest. Push keys are generated on first start unless `ROOSTER_VAPID_*` is set.
+- Personal access tokens and CLI logins are grant-based: Settings → Security → Connected apps lists them. `/api/auth` accepts only browser sessions.
+
 ### Added
 - **Collaboration in shared organisations (Phase 6):**
   - **Assignment:** assign a task with Tab+A or A, from the task pane, with `@name` when you type a new task, or for a whole selection. The task moves to the top of the other person's Inbox, and Undo puts it back where it was (ADR 0032).
@@ -40,10 +49,20 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 - Closing search (Esc) after opening it with the mouse no longer leaves a focus ring on the sidebar's Search item. When you do use the keyboard, the ring is now drawn inside the item, so its top edge is no longer cut off.
 - A task due at a time that happens twice when the clocks go back (such as 02:30 on 25 October in Sweden) now counts as due at the first of the two, whatever time zone the server runs in. Before, a server in UTC used the second one.
 
+### Security
+Phases 6 to 8 went through an additional independent security review, and everything it found is fixed (ADR 0040):
+- Token and CLI access is checked for every task a change touches (duplicates, subtasks, reassignments, restores and deletes), and reads that reference other tasks (notifications, live updates, activity, search) only show what the grant may read.
+- Retried requests (`Idempotency-Key`) only replay to the same credential; a new access token is never stored for replay.
+- Push subscriptions accept only canonical URLs of the known push services, and sign-out turns push off for that device.
+- The CLI only sends a login to the server it was created for, keeps one credential store per profile, never opens a browser or editor through a shell, and strips control characters from everything it prints.
+- Comment formatting runs in linear time on any input.
+
 ### Migrations
 - `0005_collab`: adds the `comment`, `activity`, `follower`, `notification` and `notification_pref` tables.
-- `0007_agent_access`: adds `access_grant`, the API key and device code tables, and a grant link on sessions.
 - `0006_delivery`: adds the `push_subscription` and `job_run` tables and an index for pending notification emails.
+- `0007_agent_access`: adds `access_grant`, the API key and device code tables, and a grant link on sessions.
+- `0008_grant_hardening`: drops stored replays that contained an access token, and makes the creators and assignees of existing shared tasks followers.
+- `0009_task_parent_index`: adds an index on `task.parent_id` covering deleted tasks.
 
 ## [1.1.0] - 2026-10-09
 
