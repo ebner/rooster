@@ -3,6 +3,7 @@ import { BubbleMenu } from '@tiptap/react/menus';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
+import { detectPlatform } from '../../lib/platform';
 import { Button } from '../../ui/button';
 import { overlayOffsetPx } from '../../ui/popover';
 import { editorExtensions } from './extensions';
@@ -111,6 +112,8 @@ export function MarkdownEditor({
     editorExtensions({
       placeholder: () => placeholderRef.current,
       taskCheckboxLabel: (text) => tRef.current('taskCheckbox', { text: text || '…' }),
+      linkOpenHint: () =>
+        tRef.current('link.openHint', { key: detectPlatform() === 'mac' ? '⌘' : 'Ctrl' }),
       onEscape: () => {
         const handler = latest.current.onEscape;
         if (!handler) return false;

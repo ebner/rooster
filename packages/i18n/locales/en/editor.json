@@ -21,6 +21,7 @@
     "apply": "Apply link",
     "remove": "Remove link",
     "open": "Open link",
+    "openHint": "{key}+click to open",
     "invalid": "That isn't a link"
   },
   "dev": {

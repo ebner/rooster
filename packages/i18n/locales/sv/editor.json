@@ -21,6 +21,7 @@
     "apply": "Lägg till länk",
     "remove": "Ta bort länk",
     "open": "Öppna länk",
+    "openHint": "{key}+klicka för att öppna",
     "invalid": "Det där är ingen länk"
   },
   "dev": {

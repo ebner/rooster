@@ -53,6 +53,11 @@
     text-decoration-thickness: 2px;
   }
 
+  /* Ctrl/⌘ held while editing: a click opens the link (LinkModClick in extensions.ts). */
+  [data-link-mod] .rooster-prose a {
+    cursor: pointer;
+  }
+
   .rooster-prose :where(strong) {
     font-weight: 600;
   }

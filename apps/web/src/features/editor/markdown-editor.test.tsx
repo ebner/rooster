@@ -229,6 +229,42 @@ describe('MarkdownEditor', () => {
     expect(link?.getAttribute('rel')).toBe('noopener noreferrer nofollow');
   });
 
+  test('while editing, Ctrl/⌘+click opens a link in a new tab; a plain click does not', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    const { dom } = setup({ value: 'See [docs](https://example.com)' });
+    const link = dom.querySelector('a') as HTMLAnchorElement;
+    const text = link.firstChild?.nodeType === Node.TEXT_NODE ? link : link.firstElementChild;
+    fireEvent.click(text as Element);
+    expect(open).not.toHaveBeenCalled();
+    fireEvent.click(text as Element, { ctrlKey: true });
+    fireEvent.click(text as Element, { metaKey: true });
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(open).toHaveBeenCalledWith('https://example.com', '_blank', 'noopener,noreferrer');
+    open.mockRestore();
+  });
+
+  test('links carry the open hint while editing, after their own title', () => {
+    const { dom } = setup({ value: 'See [docs](https://example.com "The docs") and https://x.test' });
+    const titles = [...dom.querySelectorAll('a')].map(
+      (a) => a.querySelector('[title]')?.getAttribute('title') ?? a.getAttribute('title'),
+    );
+    expect(titles).toEqual(['The docs\nCtrl+click to open', 'Ctrl+click to open']);
+  });
+
+  test('holding Ctrl marks the editor for the pointer cursor on links', () => {
+    const { dom } = setup({ value: 'See [docs](https://example.com)' });
+    const host = dom.parentElement as HTMLElement;
+    fireEvent.keyDown(window, { key: 'Control', ctrlKey: true });
+    expect(host.hasAttribute('data-link-mod')).toBe(true);
+    fireEvent.keyUp(window, { key: 'Control', ctrlKey: false });
+    expect(host.hasAttribute('data-link-mod')).toBe(false);
+  });
+
+  test('read-only links get no open hint (a plain click opens them)', () => {
+    const { dom } = setup({ value: 'See [docs](https://example.com)', readOnly: true });
+    expect(dom.querySelector('a [title], a[title]')).toBeNull();
+  });
+
   test('javascript: links are not rendered as links', () => {
     const { dom } = setup({ value: '[x](javascript:alert(1))' });
     expect(dom.querySelector('a[href^="javascript"]')).toBeNull();
