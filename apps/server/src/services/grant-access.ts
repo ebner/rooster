@@ -11,7 +11,14 @@ import { placement, task, taskGroup } from '../db/schema/index.ts';
 import type { PriorGroups } from '../events/bus.ts';
 import { AppError } from '../lib/errors.ts';
 import type { Actor, ActorGrant, Tx } from './context.ts';
-import { chunked, groupNotFound, type TaskRow, taskNotFound } from './list-access.ts';
+import {
+  chunked,
+  groupNotFound,
+  subtreeOf,
+  subtreePlacements,
+  type TaskRow,
+  taskNotFound,
+} from './list-access.ts';
 import { notFound } from './org-access.ts';
 
 /**
@@ -228,6 +235,17 @@ export function canReadNotification(
  * bare `['task']`/`['activity']` prefix (never for one that was not readable before); the inbox only with
  * `notifications:read`; org administration never.
  */
+/** Keys that need `tasks:read`. */
+const TASK_LEVEL_KEYS: ReadonlySet<string> = new Set([
+  'task',
+  'activity',
+  'my-list',
+  'everyone',
+  'tags',
+  'trash',
+  'org-members',
+]);
+
 export function visibleKeys(
   tx: Tx,
   actor: Actor,
@@ -247,6 +265,34 @@ export function visibleKeys(
     seen.add(id);
     out.push(key);
   };
+  // The tasks the keys name, loaded and judged in a few batched queries (an event about a
+  // big subtree names thousands).
+  // A grant reading the whole org reads any of its tasks: no lookups.
+  if (org !== null && canRead(grant.constraints, org, null)) {
+    for (const key of keys) {
+      if (key[0] === 'org-invites') continue;
+      if (key[0] === 'notifications' && !hasScope(grant.scopes, 'notifications:read')) continue;
+      if (!reads && TASK_LEVEL_KEYS.has(key[0] ?? '')) continue;
+      push(key);
+    }
+    return out;
+  }
+  const named = reads
+    ? [
+        ...new Set(
+          keys
+            .filter((k) => (k[0] === 'task' || k[0] === 'activity') && k[1] !== undefined)
+            .map((k) => k[1] as string),
+        ),
+      ]
+    : [];
+  const judged = taskGroupsOf(tx, actor.userId, named);
+  const orgOf = new Map([...judged].map(([id, e]) => [id, e.orgId]));
+  const groups = new Map([...judged].map(([id, e]) => [id, e.group]));
+  const readable = (id: string) => {
+    const orgId = orgOf.get(id);
+    return orgId !== undefined && canRead(grant.constraints, orgId, groups.get(id) ?? null);
+  };
   for (const key of keys) {
     switch (key[0]) {
       case 'task':
@@ -257,12 +303,7 @@ export function visibleKeys(
           push(key);
           break;
         }
-        const row = tx
-          .select({ id: task.id, parentId: task.parentId, orgId: task.orgId, title: task.title })
-          .from(task)
-          .where(eq(task.id, id))
-          .get();
-        if (row !== undefined && canReadTask(tx, actor, row)) {
+        if (readable(id)) {
           push(key);
           break;
         }
@@ -270,7 +311,7 @@ export function visibleKeys(
         // groups) is invalidated by the bare prefix, so a cached copy goes stale without
         // naming it. One it never could read is not news to it at all.
         const before = prior?.get(id);
-        const orgId = row?.orgId ?? org;
+        const orgId = orgOf.get(id) ?? org;
         if (
           before !== undefined &&
           orgId !== null &&
@@ -320,23 +361,10 @@ export function capturePriorGroups(tx: Tx, taskIds: readonly string[]): PriorGro
   };
   load(taskIds);
   const subtree = new Set(taskIds.filter((id) => parentOf.has(id)));
-  // Descendants, one query per level and chunk.
-  let frontier = [...subtree];
-  while (frontier.length > 0) {
-    const next: string[] = [];
-    for (const chunk of chunked(frontier)) {
-      for (const r of tx
-        .select({ id: task.id, parentId: task.parentId })
-        .from(task)
-        .where(inArray(task.parentId, chunk))
-        .all()) {
-        if (subtree.has(r.id)) continue;
-        subtree.add(r.id);
-        parentOf.set(r.id, r.parentId);
-        next.push(r.id);
-      }
-    }
-    frontier = next;
+  // Descendants: one recursive statement.
+  for (const r of subtreeOf(tx, [...subtree])) {
+    subtree.add(r.id);
+    parentOf.set(r.id, r.parentId);
   }
   // Ancestors above the roots.
   let up = [...new Set([...parentOf.values()])].filter(
@@ -349,15 +377,21 @@ export function capturePriorGroups(tx: Tx, taskIds: readonly string[]): PriorGro
       .filter((id): id is string => id !== null && !parentOf.has(id));
   }
   const placed = new Map<string, { userId: string; groupId: string }[]>();
-  for (const chunk of chunked([...parentOf.keys()])) {
+  const add = (p: { taskId: string; userId: string; groupId: string }) => {
+    const list = placed.get(p.taskId) ?? [];
+    list.push({ userId: p.userId, groupId: p.groupId });
+    placed.set(p.taskId, list);
+  };
+  // The subtree's placements in one recursive statement; the (few) ancestors' by ID.
+  for (const p of subtreePlacements(tx, taskIds)) add(p);
+  const above = [...parentOf.keys()].filter((id) => !subtree.has(id));
+  for (const chunk of chunked(above)) {
     for (const p of tx
       .select({ taskId: placement.taskId, userId: placement.userId, groupId: placement.groupId })
       .from(placement)
       .where(inArray(placement.taskId, chunk))
       .all()) {
-      const list = placed.get(p.taskId) ?? [];
-      list.push({ userId: p.userId, groupId: p.groupId });
-      placed.set(p.taskId, list);
+      add(p);
     }
   }
   const out = new Map<string, Map<string, string | null>>();
@@ -393,13 +427,89 @@ export function groupSnapshot(
   ids: readonly string[],
 ): Map<string, string | null> {
   const out = new Map<string, string | null>();
+  for (const [id, entry] of taskGroupsOf(tx, userId, ids)) out.set(id, entry.group);
+  return out;
+}
+
+/**
+ * Each task's org and grant group for `userId`. One statement for the tasks (the IDs travel
+ * as one JSON parameter), then one per ancestor level for tasks without a placement of their
+ * own; the nearest placed ancestor-or-self is resolved in memory.
+ */
+export function taskGroupsOf(
+  tx: Tx,
+  userId: string,
+  ids: readonly string[],
+): Map<string, { orgId: string; group: string | null }> {
+  const rows = new Map<
+    string,
+    { parentId: string | null; orgId: string; groupId: string | null }
+  >();
+  const fetch = (wanted: readonly string[]) => {
+    if (wanted.length === 0) return;
+    for (const r of tx.all<{
+      id: string;
+      parent_id: string | null;
+      org_id: string;
+      group_id: string | null;
+    }>(
+      sql`SELECT t.id, t.parent_id, t.org_id, p.group_id
+          FROM json_each(${JSON.stringify(wanted)}) j
+          JOIN task t ON t.id = j.value
+          LEFT JOIN placement p ON p.task_id = t.id AND p.user_id = ${userId}`,
+    )) {
+      rows.set(r.id, { parentId: r.parent_id, orgId: r.org_id, groupId: r.group_id });
+    }
+  };
+  fetch([...new Set(ids)]);
+  // Up the ancestors of tasks that have no placement of their own (a few levels at most).
+  for (let level = 0; level < 32; level++) {
+    const up = [
+      ...new Set(
+        [...rows.values()]
+          .filter((r) => r.groupId === null && r.parentId !== null && !rows.has(r.parentId))
+          .map((r) => r.parentId as string),
+      ),
+    ];
+    if (up.length === 0) break;
+    fetch(up);
+  }
+  const out = new Map<string, { orgId: string; group: string | null }>();
   for (const id of ids) {
-    const row = tx
-      .select({ id: task.id, parentId: task.parentId })
-      .from(task)
-      .where(eq(task.id, id))
-      .get();
-    if (row !== undefined) out.set(id, grantGroupOf(tx, userId, row));
+    const start = rows.get(id);
+    if (start === undefined) continue;
+    let group: string | null = null;
+    const seen = new Set<string>();
+    for (let at: string | null = id; at !== null && !seen.has(at); ) {
+      seen.add(at);
+      const r = rows.get(at);
+      if (r === undefined) break;
+      if (r.groupId !== null) {
+        group = r.groupId;
+        break;
+      }
+      at = r.parentId;
+    }
+    out.set(id, { orgId: start.orgId, group });
+  }
+  return out;
+}
+
+/**
+ * A task's and its direct children's grant groups (05 §4.1 reconciles exactly these): the
+ * task's own, and each child's own placement or else the task's. Two queries, whatever the
+ * number of children.
+ */
+export function familyGroups(tx: Tx, userId: string, taskId: string): Map<string, string | null> {
+  const own = groupSnapshot(tx, userId, [taskId]).get(taskId) ?? null;
+  const out = new Map<string, string | null>([[taskId, own]]);
+  for (const c of tx
+    .select({ id: task.id, groupId: placement.groupId })
+    .from(task)
+    .leftJoin(placement, and(eq(placement.taskId, task.id), eq(placement.userId, userId)))
+    .where(eq(task.parentId, taskId))
+    .all()) {
+    out.set(c.id, c.groupId ?? own);
   }
   return out;
 }
@@ -414,10 +524,10 @@ export function authorizeGroupMoves(
   actor: Actor,
   orgId: string,
   before: ReadonlyMap<string, string | null>,
-  options: { leaving?: string | null } = {},
+  options: { leaving?: string | null; after?: ReadonlyMap<string, string | null> } = {},
 ): void {
   if (actor.grant === null) return;
-  const after = groupSnapshot(tx, actor.userId, [...before.keys()]);
+  const after = options.after ?? groupSnapshot(tx, actor.userId, [...before.keys()]);
   for (const [id, from] of before) {
     const to = after.get(id) ?? null;
     if (to === from) continue;

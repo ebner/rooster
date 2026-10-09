@@ -2,7 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { member, organization, placement, task } from '../db/schema/index.ts';
 import type { Audience, QueryKey } from '../events/bus.ts';
 import type { Tx } from './context.ts';
-import { chunked } from './list-access.ts';
+import { chunked, subtreeOf, subtreePlacements } from './list-access.ts';
 
 /** The query-key prefixes of the SSE contract (`@rooster/core/schemas/events.ts`). */
 export const qk = {
@@ -84,26 +84,13 @@ export function taskReach(tx: Tx, taskIds: readonly string[]): TaskReach {
     }
     frontier = parents;
   }
-  // Descendants, any state.
-  frontier = [...taskIds];
-  while (frontier.length > 0) {
-    const children: string[] = [];
-    for (const chunk of chunked(frontier)) {
-      for (const r of tx
-        .select({ id: task.id })
-        .from(task)
-        .where(inArray(task.parentId, chunk))
-        .all()) {
-        if (!family.has(r.id)) {
-          family.add(r.id);
-          children.push(r.id);
-        }
-      }
-    }
-    frontier = children;
-  }
+  // Descendants (any state) and the list users of the whole family: recursive statements,
+  // so nothing scales an IN list with the subtree.
+  const ancestors = [...family].filter((id) => !taskIds.includes(id));
+  for (const r of subtreeOf(tx, taskIds)) family.add(r.id);
   const listUsers = new Set<string>();
-  for (const chunk of chunked([...family])) {
+  for (const p of subtreePlacements(tx, taskIds)) listUsers.add(p.userId);
+  for (const chunk of chunked(ancestors)) {
     for (const r of tx
       .select({ userId: placement.userId })
       .from(placement)

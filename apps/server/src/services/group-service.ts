@@ -23,6 +23,7 @@ import {
 import { qk, selfAudience, taskAudiences, taskReach } from './event-audience.ts';
 import { authorizeOrgWide, requireScope } from './grant-access.ts';
 import {
+  chunked,
   clockAllows,
   descendantsOf,
   type GroupRow,
@@ -348,10 +349,13 @@ export class GroupService {
         .map((r) => r.id);
       const all = [...ids, ...descendantsOf(tx, ids, { deletedAt })];
       if (all.length > 0) {
-        tx.update(task)
-          .set({ deletedAt: null, deletedBy: null, updatedAt: now })
-          .where(inArray(task.id, all))
-          .run();
+        // Chunked: a group may hold more tasks than SQLite takes bound parameters.
+        for (const chunk of chunked(all)) {
+          tx.update(task)
+            .set({ deletedAt: null, deletedBy: null, updatedAt: now })
+            .where(inArray(task.id, chunk))
+            .run();
+        }
         indexTasks(tx, all);
       }
       this.emit(tx, actor, 'group.restored', group, ids);

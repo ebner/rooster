@@ -376,30 +376,77 @@ export function ancestorsOf(tx: Tx, row: Pick<TaskRow, 'id' | 'parentId'>): Task
   return out;
 }
 
+/** A row of a subtree walk: `depth` 0 for the roots. */
+export interface SubtreeRow {
+  id: string;
+  parentId: string | null;
+  depth: number;
+}
+
+/** Subtasks nest at most a few levels; the walk stops well past that, cycles or not. */
+const SUBTREE_DEPTH_GUARD = 32;
+
+/**
+ * Every descendant of `rootIds` (deleted ones included) with the roots, in one recursive
+ * statement per chunk of roots over the full `task(parent_id)` index: no IN list grows with
+ * the subtree.
+ */
+export function subtreeOf(tx: Tx, rootIds: readonly string[]): SubtreeRow[] {
+  const out: SubtreeRow[] = [];
+  const seen = new Set<string>();
+  for (const chunk of chunked([...new Set(rootIds)])) {
+    const roots = sql.join(
+      chunk.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    for (const r of tx.all<{ id: string; parent_id: string | null; depth: number }>(
+      sql`WITH RECURSIVE d(id, parent_id, depth) AS (
+            SELECT id, parent_id, 0 FROM task WHERE id IN (${roots})
+            UNION ALL
+            SELECT c.id, c.parent_id, d.depth + 1 FROM task c JOIN d ON c.parent_id = d.id
+            WHERE d.depth < ${SUBTREE_DEPTH_GUARD}
+          ) SELECT id, parent_id, depth FROM d`,
+    )) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      out.push({ id: r.id, parentId: r.parent_id, depth: r.depth });
+    }
+  }
+  return out;
+}
+
+/**
+ * The placements (any user) of `rootIds` and all their descendants, joined in the same
+ * recursive statement as `subtreeOf`.
+ */
+export function subtreePlacements(
+  tx: Tx,
+  rootIds: readonly string[],
+): { taskId: string; userId: string; groupId: string }[] {
+  const out: { taskId: string; userId: string; groupId: string }[] = [];
+  for (const chunk of chunked([...new Set(rootIds)])) {
+    const roots = sql.join(
+      chunk.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    out.push(
+      ...tx.all<{ taskId: string; userId: string; groupId: string }>(
+        sql`WITH RECURSIVE d(id, depth) AS (
+              SELECT id, 0 FROM task WHERE id IN (${roots})
+              UNION
+              SELECT c.id, d.depth + 1 FROM task c JOIN d ON c.parent_id = d.id
+              WHERE d.depth < ${SUBTREE_DEPTH_GUARD}
+            ) SELECT p.task_id AS taskId, p.user_id AS userId, p.group_id AS groupId
+              FROM placement p JOIN d ON p.task_id = d.id`,
+      ),
+    );
+  }
+  return out;
+}
+
 /** Levels of descendants below `id` (deleted ones included, they may come back): 0 = a leaf. */
 export function subtreeHeight(tx: Tx, id: string): number {
-  let height = 0;
-  let frontier = [id];
-  const seen = new Set(frontier);
-  while (frontier.length > 0) {
-    const next: string[] = [];
-    for (const chunk of chunked(frontier)) {
-      for (const c of tx
-        .select({ id: task.id })
-        .from(task)
-        .where(inArray(task.parentId, chunk))
-        .all()) {
-        if (!seen.has(c.id)) {
-          seen.add(c.id);
-          next.push(c.id);
-        }
-      }
-    }
-    if (next.length === 0) break;
-    height++;
-    frontier = next;
-  }
-  return height;
+  return subtreeOf(tx, [id]).reduce((max, r) => Math.max(max, r.depth), 0);
 }
 
 /**

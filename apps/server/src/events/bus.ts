@@ -101,16 +101,17 @@ export class EventBus {
 
   constructor(private readonly logger?: Logger) {}
 
-  /** Set by the SSE hub: whether a grant's stream reaching `org` is open (P8). */
+  /** Set by the SSE hub: whether a stream of a grant with group-limited read in `org` is open. */
   setGrantStreamProbe(probe: ((org: string) => boolean) | null): void {
     this.grantStreamProbe = probe;
   }
 
   /**
-   * Whether an open grant stream reaches `org`. Services capture `priorGroups` only then:
-   * nobody else reads them.
+   * Whether an open stream belongs to a grant that reads only some groups of `org`. Services
+   * capture `priorGroups` only then: nobody else needs them (a grant reading the whole org
+   * keeps reading a task wherever it moves).
    */
-  hasGrantStream(org: string): boolean {
+  hasRestrictedGrantStream(org: string): boolean {
     return this.grantStreamProbe?.(org) ?? false;
   }
 

@@ -756,15 +756,18 @@ describe('review round 5', () => {
     };
     timedMove(today.id);
     expect(timedMove(prio.id)).toBeLessThan(20);
-    const reader = await pat(owner, ['tasks:read']);
+    // A grant reading only Prio: its stream needs the prior-group snapshot.
+    const reader = await pat(owner, ['tasks:read'], {
+      orgs: [{ orgId: parent.orgId, read: { groups: [prio.id] }, write: 'none' }],
+    });
     const stream = openStream(ctx, await actorOf(ctx, reader.token));
-    expect(ctx.app.services.events.hasGrantStream(parent.orgId)).toBe(true);
+    expect(ctx.app.services.events.hasRestrictedGrantStream(parent.orgId)).toBe(true);
     timedMove(today.id);
     expect(timedMove(prio.id)).toBeLessThan(20);
     // A reorder inside the group takes no snapshot at all.
     expect(timedMove(prio.id)).toBeLessThan(20);
     stream.close();
-    expect(ctx.app.services.events.hasGrantStream(parent.orgId)).toBe(false);
+    expect(ctx.app.services.events.hasRestrictedGrantStream(parent.orgId)).toBe(false);
   });
 });
 
@@ -857,4 +860,100 @@ describe('review round 5 (focused review)', () => {
     stream.close();
     // Deleting and restoring 33k tasks reindexes them all: seconds, not a timeout.
   }, 60_000);
+});
+
+describe('review round 6 (focused review)', () => {
+  it('G1 deleting and restoring a group with more than 33,000 tasks works (bounded IN lists)', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const created = await owner.ok<{ group: { id: string; orgId: string } }>(
+      'POST',
+      '/api/v1/orgs/personal/groups',
+      { name: 'Big' },
+      201,
+    );
+    const { id: groupId, orgId } = created.group;
+    const insert = ctx.db.sqlite.prepare(
+      "INSERT INTO task (id, org_id, title, assignee_id, created_by, created_at, updated_at) VALUES (?, ?, 'item', ?, ?, 0, 0)",
+    );
+    const place = ctx.db.sqlite.prepare(
+      'INSERT INTO placement (task_id, user_id, org_id, group_id, position, updated_at) VALUES (?, ?, ?, ?, ?, 0)',
+    );
+    const many = 33_100;
+    ctx.db.sqlite.transaction(() => {
+      for (let i = 0; i < many; i++) {
+        const id = `0199aaaa-0000-7000-8000-${i.toString(16).padStart(12, '0')}`;
+        insert.run(id, orgId, owner.userId, owner.userId);
+        place.run(id, owner.userId, orgId, groupId, `a${i.toString(36).padStart(4, '0')}`);
+      }
+    })();
+    const { groups } = ctx.app.services;
+    groups.remove(owner.actor, groupId, { deleteTasks: true }, meta(Date.now()));
+    const deleted = () =>
+      (
+        ctx.db.sqlite
+          .prepare('SELECT count(*) AS n FROM task WHERE deleted_at IS NOT NULL')
+          .get() as { n: number }
+      ).n;
+    expect(deleted()).toBe(many);
+    groups.restore(owner.actor, groupId, meta(Date.now() + 1));
+    expect(deleted()).toBe(0);
+  }, 60_000);
+
+  it('P1 re-parenting a task with 2,000 children: under 20 ms, under 50 ms with a restricted grant stream open', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const prio = await groupNamed(owner, 'Prio');
+    const make = (title: string) =>
+      owner.ok<Task>('POST', '/api/v1/orgs/personal/tasks', { title, groupId: prio.id }, 201);
+    const parent = await make('Big');
+    const targetA = await make('A');
+    const targetB = await make('B');
+    const insert = ctx.db.sqlite.prepare(
+      "INSERT INTO task (id, org_id, parent_id, subtask_position, title, assignee_id, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, 'sub', ?, ?, 0, 0)",
+    );
+    ctx.db.sqlite.transaction(() => {
+      for (let i = 0; i < 2_000; i++) {
+        insert.run(
+          `0199aaaa-0000-7000-8000-${i.toString(16).padStart(12, '0')}`,
+          parent.orgId,
+          parent.id,
+          `a${i.toString(36).padStart(4, '0')}`,
+          owner.userId,
+          owner.userId,
+        );
+      }
+    })();
+    const actor = await actorOf(ctx, (await pat(owner, ALL)).token);
+    const watcher = await pat(owner, ['tasks:read'], {
+      orgs: [{ orgId: parent.orgId, read: { groups: [prio.id] }, write: 'none' }],
+    });
+    const stream = openStream(ctx, await actorOf(ctx, watcher.token));
+    const { tasks } = ctx.app.services;
+    let edit = Date.now();
+    const timed = (parentId: string) => {
+      edit += 1;
+      const started = performance.now();
+      tasks.patch(actor, parent.id, { parentId }, meta(edit));
+      return performance.now() - started;
+    };
+    const browserTimed = (parentId: string) => {
+      edit += 1;
+      const started = performance.now();
+      tasks.patch(owner.actor, parent.id, { parentId }, meta(edit));
+      return performance.now() - started;
+    };
+    // The best of a few runs after a warm-up, alternating targets so each is a real move.
+    const best = (run: (parentId: string) => number) => {
+      run(targetA.id);
+      return Math.min(run(targetB.id), run(targetA.id), run(targetB.id));
+    };
+    // A stream of a grant reading only Prio: the prior-group snapshot and the per-key filter
+    // both run over the 2,000 subtasks.
+    expect(best(timed)).toBeLessThan(50);
+    stream.close();
+    // No such stream: the acting grant's own checks only, and the browser.
+    expect(best(timed)).toBeLessThan(20);
+    expect(best(browserTimed)).toBeLessThan(20);
+  });
 });

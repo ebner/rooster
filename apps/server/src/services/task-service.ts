@@ -99,7 +99,7 @@ import {
   authorizeTaskWrite,
   canReadTask,
   capturePriorGroups,
-  childIds,
+  familyGroups,
   grantGroupOf,
   grantReachesOrg,
   groupReadFilter,
@@ -302,11 +302,13 @@ export class TaskService {
   }
 
   /**
-   * The grant groups of `taskIds` before a change (grant SSE, P8), or nothing when no grant
-   * stream reaching the org is open: only those streams read it.
+   * The grant groups of `taskIds` before a change (grant SSE, P8), or nothing when no stream
+   * of a grant reading only some groups of the org is open: only those streams need it.
    */
   private priorsFor(tx: Tx, orgId: string, taskIds: readonly string[]): PriorGroups | undefined {
-    return this.deps.events.hasGrantStream(orgId) ? capturePriorGroups(tx, taskIds) : undefined;
+    return this.deps.events.hasRestrictedGrantStream(orgId)
+      ? capturePriorGroups(tx, taskIds)
+      : undefined;
   }
 
   /** A change only the actor sees: their own placements or expansions. */
@@ -762,14 +764,12 @@ export class TaskService {
     const ignoredFields: string[] = [];
     let applied = false;
     const reassigning = input.assigneeId !== undefined && input.assigneeId !== row.assigneeId;
-    // Grant actors: where the task and its direct children sit now, to check every move a
-    // re-parent or reassignment causes (05 §4.1 reconciles both).
-    const groupsBefore =
-      actor.grant === null
-        ? null
-        : groupSnapshot(tx, actor.userId, [row.id, ...childIds(tx, row.id)]);
     const structural =
       (input.parentId !== undefined && input.parentId !== row.parentId) || reassigning;
+    // Grant actors: where the task and its direct children sit now, to check every move a
+    // re-parent or reassignment causes (05 §4.1 reconciles both). Nothing else moves them.
+    const groupsBefore =
+      actor.grant === null || !structural ? null : familyGroups(tx, actor.userId, row.id);
     const before = structural ? taskReach(tx, [row.id]) : undefined;
     const priors = structural ? this.priorsFor(tx, row.orgId, [row.id]) : undefined;
     const apply = (key: string, fields: string[], set: () => void) => {
@@ -843,6 +843,7 @@ export class TaskService {
     // placement before the change.
     if (groupsBefore !== null && (reparented || reassigned)) {
       authorizeGroupMoves(tx, actor, row.orgId, groupsBefore, {
+        after: familyGroups(tx, actor.userId, row.id),
         leaving: reassigned && row.assigneeId !== actor.userId ? row.id : null,
       });
     }

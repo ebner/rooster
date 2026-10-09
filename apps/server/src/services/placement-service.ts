@@ -2,7 +2,7 @@ import type { OrderingIntent } from '@rooster/core/schemas';
 import { and, eq, inArray } from 'drizzle-orm';
 import { placement, task } from '../db/schema/index.ts';
 import type { ServiceDeps, Tx } from './context.ts';
-import { type GroupRow, inboxOf, placementDomain } from './list-access.ts';
+import { chunked, type GroupRow, inboxOf, placementDomain } from './list-access.ts';
 import type { OrderingService, OrderTarget } from './ordering-service.ts';
 import type { MemberRemovalStep } from './org-service.ts';
 
@@ -70,14 +70,72 @@ export class PlacementService {
    */
   reconcilePlacements(tx: Tx, taskIds: readonly string[], target?: PlacementTarget): void {
     if (taskIds.length === 0) return;
-    const children = tx
-      .select({ id: task.id })
-      .from(task)
-      .where(inArray(task.parentId, [...taskIds]))
-      .all()
-      .map((r) => r.id);
-    const ids = [...new Set([...taskIds, ...children])];
-    for (const id of ids) this.reconcileOne(tx, id, target);
+    // Batched pre-check: most tasks (a big subtree's children) are already right, and only
+    // the rest go through the per-task path. The tasks and their placements, then each
+    // chunk's children joined with theirs: no IN list grows with the number of children.
+    const rows = new Map<string, { assigneeId: string | null; parentId: string | null }>();
+    const placedFor = new Map<string, string>();
+    for (const chunk of chunked([...new Set(taskIds)])) {
+      for (const r of tx
+        .select({
+          id: task.id,
+          assigneeId: task.assigneeId,
+          parentId: task.parentId,
+          placedFor: placement.userId,
+        })
+        .from(task)
+        .leftJoin(placement, eq(placement.taskId, task.id))
+        .where(inArray(task.id, chunk))
+        .all()) {
+        rows.set(r.id, { assigneeId: r.assigneeId, parentId: r.parentId });
+        if (r.placedFor !== null) placedFor.set(r.id, r.placedFor);
+      }
+      for (const r of tx
+        .select({
+          id: task.id,
+          assigneeId: task.assigneeId,
+          parentId: task.parentId,
+          placedFor: placement.userId,
+        })
+        .from(task)
+        .leftJoin(placement, eq(placement.taskId, task.id))
+        .where(inArray(task.parentId, chunk))
+        .all()) {
+        rows.set(r.id, { assigneeId: r.assigneeId, parentId: r.parentId });
+        if (r.placedFor !== null) placedFor.set(r.id, r.placedFor);
+      }
+    }
+    const ids = [...rows.keys()];
+    const missingParents = [
+      ...new Set(
+        [...rows.values()]
+          .map((r) => r.parentId)
+          .filter((p): p is string => p !== null && !rows.has(p)),
+      ),
+    ];
+    const parentAssignee = new Map<string, string | null>(
+      [...rows].map(([id, r]) => [id, r.assigneeId]),
+    );
+    for (const chunk of chunked(missingParents)) {
+      for (const r of tx
+        .select({ id: task.id, assigneeId: task.assigneeId })
+        .from(task)
+        .where(inArray(task.id, chunk))
+        .all()) {
+        parentAssignee.set(r.id, r.assigneeId);
+      }
+    }
+    for (const id of ids) {
+      const row = rows.get(id);
+      if (row === undefined) continue;
+      const needs =
+        row.assigneeId !== null &&
+        (row.parentId === null || parentAssignee.get(row.parentId) !== row.assigneeId);
+      const existing = placedFor.get(id);
+      if (!needs && existing === undefined) continue;
+      if (needs && existing === row.assigneeId) continue;
+      this.reconcileOne(tx, id, target);
+    }
   }
 
   private reconcileOne(tx: Tx, taskId: string, target: PlacementTarget | undefined): void {
