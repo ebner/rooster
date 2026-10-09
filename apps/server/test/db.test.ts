@@ -10,6 +10,27 @@ import { createLogger } from '../src/lib/logger.ts';
 import { createTestDb, tempDir } from './helpers.ts';
 
 const silent = createLogger('silent');
+const V1 = '1.0.0';
+
+function backupFiles(): string[] {
+  return readdirSync(join(dir.path, 'backups'));
+}
+
+function storedBootVersion(): string | undefined {
+  const db = new Database(join(dir.path, 'rooster.db'), { readonly: true });
+  try {
+    const row = db
+      .prepare("SELECT value FROM instance_setting WHERE key = 'last_boot_version'")
+      .get() as { value: string } | undefined;
+    return row?.value;
+  } finally {
+    db.close();
+  }
+}
+
+function boot(version: string): void {
+  prepareDatabase(dir.path, silent, version).db.close();
+}
 
 let dir: ReturnType<typeof tempDir>;
 beforeEach(() => {
@@ -145,7 +166,7 @@ describe('backupDatabase', () => {
 
 describe('prepareDatabase', () => {
   it('creates the data layout, migrates and generates a stable instance ID', () => {
-    const first = prepareDatabase(dir.path, silent);
+    const first = prepareDatabase(dir.path, silent, V1);
     first.db.close();
     expect(existsSync(join(dir.path, 'rooster.db'))).toBe(true);
     expect(existsSync(join(dir.path, 'backups'))).toBe(true);
@@ -153,7 +174,7 @@ describe('prepareDatabase', () => {
     // A fresh database has nothing worth backing up.
     expect(readdirSync(join(dir.path, 'backups'))).toEqual([]);
 
-    const second = prepareDatabase(dir.path, silent);
+    const second = prepareDatabase(dir.path, silent, V1);
     second.db.close();
     expect(second.instanceId).toBe(first.instanceId);
     expect(first.instanceId).toMatch(/^[0-9a-f-]{36}$/);
@@ -162,7 +183,7 @@ describe('prepareDatabase', () => {
 
   it('creates the data, backup and attachment directories private (0700)', () => {
     const root = join(dir.path, 'fresh');
-    const { db } = prepareDatabase(root, silent);
+    const { db } = prepareDatabase(root, silent, V1);
     db.close();
     for (const sub of ['', 'backups', 'attachments']) {
       expect(statSync(join(root, sub)).mode & 0o777).toBe(0o700);
@@ -175,7 +196,7 @@ describe('prepareDatabase', () => {
     legacy.exec('CREATE TABLE legacy (x TEXT)');
     legacy.close();
 
-    const { db } = prepareDatabase(dir.path, silent);
+    const { db } = prepareDatabase(dir.path, silent, V1);
     db.close();
     const backups = readdirSync(join(dir.path, 'backups'));
     expect(backups).toHaveLength(1);
@@ -187,5 +208,45 @@ describe('prepareDatabase', () => {
     } finally {
       copy.close();
     }
+    expect(storedBootVersion()).toBe(V1);
+  });
+
+  it('records the version on a fresh database without taking a backup', () => {
+    boot(V1);
+    expect(backupFiles()).toEqual([]);
+    expect(storedBootVersion()).toBe(V1);
+  });
+
+  it('takes no backup when the same version boots again', () => {
+    boot(V1);
+    boot(V1);
+    boot(V1);
+    expect(backupFiles()).toEqual([]);
+  });
+
+  it('backs up before a version change without migrations, in either direction', () => {
+    boot(V1);
+    boot('1.0.1');
+    expect(backupFiles()).toHaveLength(1);
+    expect(backupFiles()[0]).toMatch(/^pre-migrate-\d{4}-\d{2}-\d{2}T[\d-]+Z\.db$/);
+    expect(storedBootVersion()).toBe('1.0.1');
+
+    boot('1.0.1');
+    expect(backupFiles()).toHaveLength(1);
+
+    boot(V1);
+    expect(backupFiles()).toHaveLength(2);
+    expect(storedBootVersion()).toBe(V1);
+  });
+
+  it('backs up an existing database that has no recorded version yet', () => {
+    boot(V1);
+    const raw = new Database(join(dir.path, 'rooster.db'));
+    raw.prepare("DELETE FROM instance_setting WHERE key = 'last_boot_version'").run();
+    raw.close();
+
+    boot(V1);
+    expect(backupFiles()).toHaveLength(1);
+    expect(storedBootVersion()).toBe(V1);
   });
 });

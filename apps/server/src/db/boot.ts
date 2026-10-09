@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Logger } from '../lib/logger.ts';
 import { type AppDb, openDb } from './client.ts';
-import { ensureInstanceId } from './instance.ts';
+import { ensureInstanceId, readLastBootVersion, recordBootVersion } from './instance.ts';
 import { backupDatabase, hasPendingMigrations, MIGRATIONS_DIR, runMigrations } from './migrate.ts';
 
 /**
@@ -33,11 +33,13 @@ function timestampForFile(date: Date): string {
 
 /**
  * Boot steps 2–5 of docs/spec/08-operations.md §2: ensure the directories, back up an
- * existing database when migrations are pending, migrate, and bootstrap instance settings.
+ * existing database before an update (pending migrations or a different server version than
+ * the one that last booted it), migrate, and bootstrap instance settings.
  */
 export function prepareDatabase(
   dataDir: string,
   logger: Logger,
+  version: string,
   migrationsDir: string = MIGRATIONS_DIR,
 ): { db: AppDb; instanceId: string } {
   const paths = dataPaths(dataDir);
@@ -47,16 +49,25 @@ export function prepareDatabase(
   const existed = existsSync(paths.dbFile) && statSync(paths.dbFile).size > 0;
   const db = openDb(paths.dbFile);
   try {
-    if (hasPendingMigrations(db, migrationsDir)) {
-      if (existed) {
-        const dest = join(paths.backupsDir, `pre-migrate-${timestampForFile(new Date())}.db`);
-        backupDatabase(db, dest);
-        logger.info({ backup: dest }, 'pre-migration backup written');
-      }
+    const migrations = hasPendingMigrations(db, migrationsDir);
+    // A missing version on an existing database (booted before this was recorded) counts as
+    // changed, so the first boot that records it also takes a backup.
+    const from = existed ? readLastBootVersion(db) : undefined;
+    if (existed && (migrations || from !== version)) {
+      // Keeps the `pre-migrate` prefix: BackupService lists and rotates it as "Before update".
+      const backup = join(paths.backupsDir, `pre-migrate-${timestampForFile(new Date())}.db`);
+      backupDatabase(db, backup);
+      logger.info(
+        { backup, from: from ?? null, to: version, migrations },
+        'pre-update backup written',
+      );
+    }
+    if (migrations) {
       runMigrations(db, migrationsDir);
       logger.info('database migrations applied');
     }
     const instanceId = ensureInstanceId(db);
+    recordBootVersion(db, version);
     return { db, instanceId };
   } catch (err) {
     db.close();

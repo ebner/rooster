@@ -276,7 +276,7 @@ CREATE TABLE allowlist_entry (
 ) STRICT;
 
 CREATE TABLE instance_setting (
-  key   TEXT PRIMARY KEY,                 -- e.g. 'vapid_public', 'vapid_private', 'instance_id'
+  key   TEXT PRIMARY KEY,                 -- e.g. 'vapid_public', 'vapid_private', 'instance_id', 'last_boot_version'
   value TEXT NOT NULL
 ) STRICT;
 

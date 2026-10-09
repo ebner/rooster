@@ -40,7 +40,7 @@
   },
   "backups": {
     "title": "Säkerhetskopior",
-    "description": "Ögonblicksbilder varje natt: de senaste 7 dagliga och 4 veckovisa sparas, plus manuella och kopior före uppdateringar.",
+    "description": "Ögonblicksbilder varje natt: de senaste 7 dagliga och 4 veckovisa sparas, plus manuella kopior och en kopia före varje uppdatering.",
     "backUpNow": "Säkerhetskopiera nu",
     "created": "Säkerhetskopian skapades",
     "failed": "Det gick inte att skapa en säkerhetskopia. Försök igen.",

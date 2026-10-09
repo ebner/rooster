@@ -34,7 +34,7 @@ The volume **must be a local filesystem**. NFS and SMB break SQLite WAL locking.
 On boot, the server:
 1. Validates the config.
 2. Ensures the directories exist.
-3. Makes an **automatic pre-migration backup** if pending migrations exist.
+3. Makes an **automatic pre-update backup** (`backups/pre-migrate-<ts>.db`) of an existing database if migrations are pending or the server version differs from the one that last booted it (`last_boot_version` in `instance_setting`, written after a successful migration; a database without it counts as changed). Upgrades and downgrades are both covered; a fresh database is not backed up. These copies are rotated like manual backups (the newest 10 are kept).
 4. Applies the migrations.
 5. Generates VAPID keys and the instance ID on first boot (stored in `instance_setting`).
 6. Starts listening.
@@ -151,8 +151,8 @@ The required claims are `email`, `email_verified` and `name`, with `picture` opt
 ## 8. Upgrades & versioning
 
 - SemVer, with images tagged `x.y.z`, `x.y` and `x`. Pin the major version (`:1`) in compose.
-- Migrations are forward-only and applied automatically. A pre-migration backup is taken automatically, as described in §2.
-- **Downgrading** requires restoring the pre-migration backup. This is documented in `CHANGELOG.md` for every migration.
+- Migrations are forward-only and applied automatically. Every version change (with or without migrations) takes a pre-update backup automatically, as described in §2.
+- **Downgrading** across a migration requires restoring the pre-update backup. This is documented in `CHANGELOG.md` for every migration.
 - After an upgrade, PWAs detect the new version through the SSE `hello` event and the SW update check, then show "New version available".
 
 ## 9. Monitoring

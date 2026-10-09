@@ -20,7 +20,7 @@ const logger = createLogger(config.logLevel);
 
 let prepared: ReturnType<typeof prepareDatabase>;
 try {
-  prepared = prepareDatabase(config.dataDir, logger);
+  prepared = prepareDatabase(config.dataDir, logger, VERSION);
 } catch (err) {
   logger.fatal({ err, dataDir: config.dataDir }, 'database startup failed');
   process.exit(1);

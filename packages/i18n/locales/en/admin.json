@@ -40,7 +40,7 @@
   },
   "backups": {
     "title": "Backups",
-    "description": "Nightly snapshots: the last 7 daily and 4 weekly are kept, plus manual and pre-update copies.",
+    "description": "Nightly snapshots: the last 7 daily and 4 weekly are kept, plus manual copies and one taken before each update.",
     "backUpNow": "Back up now",
     "created": "Backup created",
     "failed": "Couldn’t create a backup. Try again.",
