@@ -9,7 +9,7 @@
 | Topic | Rule |
 |---|---|
 | Auth | One of: session cookie (web); `Authorization: Bearer <session token>` (CLI device flow); `Authorization: Bearer rooster_pat_…` (PAT). An unauthenticated request gets `401 {code:"unauthenticated"}`. |
-| Scopes | PAT scopes are `read` or `write` (`write` implies `read`). A mutation with a read-only PAT gets `403 forbidden_scope`. |
+| Scopes | Non-browser credentials carry a grant (11 §2): capabilities (`tasks:read`, `tasks:write`, `comments:write`, `tasks:assign`, `groups:write`, `tasks:delete`, `notifications:read`) plus user-chosen org and group constraints. A missing capability gets `403 forbidden_scope`, and a target outside the constraints `403 outside_grant`. Settings, org administration and admin routes need the browser session. |
 | CSRF | For cookie auth on POST, PATCH, PUT and DELETE, the `Origin` header must equal `ROOSTER_BASE_URL`. |
 | Idempotency | Every mutation accepts `Idempotency-Key: <uuid>`. The web outbox always sends it. Replays within 7 days return the original status and body. |
 | LWW | Mutations accept `X-Rooster-Edit-Time: <ms epoch>`, the time the user made the edit, and default to the server's now. Fields older than the stored clock are skipped and listed in `ignoredFields`. |
@@ -38,8 +38,8 @@
 | PUT `/me/avatar` · DELETE `/me/avatar` | multipart `file` (image, ≤ 2 MB). It is resized to 256 px WebP, stored at BlobStore key `avatars/<userId>`, and sets `user.image` to `/api/v1/avatars/<userId>?v=<ts>`. DELETE reverts to the OIDC picture. | 10 |
 | GET `/avatars/:userId` | Serves an avatar to any user sharing an org with that user. | 10 |
 | GET `/me/sessions` · DELETE `/me/sessions/:id` | List and revoke sessions. | 1 |
-| GET/POST `/me/tokens` · DELETE `/me/tokens/:id` | PATs `{name, scopes, expiresInDays?}` → `{token}` (shown once). | 8 |
-| GET `/me/devices` · DELETE `/me/devices/:id` | Authorised CLI devices (bearer sessions). | 8 |
+| GET `/me/grants` · PATCH `/me/grants/:id` · DELETE `/me/grants/:id` | Connected apps (11 §3.2): every PAT, CLI device and OAuth client grant. PATCH edits `{label?, scopes?, constraints?, expiresAt?}` (narrowing an OAuth client's scopes is allowed, widening is not). DELETE revokes. Browser session only. | 8/9 |
+| POST `/me/tokens` | A PAT `{name, scopes, constraints, expiresInDays?}` → `{token, grant}` (the token is shown once). | 8 |
 | `/api/auth/*` | better-auth: sign-in/social, oauth2 callbacks, sign-out, device code (`/device/code`, `/device/token`, `/device/approve`, `/device/deny`; use the exact paths of the installed better-auth version and wrap them if they differ). | 1/8 |
 
 ### 2.2 Orgs, members, invites
@@ -133,6 +133,19 @@
 | GET `/admin/backups` · POST `/admin/backups` · GET `/admin/backups/:name` | List, create now, download. | 2 (WP 2.9) |
 | GET `/admin/system` | Version, DB size, WAL size, counts, job last-runs, configured features. | 11 |
 | POST `/admin/push-keys/regenerate` | Replaces the VAPID keys and deletes all push subscriptions. | 7 |
+
+### 2.11 OAuth, MCP and discovery (P9, 11)
+| Method & path | Description |
+|---|---|
+| GET `/oauth/authorize` | The authorization endpoint (PKCE S256 required, `resource` required). It renders the consent screen (11 §3.1) for a signed-in user. |
+| POST `/oauth/token` · POST `/oauth/revoke` | Code and refresh-token grants (refresh rotation); RFC 7009 revocation. |
+| POST `/oauth/register` | Dynamic Client Registration, only with `ROOSTER_OAUTH_DCR=on` (deprecated in MCP). |
+| POST/GET/DELETE `/mcp` | The remote MCP endpoint (Streamable HTTP, protocol 2026-07-28). OAuth bearer tokens with audience `<host>/mcp` only. |
+| GET `/.well-known/oauth-authorization-server` | RFC 8414 metadata. |
+| GET `/.well-known/oauth-protected-resource/mcp` · `…/api/v1` | RFC 9728 resource metadata (11 §5.2). |
+| GET MCP Server Card (path per SEP-2127) · `/.well-known/ai-catalog.json` · `/.well-known/agent-skills/index.json` · `/.well-known/agent-skills/rooster/SKILL.md` · `/llms.txt` | Discovery (11 §6); off with `ROOSTER_AGENT_DISCOVERY=off`. |
+
+All of these live outside `/api/v1`, need no session (except the consent screen), are rate-limited per IP, and do not appear in the OpenAPI document. `/mcp` is described by its Server Card.
 
 ## 3. Example: inline create, then move, offline-replayed
 

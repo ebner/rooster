@@ -140,7 +140,7 @@ rooster/
 
 ### 4.3 Authorisation model
 
-- **Actor:** `{ userId, via: 'session' | 'bearer' | 'pat', scopes: ('read'|'write')[] }`. A PAT with only `read` scope gets a 403 on any mutating route.
+- **Actor:** `{ userId, via: 'session' | 'bearer' | 'pat' | 'oauth', grant: Grant | null }`. The browser session has no grant (full access). PATs, CLI devices and OAuth tokens carry a grant: capabilities (scopes) plus user-chosen org and group constraints (11 §2). A missing capability gets `403 forbidden_scope`, and a target outside the constraints gets `403 outside_grant` (unreadable targets stay `404`). The checks live in services (`authorizeGrant`, 11 §2.3).
 - **Non-members always get `404 not_found`, never `403`**, for any org-scoped resource, so that existence never leaks. `403` is used only for authenticated members lacking a role (owner-only actions) or a scope (read-only PAT).
 - **Org access:** `requireMember(actor, orgId)` → the role. All task, group, tag and comment access resolves the entity's `org_id` first, then calls `requireMember`. **Never trust an `orgId` from the client** for an entity that already has one.
 - **Groups** are additionally owned: `group.user_id === actor.userId`, otherwise 404 (not 403, to avoid leaking existence).
@@ -176,7 +176,8 @@ rooster/
   - The `deviceAuthorization` plugin uses client ID `rooster-cli`. Codes expire after 10 minutes, with a 5 s poll interval.
   - The web app has a `/device` page that requires login, shows the code and the client name, and offers Approve or Deny.
   - The resulting session token is used as `Authorization: Bearer` through the `bearer` plugin.
-- **PATs:** `@better-auth/api-key`, with the prefix `rooster_pat_` and metadata `{scopes, name}`. They are accepted as `Authorization: Bearer rooster_pat_…`. A small middleware tells a PAT from a session token by its prefix and verifies it through the api-key plugin.
+- **OAuth 2.1 authorization server (P9):** better-auth's OAuth 2.1 Provider with Client ID Metadata Documents, rooster's own consent screen and grants, opaque audience-bound access tokens for `/mcp` and `/api/v1` (11 §4).
+- **PATs:** `@better-auth/api-key`, with the prefix `rooster_pat_` and metadata `{grantId, name}` (the grant holds the scopes and constraints, 11 §2). They are accepted as `Authorization: Bearer rooster_pat_…`. A small middleware tells a PAT from a session token by its prefix and verifies it through the api-key plugin.
 - Rate limiting: better-auth's built-in limiter on `/api/auth/*` (memory storage).
 
 ### 4.5 Domain events & realtime
@@ -232,7 +233,7 @@ All config comes from env vars, validated by a zod schema at boot. On a validati
 
 ### 4.10 Errors
 - Responses use RFC 9457 `application/problem+json`: `{type, title, status, detail, code, errors?}`.
-- `code` is a stable machine string, for example `not_found`, `validation_failed`, `personal_org`, `conflict_deleted`, `forbidden_scope`, `rate_limited`.
+- `code` is a stable machine string, for example `not_found`, `validation_failed`, `personal_org`, `conflict_deleted`, `forbidden_scope`, `outside_grant`, `rate_limited`.
 - The server never leaks stack traces. 5xx errors are logged with the request ID, which is returned in the `X-Request-Id` header.
 
 ### 4.11 Security baseline

@@ -58,6 +58,8 @@ On boot, the server:
 | `ROOSTER_SMTP_URL` | | — | `smtp://` or `smtps://`, e.g. `smtps://user:pass@smtp.example.com:465`. Enables email features (invites by email, notification emails, the digest). |
 | `ROOSTER_MAIL_FROM` | with SMTP | — | `Rooster <rooster@example.com>` or a bare address. Missing while SMTP is set: exit 78. |
 | `ROOSTER_VAPID_PUBLIC` / `_PRIVATE` / `ROOSTER_VAPID_SUBJECT` | | auto-generated / `mailto:<first admin>` | Web Push. Set both keys or neither (base64url, 65 and 32 bytes); without them the keys are generated once and kept in `instance_setting`. Keys from the env cannot be regenerated in the admin UI. The subject is a `mailto:` or `https:` URL. |
+| `ROOSTER_OAUTH_DCR` | | `off` | P9. `on` enables OAuth Dynamic Client Registration for older MCP clients that lack Client ID Metadata Document support (11 §4.2). |
+| `ROOSTER_AGENT_DISCOVERY` | | `on` | P9. `off` hides the best-effort agent discovery documents (Server Card, AI Catalog, skills index, `llms.txt`); the OAuth metadata stays (11 §6.1). |
 | `ROOSTER_UPLOAD_MAX_MB` | | `25` | |
 | `ROOSTER_S3_ENDPOINT`, `_REGION`, `_BUCKET`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`, `_FORCE_PATH_STYLE` | | — | Setting the bucket switches attachments to S3. |
 | `ROOSTER_BACKUP_CRON` | | `0 3 * * *` | Set to `off` to disable. |

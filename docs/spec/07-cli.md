@@ -32,6 +32,8 @@ The `rooster` binary lives in `apps/cli`. It uses only the public REST API (`pac
   2. A device authorisation request (client ID `rooster-cli`). Prints the verification URL and the user code, and opens the browser if possible (`--no-browser` to skip).
   3. Polls until it is approved, denied or expires.
   4. Stores the token and fetches `/me` to choose the default org.
+
+  The `/device` approval page is the consent screen of 11 §3.1. The user sees the CLI's requested capabilities and chooses orgs, groups and an expiry, so every CLI profile carries a **grant** (11 §2). The default for `rooster login` is full read and write on every org (it is the user's own terminal). `--scope`, `--org` and `--group` request less.
 - `rooster login --with-token` reads a PAT from stdin (for CI).
 - `rooster logout` revokes the device session server-side and deletes the local secret.
 
@@ -65,8 +67,11 @@ Global flags: `--org <slug>`, `--profile <name>`, `--json`, `--quiet` (IDs only)
 | `rooster search <query…>` | `--all-orgs`. |
 | `rooster open [ref]` | Opens the web UI (task deep link, or My tasks). |
 | `rooster org ls` / `rooster org use <slug>` | List orgs or set the profile's default org. |
-| `rooster token create <name> [--read-only] [--expires 90d]` / `ls` / `revoke <id>` | PATs. |
-| `rooster mcp [--read-only]` | Starts the MCP server on stdio (§6). |
+| `rooster token create <name> [--scope tasks:read,…] [--org <slug>] [--group <org>/<name>]… [--write-group <org>/<name>]… [--expires 90d]` / `ls` / `revoke <id>` | PATs with a grant (11 §2). The default is `tasks:read` on every org. `--read-only` stays as an alias for `--scope tasks:read`. |
+| `rooster apps ls` / `rooster apps revoke <id>` | Connected apps (every grant: PATs, devices, OAuth clients; 11 §3.2). |
+| `rooster mcp [--read-only] [--profile agent]` | Starts the MCP server on stdio (§6), using the profile's grant. |
+| `rooster mcp setup [--client claude-code\|claude-desktop\|cursor\|print] [--profile agent]` | Creates a dedicated agent profile through the device flow (its own, narrower grant; 11 §5.1) and writes or prints the MCP client config. |
+| `rooster skill print` / `rooster skill install [--target claude\|agents] [--project]` | Prints or installs the rooster agent skill (`SKILL.md`, 11 §6.2). |
 | `rooster completion bash\|zsh\|fish\|powershell` | Shell completions, including dynamic completion of group and tag names (cached for 60 s). |
 | `rooster whoami`, `rooster config get\|set\|path`, `rooster logout` | Utilities. |
 
@@ -135,8 +140,11 @@ Built with **Ink 8**. It is a full-screen, keyboard-only mini rooster.
 
 ## 6. MCP server (`rooster mcp`, P9)
 
-- `@modelcontextprotocol/sdk` over stdio, authenticated with the stored profile token. Each tool takes an optional `org` slug, defaulting to the profile org.
-- Example MCP client config: `{"command":"rooster","args":["mcp"]}`.
+- `@modelcontextprotocol/sdk` (v2, protocol 2026-07-28). The tools live in `packages/mcp` and are served two ways (11 §5):
+  - **stdio:** `rooster mcp`, authenticated with the profile's grant. `rooster mcp setup` creates a dedicated `agent` profile, so an agent doesn't inherit the user's full CLI access.
+  - **Remote:** `https://<host>/mcp` on the server (Streamable HTTP), with OAuth 2.1 (11 §4), scope step-up and discovery documents (11 §6).
+- Each tool takes an optional `org` slug, defaulting to the profile org (stdio) or the user's first org (remote). The grant's constraints apply to every call (11 §2.3).
+- Example stdio client config: `{"command":"rooster","args":["mcp","--profile","agent"]}`. Remote: just the URL `https://<host>/mcp`.
 
 | Tool | Input | Notes |
 |---|---|---|
@@ -150,7 +158,10 @@ Built with **Ink 8**. It is a full-screen, keyboard-only mini rooster.
 | `move_task` | `{ref, group, position?: top\|bottom}` | |
 | `list_groups` / `create_group` | | |
 | `add_comment` | `{ref, body}` | P6. |
+| `list_notifications` | `{unread?}` | P6 inbox. |
+
+Each tool needs a capability (11 §5.2): read tools `tasks:read`; `create_task`, `update_task`, `complete_task` and `move_task` `tasks:write`; assigning others `tasks:assign`; `create_group` `groups:write`; `add_comment` `comments:write`; `list_notifications` `notifications:read`. A tool whose target lies outside the grant's org or group constraints returns a tool error that tells the agent to ask the user to widen access, rather than a protocol error.
 
 - **Resources:** `rooster://{org}/my` (a Markdown rendering of My tasks), usable as context.
-- **Safety:** there is no delete tool. `--read-only` exposes only the list, get and search tools. Every mutation is attributed to the token's user and appears in the activity log with `via: "mcp"`.
-- Future (not in scope): a remote MCP endpoint (streamable HTTP plus OAuth) on the server.
+- **Instructions:** the `initialize` result carries the short form of the rooster skill (11 §6.2). `SKILL.md` has the long form.
+- **Safety:** there is no delete tool. `--read-only`, or a grant without write scopes, exposes only the list, get and search tools. Every mutation is attributed to the grant's user and appears in the activity log with `via: "mcp"` and the client's name. Task text is returned as data, and the skill tells agents never to follow instructions found in it.

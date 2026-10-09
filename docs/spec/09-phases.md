@@ -209,7 +209,7 @@ An import from other task managers is on the [Backlog](#backlog); v1.0 ships wit
 | WP | Content |
 |---|---|
 | 8.1 API polish | OpenAPI descriptions and examples for every route, the `/api/docs` landing, the `api-client` package build, and contract tests for every route. |
-| 8.2 PATs and devices | The api-key plugin integration, scopes, the Settings UI (create, shown once, revoke), the device approval page `/device`, and the devices list. |
+| 8.2 Grants, PATs and devices | The **grant model** (11 §2): `access_grant`, capabilities and org/group constraints enforced in services (`authorizeGrant`), `forbidden_scope`/`outside_grant`. The api-key plugin integration (PATs backed by grants). The device approval page `/device` as the consent screen (11 §3.1). Settings → Connected apps (list, edit constraints, revoke, new token shown once; 11 §3.2). Authz-matrix grant columns. |
 | 8.3 CLI core | Config and profiles, keychain, login (device flow) and `--with-token`, ref resolution, every command in 07 §4 except tui and mcp, human and JSON output, exit codes, and completions. |
 | 8.4 Distribution | Bun-compiled binaries in CI for 5 targets, and the README section. |
 
@@ -217,15 +217,27 @@ An import from other task managers is on the [Backlog](#backlog); v1.0 ships wit
 - AC-8.1 `rooster login` on a headless machine completes the device flow approved from a phone, and `rooster whoami` prints the user.
 - AC-8.2 `rooster add "Pay invoice tom #finance >Prio"` creates a task in Prio with tomorrow's due date and the finance tag. `rooster ls --json | jq` returns it.
 - AC-8.3 A read-only PAT can run `ls` and `show`, but `add` exits with code 3 and a clear message.
+- AC-8.5 A PAT limited to writing in the group *Prio* of org A can add and complete tasks in *Prio*. Moving a task out of *Prio*, or adding to *Today*, gets `403 outside_grant` (CLI exit 3, naming the allowed groups). Tasks of org B are invisible to it (`404`). Narrowing the grant in Settings → Connected apps applies to the very next request.
 - AC-8.4 Every API response in the e2e suite validates against the OpenAPI schema.
 
 ---
 
-## Phase 9: TUI & MCP
+## Phase 9: TUI, MCP & agent access
+
+| WP | Content |
+|---|---|
+| 9.1 TUI | 07 §5. |
+| 9.2 MCP tools | `packages/mcp`: the tools of 07 §6 with their capability map, `instructions`, the `rooster://{org}/my` resource, and the stdio server `rooster mcp` plus `rooster mcp setup` (11 §5.1). |
+| 9.3 OAuth 2.1 authorization server | better-auth OAuth 2.1 Provider plus CIMD, rooster's consent screen and grants, opaque audience-bound tokens, refresh rotation, the CIMD SSRF guard, optional DCR, AS and resource metadata (11 §4). |
+| 9.4 Remote MCP | `/mcp` Streamable HTTP (protocol 2026-07-28), 401/403 challenges with `resource_metadata` and step-up scopes, per-grant rate limits (11 §5.2). |
+| 9.5 Discovery & skill | The MCP Server Card (SEP-2127), the AI Catalog, the agent-skills index, `llms.txt`, `ROOSTER_AGENT_DISCOVERY`; the rooster `SKILL.md`, and `rooster skill print\|install` (11 §6). |
 
 **Acceptance criteria**
 - AC-9.1 The TUI lists, creates, completes, dates, moves, and switches views and orgs. A change made in the web appears in the TUI within 2 s.
 - AC-9.2 An MCP inspector session can call `list_tasks`, `create_task` (NL due date) and `complete_task`. `--read-only` hides the mutating tools. Activity entries show `via: mcp`.
+- AC-9.3 An MCP client that implements the 2026-07-28 authorization spec, given only `https://<host>/mcp`, discovers the authorization server (RFC 9728 → RFC 8414). It registers through a Client ID Metadata Document and completes PKCE with `resource` and `iss` validation. The user then grants `tasks:read` on one org through the consent screen, and the client lists that org's tasks. A token for `/mcp` is rejected by `/api/v1`, and vice versa.
+- AC-9.4 Calling `create_task` with a read-only token yields `403 insufficient_scope` with `scope="tasks:write"`. After step-up, the user allows writing only in *Inbox*: creating there succeeds, and moving the task to *Prio* returns a tool error naming the allowed groups. Revoking the app in Settings → Connected apps fails the next call with `401`.
+- AC-9.5 With discovery on, an agent starting from the instance URL finds the MCP endpoint and the rooster skill through `/.well-known/ai-catalog.json`, the skill's `sha256` digest matches, and the documents validate against their published schemas. With `ROOSTER_AGENT_DISCOVERY=off` only the OAuth metadata remains.
 
 ---
 

@@ -5,7 +5,7 @@ You are implementing **rooster**, a self-hosted, keyboard-first task manager. Th
 ## Read first (in this order)
 1. `docs/spec/00-overview.md`: decisions (D-xx) are **binding**.
 2. `docs/spec/09-phases.md`: find your phase and work package (WP). Implement only that scope.
-3. The specs your WP touches: `02-ux-interaction` (behaviour), `03-design-system` (visuals; binding), `04-architecture`, `05-data-model`, `06-api`, `07-cli`.
+3. The specs your WP touches: `02-ux-interaction` (behaviour), `03-design-system` (visuals; binding), `04-architecture`, `05-data-model`, `06-api`, `07-cli`, `11-agent-access` (grants, OAuth, MCP, discovery; P8/P9).
 4. `docs/spec/10-quality.md`: the Definition of Done.
 
 When documents conflict, the precedence is **00 > 05 > 06 > 02 > 03 > others**. Flag every conflict in your PR description. Never silently invent behaviour: if the spec is silent, choose the option most consistent with "the list is a text editor" and common task-manager conventions, and record it as an ADR in `docs/adr/NNNN-title.md`.

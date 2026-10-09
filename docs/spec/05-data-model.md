@@ -41,8 +41,9 @@ The better-auth CLI generates these through the Drizzle adapter, and they are ke
 | `organization` | id, name, slug (unique), logo, metadata, createdAt | `is_personal INTEGER NOT NULL DEFAULT 0` · `avatar_emoji TEXT` · `color TEXT` (tag palette name) · `task_seq INTEGER NOT NULL DEFAULT 0` · `deleted_at INTEGER` |
 | `member` | id, organizationId, userId, role (`owner`, `member`), createdAt | — |
 | `invitation` | id, organizationId, email, role, status, expiresAt, inviterId (**email invites only**) | — |
-| `apikey` | PATs (hashed key, prefix, name, expiresAt, metadata JSON `{scopes}`) | — |
+| `apikey` | PATs (hashed key, prefix, name, expiresAt, metadata JSON `{grantId}`) | — |
 | `deviceCode` | device authorisation grants | — |
+| `oauthClient`, `oauthAccessToken`, `oauthRefreshToken`, `oauthConsent` (P9) | better-auth OAuth 2.1 Provider tables (exact names per the plugin version). Access and refresh tokens are stored hashed and carry the `access_grant.id`. | — |
 
 Invariant: an org with `is_personal = 1` has exactly one `member` row (role `owner`). This is enforced in `OrgService` and checked by a test.
 
@@ -242,6 +243,25 @@ CREATE TABLE ical_feed (
   created_at  INTEGER NOT NULL,
   last_used_at INTEGER
 ) STRICT;
+
+-- P8/P9: agent access (11 §2). One row per PAT, CLI device session or OAuth client authorization.
+CREATE TABLE access_grant (
+  id           TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+  kind         TEXT NOT NULL CHECK (kind IN ('pat','device','oauth')),
+  client_id    TEXT,                        -- OAuth client id (a CIMD URL or 'rooster-cli'); NULL for PATs
+  label        TEXT NOT NULL,               -- shown in Settings → Connected apps
+  scopes       TEXT NOT NULL,               -- space-separated capabilities (11 §2.1)
+  constraints  TEXT NOT NULL DEFAULT '{"orgs":"all"}', -- JSON (11 §2.2)
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL,
+  expires_at   INTEGER,
+  revoked_at   INTEGER,
+  last_used_at INTEGER,
+  last_used_ip TEXT
+) STRICT;
+CREATE INDEX access_grant_user ON access_grant(user_id) WHERE revoked_at IS NULL;
+CREATE UNIQUE INDEX access_grant_oauth ON access_grant(user_id, client_id) WHERE kind = 'oauth' AND revoked_at IS NULL;
 
 -- Sync / infra
 CREATE TABLE idempotency (
