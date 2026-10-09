@@ -4,6 +4,7 @@
 // `node scripts/render-icons.mjs` (Node imports the .ts module directly).
 //   favicon.svg           small cut, ink line (white in a dark browser theme), amber paint
 //   logo.svg / wordmark.svg  the mark, and mark + name, for docs and the README
+//   wordmark-dark.svg     mark + name with a white line, for the README in dark themes
 //   logo-stack.svg        mark above name: the loading screen in index.html
 //   icon-192/512          ink rounded square, transparent corners, white line, amber paint
 //   maskable-512          full-bleed ink, the mark inside the 80 % safe zone
@@ -55,14 +56,20 @@ const nameScale = nameHeight / wordmarkViewBox.height;
 const nameWidth = wordmarkViewBox.width * nameScale;
 const gap = 6 * 2;
 const lockupWidth = Math.ceil(markGrid + gap + nameWidth);
-write(
-  'wordmark.svg',
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${lockupWidth} ${markGrid}" width="${lockupWidth}" height="${markGrid}" role="img" aria-label="rooster">
-  ${markSvgBody({ ink: brandColors.ink, paint: brandColors.paint })}
-  <path fill="${brandColors.ink}" transform="translate(${markGrid + gap} ${(markGrid - nameHeight) / 2}) scale(${nameScale})" d="${wordmarkPath}"/>
+// The README shows the dark variant (white line and name) under GitHub's dark theme.
+for (const [file, ink] of [
+  ['wordmark.svg', brandColors.ink],
+  ['wordmark-dark.svg', brandColors.inkInverse],
+]) {
+  write(
+    file,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${lockupWidth} ${markGrid}" width="${lockupWidth}" height="${markGrid}" role="img" aria-label="rooster">
+  ${markSvgBody({ ink, paint: brandColors.paint })}
+  <path fill="${ink}" transform="translate(${markGrid + gap} ${(markGrid - nameHeight) / 2}) scale(${nameScale})" d="${wordmarkPath}"/>
 </svg>
 `,
-);
+  );
+}
 
 // Mark above the name, as the `stack` Logo lays them out (name at 0.36 of the mark).
 const stackName = markGrid * 0.36;

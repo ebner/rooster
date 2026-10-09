@@ -1,4 +1,9 @@
-# 🐓 rooster
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/icons/wordmark-dark.svg">
+    <img alt="rooster" src="apps/web/public/icons/wordmark.svg" height="56">
+  </picture>
+</h1>
 
 A self-hosted, keyboard-first task manager.
 
@@ -13,7 +18,7 @@ A self-hosted, keyboard-first task manager.
 - **Your data:** JSON and Markdown export per org, a 30-day Trash, and nightly backups.
 - **Hosting:** one Docker container and one SQLite volume.
 
-**Status:** v1.0, the daily-use release. Collaboration (assignees, comments, notifications), the CLI, TUI and MCP server, recurrence, attachments and the iCal feed follow; see the [phases](docs/spec/09-phases.md) and the [changelog](CHANGELOG.md).
+**Status:** v1.1, the daily-use release. Collaboration (assignees, comments, notifications), the CLI, TUI and MCP server, recurrence, attachments and the iCal feed follow; see the [phases](docs/spec/09-phases.md) and the [changelog](CHANGELOG.md).
 
 ## Quick start (Docker Compose)
 
