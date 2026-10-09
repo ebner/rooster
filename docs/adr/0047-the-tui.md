@@ -42,7 +42,7 @@
    - Terminals too small to draw the TUI show a notice.
 
 ## Consequences
-- The Bun-compiled release binaries are untested locally (no Bun on the dev machine). The release workflow's `cli-smoke` jobs are the check that Bun compiles the chunked build.
+- Bun compiles the chunked build into one binary. An unresolved external (Ink's `react-devtools-core`) made the compiled binary fail at startup, so it is aliased to a bundled no-op (`tui/devtools-stub.ts`). This was verified locally with Bun 1.4.2 (`--version`, `ls`); the release workflow's `cli-smoke` jobs check every target.
 
 ## Amendments after the first security review
 - **One identity per logical change:** each change keeps one edit time and one Idempotency-Key per write (`tui/idempotency.ts`), reused by `r`, so a lost response can't create a duplicate.
