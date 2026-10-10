@@ -8,7 +8,8 @@
     "completed": "{actor} slutförde en uppgift du skapade",
     "due_changed": "{actor} ändrade förfallodatum för din uppgift till {date}",
     "due_removed": "{actor} tog bort förfallodatumet för din uppgift",
-    "invite_accepted": "{actor} gick med i {org}"
+    "invite_accepted": "{actor} gick med i {org}",
+    "reminder": "Påminnelse"
   },
   "category": {
     "assigned": "tilldelningar",
@@ -17,6 +18,7 @@
     "completed": "slutförda uppgifter",
     "due_changed": "ändrade förfallodatum",
     "invite_accepted": "accepterade inbjudningar",
+    "reminder": "påminnelser om uppgifter",
     "digest": "den dagliga sammanfattningen"
   },
   "action": {
@@ -32,6 +34,12 @@
   "batch": {
     "subject": "{count, plural, one {# ny avisering} other {# nya aviseringar}}",
     "heading": "Nytt i din inkorg"
+  },
+  "reminder": {
+    "subject": "Påminnelse: {title}",
+    "due": "Förfaller {date}",
+    "noDue": "Du bad om en påminnelse om den här uppgiften",
+    "late": "{when} (påminnelsen blev försenad)"
   },
   "digest": {
     "subject": "Din dag: {date}",

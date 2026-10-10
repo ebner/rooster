@@ -5,6 +5,7 @@ import type { GrantScope } from '@rooster/core/grants';
 import { uuidv7 } from '@rooster/core/ids';
 import type { GrantConstraintsValue as GrantConstraints } from '@rooster/core/schemas';
 import { eq } from 'drizzle-orm';
+import sharp from 'sharp';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { App } from '../src/app.ts';
 import type { AppDb } from '../src/db/client.ts';
@@ -147,7 +148,15 @@ interface Fixture {
   /** One of the owner's two linked sign-in identities. */
   identityId: string;
   // P10 fixtures (tasks): reminders.
+  /** The owner's weekly task in group A, and the owner's reminder on `taskId`. */
+  recurringTaskId: string;
+  reminderId: string;
   // P10 fixtures (files): attachments, avatars, calendar feeds.
+  /** The owner's image attachment (with a thumbnail) on `taskId`. */
+  attachmentId: string;
+  /** The other member, who has uploaded an avatar; and the owner's calendar feed. */
+  avatarUserId: string;
+  icalFeedId: string;
   jars: Record<CookieActor, CookieJar>;
   sessions: Record<CookieActor, string>;
   /** Bearer credentials of the token actors. */
@@ -629,8 +638,104 @@ const ROWS: Record<string, Row> = {
     expect: { ...orgScoped(200, 200), ...grants(200, 200, 404, 200) },
   },
   // Phase 10 rows (tasks): skip, reminders.
-  // Phase 10 rows (files): attachments, avatars, calendar feeds.
+  'POST /api/v1/tasks/{id}/skip': {
+    request: (f) => ({ path: `/api/v1/tasks/${f.recurringTaskId}/skip`, body: {} }),
+    expect: { ...orgScoped(200, 200), ...grants(403, 200, 404, 200) },
+  },
+  // Reminders are personal (ADR 0049 §2): any member sets their own on a task they can read;
+  // grants need `tasks:write`, but no group write constraint applies.
+  'GET /api/v1/tasks/{id}/reminders': {
+    request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/reminders` }),
+    expect: { ...orgScoped(200, 200), ...grants(200, 200, 404, 200) },
+  },
+  'POST /api/v1/tasks/{id}/reminders': {
+    request: (f) => ({
+      path: `/api/v1/tasks/${f.taskId}/reminders`,
+      body: { at: Date.now() + 2 * 3_600_000 },
+    }),
+    expect: { ...orgScoped(201, 201), ...grants(403, 201, 404, 201) },
+  },
+  // Someone else's reminder is not there for them (404).
+  'DELETE /api/v1/tasks/{id}/reminders/{reminderId}': {
+    request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/reminders/${f.reminderId}` }),
+    expect: { ...orgScoped(404, 204), ...grants(403, 204, 404, 204) },
+  },
+  // Phase 10 rows (files): attachments, avatars, calendar feeds. Uploading is an edit of
+  // the task; downloading needs read access; deleting is for the uploader or the assignee.
+  'POST /api/v1/tasks/{id}/attachments': {
+    request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/attachments`, body: textFile() }),
+    expect: { ...orgScoped(201, 201), ...grants(403, 201, 404, 201) },
+  },
+  'GET /api/v1/attachments/{id}': {
+    request: (f) => ({ path: `/api/v1/attachments/${f.attachmentId}` }),
+    expect: { ...orgScoped(200, 200), ...grants(200, 200, 404, 200) },
+    binary: 'image/png',
+  },
+  'GET /api/v1/attachments/{id}/thumb': {
+    request: (f) => ({ path: `/api/v1/attachments/${f.attachmentId}/thumb` }),
+    expect: { ...orgScoped(200, 200), ...grants(200, 200, 404, 200) },
+    binary: 'image/webp',
+  },
+  // The member neither uploaded it nor is assigned: 403.
+  'DELETE /api/v1/attachments/{id}': {
+    request: (f) => ({ path: `/api/v1/attachments/${f.attachmentId}` }),
+    expect: { ...orgScoped(403, 204), ...grants(403, 204, 404, 204) },
+  },
+  // The avatar is a profile setting (browser only); seeing one needs a shared org.
+  'PUT /api/v1/me/avatar': {
+    request: () => ({ path: '/api/v1/me/avatar', body: imageFile() }),
+    expect: { ...signedIn(200), ...SESSION_ONLY },
+  },
+  'DELETE /api/v1/me/avatar': {
+    request: () => ({ path: '/api/v1/me/avatar' }),
+    expect: { ...signedIn(200), ...SESSION_ONLY },
+  },
+  'GET /api/v1/avatars/{userId}': {
+    request: (f) => ({ path: `/api/v1/avatars/${f.avatarUserId}` }),
+    expect: {
+      anonymous: 401,
+      disabled: 401,
+      nonMember: 404,
+      admin: 404,
+      member: 200,
+      owner: 200,
+      ...grants(200, 200, 404, 200),
+    },
+    binary: 'image/webp',
+  },
+  // Calendar feeds are settings: browser only, and a feed is its owner's alone.
+  'GET /api/v1/me/ical-feeds': {
+    request: () => ({ path: '/api/v1/me/ical-feeds' }),
+    expect: { ...signedIn(200), ...SESSION_ONLY },
+  },
+  'POST /api/v1/me/ical-feeds': {
+    request: () => ({ path: '/api/v1/me/ical-feeds', body: {} }),
+    expect: { ...signedIn(201), ...SESSION_ONLY },
+  },
+  'DELETE /api/v1/me/ical-feeds/{id}': {
+    request: (f) => ({ path: `/api/v1/me/ical-feeds/${f.icalFeedId}` }),
+    expect: { ...owned(204), ...SESSION_ONLY },
+  },
 };
+
+/** A 1 × 1 PNG. */
+const PNG_1PX = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+/** Multipart bodies for the upload rows (sent as is, never as JSON). */
+function textFile(): FormData {
+  const form = new FormData();
+  form.append('file', new File(['matrix'], 'matrix.txt', { type: 'text/plain' }));
+  return form;
+}
+
+function imageFile(): FormData {
+  const form = new FormData();
+  form.append('file', new File([new Uint8Array(PNG_1PX)], 'me.png', { type: 'image/png' }));
+  return form;
+}
 
 const dataDirs: (() => void)[] = [];
 afterAll(() => {
@@ -843,8 +948,36 @@ async function fixture(): Promise<Fixture> {
   const identityId = identity('dev');
 
   // P10 setup (tasks): reminders.
+  const recurring = tasks.create(ownerActor, org.id, {
+    title: 'Weekly',
+    groupId: groupA,
+    dueDate: '2026-10-09',
+    recurrence: 'FREQ=WEEKLY',
+  });
+  const { reminder } = app.services.reminders.create(ownerActor, task.id, {
+    at: Date.now() + 3_600_000,
+  });
 
   // P10 setup (files): attachments, avatars, calendar feeds.
+  const bigPng = new Uint8Array(
+    await sharp({ create: { width: 64, height: 48, channels: 3, background: '#c33' } })
+      .png()
+      .toBuffer(),
+  );
+  const imageForm = new FormData();
+  imageForm.append('file', new File([bigPng], 'photo.png', { type: 'image/png' }));
+  const uploaded = await app.request(
+    `/api/v1/tasks/${task.id}/attachments`,
+    asJar(owner.jar, { method: 'POST', body: imageForm }),
+  );
+  if (uploaded.status !== 201) throw new Error(`fixture upload: ${await uploaded.text()}`);
+  const attachmentId = ((await uploaded.json()) as { id: string }).id;
+  const avatar = await app.request(
+    '/api/v1/me/avatar',
+    asJar(other.jar, { method: 'PUT', body: imageFile() }),
+  );
+  if (avatar.status !== 200) throw new Error(`fixture avatar: ${await avatar.text()}`);
+  const icalFeedId = app.services.icalFeeds.create(ownerActor, {}).feed.id;
 
   // A disabled user whose session somehow survived must still be rejected.
   db.orm.update(user).set({ disabledAt: Date.now() }).where(eq(user.id, disabled.userId)).run();
@@ -881,7 +1014,12 @@ async function fixture(): Promise<Fixture> {
     oauthQuery: consentPage.search.slice(1),
     identityId,
     // P10 fixtures (tasks).
+    recurringTaskId: recurring.id,
+    reminderId: reminder.id,
     // P10 fixtures (files).
+    attachmentId,
+    avatarUserId: other.userId,
+    icalFeedId,
     tokens: {
       readOnlyPat: readOnlyPat.token,
       writeInGroupPat: writeInGroupPat.token,
@@ -951,7 +1089,10 @@ describe('AC-1.6 authorisation matrix', () => {
     const f = await fixture();
     const [method = 'GET'] = route.split(' ');
     const { path, body } = row.request(f, actor);
-    const payload = body === undefined ? {} : { body: JSON.stringify(body) };
+    // Upload rows send multipart bodies as they are (P10).
+    const form = body instanceof FormData;
+    const payload =
+      body === undefined ? {} : { body: form ? (body as FormData) : JSON.stringify(body) };
     // Token actors are not browsers: a bearer header, no cookie, no Origin.
     const init: RequestInit = TOKEN_ACTORS.has(actor)
       ? {
@@ -959,7 +1100,7 @@ describe('AC-1.6 authorisation matrix', () => {
           ...payload,
           headers: {
             authorization: `Bearer ${f.tokens[actor as TokenActor]}`,
-            ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+            ...(body === undefined || form ? {} : { 'content-type': 'application/json' }),
           },
         }
       : asJar(actor === 'anonymous' ? new CookieJar() : f.jars[actor as CookieActor], {

@@ -5,3 +5,5 @@ labels:
   - traefik.http.routers.rooster.entrypoints=websecure
   - traefik.http.routers.rooster.tls.certresolver=letsencrypt
   - traefik.http.services.rooster.loadbalancer.server.port=3000
+# Uploads (P10): Traefik sets no body limit; rooster enforces its own (ROOSTER_UPLOAD_MAX_MB,
+# default 25 MB). A buffering middleware with maxRequestBodyBytes must stay above it.

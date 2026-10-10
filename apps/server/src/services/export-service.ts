@@ -94,7 +94,7 @@ export class ExportService {
 
       const ids = rows.map((r) => r.id);
       const places = placementsFor(tx, actor.userId, ids);
-      const extras = loadTaskExtras(tx, ids);
+      const extras = loadTaskExtras(tx, ids, actor.userId);
       const tasks: ExportTask[] = rows.map((r) => ({
         ...toTaskDto(r, places.get(r.id) ?? null, {}, extras),
         description: r.description,

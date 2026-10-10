@@ -194,7 +194,8 @@ export function asJar(jar: CookieJar, init: RequestInit = {}): RequestInit {
   const headers = new Headers(init.headers);
   headers.set('cookie', jar.header());
   headers.set('origin', BASE_URL);
-  if (init.body !== undefined && !headers.has('content-type')) {
+  // A FormData body (uploads) sets its own multipart type with the boundary.
+  if (init.body !== undefined && !(init.body instanceof FormData) && !headers.has('content-type')) {
     headers.set('content-type', 'application/json');
   }
   return { ...init, headers };

@@ -3532,6 +3532,205 @@
           "completed": true
         }
       },
+      "TaskSkipResult": {
+        "type": "object",
+        "properties": {
+          "next": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Task"
+              },
+              {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            ]
+          }
+        },
+        "required": [
+          "next"
+        ],
+        "example": {
+          "next": {
+            "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c04",
+            "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+            "seq": 43,
+            "parentId": null,
+            "subtaskPosition": null,
+            "title": "Pay invoice",
+            "hasDescription": true,
+            "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+            "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+            "dueDate": "2026-10-16",
+            "dueTime": null,
+            "dueTz": null,
+            "startDate": null,
+            "completedAt": null,
+            "tagIds": [
+              "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+            ],
+            "counts": {
+              "subtasks": 1,
+              "subtasksDone": 0,
+              "comments": 2,
+              "attachments": 0
+            },
+            "placement": {
+              "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+              "position": "a1V"
+            },
+            "createdAt": 1791532800000,
+            "updatedAt": 1791532800000
+          }
+        }
+      },
+      "TaskSkip": {
+        "type": "object",
+        "properties": {
+          "nextId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          }
+        },
+        "example": {
+          "nextId": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c04"
+        }
+      },
+      "ReminderList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Reminder"
+        },
+        "example": [
+          {
+            "id": "0199c5a2-c6d7-75e8-b9fa-6a7b8c9d0e01",
+            "taskId": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+            "kind": "relative",
+            "offsetMinutes": 60,
+            "remindAt": null,
+            "fireAt": 1791547200000,
+            "firedAt": null,
+            "createdAt": 1791532800000
+          }
+        ]
+      },
+      "Reminder": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "taskId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "relative",
+              "absolute"
+            ]
+          },
+          "offsetMinutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 40320
+          },
+          "remindAt": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "fireAt": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "firedAt": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "createdAt": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "taskId",
+          "kind",
+          "offsetMinutes",
+          "remindAt",
+          "fireAt",
+          "firedAt",
+          "createdAt"
+        ],
+        "example": {
+          "id": "0199c5a2-c6d7-75e8-b9fa-6a7b8c9d0e01",
+          "taskId": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+          "kind": "relative",
+          "offsetMinutes": 60,
+          "remindAt": null,
+          "fireAt": 1791547200000,
+          "firedAt": null,
+          "createdAt": 1791532800000
+        }
+      },
+      "ReminderCreate": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "offsetMinutes": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 40320
+              }
+            },
+            "required": [
+              "offsetMinutes"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "at": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "at"
+            ],
+            "additionalProperties": false
+          }
+        ],
+        "example": {
+          "offsetMinutes": 60
+        }
+      },
       "BulkResult": {
         "type": "object",
         "properties": {
@@ -6650,6 +6849,184 @@
             "auth": "tBHItJI5svbpez7KI4CCXg"
           },
           "userAgent": "Chrome on Android"
+        }
+      },
+      "Attachment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "taskId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "mime": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "uploaderId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "image": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "width": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "height": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "thumb": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "width",
+              "height",
+              "thumb"
+            ]
+          },
+          "createdAt": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "taskId",
+          "filename",
+          "mime",
+          "size",
+          "uploaderId",
+          "image",
+          "createdAt"
+        ],
+        "example": {
+          "id": "0199c5a2-d7e8-76f9-8a0b-7b8c9d0e1f01",
+          "taskId": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+          "filename": "receipt.png",
+          "mime": "image/png",
+          "size": 182340,
+          "uploaderId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+          "image": {
+            "width": 1200,
+            "height": 800,
+            "thumb": true
+          },
+          "createdAt": 1791532800000
+        }
+      },
+      "IcalFeedList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/IcalFeed"
+        },
+        "example": [
+          {
+            "id": "0199c5a2-e8f9-770a-9b1c-8c9d0e1f2a01",
+            "orgId": null,
+            "createdAt": 1791532800000,
+            "lastUsedAt": 1791619200000
+          }
+        ]
+      },
+      "IcalFeed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "orgId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "createdAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastUsedAt": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "orgId",
+          "createdAt",
+          "lastUsedAt"
+        ],
+        "example": {
+          "id": "0199c5a2-e8f9-770a-9b1c-8c9d0e1f2a01",
+          "orgId": null,
+          "createdAt": 1791532800000,
+          "lastUsedAt": 1791619200000
+        }
+      },
+      "IcalFeedCreated": {
+        "type": "object",
+        "properties": {
+          "feed": {
+            "$ref": "#/components/schemas/IcalFeed"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "feed",
+          "url"
+        ],
+        "example": {
+          "feed": {
+            "id": "0199c5a2-e8f9-770a-9b1c-8c9d0e1f2a01",
+            "orgId": null,
+            "createdAt": 1791532800000,
+            "lastUsedAt": 1791619200000
+          },
+          "url": "https://rooster.example.com/ical/rcal_8Kx1q0ZpVb3mT2yWc9dLr5nA7fGh4jE6sUo0iQ1zXk.ics"
+        }
+      },
+      "IcalFeedCreate": {
+        "type": "object",
+        "properties": {
+          "orgId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "replaces": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          }
+        },
+        "example": {
+          "orgId": null
         }
       }
     },
@@ -16148,7 +16525,7 @@
         ],
         "operationId": "createTask",
         "summary": "Create a task assigned to me, placed in my list",
-        "description": "Placed in `groupId` (default: the Inbox) at the `afterId`/`beforeId` intent. Without any intent it goes to the top of the Inbox, or to the end of a named group. With `parentId` it is a subtask (`422 invalid_parent`, `subtask_depth`; `410 conflict_deleted` for a deleted parent). Assigning another member puts it at the top of their Inbox instead. A repeated create with the same `id` and content returns the task; other content is `409 id_conflict`. `parse: true` reads a trailing `>Group` token and a date phrase from the title.",
+        "description": "Placed in `groupId` (default: the Inbox) at the `afterId`/`beforeId` intent. Without any intent it goes to the top of the Inbox, or to the end of a named group. With `parentId` it is a subtask (`422 invalid_parent`, `subtask_depth`; `410 conflict_deleted` for a deleted parent). Assigning another member puts it at the top of their Inbox instead. A repeated create with the same `id` and content returns the task; other content is `409 id_conflict`. `recurrence` (an RRULE subset, stored normalised) needs a due date; `reminders` are my own (`422 reminder_needs_due`, `reminder_in_past`). `parse: true` reads a trailing `>Group` token, `#tags`, `@member`, a date or recurrence phrase (\"every mon\") and `!1h` reminder tokens from the title.",
         "parameters": [
           {
             "schema": {
@@ -16376,7 +16753,7 @@
             }
           },
           "422": {
-            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `invalid_parent`, `subtask_depth`.",
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `invalid_parent`, `subtask_depth`, `reminder_needs_due`, `reminder_in_past`.",
             "content": {
               "application/problem+json": {
                 "examples": {
@@ -16437,6 +16814,38 @@
                         }
                       ]
                     }
+                  },
+                  "reminder_needs_due": {
+                    "summary": "A reminder before the due date needs a due date.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "A reminder before the due date needs a due date.",
+                      "code": "reminder_needs_due",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "reminder_in_past": {
+                    "summary": "The reminder time has already passed.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The reminder time has already passed.",
+                      "code": "reminder_in_past",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
                   }
                 },
                 "schema": {
@@ -16482,7 +16891,7 @@
         ],
         "operationId": "updateTask",
         "summary": "Update fields (per-field last write wins; skipped fields in ignoredFields)",
-        "description": "Partial update of a task any member can see. Each field is last-write-wins on `X-Rooster-Edit-Time`: a field whose stored edit is newer is skipped and named in `ignoredFields` (the response is still `200`). The due unit (date, time, timezone, start date) is one field. Re-parenting checks cycles and depth (`422 subtask_cycle`, `subtask_depth`). A deleted task is `410 conflict_deleted`; restore it first.",
+        "description": "Partial update of a task any member can see. Each field is last-write-wins on `X-Rooster-Edit-Time`: a field whose stored edit is newer is skipped and named in `ignoredFields` (the response is still `200`). The due unit (date, time, timezone, start date, and the recurrence rule and basis) is one field; the rule is kept when only the dates change, and clearing the due date clears it. Re-parenting checks cycles and depth (`422 subtask_cycle`, `subtask_depth`). `clearReminders` and `reminders` act on my own reminders after the patch (`422 reminder_needs_due`, `reminder_in_past`, `409 too_many_reminders`). A deleted task is `410 conflict_deleted`; restore it first.",
         "parameters": [
           {
             "schema": {
@@ -16620,6 +17029,28 @@
               }
             }
           },
+          "409": {
+            "description": "Conflicts with the current state. Codes: `too_many_reminders`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "too_many_reminders": {
+                    "summary": "A task can have at most 5 reminders.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Conflict",
+                      "status": 409,
+                      "detail": "A task can have at most 5 reminders.",
+                      "code": "too_many_reminders"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "410": {
             "description": "Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`.",
             "content": {
@@ -16687,7 +17118,7 @@
             }
           },
           "422": {
-            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `invalid_parent`, `subtask_cycle`, `subtask_depth`.",
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `invalid_parent`, `subtask_cycle`, `subtask_depth`, `reminder_needs_due`, `reminder_in_past`.",
             "content": {
               "application/problem+json": {
                 "examples": {
@@ -16757,6 +17188,38 @@
                       "status": 422,
                       "detail": "Subtasks can be nested at most 5 levels deep.",
                       "code": "subtask_depth",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "reminder_needs_due": {
+                    "summary": "A reminder before the due date needs a due date.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "A reminder before the due date needs a due date.",
+                      "code": "reminder_needs_due",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "reminder_in_past": {
+                    "summary": "The reminder time has already passed.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The reminder time has already passed.",
+                      "code": "reminder_in_past",
                       "errors": [
                         {
                           "path": "title",
@@ -17045,7 +17508,7 @@
         ],
         "operationId": "getTask",
         "summary": "The full task: description, direct subtasks in order and the parent chain",
-        "description": "`parentChain` runs from the root down to the direct parent. A task in Trash is returned with `deletedAt`.",
+        "description": "`parentChain` runs from the root down to the direct parent. A task in Trash is returned with `deletedAt`. `attachments` lists its live files, oldest first; `reminders` lists my own reminders on it by `fireAt` (dormant ones last).",
         "parameters": [
           {
             "schema": {
@@ -17462,7 +17925,7 @@
         ],
         "operationId": "completeTask",
         "summary": "Complete or reopen a task; it keeps its place in the list",
-        "description": "Last write wins on the `completed` clock; completing a completed task changes nothing. Followers are notified. `next` will carry the next instance of a recurring task.",
+        "description": "Last write wins on the `completed` clock; completing a completed task changes nothing. Followers are notified. Completing a recurring task creates its next instance directly below it (with the client’s `nextId`, else a new ID), returned as `next`; there is none when the series ended or another instance is still open. A `nextId` already in use is `409 id_conflict`.",
         "parameters": [
           {
             "schema": {
@@ -17600,6 +18063,28 @@
               }
             }
           },
+          "409": {
+            "description": "Conflicts with the current state. Codes: `id_conflict`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "id_conflict": {
+                    "summary": "That ID is already in use.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Conflict",
+                      "status": 409,
+                      "detail": "That ID is already in use.",
+                      "code": "id_conflict"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "410": {
             "description": "Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`.",
             "content": {
@@ -17613,6 +18098,1068 @@
                       "status": 410,
                       "detail": "The task is deleted; restore it first.",
                       "code": "conflict_deleted"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body is too large (1 MB). Codes: `payload_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "payload_too_large": {
+                    "summary": "The request body exceeds the limit of 1024 KB.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Content Too Large",
+                      "status": 413,
+                      "detail": "The request body exceeds the limit of 1024 KB.",
+                      "code": "payload_too_large"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not JSON. Codes: `unsupported_media_type`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unsupported_media_type": {
+                    "summary": "Send JSON (application/json).",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unsupported Media Type",
+                      "status": 415,
+                      "detail": "Send JSON (application/json).",
+                      "code": "unsupported_media_type"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "idempotency_key_reuse": {
+                    "summary": "This Idempotency-Key was already used for a different request.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "This Idempotency-Key was already used for a different request.",
+                      "code": "idempotency_key_reuse"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/{id}/skip": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "operationId": "skipTask",
+        "summary": "Delete this occurrence of a recurring task; the series continues",
+        "description": "The occurrence goes to Trash like a delete, and the next instance is created as if it had been completed today (with the client’s `nextId`, else a new ID). `next` is null when the series ended with it or another instance is open. A plain `DELETE` is \"this and following\": it ends the series. A task without a rule is `422 not_recurring`.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Task ID"
+            },
+            "required": true,
+            "description": "Task ID",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/EditTime"
+          },
+          {
+            "$ref": "#/components/parameters/ClientId"
+          },
+          {
+            "$ref": "#/components/parameters/Client"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskSkip"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The next instance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskSkipResult"
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  },
+                  "csrf_origin": {
+                    "summary": "Cross-origin request rejected.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Cross-origin request rejected.",
+                      "code": "csrf_origin"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current state. Codes: `id_conflict`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "id_conflict": {
+                    "summary": "That ID is already in use.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Conflict",
+                      "status": 409,
+                      "detail": "That ID is already in use.",
+                      "code": "id_conflict"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "conflict_deleted": {
+                    "summary": "The task is deleted; restore it first.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Gone",
+                      "status": 410,
+                      "detail": "The task is deleted; restore it first.",
+                      "code": "conflict_deleted"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body is too large (1 MB). Codes: `payload_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "payload_too_large": {
+                    "summary": "The request body exceeds the limit of 1024 KB.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Content Too Large",
+                      "status": 413,
+                      "detail": "The request body exceeds the limit of 1024 KB.",
+                      "code": "payload_too_large"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not JSON. Codes: `unsupported_media_type`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unsupported_media_type": {
+                    "summary": "Send JSON (application/json).",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unsupported Media Type",
+                      "status": 415,
+                      "detail": "Send JSON (application/json).",
+                      "code": "unsupported_media_type"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `not_recurring`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "idempotency_key_reuse": {
+                    "summary": "This Idempotency-Key was already used for a different request.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "This Idempotency-Key was already used for a different request.",
+                      "code": "idempotency_key_reuse"
+                    }
+                  },
+                  "not_recurring": {
+                    "summary": "The task does not repeat.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The task does not repeat.",
+                      "code": "not_recurring",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/{id}/reminders": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "operationId": "listReminders",
+        "summary": "My reminders on a task, by when they fire",
+        "description": "Reminders are personal: only my own are listed. `fireAt` null is a dormant reminder (relative, on a task without a due date); `firedAt` is set once it fired.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Task ID"
+            },
+            "required": true,
+            "description": "Task ID",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "My reminders",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "operationId": "createReminder",
+        "summary": "Remind me about a task: minutes before it is due, or at a moment",
+        "description": "`offsetMinutes` before the due moment (an all-day task is due at my `allDayReminderTime`), or `at` an instant. Only I am reminded, by in-app, push and email as my Task reminders preference says. An identical reminder (same offset or instant), or a repeat with the same client `id`, returns the existing one with `200`. At most 5 per task (`409 too_many_reminders`); a relative reminder needs a due date (`422 reminder_needs_due`); `at` must not be in the past (`422 reminder_in_past`).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Task ID"
+            },
+            "required": true,
+            "description": "Task ID",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/EditTime"
+          },
+          {
+            "$ref": "#/components/parameters/ClientId"
+          },
+          {
+            "$ref": "#/components/parameters/Client"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReminderCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The existing identical reminder",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reminder"
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            }
+          },
+          "201": {
+            "description": "The reminder",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reminder"
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  },
+                  "csrf_origin": {
+                    "summary": "Cross-origin request rejected.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Cross-origin request rejected.",
+                      "code": "csrf_origin"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current state. Codes: `id_conflict`, `too_many_reminders`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "id_conflict": {
+                    "summary": "That ID is already in use.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Conflict",
+                      "status": 409,
+                      "detail": "That ID is already in use.",
+                      "code": "id_conflict"
+                    }
+                  },
+                  "too_many_reminders": {
+                    "summary": "A task can have at most 5 reminders.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Conflict",
+                      "status": 409,
+                      "detail": "A task can have at most 5 reminders.",
+                      "code": "too_many_reminders"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "conflict_deleted": {
+                    "summary": "The task is deleted; restore it first.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Gone",
+                      "status": 410,
+                      "detail": "The task is deleted; restore it first.",
+                      "code": "conflict_deleted"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body is too large (1 MB). Codes: `payload_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "payload_too_large": {
+                    "summary": "The request body exceeds the limit of 1024 KB.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Content Too Large",
+                      "status": 413,
+                      "detail": "The request body exceeds the limit of 1024 KB.",
+                      "code": "payload_too_large"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not JSON. Codes: `unsupported_media_type`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unsupported_media_type": {
+                    "summary": "Send JSON (application/json).",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unsupported Media Type",
+                      "status": 415,
+                      "detail": "Send JSON (application/json).",
+                      "code": "unsupported_media_type"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `reminder_needs_due`, `reminder_in_past`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "idempotency_key_reuse": {
+                    "summary": "This Idempotency-Key was already used for a different request.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "This Idempotency-Key was already used for a different request.",
+                      "code": "idempotency_key_reuse"
+                    }
+                  },
+                  "reminder_needs_due": {
+                    "summary": "A reminder before the due date needs a due date.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "A reminder before the due date needs a due date.",
+                      "code": "reminder_needs_due",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "reminder_in_past": {
+                    "summary": "The reminder time has already passed.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The reminder time has already passed.",
+                      "code": "reminder_in_past",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/{id}/reminders/{reminderId}": {
+      "delete": {
+        "tags": [
+          "tasks"
+        ],
+        "operationId": "deleteReminder",
+        "summary": "Remove one of my reminders",
+        "description": "Only my own reminders can be removed; anyone else’s is `404`.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Task ID"
+            },
+            "required": true,
+            "description": "Task ID",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Reminder ID"
+            },
+            "required": true,
+            "description": "Reminder ID",
+            "name": "reminderId",
+            "in": "path"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/EditTime"
+          },
+          {
+            "$ref": "#/components/parameters/ClientId"
+          },
+          {
+            "$ref": "#/components/parameters/Client"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  },
+                  "csrf_origin": {
+                    "summary": "Cross-origin request rejected.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Cross-origin request rejected.",
+                      "code": "csrf_origin"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
                     }
                   }
                 },
@@ -26787,6 +28334,2225 @@
           }
         }
       }
+    },
+    "/api/v1/tasks/{id}/attachments": {
+      "post": {
+        "tags": [
+          "attachments"
+        ],
+        "operationId": "uploadAttachment",
+        "summary": "Attach a file to a task (multipart, online only)",
+        "description": "One multipart part named `file`, streamed to storage; above `ROOSTER_UPLOAD_MAX_MB` (default 25 MB) the upload is cut off with `413`. Needs the same access as editing the task. The stored type is sniffed from the content, never taken from the client: a file that claims to be a PNG, JPEG, GIF, WebP or AVIF image but is not one is `415 mime_mismatch`. Such images get their size and a 320 px WebP thumbnail. At most 100 attachments per task (`409 too_many_attachments`). Uploads are not idempotent (`Idempotency-Key` is not stored) and records `attachment_added` in the activity.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Task ID"
+            },
+            "required": true,
+            "description": "Task ID",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/EditTime"
+          },
+          {
+            "$ref": "#/components/parameters/ClientId"
+          },
+          {
+            "$ref": "#/components/parameters/Client"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The file. Its name is kept (cleaned) as the attachment’s file name.",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "The file. Its name is kept (cleaned) as the attachment’s file name."
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The attachment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Attachment"
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  },
+                  "csrf_origin": {
+                    "summary": "Cross-origin request rejected.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Cross-origin request rejected.",
+                      "code": "csrf_origin"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current state. Codes: `too_many_attachments`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "too_many_attachments": {
+                    "summary": "A task can have at most 100 attachments.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Conflict",
+                      "status": 409,
+                      "detail": "A task can have at most 100 attachments.",
+                      "code": "too_many_attachments"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "conflict_deleted": {
+                    "summary": "The task is deleted; restore it first.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Gone",
+                      "status": 410,
+                      "detail": "The task is deleted; restore it first.",
+                      "code": "conflict_deleted"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The file exceeds `ROOSTER_UPLOAD_MAX_MB`. Codes: `payload_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "payload_too_large": {
+                    "summary": "The request body exceeds the limit of 1024 KB.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Content Too Large",
+                      "status": 413,
+                      "detail": "The request body exceeds the limit of 1024 KB.",
+                      "code": "payload_too_large"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not multipart/form-data, or a file that claims to be an image (by type or extension) but is not one. Codes: `unsupported_media_type`, `mime_mismatch`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unsupported_media_type": {
+                    "summary": "Send JSON (application/json).",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unsupported Media Type",
+                      "status": 415,
+                      "detail": "Send JSON (application/json).",
+                      "code": "unsupported_media_type"
+                    }
+                  },
+                  "mime_mismatch": {
+                    "summary": "The file is not the image its name or type claims; nothing was uploaded.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unsupported Media Type",
+                      "status": 415,
+                      "detail": "The file is not the image its name or type claims; nothing was uploaded.",
+                      "code": "mime_mismatch"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "idempotency_key_reuse": {
+                    "summary": "This Idempotency-Key was already used for a different request.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "This Idempotency-Key was already used for a different request.",
+                      "code": "idempotency_key_reuse"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/attachments/{id}": {
+      "get": {
+        "tags": [
+          "attachments"
+        ],
+        "operationId": "downloadAttachment",
+        "summary": "Download an attachment",
+        "description": "Needs read access to the task, else `404`. Local storage streams the file with its sniffed type, `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none'; sandbox`; S3 storage answers `302` to a presigned URL. `?inline=1` shows a raster image inline instead of downloading it; everything else (SVG included) is always an attachment.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Attachment ID"
+            },
+            "required": true,
+            "description": "Attachment ID",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "`1`: inline for raster images.",
+              "example": "1"
+            },
+            "required": false,
+            "description": "`1`: inline for raster images.",
+            "name": "inline",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file",
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment` (or `inline` for `?inline=1` on a raster image), with an ASCII `filename` and the RFC 5987 `filename*`.",
+                "schema": {
+                  "type": "string"
+                },
+                "required": true
+              },
+              "Cache-Control": {
+                "description": "`private, max-age=300`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "S3 storage: a redirect to a presigned URL valid for 60 seconds, carrying the same type and disposition.",
+            "headers": {
+              "Location": {
+                "description": "The presigned URL",
+                "schema": {
+                  "type": "string"
+                },
+                "required": true
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "attachments"
+        ],
+        "operationId": "deleteAttachment",
+        "summary": "Delete an attachment (no undo)",
+        "description": "Only the person who attached it or the task’s assignee (`403 forbidden` for other members). The file is removed from storage shortly after.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Attachment ID"
+            },
+            "required": true,
+            "description": "Attachment ID",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/EditTime"
+          },
+          {
+            "$ref": "#/components/parameters/ClientId"
+          },
+          {
+            "$ref": "#/components/parameters/Client"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  },
+                  "csrf_origin": {
+                    "summary": "Cross-origin request rejected.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Cross-origin request rejected.",
+                      "code": "csrf_origin"
+                    }
+                  },
+                  "forbidden": {
+                    "summary": "Only owners of this organisation can do that.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Only owners of this organisation can do that.",
+                      "code": "forbidden"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "conflict_deleted": {
+                    "summary": "The task is deleted; restore it first.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Gone",
+                      "status": 410,
+                      "detail": "The task is deleted; restore it first.",
+                      "code": "conflict_deleted"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body is too large (1 MB). Codes: `payload_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "payload_too_large": {
+                    "summary": "The request body exceeds the limit of 1024 KB.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Content Too Large",
+                      "status": 413,
+                      "detail": "The request body exceeds the limit of 1024 KB.",
+                      "code": "payload_too_large"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not JSON. Codes: `unsupported_media_type`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unsupported_media_type": {
+                    "summary": "Send JSON (application/json).",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unsupported Media Type",
+                      "status": 415,
+                      "detail": "Send JSON (application/json).",
+                      "code": "unsupported_media_type"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "idempotency_key_reuse": {
+                    "summary": "This Idempotency-Key was already used for a different request.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "This Idempotency-Key was already used for a different request.",
+                      "code": "idempotency_key_reuse"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/attachments/{id}/thumb": {
+      "get": {
+        "tags": [
+          "attachments"
+        ],
+        "operationId": "downloadAttachmentThumb",
+        "summary": "The WebP thumbnail of an image attachment",
+        "description": "Fits inside 320 × 320 px. Only attachments whose `image.thumb` is true have one; others are `404`.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Attachment ID"
+            },
+            "required": true,
+            "description": "Attachment ID",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The thumbnail",
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment` (or `inline` for `?inline=1` on a raster image), with an ASCII `filename` and the RFC 5987 `filename*`.",
+                "schema": {
+                  "type": "string"
+                },
+                "required": true
+              },
+              "Cache-Control": {
+                "description": "`private, max-age=300`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "S3 storage: a redirect to a presigned URL valid for 60 seconds, carrying the same type and disposition.",
+            "headers": {
+              "Location": {
+                "description": "The presigned URL",
+                "schema": {
+                  "type": "string"
+                },
+                "required": true
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/avatar": {
+      "put": {
+        "tags": [
+          "me"
+        ],
+        "operationId": "putAvatar",
+        "summary": "Upload my avatar (multipart, browser session only)",
+        "description": "One multipart part named `file`: a PNG, JPEG, GIF, WebP or AVIF image of at most 2 MB (`413` above). It is cropped to a 256 × 256 WebP and `image` becomes `/api/v1/avatars/<userId>?v=<time>`. The sign-in provider’s picture is kept for `DELETE`, and signing in again never replaces the upload.",
+        "requestBody": {
+          "required": true,
+          "description": "The image.",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "The image."
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  },
+                  "csrf_origin": {
+                    "summary": "Cross-origin request rejected.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Cross-origin request rejected.",
+                      "code": "csrf_origin"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The file exceeds 2 MB. Codes: `payload_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "payload_too_large": {
+                    "summary": "The request body exceeds the limit of 1024 KB.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Content Too Large",
+                      "status": 413,
+                      "detail": "The request body exceeds the limit of 1024 KB.",
+                      "code": "payload_too_large"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not multipart/form-data, or a file that claims to be an image (by type or extension) but is not one. Codes: `unsupported_media_type`, `mime_mismatch`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unsupported_media_type": {
+                    "summary": "Send JSON (application/json).",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unsupported Media Type",
+                      "status": 415,
+                      "detail": "Send JSON (application/json).",
+                      "code": "unsupported_media_type"
+                    }
+                  },
+                  "mime_mismatch": {
+                    "summary": "The file is not the image its name or type claims; nothing was uploaded.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unsupported Media Type",
+                      "status": 415,
+                      "detail": "The file is not the image its name or type claims; nothing was uploaded.",
+                      "code": "mime_mismatch"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "idempotency_key_reuse": {
+                    "summary": "This Idempotency-Key was already used for a different request.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "This Idempotency-Key was already used for a different request.",
+                      "code": "idempotency_key_reuse"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/EditTime"
+          },
+          {
+            "$ref": "#/components/parameters/ClientId"
+          },
+          {
+            "$ref": "#/components/parameters/Client"
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "me"
+        ],
+        "operationId": "deleteAvatar",
+        "summary": "Remove my uploaded avatar (browser session only)",
+        "description": "Back to the sign-in provider’s picture. Without an uploaded avatar nothing changes.",
+        "responses": {
+          "200": {
+            "description": "The updated user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  },
+                  "csrf_origin": {
+                    "summary": "Cross-origin request rejected.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Cross-origin request rejected.",
+                      "code": "csrf_origin"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body is too large (1 MB). Codes: `payload_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "payload_too_large": {
+                    "summary": "The request body exceeds the limit of 1024 KB.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Content Too Large",
+                      "status": 413,
+                      "detail": "The request body exceeds the limit of 1024 KB.",
+                      "code": "payload_too_large"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not JSON. Codes: `unsupported_media_type`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unsupported_media_type": {
+                    "summary": "Send JSON (application/json).",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unsupported Media Type",
+                      "status": 415,
+                      "detail": "Send JSON (application/json).",
+                      "code": "unsupported_media_type"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "idempotency_key_reuse": {
+                    "summary": "This Idempotency-Key was already used for a different request.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "This Idempotency-Key was already used for a different request.",
+                      "code": "idempotency_key_reuse"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/EditTime"
+          },
+          {
+            "$ref": "#/components/parameters/ClientId"
+          },
+          {
+            "$ref": "#/components/parameters/Client"
+          }
+        ]
+      }
+    },
+    "/api/v1/avatars/{userId}": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "operationId": "getAvatar",
+        "summary": "A user’s uploaded avatar",
+        "description": "For anyone who shares an organisation with the user (and the user), otherwise `404`. The `?v=` of the `image` URL changes with every upload, so the response may be cached for a day.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "User ID"
+            },
+            "required": true,
+            "description": "User ID",
+            "name": "userId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The 256 × 256 WebP image",
+            "headers": {
+              "Cache-Control": {
+                "description": "`private, max-age=86400`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/ical-feeds": {
+      "get": {
+        "tags": [
+          "calendar"
+        ],
+        "operationId": "listIcalFeeds",
+        "summary": "My calendar feeds (browser session only)",
+        "description": "The feed URLs themselves are secret and only shown when a feed is created.",
+        "responses": {
+          "200": {
+            "description": "Feeds, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IcalFeedList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "calendar"
+        ],
+        "operationId": "createIcalFeed",
+        "summary": "Create a calendar feed URL (shown once; browser session only)",
+        "description": "A private `.ics` URL with my open tasks that have a due date: for one organisation (`orgId`) or all of them. `replaces` regenerates a feed: the old URL stops working in the same step. At most 10 feeds (`409 too_many_ical_feeds`). The URL is returned only in this response; a replay of the same `Idempotency-Key` is `409 token_shown_once`.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IcalFeedCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The feed and its secret URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IcalFeedCreated"
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  },
+                  "csrf_origin": {
+                    "summary": "Cross-origin request rejected.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Cross-origin request rejected.",
+                      "code": "csrf_origin"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current state. Codes: `too_many_ical_feeds`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "too_many_ical_feeds": {
+                    "summary": "You can have at most 10 calendar feeds; revoke one first.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Conflict",
+                      "status": 409,
+                      "detail": "You can have at most 10 calendar feeds; revoke one first.",
+                      "code": "too_many_ical_feeds"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body is too large (1 MB). Codes: `payload_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "payload_too_large": {
+                    "summary": "The request body exceeds the limit of 1024 KB.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Content Too Large",
+                      "status": 413,
+                      "detail": "The request body exceeds the limit of 1024 KB.",
+                      "code": "payload_too_large"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not JSON. Codes: `unsupported_media_type`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unsupported_media_type": {
+                    "summary": "Send JSON (application/json).",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unsupported Media Type",
+                      "status": 415,
+                      "detail": "Send JSON (application/json).",
+                      "code": "unsupported_media_type"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "idempotency_key_reuse": {
+                    "summary": "This Idempotency-Key was already used for a different request.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "This Idempotency-Key was already used for a different request.",
+                      "code": "idempotency_key_reuse"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/EditTime"
+          },
+          {
+            "$ref": "#/components/parameters/ClientId"
+          },
+          {
+            "$ref": "#/components/parameters/Client"
+          }
+        ]
+      }
+    },
+    "/api/v1/me/ical-feeds/{id}": {
+      "delete": {
+        "tags": [
+          "calendar"
+        ],
+        "operationId": "deleteIcalFeed",
+        "summary": "Revoke a calendar feed (browser session only)",
+        "description": "Its URL answers `404` from now on. Another user’s feed is `404`.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Feed ID"
+            },
+            "required": true,
+            "description": "Feed ID",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/EditTime"
+          },
+          {
+            "$ref": "#/components/parameters/ClientId"
+          },
+          {
+            "$ref": "#/components/parameters/Client"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Revoked",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  },
+                  "csrf_origin": {
+                    "summary": "Cross-origin request rejected.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Cross-origin request rejected.",
+                      "code": "csrf_origin"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body is too large (1 MB). Codes: `payload_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "payload_too_large": {
+                    "summary": "The request body exceeds the limit of 1024 KB.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Content Too Large",
+                      "status": 413,
+                      "detail": "The request body exceeds the limit of 1024 KB.",
+                      "code": "payload_too_large"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not JSON. Codes: `unsupported_media_type`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unsupported_media_type": {
+                    "summary": "Send JSON (application/json).",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unsupported Media Type",
+                      "status": 415,
+                      "detail": "Send JSON (application/json).",
+                      "code": "unsupported_media_type"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "idempotency_key_reuse": {
+                    "summary": "This Idempotency-Key was already used for a different request.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "This Idempotency-Key was already used for a different request.",
+                      "code": "idempotency_key_reuse"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ical/{file}": {
+      "get": {
+        "tags": [
+          "calendar"
+        ],
+        "operationId": "getIcalFeed",
+        "summary": "A calendar feed (iCalendar; the token is the credential)",
+        "description": "Outside `/api/v1` and without authentication: the secret token in the URL is the credential. My open tasks assigned to me with a due date, from 90 days ago on (at most 1,000): an all-day event for a date, a 30-minute event for a date with a time. Cacheable for 15 minutes (`ETag`, `304`). An unknown or revoked token is `404`; more than 20 of those from one IP within 10 minutes is `429`.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "`<token>.ics`",
+              "example": "rcal_8Kx1q0ZpVb3mT2yWc9dLr5nA7fGh4jE6sUo0iQ1zXk.ics"
+            },
+            "required": true,
+            "description": "`<token>.ics`",
+            "name": "file",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The calendar",
+            "headers": {
+              "ETag": {
+                "description": "A validator over the body",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "`private, max-age=900`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/calendar": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (`If-None-Match` matched the `ETag`)"
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        },
+        "security": []
+      }
     }
   },
   "webhooks": {},
@@ -26841,6 +30607,14 @@
     {
       "name": "push",
       "description": "Web Push subscriptions of my devices."
+    },
+    {
+      "name": "attachments",
+      "description": "Files attached to tasks: multipart uploads (online only), downloads with access checks, thumbnails of images."
+    },
+    {
+      "name": "calendar",
+      "description": "Private calendar feed URLs (iCalendar) of my tasks with a due date, for calendar apps to subscribe to."
     },
     {
       "name": "search",

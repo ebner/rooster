@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
+import { isUploadRequest } from './body-limit.ts';
 import type { AppEnv } from './context.ts';
 import { problemResponse } from './errors.ts';
 
@@ -26,7 +27,11 @@ export function csrfProtection(baseUrl: string): MiddlewareHandler<AppEnv> {
       return problemResponse(c, 403, 'csrf_origin', 'Cross-origin request rejected.');
     }
     const contentType = c.req.header('content-type');
-    if (contentType !== undefined && !/^application\/json\b/i.test(contentType)) {
+    // Uploads are multipart (04 §4.11); a cross-site form still fails the Origin check above.
+    const allowed = isUploadRequest(c.req.method, c.req.path)
+      ? /^(application\/json|multipart\/form-data)\b/i
+      : /^application\/json\b/i;
+    if (contentType !== undefined && !allowed.test(contentType)) {
       return problemResponse(c, 415, 'unsupported_media_type', 'Send JSON (application/json).');
     }
     return next();

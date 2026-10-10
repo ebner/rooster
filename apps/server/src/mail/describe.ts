@@ -1,5 +1,12 @@
-import { type DateFormat, formatRelative, type TimeFormat, todayIn } from '@rooster/core/dates';
+import {
+  type DateFormat,
+  dueInstant,
+  formatRelative,
+  type TimeFormat,
+  todayIn,
+} from '@rooster/core/dates';
 import type { NotificationType } from '@rooster/core/schemas';
+import type { ReminderDueSnapshot } from '../services/notification-service.ts';
 import type { Recipient } from '../services/pref-store.ts';
 import type { MailT } from './i18n.ts';
 
@@ -15,6 +22,8 @@ export interface DeliverableNotification {
   excerpt?: string | undefined;
   /** due_changed: the new due date (null when it was removed). */
   dueTo?: { dueDate: string | null; dueTime: string | null } | null | undefined;
+  /** P10 reminder: the task's due unit when it fired, and whether it fired late. */
+  reminder?: { due: ReminderDueSnapshot | null; late: boolean } | undefined;
   createdAt: number;
 }
 
@@ -26,8 +35,59 @@ export interface DescribedNotification {
   subject: string;
   /** A quoted comment excerpt (comment, mention). */
   quote?: string;
+  /** P10 reminder: the due moment in words ("Due today 14:00"), plus a delay note. */
+  when?: string;
   /** Same-origin path: the task in its org, or the inbox. */
   path: string;
+}
+
+/**
+ * A due unit as the recipient reads it: a timed task's moment converted to their timezone
+ * (a 14:00 Stockholm meeting is 08:00 in New York), an all-day one as its date.
+ */
+function dueLabel(due: ReminderDueSnapshot, recipient: Recipient, now: number): string {
+  let dueDate = due.dueDate;
+  let dueTime = due.dueTime;
+  if (dueTime !== null && due.dueTz !== null && due.dueTz !== recipient.timezone) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: recipient.timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date(dueInstant(dueDate, dueTime, due.dueTz)));
+    const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+    dueDate = `${part('year')}-${part('month')}-${part('day')}`;
+    dueTime = `${part('hour')}:${part('minute')}`;
+  }
+  return formatRelative(
+    { dueDate, dueTime },
+    {
+      today: todayIn(recipient.timezone, now),
+      locale: recipient.locale,
+      dateFormat: recipient.dateFormat as DateFormat,
+      timeFormat: recipient.timeFormat as TimeFormat,
+    },
+  );
+}
+
+function describeReminder(
+  n: DeliverableNotification,
+  recipient: Recipient,
+  t: MailT,
+  now: number,
+): DescribedNotification {
+  const due = n.reminder?.due ?? null;
+  const when =
+    due === null ? t('reminder.noDue') : t('reminder.due', { date: dueLabel(due, recipient, now) });
+  return {
+    event: t('event.reminder'),
+    subject: n.taskTitle ?? n.orgName,
+    path: n.taskId === null ? '/inbox' : `/o/${n.orgSlug}/t/${n.taskId}`,
+    when: n.reminder?.late === true ? t('reminder.late', { when }) : when,
+  };
 }
 
 export function describeNotification(
@@ -36,6 +96,7 @@ export function describeNotification(
   t: MailT,
   now: number,
 ): DescribedNotification {
+  if (n.type === 'reminder') return describeReminder(n, recipient, t, now);
   const actor = n.actorName === null || n.actorName === '' ? t('someone') : n.actorName;
   let event: string;
   if (n.type === 'due_changed') {

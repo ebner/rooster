@@ -2,6 +2,7 @@ import {
   findAssigneeToken,
   findDateInTitle,
   findGroupToken,
+  findReminderTokens,
   findTagTokens,
   removeSpans,
   stripBackticks,
@@ -10,6 +11,8 @@ import {
 } from '@rooster/core/dates';
 import { uuidv7 } from '@rooster/core/ids';
 import { compareKeys } from '@rooster/core/ordering';
+import type { RecurrenceBasis } from '@rooster/core/recurrence';
+import type { ReminderSpec } from '@rooster/core/reminders';
 import {
   type BulkOp,
   type BulkResult,
@@ -31,6 +34,7 @@ import {
   type TaskPatch,
   type TaskPatchResult,
   type TaskQuery,
+  type TaskSkipResult,
   type TrashPage,
 } from '@rooster/core/schemas';
 import { inSmartView, selectView } from '@rooster/core/views';
@@ -69,6 +73,7 @@ import {
   type ActivityService,
   viaFor,
 } from './activity-service.ts';
+import { attachmentsForTask } from './attachment-queries.ts';
 import {
   type Actor,
   emitAfterCommit,
@@ -115,6 +120,7 @@ import {
   descendantsOf,
   type GroupRow,
   inboxOf,
+  insertTaskRow,
   isMember,
   liveTasksById,
   loadTaskExtras,
@@ -141,6 +147,8 @@ import type { OrderingService, OrderTarget } from './ordering-service.ts';
 import { listMemberships, requireMembership } from './org-access.ts';
 import type { MemberRemovalStep } from './org-service.ts';
 import type { PlacementService, PlacementTarget } from './placement-service.ts';
+import type { RecurrenceService, SeriesNext } from './recurrence-service.ts';
+import type { ReminderService } from './reminder-service.ts';
 import { indexTasks } from './search-index.ts';
 import type { SearchService } from './search-service.ts';
 import { attachTags, emitTaskTagged, resolveTagsForCreate, setTaskTag } from './tag-service.ts';
@@ -149,7 +157,10 @@ const DAY_MS = 86_400_000;
 /** my-list includes tasks completed within the last 14 days by default (06 §2.3). */
 export const COMPLETED_WINDOW_MS = 14 * DAY_MS;
 
-const DUE_KEYS = ['dueDate', 'dueTime', 'dueTz', 'startDate'] as const;
+const DATE_KEYS = ['dueDate', 'dueTime', 'dueTz', 'startDate'] as const;
+/** P10: the rule is part of the due unit (LWW key `due`), but kept when only the date changes. */
+const RECURRENCE_KEYS = ['recurrence', 'recurrenceBasis'] as const;
+const DUE_KEYS = [...DATE_KEYS, ...RECURRENCE_KEYS] as const;
 
 /** `GET /tasks/resolve`: at most this many candidates in `409 ambiguous_ref`. */
 const AMBIGUOUS_CANDIDATES = 10;
@@ -170,7 +181,7 @@ interface DueUnit {
  */
 function dueUnit(
   input: {
-    [K in (typeof DUE_KEYS)[number]]?: string | null | undefined;
+    [K in (typeof DATE_KEYS)[number]]?: string | null | undefined;
   },
 ): DueUnit {
   const dueDate = input.dueDate ?? null;
@@ -194,8 +205,22 @@ function dueUnit(
   return { dueDate, dueTime, dueTz, startDate };
 }
 
+function hasKeys(input: object, keys: readonly string[]): boolean {
+  return keys.some((k) => k in input && (input as Record<string, unknown>)[k] !== undefined);
+}
+
 function hasDue(input: object): boolean {
-  return DUE_KEYS.some((k) => k in input && (input as Record<string, unknown>)[k] !== undefined);
+  return hasKeys(input, DUE_KEYS);
+}
+
+interface RecurrenceInput {
+  recurrence?: string | null | undefined;
+  recurrenceBasis?: RecurrenceBasis | null | undefined;
+}
+
+interface RecurrenceFields {
+  recurrence: string | null;
+  recurrenceBasis: RecurrenceBasis | null;
 }
 
 const isTrashCursor = (v: unknown): v is [number, string] =>
@@ -226,11 +251,13 @@ export const expansionRemovalStep: MemberRemovalStep = (tx, { orgId, userId }) =
   }
 };
 
-/** The collaboration services every task write feeds (P6). */
+/** The collaboration services every task write feeds (P6), and P10's series and reminders. */
 export interface TaskCollab {
   activity: ActivityService;
   followers: FollowerService;
   notifications: NotificationService;
+  recurrence: RecurrenceService;
+  reminders: ReminderService;
 }
 
 type DueSnapshot = { dueDate: string | null; dueTime: string | null } | null;
@@ -331,6 +358,48 @@ export class TaskService {
     });
   }
 
+  /**
+   * The rule after a write of the due unit (ADR 0049 §1.8): no due date clears it, `recurrence:
+   * null` stops the series, a new rule is normalised against the due date (basis `due` unless
+   * named), a new basis alone re-normalises the current rule, and absent fields keep it.
+   */
+  private recurrenceFor(
+    dueDate: string | null,
+    input: RecurrenceInput,
+    current: RecurrenceFields,
+  ): RecurrenceFields {
+    const none: RecurrenceFields = { recurrence: null, recurrenceBasis: null };
+    if (dueDate === null) {
+      if (typeof input.recurrence === 'string') {
+        throw new AppError('validation_failed', 422, 'A recurrence rule needs a due date.', [
+          { path: 'recurrence', message: 'Set a due date together with the rule' },
+        ]);
+      }
+      return none;
+    }
+    if (input.recurrence === null) return none;
+    const { recurrence } = this.collab;
+    if (input.recurrence !== undefined) {
+      const basis = input.recurrenceBasis ?? 'due';
+      return {
+        recurrence: recurrence.normalize(input.recurrence, dueDate, basis),
+        recurrenceBasis: basis,
+      };
+    }
+    if (input.recurrenceBasis !== undefined && input.recurrenceBasis !== null) {
+      if (current.recurrence === null) {
+        throw new AppError('validation_failed', 422, 'A recurrence basis needs a rule.', [
+          { path: 'recurrenceBasis', message: 'The task does not repeat' },
+        ]);
+      }
+      return {
+        recurrence: recurrence.normalize(current.recurrence, dueDate, input.recurrenceBasis),
+        recurrenceBasis: input.recurrenceBasis,
+      };
+    }
+    return current;
+  }
+
   // --- create -------------------------------------------------------------------------------
 
   /**
@@ -349,6 +418,10 @@ export class TaskService {
       authorizeOrg(actor, org.id, 'tasks:write');
       const fields = input.parse === true ? this.parseTitle(tx, actor, org.id, input) : input;
       const due = dueUnit(fields);
+      const rule = this.recurrenceFor(due.dueDate, fields, {
+        recurrence: null,
+        recurrenceBasis: null,
+      });
       const description = fields.description ?? '';
 
       if (input.id !== undefined) {
@@ -363,7 +436,8 @@ export class TaskService {
             existing.dueDate === due.dueDate &&
             existing.dueTime === due.dueTime &&
             existing.dueTz === due.dueTz &&
-            existing.startDate === due.startDate;
+            existing.startDate === due.startDate &&
+            existing.recurrence === rule.recurrence;
           if (!same) throw new AppError('id_conflict', 409, 'That ID is already in use.');
           authorizeTaskRead(tx, actor, existing);
           return taskDtoFor(tx, actor.userId, existing);
@@ -405,7 +479,7 @@ export class TaskService {
         ...(fields.tagNames === undefined ? {} : { tagNames: fields.tagNames }),
         now,
       });
-      const row = this.insertTask(tx, {
+      const row = insertTaskRow(tx, {
         id: input.id ?? uuidv7(),
         orgId: org.id,
         parentId: parent?.id ?? null,
@@ -422,9 +496,15 @@ export class TaskService {
         assigneeId,
         createdBy: actor.userId,
         ...due,
+        ...rule,
         now,
       });
       attachTags(tx, row.id, tagIds, meta?.editTime ?? now);
+      if (fields.reminders !== undefined) {
+        this.collab.reminders.applyTaskInput(tx, actor.userId, row, {
+          reminders: fields.reminders,
+        });
+      }
       this.placements.reconcilePlacements(
         tx,
         [row.id],
@@ -510,52 +590,6 @@ export class TaskService {
     return assigneeId;
   }
 
-  /** Inserts a task row with the next org sequence number and fresh clocks. */
-  private insertTask(
-    tx: Tx,
-    input: Pick<
-      TaskRow,
-      | 'id'
-      | 'orgId'
-      | 'parentId'
-      | 'subtaskPosition'
-      | 'title'
-      | 'description'
-      | 'assigneeId'
-      | 'createdBy'
-      | 'dueDate'
-      | 'dueTime'
-      | 'dueTz'
-      | 'startDate'
-    > &
-      Partial<Pick<TaskRow, 'recurrence' | 'recurrenceBasis'>> & { now: number },
-  ): TaskRow {
-    const seq = tx
-      .update(organization)
-      .set({ taskSeq: sql`${organization.taskSeq} + 1` })
-      .where(eq(organization.id, input.orgId))
-      .returning({ taskSeq: organization.taskSeq })
-      .get();
-    const { now, ...fields } = input;
-    const row: TaskRow = {
-      ...fields,
-      seq: seq?.taskSeq ?? null,
-      recurrence: input.recurrence ?? null,
-      recurrenceBasis: input.recurrenceBasis ?? null,
-      seriesId: null,
-      completedAt: null,
-      completedBy: null,
-      fieldClock: '{}',
-      createdAt: now,
-      updatedAt: now,
-      deletedAt: null,
-      deletedBy: null,
-    };
-    tx.insert(task).values(row).run();
-    indexTasks(tx, [row.id]);
-    return row;
-  }
-
   /** A fractional key among the subtasks of `parentId` (04 §7), excluding `exclude`. */
   private siblingKey(
     tx: Tx,
@@ -622,7 +656,8 @@ export class TaskService {
    * `parse: true` (CLI, MCP): `#tag` tokens tag the task, a trailing `>Group` token picks the
    * actor's group by case-insensitive name prefix (an unknown one stays in the title and the
    * task goes to the Inbox), `@member` assigns, and the last date phrase becomes the due date,
-   * in the actor's locale, timezone and week start. Explicit body fields win.
+   * in the actor's locale, timezone and week start. P10: a recurrence phrase ("every mon")
+   * sets the rule, and `!1h` tokens add the actor's reminders. Explicit body fields win.
    */
   private parseTitle(tx: Tx, actor: Actor, orgId: string, input: TaskCreate): TaskCreate {
     const settings = tx
@@ -637,6 +672,21 @@ export class TaskService {
       .get();
     const timezone = settings?.timezone ?? 'UTC';
     let title = input.title;
+    // P10 `!15m` reminder tokens (02 §8.1) go first: they may follow a `>Group` or `@name`
+    // token, which must otherwise be last. Kept when nothing else would be left.
+    const reminderTokens = findReminderTokens(title);
+    const reminders: ReminderSpec[] = [...(input.reminders ?? [])];
+    if (reminderTokens.length > 0) {
+      const rest = removeSpans(title, reminderTokens);
+      if (stripBackticks(rest).trim() !== '') {
+        title = rest;
+        for (const t of reminderTokens) {
+          if (!reminders.some((r) => 'offsetMinutes' in r && r.offsetMinutes === t.offsetMinutes)) {
+            reminders.push({ offsetMinutes: t.offsetMinutes });
+          }
+        }
+      }
+    }
     // `#tag` tokens anywhere (ADR 0007): removed from the title and added by name (created
     // when missing), unless nothing but tokens would be left.
     const tagTokens = findTagTokens(title);
@@ -669,6 +719,7 @@ export class TaskService {
       ...input,
       ...(groupId === undefined ? {} : { groupId }),
       ...(tagNames.length === 0 ? {} : { tagNames }),
+      ...(reminders.length === 0 ? {} : { reminders }),
     };
     if (input.assigneeId === undefined) {
       const token = this.findAssigneeToken(tx, actor, orgId, title);
@@ -677,7 +728,7 @@ export class TaskService {
         title = `${title.slice(0, token.start)} ${title.slice(token.end)}`;
       }
     }
-    const date = hasDue(input)
+    const date = hasKeys(input, DATE_KEYS)
       ? null
       : findDateInTitle(title, {
           today: todayIn(timezone, this.now()),
@@ -690,6 +741,11 @@ export class TaskService {
       result.dueDate = date.date;
       result.dueTime = date.time;
       result.dueTz = date.time === null ? null : timezone;
+      // P10 (FR-REC-2): "every mon" also sets the rule, unless the body names one.
+      if (date.recurrence !== undefined && input.recurrence === undefined) {
+        result.recurrence = date.recurrence.rule;
+        result.recurrenceBasis = date.recurrence.basis;
+      }
     } else {
       title = stripBackticks(title).replace(/\s+/g, ' ').trim();
     }
@@ -794,11 +850,28 @@ export class TaskService {
       });
     }
     if (hasDue(input)) {
-      const due = dueUnit(input);
+      // The date members are replaced as a whole when any is present; a rule-only patch keeps
+      // the dates. The rule follows `recurrenceFor` (ADR 0049 §1.8).
+      const due = hasKeys(input, DATE_KEYS)
+        ? dueUnit(input)
+        : {
+            dueDate: row.dueDate,
+            dueTime: row.dueTime,
+            dueTz: row.dueTz,
+            startDate: row.startDate,
+          };
+      const rule = this.recurrenceFor(due.dueDate, input, {
+        recurrence: row.recurrence,
+        recurrenceBasis: row.recurrenceBasis,
+      });
       apply(
         'due',
         DUE_KEYS.filter((k) => input[k] !== undefined),
-        () => Object.assign(changes, due),
+        () => {
+          Object.assign(changes, due, rule);
+          // ADR 0049 §1.4: a series is named after its first instance.
+          if (rule.recurrence !== null && row.seriesId === null) changes.seriesId = row.id;
+        },
       );
     }
     let reparented = false;
@@ -838,6 +911,13 @@ export class TaskService {
       }
     }
     if (reparented || reassigned) this.placements.reconcilePlacements(tx, [row.id]);
+    // Every user's reminders follow the due moment (ADR 0049 §2.1).
+    if (old.dueDate !== row.dueDate || old.dueTime !== row.dueTime || old.dueTz !== row.dueTz) {
+      this.collab.reminders.recomputeForTask(tx, row);
+    }
+    if (input.reminders !== undefined || input.clearReminders === true) {
+      this.collab.reminders.applyTaskInput(tx, actor.userId, row, input);
+    }
     // No task may move between groups outside the grant (11 §2.2). Assigning the task itself
     // to someone else may take it out of the list: that was checked against the actor's
     // placement before the change.
@@ -922,12 +1002,25 @@ export class TaskService {
     return [...feeds];
   }
 
-  /** Completes or reopens (LWW key `completed`). The placement is kept (05 §4.1). */
-  complete(actor: Actor, taskId: string, completed: boolean, meta: OpMeta): TaskCompleteResult {
+  /**
+   * Completes or reopens (LWW key `completed`). The placement is kept (05 §4.1). Completing a
+   * recurring task creates its next instance in the same transaction (ADR 0049 §1.4), with
+   * the client's `nextId` when given; it is `next` in the result.
+   */
+  complete(
+    actor: Actor,
+    taskId: string,
+    completed: boolean,
+    meta: OpMeta,
+    nextId?: string,
+  ): TaskCompleteResult {
     return immediate(this.deps.db, (tx) => {
       const row = this.requireLive(tx, actor, taskId);
-      this.applyComplete(tx, actor, row, completed, meta);
-      return { task: taskDtoFor(tx, actor.userId, row) };
+      const series = this.applyComplete(tx, actor, row, completed, meta, nextId);
+      return {
+        task: taskDtoFor(tx, actor.userId, row),
+        ...(series === null ? {} : { next: taskDtoFor(tx, actor.userId, series.next) }),
+      };
     });
   }
 
@@ -937,9 +1030,10 @@ export class TaskService {
     row: TaskRow,
     completed: boolean,
     meta: OpMeta,
-  ): void {
+    nextId?: string,
+  ): SeriesNext | null {
     const clock = parseClock(row.fieldClock);
-    if (!clockAllows(clock, 'completed', meta.editTime)) return;
+    if (!clockAllows(clock, 'completed', meta.editTime)) return null;
     clock.completed = meta.editTime;
     const changes: Partial<TaskRow> = {
       fieldClock: JSON.stringify(clock),
@@ -976,6 +1070,56 @@ export class TaskService {
     }
     this.emit(tx, actor, 'task.completed', row.orgId, [row.id], {
       activity: changed ? [row.id] : [],
+    });
+    return changed && completed ? this.continueSeries(tx, actor, row, meta, nextId) : null;
+  }
+
+  /**
+   * The next instance of `row`'s series, as of the edit time's day (ADR 0049 §1.2), announced
+   * like a create. Null when it does not repeat, has ended, or another instance is open.
+   */
+  private continueSeries(
+    tx: Tx,
+    actor: Actor,
+    row: TaskRow,
+    meta: OpMeta,
+    nextId?: string,
+  ): SeriesNext | null {
+    if (row.recurrence === null) return null;
+    const { recurrence } = this.collab;
+    const completedOn = recurrence.completionDate(tx, row, actor.userId, meta.editTime);
+    const series = recurrence.continueSeries(tx, this.scope(actor, meta), row, completedOn, nextId);
+    if (series === null) return null;
+    // The next instance lands where the completed one is, which the actor could write.
+    if (actor.grant !== null) {
+      authorizeGroupTarget(tx, actor, row.orgId, grantGroupOf(tx, actor.userId, series.next));
+    }
+    this.emit(tx, actor, 'task.created', row.orgId, [series.next.id], {
+      activity: series.created,
+    });
+    return series;
+  }
+
+  /**
+   * "Delete this occurrence" (FR-REC-4, ADR 0049 §1.7): the series continues with the next
+   * instance, as if the task had been completed on the edit time's day, and the occurrence
+   * goes to Trash like a delete. A task without a rule is `422 not_recurring`.
+   */
+  skip(actor: Actor, taskId: string, nextId: string | undefined, meta: OpMeta): TaskSkipResult {
+    return immediate(this.deps.db, (tx) => {
+      const row = requireTask(tx, actor.userId, taskId);
+      authorizeTaskWrite(tx, actor, row, 'tasks:delete');
+      if (row.deletedAt !== null) throw taskDeleted();
+      if (row.recurrence === null || row.dueDate === null) {
+        throw new AppError('not_recurring', 422, 'The task does not repeat.');
+      }
+      // A newer delete or restore elsewhere wins; then nothing happens here either.
+      if (!clockAllows(parseClock(row.fieldClock), 'deleted', meta.editTime)) {
+        return { next: null };
+      }
+      const series = this.continueSeries(tx, actor, row, meta, nextId);
+      this.applyDelete(tx, actor, row, meta);
+      return { next: series === null ? null : taskDtoFor(tx, actor.userId, series.next) };
     });
   }
 
@@ -1376,7 +1520,7 @@ export class TaskService {
         under: TaskRow | null,
         subtaskPosition: string | null,
       ): TaskRow => {
-        const row = this.insertTask(tx, {
+        const row = insertTaskRow(tx, {
           id,
           orgId: from.orgId,
           parentId: under?.id ?? null,
@@ -1485,7 +1629,8 @@ export class TaskService {
 
   /**
    * The full task (06 §2.4): description, live direct subtasks in sibling order and the
-   * parent chain (root first). A deleted task is returned with `deletedAt` (Trash).
+   * parent chain (root first). A deleted task is returned with `deletedAt` (Trash). P10: its
+   * live attachments, and the actor's own reminders on it.
    */
   detail(actor: Actor, taskId: string): TaskDetail {
     return immediate(this.deps.db, (tx) => {
@@ -1504,10 +1649,12 @@ export class TaskService {
         row,
         place !== undefined && place.userId === actor.userId ? place : null,
         { description: true, trash: true },
-        loadTaskExtras(tx, [row.id]),
+        loadTaskExtras(tx, [row.id], actor.userId),
       );
       return {
         ...dto,
+        attachments: attachmentsForTask(tx, row.id),
+        reminders: this.collab.reminders.forViewer(tx, actor.userId, row.id),
         description: row.description,
         subtasks: taskDtos(tx, actor.userId, subtasks),
         parentChain: ancestorsOf(tx, row)
@@ -1607,7 +1754,7 @@ export class TaskService {
         only,
         place !== undefined && place.userId === actor.userId ? place : null,
         { trash: true },
-        loadTaskExtras(tx, [only.id]),
+        loadTaskExtras(tx, [only.id], actor.userId),
       );
     });
   }
@@ -1997,7 +2144,9 @@ export class TaskService {
 
   private tagSets(tx: Tx, taskIds: readonly string[]): Map<string, Set<string>> {
     const out = new Map<string, Set<string>>();
-    for (const [id, tagIds] of loadTaskExtras(tx, taskIds).tagIds) out.set(id, new Set(tagIds));
+    for (const [id, tagIds] of loadTaskExtras(tx, taskIds, null).tagIds) {
+      out.set(id, new Set(tagIds));
+    }
     return out;
   }
 }

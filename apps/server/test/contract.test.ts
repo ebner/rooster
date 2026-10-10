@@ -9,10 +9,11 @@ import type {
   GrantScopeValue as GrantScope,
   TokenCreated,
 } from '@rooster/core/schemas';
+import sharp from 'sharp';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { App } from '../src/app.ts';
 import type { AppDb } from '../src/db/client.ts';
-import { account, oauthClient } from '../src/db/schema/index.ts';
+import { account, attachment, oauthClient } from '../src/db/schema/index.ts';
 import { NAMED_SCHEMAS } from '../src/lib/openapi.ts';
 import { checkResponse, type RouteContract, routeContracts } from '../src/lib/response-contract.ts';
 import type { Actor } from '../src/services/index.ts';
@@ -87,6 +88,8 @@ interface Req {
   body?: unknown;
   /** Sent as is, instead of `body`. */
   rawBody?: string;
+  /** P10 uploads: a multipart body, sent as is (it sets its own Content-Type). */
+  form?: FormData;
   headers?: Record<string, string>;
   /** Default: the route's actor (the owner unless the spec says otherwise). */
   as?: ActorKind;
@@ -112,6 +115,11 @@ interface Spec {
   fixture?: FixtureOptions;
   /** Specific error paths and further happy paths. */
   cases?: (Partial<Case> & { status: number })[];
+  /**
+   * Statuses whose generic case does not apply, so a specific case is required: an upload's
+   * `413` comes from its multipart file, not from the generic oversized JSON body (P10).
+   */
+  noGeneric?: number[];
 }
 
 const fresh = () => uuidv7();
@@ -243,7 +251,286 @@ const writesInB = (f: Fixture): GrantConstraintsValue => ({
 });
 const invalidIdempotencyKey = { 'idempotency-key': 'not a key!' };
 
+// --- Phase 10 (tasks): a recurring task and a reminder of the owner -------------------------
+const p10 = new WeakMap<Fixture, { recurringId: string; reminderId: string; at: number }>();
+function p10Setup(f: Fixture): void {
+  const owner = f.actors.owner;
+  const recurring = f.app.services.tasks.create(owner, f.orgId, {
+    title: 'Weekly',
+    groupId: f.groupId,
+    dueDate: '2026-10-09',
+    recurrence: 'FREQ=WEEKLY',
+  });
+  const at = Date.now() + 3_600_000;
+  const { reminder } = f.app.services.reminders.create(owner, f.taskId, { at });
+  p10.set(f, { recurringId: recurring.id, reminderId: reminder.id, at });
+}
+function p10Of(f: Fixture) {
+  const ids = p10.get(f);
+  if (ids === undefined) throw new Error('p10Setup did not run');
+  return ids;
+}
+/** Distinct future instants for absolute reminders. */
+const laterAt = (n: number) => Date.now() + (2 + n) * 3_600_000;
+
+// --- Phase 10 (files): an image attachment, a member's avatar, a calendar feed ---------------
+const files = new WeakMap<
+  Fixture,
+  { attachmentId: string; feedId: string; avatarUserId: string }
+>();
+/** A 1 × 1 PNG. */
+const PNG_1PX = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64',
+);
+function fileForm(content: Uint8Array | string, name: string, type: string): FormData {
+  const form = new FormData();
+  const data = typeof content === 'string' ? content : new Uint8Array(content);
+  form.append('file', new File([data], name, { type }));
+  return form;
+}
+const uploadOf = (form: FormData) => {
+  const req = new Request(BASE_URL, { method: 'POST', body: form });
+  return {
+    contentType: req.headers.get('content-type') ?? undefined,
+    contentLength: undefined,
+    body: req.body,
+  };
+};
+async function filesSetup(f: Fixture): Promise<void> {
+  const s = f.app.services;
+  const image = await sharp({ create: { width: 64, height: 48, channels: 3, background: '#c33' } })
+    .png()
+    .toBuffer();
+  const att = await s.attachments.upload(
+    f.actors.owner,
+    f.taskId,
+    uploadOf(fileForm(image, 'photo.png', 'image/png')),
+  );
+  await s.avatars.put(f.actors.member, uploadOf(fileForm(PNG_1PX, 'me.png', 'image/png')));
+  const feedId = s.icalFeeds.create(f.actors.owner, {}).feed.id;
+  files.set(f, { attachmentId: att.id, feedId, avatarUserId: f.actors.member.userId });
+}
+function filesOf(f: Fixture) {
+  const ids = files.get(f);
+  if (ids === undefined) throw new Error('filesSetup did not run');
+  return ids;
+}
+const attachmentPath = (f: Fixture, suffix = '') =>
+  `/api/v1/attachments/${filesOf(f).attachmentId}${suffix}`;
+const deleteOwnersTask = (f: Fixture) =>
+  f.app.services.tasks.remove(f.actors.owner, f.taskId, {
+    editTime: Date.now(),
+    clientId: null,
+    client: null,
+  });
+
 const SPECS: Record<string, Spec> = {
+  // Phase 10 (files).
+  'POST /api/v1/tasks/{id}/attachments': {
+    ok: (f) => ({
+      path: `/api/v1/tasks/${f.taskId}/attachments`,
+      form: fileForm('notes', 'notes.txt', 'text/plain'),
+    }),
+    noGeneric: [413],
+    cases: [
+      {
+        status: 409,
+        code: 'too_many_attachments',
+        setup: (f) => {
+          for (let i = 0; i < 100; i++) {
+            const id = fresh();
+            f.db.orm
+              .insert(attachment)
+              .values({
+                id,
+                taskId: f.taskId,
+                orgId: f.orgId,
+                uploaderId: f.ownerId,
+                filename: 'x.txt',
+                mime: 'text/plain',
+                size: 1,
+                storage: 'local',
+                key: `${f.orgId}/${id}`,
+                createdAt: Date.now(),
+              })
+              .run();
+          }
+        },
+      },
+      {
+        status: 410,
+        code: 'conflict_deleted',
+        request: (f) => ({
+          path: `/api/v1/tasks/${f.trashedTaskId}/attachments`,
+          form: fileForm('notes', 'notes.txt', 'text/plain'),
+        }),
+      },
+      {
+        status: 413,
+        code: 'payload_too_large',
+        fixture: { env: { ROOSTER_UPLOAD_MAX_MB: '1' } },
+        request: (f) => ({
+          path: `/api/v1/tasks/${f.taskId}/attachments`,
+          form: fileForm(new Uint8Array(1024 * 1024 + 1), 'big.bin', 'application/octet-stream'),
+        }),
+      },
+      {
+        status: 415,
+        code: 'mime_mismatch',
+        request: (f) => ({
+          path: `/api/v1/tasks/${f.taskId}/attachments`,
+          form: fileForm('<html></html>', 'cat.png', 'image/png'),
+        }),
+      },
+      {
+        status: 422,
+        name: 'no file part',
+        code: 'validation_failed',
+        request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/attachments`, form: new FormData() }),
+      },
+    ],
+  },
+  'GET /api/v1/attachments/{id}': {
+    setup: filesSetup,
+    ok: (f) => ({ path: attachmentPath(f, '?inline=1') }),
+  },
+  'GET /api/v1/attachments/{id}/thumb': {
+    setup: filesSetup,
+    ok: (f) => ({ path: attachmentPath(f, '/thumb') }),
+  },
+  'DELETE /api/v1/attachments/{id}': {
+    setup: filesSetup,
+    ok: (f) => ({ path: attachmentPath(f) }),
+    cases: [
+      {
+        status: 403,
+        code: 'forbidden',
+        request: (f) => ({ path: attachmentPath(f), as: 'member' }),
+      },
+      { status: 410, code: 'conflict_deleted', setup: deleteOwnersTask },
+    ],
+  },
+  'PUT /api/v1/me/avatar': {
+    ok: () => ({ path: '/api/v1/me/avatar', form: fileForm(PNG_1PX, 'me.png', 'image/png') }),
+    noGeneric: [413],
+    cases: [
+      {
+        status: 413,
+        code: 'payload_too_large',
+        request: () => ({
+          path: '/api/v1/me/avatar',
+          form: fileForm(new Uint8Array(2 * 1024 * 1024 + 1), 'big.png', 'image/png'),
+        }),
+      },
+      {
+        status: 415,
+        code: 'mime_mismatch',
+        request: () => ({ path: '/api/v1/me/avatar', form: fileForm('hi', 'me.png', 'image/png') }),
+      },
+      {
+        status: 422,
+        name: 'no file part',
+        code: 'validation_failed',
+        request: () => ({ path: '/api/v1/me/avatar', form: new FormData() }),
+      },
+    ],
+  },
+  'DELETE /api/v1/me/avatar': { setup: filesSetup, ok: () => ({ path: '/api/v1/me/avatar' }) },
+  'GET /api/v1/avatars/{userId}': {
+    setup: filesSetup,
+    ok: (f) => ({ path: `/api/v1/avatars/${filesOf(f).avatarUserId}` }),
+  },
+  'GET /api/v1/me/ical-feeds': { setup: filesSetup, ok: () => ({ path: '/api/v1/me/ical-feeds' }) },
+  'POST /api/v1/me/ical-feeds': {
+    ok: () => ({ path: '/api/v1/me/ical-feeds', body: {} }),
+    cases: [
+      {
+        status: 404,
+        code: 'not_found',
+        request: () => ({ path: '/api/v1/me/ical-feeds', body: { orgId: fresh() } }),
+      },
+      {
+        status: 409,
+        code: 'too_many_ical_feeds',
+        setup: (f) => {
+          for (let i = 0; i < 10; i++) f.app.services.icalFeeds.create(f.actors.owner, {});
+        },
+      },
+    ],
+  },
+  'DELETE /api/v1/me/ical-feeds/{id}': {
+    setup: filesSetup,
+    ok: (f) => ({ path: `/api/v1/me/ical-feeds/${filesOf(f).feedId}` }),
+  },
+  // Phase 10 (tasks).
+  'POST /api/v1/tasks/{id}/skip': {
+    setup: p10Setup,
+    ok: (f) => ({ path: `/api/v1/tasks/${p10Of(f).recurringId}/skip`, body: {} }),
+    cases: [
+      {
+        status: 410,
+        code: 'conflict_deleted',
+        setup: (f) =>
+          f.app.services.tasks.remove(f.actors.owner, p10Of(f).recurringId, {
+            editTime: Date.now(),
+            clientId: null,
+            client: null,
+          }),
+      },
+      {
+        status: 409,
+        code: 'id_conflict',
+        request: (f) => ({
+          path: `/api/v1/tasks/${p10Of(f).recurringId}/skip`,
+          body: { nextId: f.taskId },
+        }),
+      },
+      {
+        status: 422,
+        code: 'not_recurring',
+        request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/skip`, body: {} }),
+      },
+    ],
+  },
+  'GET /api/v1/tasks/{id}/reminders': {
+    setup: p10Setup,
+    ok: (f) => ({ path: `/api/v1/tasks/${f.taskId}/reminders` }),
+  },
+  'POST /api/v1/tasks/{id}/reminders': {
+    setup: p10Setup,
+    // The identical reminder: 200 with the existing one.
+    ok: (f) => ({ path: `/api/v1/tasks/${f.taskId}/reminders`, body: { at: p10Of(f).at } }),
+    cases: [
+      {
+        status: 201,
+        name: 'a new reminder',
+        request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/reminders`, body: { at: laterAt(1) } }),
+      },
+      {
+        status: 409,
+        code: 'too_many_reminders',
+        setup: (f) => {
+          for (let n = 1; n <= 4; n += 1) {
+            f.app.services.reminders.create(f.actors.owner, f.taskId, { at: laterAt(n) });
+          }
+        },
+        request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/reminders`, body: { at: laterAt(9) } }),
+      },
+      {
+        status: 410,
+        code: 'conflict_deleted',
+        request: (f) => ({
+          path: `/api/v1/tasks/${f.trashedTaskId}/reminders`,
+          body: { at: laterAt(1) },
+        }),
+      },
+    ],
+  },
+  'DELETE /api/v1/tasks/{id}/reminders/{reminderId}': {
+    setup: p10Setup,
+    ok: (f) => ({ path: `/api/v1/tasks/${f.taskId}/reminders/${p10Of(f).reminderId}` }),
+  },
   'GET /api/v1/meta': { ok: () => ({ path: '/api/v1/meta' }) },
   'GET /api/v1/invites/{token}': {
     ok: (f) => ({ path: `/api/v1/invites/${f.inviteToken}` }),
@@ -592,6 +879,15 @@ const SPECS: Record<string, Spec> = {
     ok: (f) => ({ path: `/api/v1/tasks/${f.taskId}`, body: { title: 'Renamed' } }),
     cases: [
       {
+        status: 409,
+        code: 'too_many_reminders',
+        setup: p10Setup,
+        request: (f) => ({
+          path: `/api/v1/tasks/${f.taskId}`,
+          body: { reminders: [1, 2, 3, 4, 5].map((n) => ({ at: laterAt(n) })) },
+        }),
+      },
+      {
         status: 200,
         name: 'stale edit',
         request: (f) => ({
@@ -628,6 +924,15 @@ const SPECS: Record<string, Spec> = {
   'POST /api/v1/tasks/{id}/complete': {
     ok: (f) => ({ path: `/api/v1/tasks/${f.taskId}/complete`, body: { completed: true } }),
     cases: [
+      {
+        status: 409,
+        code: 'id_conflict',
+        setup: p10Setup,
+        request: (f) => ({
+          path: `/api/v1/tasks/${p10Of(f).recurringId}/complete`,
+          body: { completed: true, nextId: f.taskId },
+        }),
+      },
       {
         status: 410,
         code: 'conflict_deleted',
@@ -1421,8 +1726,9 @@ async function send(f: Fixture, method: string, req: Req, actor: ActorKind): Pro
     headers.set('origin', BASE_URL);
     if (as !== 'anonymous') headers.set('cookie', f.jars[as].header());
   }
-  let body: string | undefined;
-  if (req.rawBody !== undefined) body = req.rawBody;
+  let body: string | FormData | undefined;
+  if (req.form !== undefined) body = req.form;
+  else if (req.rawBody !== undefined) body = req.rawBody;
   else if (req.body !== undefined) {
     body = JSON.stringify(req.body);
     headers.set('content-type', 'application/json');
@@ -1527,7 +1833,9 @@ function casesFor(route: string, spec: Spec): { cases: Case[]; missing: string[]
   const cases: Case[] = [{ name: 'happy path', status: success, request: spec.ok }, ...specific];
   const missing: string[] = [];
   for (const status of declared.filter((s) => s >= 400)) {
-    const generic = genericCase(route, spec, status);
+    const generic = spec.noGeneric?.includes(status)
+      ? `${route}: ${status} needs a case`
+      : genericCase(route, spec, status);
     if (typeof generic !== 'string') cases.push(generic);
     else if (!specific.some((c) => c.status === status)) missing.push(generic);
   }

@@ -1,5 +1,5 @@
 import type { Group, Task } from '@rooster/core/schemas';
-import { and, asc, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, min, notInArray, sql } from 'drizzle-orm';
 import {
   comment,
   member,
@@ -7,9 +7,11 @@ import {
   placement,
   task,
   taskGroup,
+  taskReminder,
   taskTag,
 } from '../db/schema/index.ts';
 import { AppError } from '../lib/errors.ts';
+import { attachmentCounts } from './attachment-queries.ts';
 import type { Tx } from './context.ts';
 import type { OrderDomain } from './ordering-service.ts';
 import { indexTasks } from './search-index.ts';
@@ -204,22 +206,36 @@ export function chunked<T>(items: readonly T[], size = IN_CHUNK): T[][] {
 }
 
 /**
- * Derived TaskDTO fields loaded per batch: tag IDs in add order, subtask counts and live
- * comment counts.
+ * Derived TaskDTO fields loaded per batch: tag IDs in add order, subtask counts, live comment
+ * and attachment counts, and (P10) the viewer's next pending reminder.
  */
 export interface TaskExtras {
   tagIds: Map<string, string[]>;
   counts: Map<string, { subtasks: number; subtasksDone: number }>;
   comments: Map<string, number>;
+  attachments: Map<string, number>;
+  /** The viewer's earliest pending (not fired, not dormant) reminder per task (FR-REM-4). */
+  nextReminderAt: Map<string, number>;
 }
 
 /**
- * Tags (ordered by `added_at`, then insertion), direct live subtask counts (FR-TASK-10) and
- * live comment counts of `taskIds`. Completing a subtask counts it as done; deleted subtasks
- * and comments do not count.
+ * Tags (ordered by `added_at`, then insertion), direct live subtask counts (FR-TASK-10), live
+ * comment and attachment counts of `taskIds`, and `viewerId`'s next reminder on each (null:
+ * nobody's, e.g. an export without a viewer). Completing a subtask counts it as done; deleted
+ * subtasks, comments and attachments do not count.
  */
-export function loadTaskExtras(tx: Tx, taskIds: readonly string[]): TaskExtras {
-  const extras: TaskExtras = { tagIds: new Map(), counts: new Map(), comments: new Map() };
+export function loadTaskExtras(
+  tx: Tx,
+  taskIds: readonly string[],
+  viewerId: string | null,
+): TaskExtras {
+  const extras: TaskExtras = {
+    tagIds: new Map(),
+    counts: new Map(),
+    comments: new Map(),
+    attachments: attachmentCounts(tx, taskIds),
+    nextReminderAt: new Map(),
+  };
   for (const ids of chunked([...new Set(taskIds)])) {
     const tags = tx
       .select({ taskId: taskTag.taskId, tagId: taskTag.tagId })
@@ -255,6 +271,23 @@ export function loadTaskExtras(tx: Tx, taskIds: readonly string[]): TaskExtras {
       .all()) {
       extras.comments.set(c.taskId, c.n);
     }
+    if (viewerId !== null) {
+      for (const r of tx
+        .select({ taskId: taskReminder.taskId, at: min(taskReminder.fireAt) })
+        .from(taskReminder)
+        .where(
+          and(
+            eq(taskReminder.userId, viewerId),
+            inArray(taskReminder.taskId, ids),
+            isNull(taskReminder.firedAt),
+            isNotNull(taskReminder.fireAt),
+          ),
+        )
+        .groupBy(taskReminder.taskId)
+        .all()) {
+        if (r.at !== null) extras.nextReminderAt.set(r.taskId, r.at);
+      }
+    }
   }
   return extras;
 }
@@ -281,14 +314,20 @@ export function toTaskDto(
     dueTime: row.dueTime,
     dueTz: row.dueTz,
     startDate: row.startDate,
+    recurrence: row.recurrence,
+    recurrenceBasis: row.recurrenceBasis,
+    // Done and deleted tasks never remind (FR-REM-3): no bell, though a reopen brings it back.
+    nextReminderAt:
+      row.completedAt === null && row.deletedAt === null
+        ? (extras?.nextReminderAt.get(row.id) ?? null)
+        : null,
     completedAt: row.completedAt,
     tagIds: [...(extras?.tagIds.get(row.id) ?? [])],
-    // Attachments (P10) do not exist yet.
     counts: {
       subtasks: counts?.subtasks ?? 0,
       subtasksDone: counts?.subtasksDone ?? 0,
       comments: extras?.comments.get(row.id) ?? 0,
-      attachments: 0,
+      attachments: extras?.attachments.get(row.id) ?? 0,
     },
     placement: place === null ? null : { groupId: place.groupId, position: place.position },
     createdAt: row.createdAt,
@@ -327,7 +366,7 @@ export function taskDtoFor(tx: Tx, userId: string, row: TaskRow): Task {
     row,
     place !== undefined && place.userId === userId ? place : null,
     { description: true },
-    loadTaskExtras(tx, [row.id]),
+    loadTaskExtras(tx, [row.id], userId),
   );
 }
 
@@ -340,7 +379,7 @@ export function taskDtos(
 ): Task[] {
   const ids = rows.map((r) => r.id);
   const places = options.places ?? placementsFor(tx, userId, ids);
-  const extras = loadTaskExtras(tx, ids);
+  const extras = loadTaskExtras(tx, ids, userId);
   return rows.map((r) =>
     toTaskDto(r, places.get(r.id) ?? null, options.trash === true ? { trash: true } : {}, extras),
   );
@@ -525,4 +564,55 @@ export function softDeleteTasks(
       .run();
   }
   indexTasks(tx, all);
+}
+
+/** What a new task row needs; the rest (sequence number, clocks, timestamps) is filled in. */
+export type NewTaskRow = Pick<
+  TaskRow,
+  | 'id'
+  | 'orgId'
+  | 'parentId'
+  | 'subtaskPosition'
+  | 'title'
+  | 'description'
+  | 'assigneeId'
+  | 'createdBy'
+  | 'dueDate'
+  | 'dueTime'
+  | 'dueTz'
+  | 'startDate'
+> &
+  Partial<Pick<TaskRow, 'recurrence' | 'recurrenceBasis' | 'seriesId'>> & { now: number };
+
+/**
+ * Inserts a task row with the next org sequence number and fresh clocks, and indexes it. A
+ * task created with a rule starts its own series (ADR 0049: `series_id` is the first
+ * instance's id) unless `seriesId` names the series it continues.
+ */
+export function insertTaskRow(tx: Tx, input: NewTaskRow): TaskRow {
+  const seq = tx
+    .update(organization)
+    .set({ taskSeq: sql`${organization.taskSeq} + 1` })
+    .where(eq(organization.id, input.orgId))
+    .returning({ taskSeq: organization.taskSeq })
+    .get();
+  const { now, ...fields } = input;
+  const recurrence = input.recurrence ?? null;
+  const row: TaskRow = {
+    ...fields,
+    seq: seq?.taskSeq ?? null,
+    recurrence,
+    recurrenceBasis: recurrence === null ? null : (input.recurrenceBasis ?? 'due'),
+    seriesId: input.seriesId ?? (recurrence === null ? null : input.id),
+    completedAt: null,
+    completedBy: null,
+    fieldClock: '{}',
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+    deletedBy: null,
+  };
+  tx.insert(task).values(row).run();
+  indexTasks(tx, [row.id]);
+  return row;
 }

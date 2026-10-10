@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { MiddlewareHandler } from 'hono';
 import { PAT_PREFIX } from '../services/grant-service.ts';
 import type { IdempotencyStore } from '../services/idempotency-store.ts';
+import { isUploadRequest } from './body-limit.ts';
 import type { AppEnv } from './context.ts';
 import { problemResponse } from './errors.ts';
 
@@ -33,6 +34,9 @@ export function idempotencyMiddleware(store: IdempotencyStore): MiddlewareHandle
         { path: 'Idempotency-Key', message: 'Expected 1–128 characters of [A-Za-z0-9_-]' },
       ]);
     }
+    // Uploads are online-only and never replayed by the outbox (ADR 0049 §3.1); fingerprinting
+    // would read the whole file into memory.
+    if (isUploadRequest(c.req.method, c.req.path)) return next();
     const url = new URL(c.req.url);
     const fingerprint = createHash('sha256')
       .update(`${c.req.method} ${url.pathname}${url.search}\n`)

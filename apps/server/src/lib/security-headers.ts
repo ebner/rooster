@@ -44,5 +44,16 @@ export function securityHeaders(formOrigins: readonly string[] = []): Middleware
     ...SHARED,
     contentSecurityPolicy: { ...csp, scriptSrc: ["'self'", NONCE], fontSrc: ["'self'", 'data:'] },
   });
-  return (c, next) => (c.req.path === DOCS_PATH ? docs(c, next) : strict(c, next));
+  return async (c, next) => {
+    if (c.req.path === DOCS_PATH) return docs(c, next);
+    // A response with its own, stricter policy keeps it: downloads of user files send
+    // `default-src 'none'; sandbox` (P10, ADR 0049 §3.5). hono sets its headers after the
+    // handler, so the handler's value is restored afterwards.
+    let own: string | null = null;
+    await strict(c, async () => {
+      await next();
+      own = c.res.headers.get('content-security-policy');
+    });
+    if (own !== null) c.res.headers.set('Content-Security-Policy', own);
+  };
 }

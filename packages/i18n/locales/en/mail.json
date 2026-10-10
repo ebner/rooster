@@ -8,7 +8,8 @@
     "completed": "{actor} completed a task you created",
     "due_changed": "{actor} changed the due date of your task to {date}",
     "due_removed": "{actor} removed the due date of your task",
-    "invite_accepted": "{actor} joined {org}"
+    "invite_accepted": "{actor} joined {org}",
+    "reminder": "Reminder"
   },
   "category": {
     "assigned": "assignments",
@@ -17,6 +18,7 @@
     "completed": "completed tasks",
     "due_changed": "due date changes",
     "invite_accepted": "accepted invites",
+    "reminder": "task reminders",
     "digest": "the daily digest"
   },
   "action": {
@@ -32,6 +34,12 @@
   "batch": {
     "subject": "{count, plural, one {# new notification} other {# new notifications}}",
     "heading": "New in your inbox"
+  },
+  "reminder": {
+    "subject": "Reminder: {title}",
+    "due": "Due {date}",
+    "noDue": "You asked to be reminded about this task",
+    "late": "{when} (this reminder was delayed)"
   },
   "digest": {
     "subject": "Your day: {date}",

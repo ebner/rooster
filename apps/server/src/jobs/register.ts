@@ -6,7 +6,8 @@ import type { Scheduler } from './scheduler.ts';
 export interface JobDeps {
   db: AppDb;
   /** Without services only the maintenance pragma runs (used by low-level tests). */
-  services?: Pick<Services, 'retention' | 'backups' | 'push' | 'mail'>;
+  services?: Pick<Services, 'retention' | 'backups' | 'push' | 'mail'> &
+    Partial<Pick<Services, 'reminders' | 'blobGc'>>;
   config?: Pick<Config, 'backup'>;
 }
 
@@ -33,8 +34,25 @@ export function registerJobs(scheduler: Scheduler, deps: JobDeps): void {
   scheduler.register('email-batch', '*/5 * * * *', async () => {
     await services.mail.runBatches();
   });
-  // P10 jobs (tasks): task reminders.
-  // P10 jobs (files): blob GC.
+  // P10 jobs (tasks): task reminders (ADR 0049 §2.3). Every due reminder is claimed
+  // before it is sent, so overlapping runs, restarts and instances on the same database never
+  // fire one twice. Also run once at boot, so reminders missed while down go out at once.
+  const { reminders } = services;
+  if (reminders !== undefined) {
+    scheduler.register('task-reminders', '* * * * *', async () => {
+      await reminders.runDue();
+    });
+    void scheduler.run('task-reminders');
+  }
+  // P10 jobs (files): blob GC (ADR 0049 §3.6). Deletes the blobs the attachment trigger
+  // queued (deletes, purges); failures stay queued for the next run. Also run once at boot.
+  const { blobGc } = services;
+  if (blobGc !== undefined) {
+    scheduler.register('blob-gc', '* * * * *', async () => {
+      await blobGc.drain();
+    });
+    void scheduler.run('blob-gc');
+  }
   const cron = config?.backup.cron ?? null;
   if (cron !== null) {
     scheduler.register('backup', cron, () => {

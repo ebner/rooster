@@ -89,6 +89,16 @@ export const OPENAPI_TAGS: { name: string; description: string }[] = [
   },
   { name: 'push', description: 'Web Push subscriptions of my devices.' },
   {
+    name: 'attachments',
+    description:
+      'Files attached to tasks: multipart uploads (online only), downloads with access checks, thumbnails of images.',
+  },
+  {
+    name: 'calendar',
+    description:
+      'Private calendar feed URLs (iCalendar) of my tasks with a due date, for calendar apps to subscribe to.',
+  },
+  {
     name: 'search',
     description: 'Full-text search over the tasks of my orgs, with filters.',
   },

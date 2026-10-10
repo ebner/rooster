@@ -112,11 +112,15 @@ export async function checkResponse(
       ? null
       : { ...base, kind: 'unexpected_body', message: 'A body where none is declared' };
   }
-  if (!declared.content.has(type)) {
+  // A download of whatever a user attached is declared as `*/*` (or `image/*`).
+  const declaredType = [type, `${type.split('/')[0]}/*`, '*/*'].find((t) =>
+    declared.content.has(t),
+  );
+  if (type === '' || declaredType === undefined) {
     const expected = [...declared.content.keys()].join(', ');
     return { ...base, kind: 'content_type', message: `${type || 'no type'}, expected ${expected}` };
   }
-  const schema = declared.content.get(type);
+  const schema = declared.content.get(declaredType);
   if (schema === undefined || schema === null) return null;
   let body: unknown;
   try {

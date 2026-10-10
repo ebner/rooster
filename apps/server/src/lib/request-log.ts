@@ -6,10 +6,11 @@ import type { Logger } from './logger.ts';
 const PROBE_PATHS = new Set(['/healthz', '/readyz']);
 
 /**
- * Tokens that are bearer secrets in the path: invites (the API routes and the web page) and
- * unsubscribe links (P7, GET and POST), which act for a user without a session.
+ * Tokens that are bearer secrets in the path: invites (the API routes and the web page),
+ * unsubscribe links (P7, GET and POST), which act for a user without a session, and calendar
+ * feeds (P10, `/ical/<token>.ics`).
  */
-const TOKEN_PATH = /^(\/api\/v1\/invites|\/invite|\/unsubscribe)\/[^/]+/;
+const TOKEN_PATH = /^(\/api\/v1\/invites|\/invite|\/unsubscribe|\/ical)\/[^/]+/;
 
 /** The path as logged: secrets in it replaced by their route parameter name. */
 export function loggablePath(path: string): string {

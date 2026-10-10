@@ -32,6 +32,7 @@ import {
   requireMembership,
   toOrgDto,
 } from './org-access.ts';
+import { recomputeUserReminders } from './reminder-service.ts';
 
 type UserRow = typeof user.$inferSelect;
 
@@ -168,6 +169,18 @@ export class UserService {
       if (Object.keys(changes).length === 0) return this.toMe(tx, actor, current);
       changes.updatedAt = new Date(this.deps.clock());
       tx.update(user).set(changes).where(eq(user.id, actor.userId)).run();
+      // P10 (ADR 0049 §2.1): reminders on all-day tasks fire at the user's local time.
+      const before = resolvePrefs(parseJson(current.prefs)).allDayReminderTime;
+      const after =
+        changes.prefs === undefined
+          ? before
+          : resolvePrefs(parseJson(changes.prefs)).allDayReminderTime;
+      if (
+        (changes.timezone !== undefined && changes.timezone !== current.timezone) ||
+        after !== before
+      ) {
+        recomputeUserReminders(this.deps, tx, actor.userId);
+      }
       // A new name shows in every member list the user appears in.
       const extra: Audience[] =
         changes.name === undefined || changes.name === current.name

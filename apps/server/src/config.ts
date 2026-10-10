@@ -184,7 +184,10 @@ const envSchema = z.object({
   ROOSTER_VAPID_PRIVATE: vapidKey(32),
   ROOSTER_VAPID_SUBJECT: vapidSubject,
   ROOSTER_UPLOAD_MAX_MB: intInRange(25, 1, 10_240),
-  ROOSTER_S3_ENDPOINT: z.url().optional(),
+  /** P10: the only host S3 requests go to (SSRF, 04 §4.11). */
+  ROOSTER_S3_ENDPOINT: z
+    .url({ protocol: /^https?$/, error: 'must be an absolute http(s) URL' })
+    .optional(),
   ROOSTER_S3_REGION: z.string().optional(),
   ROOSTER_S3_BUCKET: z.string().optional(),
   ROOSTER_S3_ACCESS_KEY_ID: z.string().optional(),

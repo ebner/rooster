@@ -1,8 +1,10 @@
+import { mkdirSync, rmSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { serve } from '@hono/node-server';
 import { createApp } from './app.ts';
+import { uploadTmpDir } from './blob/multipart.ts';
 import { loadConfig } from './config.ts';
-import { prepareDatabase } from './db/boot.ts';
+import { PRIVATE_DIR_MODE, prepareDatabase } from './db/boot.ts';
 import { registerJobs } from './jobs/register.ts';
 import { createScheduler } from './jobs/scheduler.ts';
 import { trackConnections } from './lib/graceful-close.ts';
@@ -26,6 +28,11 @@ try {
   process.exit(1);
 }
 const { db, instanceId } = prepared;
+
+// P10: uploads in flight die with the process, so their temp files go at boot (ADR 0049 §3.1).
+const tmpDir = uploadTmpDir(config.dataDir);
+rmSync(tmpDir, { recursive: true, force: true });
+mkdirSync(tmpDir, { recursive: true, mode: PRIVATE_DIR_MODE });
 
 const app = createApp({ config, db, logger, version: VERSION });
 

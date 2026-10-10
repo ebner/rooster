@@ -1,11 +1,17 @@
+import type { S3Client } from '@aws-sdk/client-s3';
+import { BlobGc } from '../blob/gc.ts';
+import { type BlobStores, createBlobStores } from '../blob/store.ts';
 import { EventBus } from '../events/bus.ts';
 import { TaskQueue } from '../lib/task-queue.ts';
 import { MailService } from '../mail/mail-service.ts';
 import { type MailTransport, smtpTransport } from '../mail/transport.ts';
 import { PushService } from '../push/push-service.ts';
 import { type PushSender, webPushSender } from '../push/transport.ts';
+import { VERSION } from '../version.ts';
 import { ActivityService } from './activity-service.ts';
 import { AdminService } from './admin-service.ts';
+import { AttachmentService } from './attachment-service.ts';
+import { AvatarService } from './avatar-service.ts';
 import { BackupService } from './backup-service.ts';
 import { CommentService } from './comment-service.ts';
 import type { ServiceDeps } from './context.ts';
@@ -13,6 +19,7 @@ import { ExportService } from './export-service.ts';
 import { FollowerService } from './follower-service.ts';
 import { GrantService } from './grant-service.ts';
 import { GroupService } from './group-service.ts';
+import { IcalService } from './ical-service.ts';
 import { IdempotencyStore } from './idempotency-store.ts';
 import { IdentityService } from './identity-service.ts';
 import { NotificationService } from './notification-service.ts';
@@ -20,6 +27,8 @@ import { OrderingService } from './ordering-service.ts';
 import { OrgService, type OrgServiceOptions } from './org-service.ts';
 import { PlacementService } from './placement-service.ts';
 import { prefEnabled } from './pref-store.ts';
+import { RecurrenceService } from './recurrence-service.ts';
+import { ReminderService } from './reminder-service.ts';
 import { RetentionService } from './retention-service.ts';
 import { SearchService } from './search-service.ts';
 import { SignInPolicy } from './sign-in-policy.ts';
@@ -57,7 +66,21 @@ export interface Services {
   /** Domain events, published after commit (04 §4.5). */
   events: EventBus;
   // P10 services (tasks): recurrence, reminders.
+  /** Recurring tasks: the stored rule and the next instance (FR-REC, ADR 0049 §1). */
+  recurrence: RecurrenceService;
+  /** Task reminders and the job that fires them (FR-REM, ADR 0049 §2). */
+  reminders: ReminderService;
   // P10 services (files): blobs, attachments, avatars, calendar feeds.
+  /** Attachment and avatar storage: local, or S3 with `ROOSTER_S3_BUCKET` (04 §4.8). */
+  blobs: BlobStores;
+  /** Deletes the blobs queued in `blob_gc` (ADR 0049 §3.6). */
+  blobGc: BlobGc;
+  /** Task attachments (FR-ATT). */
+  attachments: AttachmentService;
+  /** Uploaded avatars (FR-SET-1). */
+  avatars: AvatarService;
+  /** Calendar feeds (FR-CAL). */
+  icalFeeds: IcalService;
 }
 
 /** Outbound transports; tests inject fakes. */
@@ -66,6 +89,8 @@ export interface DeliveryTransports {
   pushSender?: PushSender;
   /** Default: SMTP from `ROOSTER_SMTP_URL`, or none without it. */
   mailTransport?: MailTransport | null;
+  /** P10: the S3 client of the blob store (tests inject one with a fake `send`). */
+  s3Client?: S3Client;
 }
 
 /** Push and email sends in flight at once. */
@@ -75,7 +100,7 @@ export function createServices(
   input: Omit<ServiceDeps, 'events'> & { events?: EventBus } & DeliveryTransports,
   options: OrgServiceOptions = {},
 ): Services {
-  const { pushSender, mailTransport, ...rest } = input;
+  const { pushSender, mailTransport, s3Client, ...rest } = input;
   const deps: ServiceDeps = { ...rest, events: input.events ?? new EventBus(input.logger) };
   const ordering = new OrderingService();
   const placements = new PlacementService(deps, ordering);
@@ -120,7 +145,16 @@ export function createServices(
   const search = new SearchService(deps);
   const users = new UserService(deps);
   // P10 construction (tasks).
+  const reminders = new ReminderService(deps, notifications);
+  const recurrence = new RecurrenceService(deps, ordering, placements, activity, reminders);
   // P10 construction (files).
+  const blobs = createBlobStores(deps.config, s3Client);
+  const blobGc = new BlobGc(deps.db, blobs, deps.logger);
+  // Purging tasks (permanent delete, the trash purge) and deleting orgs cascade to their
+  // attachments, whose trigger queues the blobs: free them now rather than at the next minute.
+  deps.events.on((event) => {
+    if (event.type === 'task.purged' || event.type === 'org.deleted') blobGc.kick();
+  });
   return {
     orgs,
     users,
@@ -139,6 +173,8 @@ export function createServices(
       activity,
       followers,
       notifications,
+      recurrence,
+      reminders,
     }),
     tags: new TagService(deps),
     search,
@@ -155,7 +191,14 @@ export function createServices(
     deliveries,
     events: deps.events,
     // P10 (tasks).
+    recurrence,
+    reminders,
     // P10 (files).
+    blobs,
+    blobGc,
+    attachments: new AttachmentService(deps, blobs, blobGc, activity),
+    avatars: new AvatarService(deps, blobs, users),
+    icalFeeds: new IcalService(deps, VERSION),
   };
 }
 

@@ -119,6 +119,8 @@ describe('trash purge (05 §4.5)', () => {
       'due-reminders',
       'email-digest',
       'email-batch',
+      'task-reminders',
+      'blob-gc',
       'backup',
     ]);
     await scheduler.run('purge');
@@ -135,6 +137,8 @@ describe('trash purge (05 §4.5)', () => {
       'due-reminders',
       'email-digest',
       'email-batch',
+      'task-reminders',
+      'blob-gc',
     ]);
     off.stop();
   });

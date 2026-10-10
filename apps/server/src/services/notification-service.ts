@@ -40,6 +40,13 @@ export const READ_NOTIFICATION_RETENTION_MS = 90 * 86_400_000;
 
 type DueSnapshot = Notification['data']['from'];
 
+/** P10: the task's due unit when a reminder fired, for the push and email text. */
+export interface ReminderDueSnapshot {
+  dueDate: string;
+  dueTime: string | null;
+  dueTz: string | null;
+}
+
 /** What a service asks to be notified; recipients are filtered by `notify`. */
 export interface NotificationDraft {
   userId: string;
@@ -54,6 +61,12 @@ export interface NotificationDraft {
     from?: DueSnapshot;
     to?: DueSnapshot;
     userId?: string;
+    /** P10 reminder (FR-REM-3): the reminder, when it was due to fire, and whether it is late. */
+    reminderId?: string;
+    fireAt?: number;
+    late?: boolean;
+    /** P10 reminder: the due unit when it fired (stored only, for push and email). */
+    due?: ReminderDueSnapshot | null;
   };
 }
 
@@ -68,6 +81,10 @@ export interface StoredData {
   from?: DueSnapshot;
   to?: DueSnapshot;
   userId?: string;
+  reminderId?: string;
+  fireAt?: number;
+  late?: boolean;
+  due?: ReminderDueSnapshot | null;
   actorName?: string;
   actorImage?: string | null;
   taskTitle?: string;
@@ -114,6 +131,9 @@ function toNotificationDto(row: NotificationRow, orgSlug: string): Notification 
   if (stored.from !== undefined) data.from = stored.from;
   if (stored.to !== undefined) data.to = stored.to;
   if (stored.userId !== undefined) data.userId = stored.userId;
+  if (stored.reminderId !== undefined) data.reminderId = stored.reminderId;
+  if (stored.fireAt !== undefined) data.fireAt = stored.fireAt;
+  if (stored.late !== undefined) data.late = stored.late;
   return {
     id: row.id,
     orgId: row.orgId,
@@ -150,7 +170,8 @@ export class NotificationService {
 
   /**
    * Fan-out inside the caller's transaction. Drafts addressed to the actor or to non-members
-   * of the org are dropped, and so are recipients no enabled channel reaches. A recipient
+   * of the org are dropped (a `reminder` has no actor: it is the one notification about the
+   * user's own doing, FR-REM-3), and so are recipients no enabled channel reaches. A recipient
    * with the type off in-app but on for push or email gets a hidden row (read, outside the
    * inbox). After commit each in-app recipient gets an `['notifications']` invalidation and
    * an SSE `notification` event with the unread count and a preview, and push and email take

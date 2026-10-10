@@ -60,6 +60,7 @@ import {
   requireOwner,
   toOrgDto,
 } from './org-access.ts';
+import { reminderRemovalStep } from './reminder-service.ts';
 
 const DAY_MS = 86_400_000;
 const MAX_SLUG_ATTEMPTS = 1000;
@@ -465,6 +466,8 @@ export class OrgService {
         .all()
         .map((r) => r.id);
       for (const step of this.removalSteps) step(tx, scope);
+      // P10 (ADR 0049 §2.4): their reminders on the org's tasks go with them.
+      reminderRemovalStep(tx, scope);
       deleteMemberGroups(tx, scope);
       tx.delete(orgMemberPref)
         .where(and(eq(orgMemberPref.orgId, org.id), eq(orgMemberPref.userId, userId)))

@@ -58,9 +58,20 @@ export const PROBLEM_CODES = {
     status: 409,
     detail: 'A tag with that name already exists in this organisation.',
   },
+  too_many_reminders: { status: 409, detail: 'A task can have at most 5 reminders.' },
   push_keys_from_env: {
     status: 409,
     detail: 'The VAPID keys come from the environment and cannot be replaced here.',
+  },
+  // P10 (files): attachments and calendar feeds.
+  too_many_attachments: { status: 409, detail: 'A task can have at most 100 attachments.' },
+  too_many_ical_feeds: {
+    status: 409,
+    detail: 'You can have at most 10 calendar feeds; revoke one first.',
+  },
+  mime_mismatch: {
+    status: 415,
+    detail: 'The file is not the image its name or type claims; nothing was uploaded.',
   },
   conflict_deleted: { status: 410, detail: 'The task is deleted; restore it first.' },
   invite_invalid: { status: 410, detail: 'This invite can no longer be used (expired).' },
@@ -93,6 +104,12 @@ export const PROBLEM_CODES = {
     status: 422,
     detail: 'Type the organisation name exactly to delete it.',
   },
+  not_recurring: { status: 422, detail: 'The task does not repeat.' },
+  reminder_needs_due: {
+    status: 422,
+    detail: 'A reminder before the due date needs a due date.',
+  },
+  reminder_in_past: { status: 422, detail: 'The reminder time has already passed.' },
   rate_limited: { status: 429, detail: 'Too many requests; slow down.' },
   push_failed: { status: 502, detail: 'The push service did not accept the message.' },
   unavailable: { status: 503, detail: 'The server is shutting down; reconnect shortly.' },

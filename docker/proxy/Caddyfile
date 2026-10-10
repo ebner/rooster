@@ -1,4 +1,9 @@
 # Caddy streams text/event-stream without buffering by default.
+# Uploads (P10): rooster enforces its own body limits (ROOSTER_UPLOAD_MAX_MB, default 25 MB);
+# Caddy sets none. To cap bodies at the proxy too, keep the cap above the upload limit.
 rooster.example.com {
+	request_body {
+		max_size 30MB
+	}
 	reverse_proxy 127.0.0.1:3000
 }

@@ -330,19 +330,28 @@ export class PushService {
       t,
       this.deps.clock(),
     );
-    const payload: PushPayload = {
-      kind: 'notification',
-      title: described.event,
-      body:
-        described.quote === undefined
-          ? described.subject
-          : `${described.subject}\n${described.quote}`,
-      url: described.path,
-      tag:
-        loaded.notification.taskId === null
-          ? `notification:${id}`
-          : `task:${loaded.notification.taskId}`,
-    };
+    const { taskId } = loaded.notification;
+    // A task reminder (ADR 0049 §2.3) reads as the task itself: its title, then when it is
+    // due. Its own tag keeps it apart from other news about the task.
+    const payload: PushPayload =
+      loaded.notification.type === 'reminder'
+        ? {
+            kind: 'notification',
+            title: described.subject,
+            body: described.when ?? described.event,
+            url: described.path,
+            tag: taskId === null ? `notification:${id}` : `reminder:${taskId}`,
+          }
+        : {
+            kind: 'notification',
+            title: described.event,
+            body:
+              described.quote === undefined
+                ? described.subject
+                : `${described.subject}\n${described.quote}`,
+            url: described.path,
+            tag: taskId === null ? `notification:${id}` : `task:${taskId}`,
+          };
     const outcomes = await Promise.all(loaded.subscriptions.map((s) => this.deliver(s, payload)));
     if (outcomes.includes('ok')) {
       immediate(this.deps.db, (tx) => {

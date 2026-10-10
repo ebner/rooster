@@ -10,7 +10,7 @@ import type { Config } from './config.ts';
 import type { AppDb } from './db/client.ts';
 import { EventBus } from './events/bus.ts';
 import { SseHub } from './events/hub.ts';
-import { API_BODY_LIMIT, AUTH_BODY_LIMIT, bodyLimitFor } from './lib/body-limit.ts';
+import { AUTH_BODY_LIMIT, apiBodyLimit, bodyLimitFor } from './lib/body-limit.ts';
 import type { AppEnv } from './lib/context.ts';
 import { csrfProtection } from './lib/csrf.ts';
 import { createErrorHandler, notFoundHandler, validationHook } from './lib/errors.ts';
@@ -29,6 +29,8 @@ import { DOCS_PATH, securityHeaders } from './lib/security-headers.ts';
 import { webApp } from './lib/web-app.ts';
 import { registerMcpRoutes } from './mcp/route.ts';
 import { registerAdminRoutes } from './routes/admin.ts';
+import { registerAttachmentRoutes } from './routes/attachments.ts';
+import { registerAvatarRoutes } from './routes/avatars.ts';
 import { registerCollabRoutes } from './routes/collab.ts';
 import { registerDiscoveryRoutes } from './routes/discovery.ts';
 import { registerEventRoutes } from './routes/events.ts';
@@ -36,6 +38,7 @@ import { registerExportRoutes } from './routes/export.ts';
 import { registerGrantRoutes } from './routes/grants.ts';
 import { registerGroupRoutes } from './routes/groups.ts';
 import { registerHealthRoutes } from './routes/health.ts';
+import { registerIcalRoutes } from './routes/ical.ts';
 import { registerIdentityRoutes } from './routes/identities.ts';
 import { registerInviteRoutes } from './routes/invites.ts';
 import { registerMeRoutes } from './routes/me.ts';
@@ -146,7 +149,8 @@ export function createApp(deps: AppDeps): App {
   }
   // Before the auth mount, which buffers the whole body (auth/mount.ts).
   app.use('/api/auth/*', bodyLimitFor(AUTH_BODY_LIMIT));
-  app.use('/api/v1/*', bodyLimitFor(API_BODY_LIMIT));
+  // The upload routes stream their bodies under their own limits (lib/body-limit.ts).
+  app.use('/api/v1/*', apiBodyLimit());
   app.use('/api/v1/*', actorMiddleware({ auth, services, config }));
   app.use('/api/v1/*', csrfProtection(config.baseUrl));
   const rateLimit = deps.apiRateLimit ?? API_RATE_LIMIT;
@@ -183,6 +187,10 @@ export function createApp(deps: AppDeps): App {
   registerIdentityRoutes(app, p9);
   registerMcpRoutes(app, p9);
   registerDiscoveryRoutes(app, p9);
+  // Phase 10 (files): attachments, avatars, calendar feeds (`/ical` is outside /api/v1).
+  registerAttachmentRoutes(app, services);
+  registerAvatarRoutes(app, services);
+  registerIcalRoutes(app, { services, config, clock });
 
   app.openAPIRegistry.register('Problem', ProblemSchema);
   let openApiDocument: string | undefined;

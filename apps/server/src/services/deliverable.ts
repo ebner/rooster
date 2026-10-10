@@ -29,6 +29,9 @@ export function toDeliverable(
     actorName: row.actorId === null ? null : (stored.actorName ?? ''),
     excerpt: stored.excerpt,
     dueTo: stored.to,
+    ...(row.type === 'reminder'
+      ? { reminder: { due: stored.due ?? null, late: stored.late === true } }
+      : {}),
     createdAt: row.createdAt,
   };
 }

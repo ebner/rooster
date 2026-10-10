@@ -430,6 +430,12 @@ export function createAuth(deps: AuthDeps) {
             services.orgs.bootstrapPersonalOrg(created.id, locale);
           },
         },
+        update: {
+          // P10 (FR-SET-1): an uploaded avatar survives any profile update better-auth makes.
+          after: async (updated) => {
+            services.avatars.keepUploaded(updated.id);
+          },
+        },
       },
       session: {
         create: {

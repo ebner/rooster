@@ -37,6 +37,7 @@ import { DigestEmail, type DigestSection } from './templates/digest.tsx';
 import { InviteEmail } from './templates/invite.tsx';
 import type { ListItem, UnsubscribeLink } from './templates/layout.tsx';
 import { BatchEmail, NotificationEmail } from './templates/notifications.tsx';
+import { ReminderEmail } from './templates/reminder.tsx';
 import type { MailTransport } from './transport.ts';
 import { parseUnsubscribeToken, unsubscribeToken } from './unsubscribe-token.ts';
 
@@ -210,7 +211,10 @@ export class MailService {
     const now = this.deps.clock();
     const claimed = immediate(this.deps.db, (tx) => {
       const found = loadDeliverable(tx, id);
-      if (found === null || found.recipient.prefs.emailMode !== 'immediate') return null;
+      if (found === null) return null;
+      // A task reminder is time-bound: it never waits for the batch (ADR 0049 §2.3).
+      const timeBound = found.notification.type === 'reminder';
+      if (!timeBound && found.recipient.prefs.emailMode !== 'immediate') return null;
       if (!prefEnabled(tx, found.recipient.id, found.notification.type, 'email')) return null;
       const pending = tx
         .update(notification)
@@ -224,6 +228,19 @@ export class MailService {
     const t = mailT(recipient.locale);
     const item = describeNotification(claimed.notification, recipient, t, now);
     try {
+      if (claimed.notification.type === 'reminder') {
+        await this.send({
+          to: recipient.email,
+          subject: t('reminder.subject', { title: item.subject }),
+          element: ReminderEmail({
+            ...this.frame(recipient, ['reminder']),
+            item,
+            url: this.url(item.path),
+          }),
+          unsubscribe: { userId: recipient.id, category: 'reminder' },
+        });
+        return;
+      }
       await this.send({
         to: recipient.email,
         subject:

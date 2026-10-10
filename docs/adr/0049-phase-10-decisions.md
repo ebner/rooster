@@ -136,3 +136,82 @@ added below as an amendment.
   - A complete or skip response without `next` removes the optimistic instance. This is how "at most one open instance" reaches the client, which has no `seriesId`.
   - `reminder.delete` carries the deleted spec (not sent) as its undo.
 - **New exports:** `firstOccurrence`, `recurrencePresets`, `presetOf`, `describeRule` (structured, for localisation), `reminderTokenSpans` and `touchesRecurrence`.
+
+## Amendments: web, attachments and settings (WP 10.2, 10.3 web, FR-SET-1)
+- **Paste:** an image becomes an attachment only when the clipboard has no `text/plain`, so a selection pasted from an office app stays text. Paste and drop are caught in the capture phase on `[data-pane-root]`, so the editor and the composer never see them. A pasted screenshot is named "Pasted image <date time>.png" (localised).
+- **Uploads:**
+  - They run one at a time per task in a module store, so closing the pane neither cancels them nor loses their progress.
+  - Failures keep their reason: 413 (also a proxy's bare 413), `mime_mismatch` and 409 each have their own text, and other failures offer Retry.
+  - The cache is updated from the 201; then the detail, `my-list`, `everyone` and `activity` are invalidated.
+- **Layout:** images are a 3-column grid; everything else, SVG included, is a download row. Delete has an inline confirm, shown only to the uploader or the assignee, and only online.
+- **Keys:** `Tab+U` (`attachFile`) opens the file picker from the pane. The lightbox has its own keymap scope (←/→ wrap around, Esc), swipes on touch, preloads its neighbours, and returns focus to the last image's thumbnail.
+- **Calendar feed:**
+  - It is its own settings page between Notifications and Security, with a phone index entry.
+  - The URL is shown once, with Copy and a `webcal://` Subscribe link.
+  - "New link" regenerates (`replaces`) and Revoke has a danger confirm. At 10 feeds the New button is disabled.
+- **Avatar:** Upload/Change and Remove (only shown for an uploaded picture). The type and the 2 MB limit are checked on the client too. `/me` is updated, and member, everyone, activity and notification caches are invalidated.
+
+## Amendments: web, recurrence and reminders (WP 10.1, 10.4 web)
+- **Picker:**
+  - A second footer row holds "↻ Repeat" and "🔔 Reminder" (Alt+R). Open sections stack below it, and the popover scrolls.
+  - Repeat changes are a draft that keeps the popover open. Enter or a click outside commits them, and Esc discards them. Choosing a day still commits and closes.
+  - A preset is stored by id and follows the chosen date: "Weekly" moves with the task.
+  - Custom offers every N of a unit, weekdays, day of the month / nth / last weekday, "Count from completion", and an end (never, a date or a count).
+  - Choosing a repeat without a date sets the date from `firstOccurrence`.
+- **Reminders:**
+  - Chips show dormant reminders muted with "needs a due date", and fired ones muted.
+  - Presets that already exist are disabled; at 5, none are offered.
+  - Custom accepts `2h`/`1d`/`due` or a phrase; a date without a time uses `allDayReminderTime`.
+  - Adding a reminder first saves the date draft, so a relative reminder resolves against the new date.
+- **Pane:** the reminders sit as a second line in the Due date cell, followed by a Repeat row ("Doesn't repeat" or the rule). On phones, both the date sheet and the pane sheet have Repeat and Reminders rows.
+- **Recurring delete:**
+  - Applies to an open recurring task with a due date: an anchored popover on desktop (row, or the pane's ⋯), a sheet on phones.
+  - "Delete this task" is focused first, with toasts "Task deleted · the series continues" and "… it no longer repeats".
+  - Bulk delete stays plain. Recurring tasks inside a multi-select complete one by one, each with a `nextId`.
+- **Title tokens:** `!1h` applies only when the title has a date phrase or the task already has a due date; otherwise it stays plain text.
+- **Row meta order:** description, bell, subtasks, paperclip count, repeat.
+- **Settings:** "All-day reminder time" sits in Timing, which is now always shown.
+
+## Amendments: server, recurrence and reminders (WP 10.1, 10.4 server)
+- **`nextId` and skip:**
+  - A `nextId` (or reminder id) that is already taken is `409 id_conflict`, and nothing changes.
+  - Skip needs `tasks:delete` and honours the `deleted` clock; a stale skip returns `{next: null}`.
+- **Patches:** a rule-only PATCH keeps the dates; a basis on a task without a rule is 422.
+- **The next instance:**
+  - It copies followers including muted ones, so an unfollow sticks, and keeps the original `createdBy`.
+  - Copied subtasks keep their own assignee and tags, and each gets a `created` activity.
+- **Reminder state:**
+  - `nextReminderAt` is null on completed or deleted tasks; reopening brings the bell back while the reminder is still unfired.
+  - A fired relative reminder is re-armed when a due change moves it into the future.
+  - One whose resolved time is already past fires at the next run, marked late after 10 minutes.
+  - Reminders can be added to completed tasks.
+- **`parse: true`:** `!` tokens on a task that ends up without a due date give `422 reminder_needs_due`.
+- **Routes and events:**
+  - `GET /tasks/:id/reminders` lists the actor's reminders.
+  - Reminder changes publish a `task.updated` invalidation to the owner only (an audience of one), not `DomainEvent.direct`, which carries no invalidations. This is a deviation from §2.4, with the same privacy.
+- **Delivery:**
+  - Reminder emails go out at once regardless of `emailMode`. The push body is the localised due moment, with a delay note when late.
+  - The notification's `data.to` holds the due date and time when it fired, so the inbox can show "due Fri 14:00".
+
+## Amendments: server, attachments and calendar feeds (WP 10.2, 10.3 server)
+- **Uploads:**
+  - Access is checked before any byte is read, and again in the transaction that records the attachment.
+  - A file exactly at the limit is accepted. A declared Content-Length above the limit plus 64 KB is 413 at once.
+  - A missing `file` part is `422 validation_failed`, and a body that isn't multipart is 415.
+  - An `Idempotency-Key` on an upload is format-checked but never stored.
+  - CSRF origin checks still apply; multipart is allowed only on the two upload routes.
+- **Type check:** strict. The claimed raster type (from the part type with aliases normalised, or else the extension) must equal the sniffed type, so a PNG named `.jpg` is 415. For avatars, a non-image is `415 unsupported_media_type`.
+- **File names:** the last path segment, NFC-normalised, without control, bidi or BOM characters, trailing dots and spaces trimmed, at most 255 characters keeping the extension. An empty name becomes `file.<ext>`.
+- **Trash:** attachments of a task in Trash can still be downloaded; uploads and deletes there are `410 conflict_deleted`. Delete also needs `tasks:write` within the grant's groups.
+- **Events and blob GC:**
+  - Attachment changes publish `task.updated`.
+  - Blob GC is kicked after a delete, after a failed upload, and on `task.purged`/`org.deleted`. The retention purge waits for the minute job.
+- **Avatars:**
+  - They live in the current backend, are always streamed (never presigned), and fall back to the other backend on read.
+  - DELETE removes the blob directly, because the key is reused. PUT and DELETE are serialised per user and need the browser session. GET accepts any credential, through the orgs it reaches.
+  - better-auth does not overwrite `image` on sign-in today; an update hook re-asserts the uploaded avatar as a safeguard.
+- **Calendar feeds:**
+  - Managing feeds is browser-session only, and replaying a create is `409 token_shown_once`.
+  - Once an IP is over the miss limit, all its feed requests are 429.
+  - DTSTAMP is the task's `updatedAt`, so the ETag is stable. All-day events are TRANSP:TRANSPARENT.
+- **S3:** checksum calculation `WHEN_REQUIRED` for compatible stores; presigned redirects carry `private, max-age=60`; the endpoint must be http(s).
