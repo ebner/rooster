@@ -11,6 +11,7 @@ import {
   bearer,
   deviceCode,
   deviceLogin,
+  deviceNonce,
   pat,
   personalOrgId,
   pollToken,
@@ -400,13 +401,16 @@ describe('CLI device flow (AC-8.1 server side, 07 §2)', () => {
     expect(request).toMatchObject({ clientName: 'rooster CLI', requestedScopes: ['tasks:write'] });
     const constraints = { orgs: [{ orgId, read: 'all' as const, write: { groups: [prio.id] } }] };
     // No more than the CLI asked for.
+    const decisionNonce = await deviceNonce(owner, code.user_code);
     const wider = await owner.call('POST', `/api/v1/device/${code.user_code}/approve`, {
+      decisionNonce,
       scopes: ['tasks:delete'],
       constraints,
     });
     expect(wider.status).toBe(422);
     expect(((await wider.json()) as { code: string }).code).toBe('widening_not_allowed');
     const grant = await owner.ok<Grant>('POST', `/api/v1/device/${code.user_code}/approve`, {
+      decisionNonce,
       scopes: ['tasks:write'],
       constraints,
     });
@@ -470,7 +474,12 @@ describe('CLI device flow (AC-8.1 server side, 07 §2)', () => {
         'tasks:delete',
       ].sort(),
     );
-    await owner.ok('POST', `/api/v1/device/${code.user_code}/deny`, undefined, 204);
+    await owner.ok(
+      'POST',
+      `/api/v1/device/${code.user_code}/deny`,
+      { decisionNonce: await deviceNonce(owner, code.user_code) },
+      204,
+    );
     expect((await owner.call('GET', `/api/v1/device/${code.user_code}`)).status).toBe(404);
     expect((await pollToken(ctx, code.device_code)).body.error).toBe('access_denied');
   });
@@ -503,6 +512,7 @@ describe('CLI device flow (AC-8.1 server side, 07 §2)', () => {
     }
     // A revoked grant is never turned into a session.
     const grant = await owner.ok<Grant>('POST', `/api/v1/device/${code.user_code}/approve`, {
+      decisionNonce: await deviceNonce(owner, code.user_code),
       scopes: ['tasks:read'],
       constraints: { orgs: 'all' },
     });
@@ -585,8 +595,7 @@ describe('non-browser credentials stay out of /api/auth (default deny)', () => {
     expect(auth.status).toBe(403);
     // The browser itself is unaffected.
     expect(
-      (await ctx.app.request('/api/auth/get-session', { headers: { cookie: owner.jar.header() } }))
-        .status,
+      (await ctx.app.request('/api/v1/me', { headers: { cookie: owner.jar.header() } })).status,
     ).toBe(200);
   });
 
@@ -872,6 +881,7 @@ describe('device flow encodings (RFC 8628 §3.1, §3.4)', () => {
     expect(pending.status).toBe(400);
     expect(((await pending.json()) as { error: string }).error).toBe('authorization_pending');
     await owner.ok('POST', `/api/v1/device/${code.user_code}/approve`, {
+      decisionNonce: await deviceNonce(owner, code.user_code),
       scopes: ['tasks:read'],
       constraints: { orgs: 'all' },
     });

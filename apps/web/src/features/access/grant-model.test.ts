@@ -55,7 +55,8 @@ describe('grant model', () => {
 
   test('the device default is what the CLI asked for, everywhere, never expiring', () => {
     const value = defaultDeviceValue(['tasks:read', 'tasks:write', 'tasks:delete']);
-    expect(toDeviceApprove(value)).toEqual({
+    expect(toDeviceApprove(value, { decisionNonce: 'n' })).toEqual({
+      decisionNonce: 'n',
       scopes: ['tasks:delete'],
       constraints: { orgs: 'all' },
     });

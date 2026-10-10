@@ -3,6 +3,7 @@ import type { DeviceApprove, DeviceRequest } from '@rooster/core/schemas';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ApiError } from './errors';
 import { api, unwrap } from './http';
+import { useRefetchWhenSessionClears } from './session-bound';
 import type { MutationResult, QueryResult } from './types';
 
 /**
@@ -13,8 +14,13 @@ export const deviceKeys = {
   request: (userCode: string) => ['device', userCode] as const,
 };
 
-/** `GET /device/:userCode`: who is asking for what. Not retried: a wrong code stays wrong. */
+/**
+ * `GET /device/:userCode`: who is asking for what. Not retried: a wrong code stays wrong. After
+ * a session change (sign-out, another account; ADR 0051) it is fetched again: its
+ * `decisionNonce` belongs to the session it was shown to.
+ */
 export function useDeviceRequest(userCode: string | undefined): QueryResult<DeviceRequest> {
+  useRefetchWhenSessionClears(deviceKeys.request(userCode ?? ''));
   return useQuery({
     queryKey: deviceKeys.request(userCode ?? ''),
     queryFn: async () =>
@@ -44,11 +50,22 @@ export function useApproveDevice(): MutationResult<{ userCode: string; body: Dev
   });
 }
 
-/** `POST /device/:userCode/deny`. */
-export function useDenyDevice(): MutationResult<{ userCode: string }> {
+/** `POST /device/:userCode/deny` `{decisionNonce}` (the shown request's, unchanged). */
+export function useDenyDevice(): MutationResult<{ userCode: string; decisionNonce: string }> {
   return useMutation({
-    mutationFn: async ({ userCode }: { userCode: string }) => {
-      await unwrap(api.POST('/api/v1/device/{userCode}/deny', { params: { path: { userCode } } }));
+    mutationFn: async ({
+      userCode,
+      decisionNonce,
+    }: {
+      userCode: string;
+      decisionNonce: string;
+    }) => {
+      await unwrap(
+        api.POST('/api/v1/device/{userCode}/deny', {
+          params: { path: { userCode } },
+          body: { decisionNonce },
+        }),
+      );
     },
   });
 }

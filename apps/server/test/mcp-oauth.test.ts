@@ -138,7 +138,12 @@ async function authorize(
 
   const decision = await ctx.call('/api/v1/oauth/consent', {
     method: 'POST',
-    body: JSON.stringify({ accept: true, oauthQuery: request.oauthQuery, ...options.consent }),
+    body: JSON.stringify({
+      accept: true,
+      oauthQuery: request.oauthQuery,
+      decisionNonce: request.decisionNonce,
+      ...options.consent,
+    }),
   });
   expect(decision.status, await decision.clone().text()).toBe(200);
   const { redirectTo } = (await decision.json()) as { redirectTo: string };

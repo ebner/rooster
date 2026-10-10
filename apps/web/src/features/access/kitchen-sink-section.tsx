@@ -66,6 +66,7 @@ export function AccessKitchenSection() {
       'notifications:read',
     ] as const,
     expiresAt: now + 10 * 60 * 1000,
+    decisionNonce: 'fixture-device-nonce',
   };
   const deviceStates: [string, DevicePageState][] = [
     [t('access.dev.deviceEnter'), { kind: 'enter' }],

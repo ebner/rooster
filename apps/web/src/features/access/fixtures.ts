@@ -161,6 +161,7 @@ export function fixtureConsentRequests(now: number): {
   return {
     verified: {
       oauthQuery: signedQuery,
+      decisionNonce: 'fixture-nonce-1',
       clientId: 'https://claude.ai/oauth/mcp-client-metadata.json',
       client: {
         name: 'Claude',
@@ -180,6 +181,7 @@ export function fixtureConsentRequests(now: number): {
     },
     dynamic: {
       oauthQuery: signedQuery,
+      decisionNonce: 'fixture-nonce-2',
       clientId: 'dcr_8f2a1c',
       client: {
         name: 'Task Helper\u202e (official)',
@@ -199,6 +201,7 @@ export function fixtureConsentRequests(now: number): {
     },
     loopback: {
       oauthQuery: signedQuery,
+      decisionNonce: 'fixture-nonce-3',
       clientId: 'https://zed.dev/mcp/client.json',
       client: {
         name: 'Zed',
@@ -218,6 +221,7 @@ export function fixtureConsentRequests(now: number): {
     },
     stepUp: {
       oauthQuery: signedQuery,
+      decisionNonce: 'fixture-nonce-4',
       clientId: 'https://claude.ai/oauth/mcp-client-metadata.json',
       client: {
         name: 'Claude',
@@ -238,6 +242,7 @@ export function fixtureConsentRequests(now: number): {
     // A step-up of a grant that already deletes and names a group deleted since.
     stepUpDeleting: {
       oauthQuery: signedQuery,
+      decisionNonce: 'fixture-nonce-5',
       clientId: 'https://claude.ai/oauth/mcp-client-metadata.json',
       client: {
         name: 'Claude',

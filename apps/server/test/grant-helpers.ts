@@ -101,6 +101,12 @@ export async function pollToken(ctx: ListCtx, code: string) {
   return { status: res.status, body: (await res.json()) as Record<string, string> };
 }
 
+/** The decision nonce `/device` shows this caller for a pending code (as the page loads it). */
+export async function deviceNonce(caller: Caller, userCode: string): Promise<string> {
+  return (await caller.ok<{ decisionNonce: string }>('GET', `/api/v1/device/${userCode}`))
+    .decisionNonce;
+}
+
 /** Logs a CLI device in with the given approval; returns the bearer token and the grant. */
 export async function deviceLogin(
   ctx: ListCtx,
@@ -108,7 +114,11 @@ export async function deviceLogin(
   approval: { scopes: GrantScope[]; constraints: GrantConstraints; label?: string },
 ) {
   const code = await deviceCode(ctx, ALL.join(' '));
-  const grant = await owner.ok<Grant>('POST', `/api/v1/device/${code.user_code}/approve`, approval);
+  const decisionNonce = await deviceNonce(owner, code.user_code);
+  const grant = await owner.ok<Grant>('POST', `/api/v1/device/${code.user_code}/approve`, {
+    ...approval,
+    decisionNonce,
+  });
   // The plugin enforces the 5 s polling interval only after a first poll.
   const token = await pollToken(ctx, code.device_code);
   expect(token.status, JSON.stringify(token.body)).toBe(200);

@@ -7,6 +7,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { addDays, todayIn } from '@rooster/core/dates';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runCli } from '../src/run.ts';
+import { approveDevice, pendingDevice } from './support/device.ts';
 import { fakeIo } from './support/fake-io.ts';
 import { type RoosterServer, startServer, type TestUser } from './support/rooster-server.ts';
 
@@ -46,14 +47,14 @@ async function setupAgent(user: TestUser, home: string, extra: string[] = []) {
     if (code === undefined) await new Promise((r) => setTimeout(r, 10));
   }
   expect(code).toBeDefined();
-  const pending = await user.api<{ requestedScopes: string[] }>('GET', `/api/v1/device/${code}`);
-  const approved = await user.api('POST', `/api/v1/device/${code}/approve`, {
-    scopes: pending.data.requestedScopes,
+  const { requestedScopes } = await pendingDevice(user, code ?? '');
+  const approved = await approveDevice(user, code ?? '', {
+    scopes: requestedScopes,
     constraints: { orgs: 'all' },
   });
   expect(approved.status).toBe(200);
   expect(await setup).toBe(0);
-  return { io, requested: pending.data.requestedScopes };
+  return { io, requested: requestedScopes };
 }
 
 /** An MCP client talking to `rooster mcp` over a real stdio pipe (a child process). */

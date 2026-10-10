@@ -3,7 +3,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SESSION_COOKIE } from '../src/auth/cookies.ts';
 import { user } from '../src/db/schema/index.ts';
+import { deviceLogin } from './grant-helpers.ts';
 import { asJar, BASE_URL, CookieJar, createTestApp, idpEnv, signInAs } from './helpers.ts';
+import { listCtx } from './list-helpers.ts';
 import { type MockIdp, startMockIdp } from './mock-idp.ts';
 
 let idp: MockIdp;
@@ -132,5 +134,36 @@ describe('boundary 1: sign-in and account linking', () => {
     expect(unknown.location).toBe(`${BASE_URL}/not-invited?reason=unverified_email`);
     expect(known.location).toBe(unknown.location);
     expect(db.orm.select().from(user).all()).toHaveLength(1);
+  });
+});
+
+describe('boundary 1, round 3: session lists', () => {
+  it('P2 no session list hands out a CLI device’s bearer token', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const device = await deviceLogin(ctx, owner, {
+      scopes: ['tasks:read'],
+      constraints: { orgs: 'all' },
+    });
+    const better = await owner.call('GET', '/api/auth/list-sessions');
+    expect(better.status).toBe(404);
+    expect(await better.text()).not.toContain(device.token);
+    // Nor do better-auth's get and update hand scripts the browser's own session token.
+    for (const [method, path] of [
+      ['GET', '/api/auth/get-session'],
+      ['POST', '/api/auth/update-session'],
+    ] as const) {
+      const res = await owner.call(method, path, method === 'POST' ? {} : undefined);
+      expect(res.status, path).toBe(404);
+      expect(await res.text(), path).not.toContain('"token"');
+    }
+    const ours = await owner.call('GET', '/api/v1/me/sessions');
+    expect(ours.status).toBe(200);
+    expect(await ours.text()).not.toContain(device.token);
+    // The device itself still works.
+    const me = await ctx.app.request('/api/v1/me', {
+      headers: { authorization: `Bearer ${device.token}` },
+    });
+    expect(me.status).toBe(200);
   });
 });

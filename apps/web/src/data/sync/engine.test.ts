@@ -147,7 +147,9 @@ describe('sync engine (04 §6)', () => {
       },
     ]);
     queryClient.setQueryData(['me'], me(userId));
-    await vi.waitFor(() => expect(posted).toContainEqual({ type: 'cleared' }));
+    await vi.waitFor(() =>
+      expect(posted).toContainEqual({ type: 'cleared', userId: 'someone-else' }),
+    );
     expect(outbox.records.size).toBe(0);
     expect(queryClient.getQueryData(myListKey(orgId))).toBeUndefined();
     expect(queryClient.getQueryData(['me'])).toBeDefined();
@@ -1064,6 +1066,66 @@ describe('leader watch (a frozen leader must not block the tab in front)', () =>
     });
     engines.push(engine);
     await vi.waitFor(() => expect(engine.pipeline.pending).toBe(0));
+  });
+});
+
+describe('sign-out across tabs (ADR 0051)', () => {
+  test("an edit another tab stored after the outbox was wiped is deleted with the account's session", async () => {
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...globalThis.location, reload });
+    try {
+      localStorage.setItem('rooster.cacheOwner', userId);
+      const outbox = createMemoryOutbox();
+      const net = bus();
+      const transport = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+      // Nothing reaches the server: the record would otherwise leave the outbox when sent.
+      transport.send = () => new Promise(() => {});
+      const start = (channel: SyncChannel, queryClient: QueryClient) =>
+        startSync({
+          queryClient,
+          transport,
+          outbox,
+          channel,
+          persister: createCachePersister(() => undefined, memoryStorage().storage),
+          eventSource: quietSource,
+          locks: null,
+          listen: false,
+        });
+      const queriesA = new QueryClient();
+      const queriesB = new QueryClient();
+      const tabA = await start(net.join().channel, queriesA);
+      const tabB = await start(net.join().channel, queriesB);
+      engines.push(tabA, tabB);
+      await fetchMe(queriesA, me(userId));
+      await fetchMe(queriesB, me(userId));
+      const other = '01900000-0000-7000-8000-000000000002';
+      const taskId = Object.keys(transport.state(orgId).tasks)[0] as string;
+      const clear = outbox.clear.bind(outbox);
+      outbox.clear = async () => {
+        await clear();
+        // A record of another account (signed in meanwhile) is not this sign-out's.
+        await outbox.put([
+          {
+            op: { ...listOps.deleteTask('y'), opId: 'theirs', editTime: 1, clientId: 'c' },
+            orgId,
+            ctx: { userId: other },
+            userId: other,
+          },
+        ]);
+        // Tab B flushes an edit after tab A wiped the shared outbox, before it hears `cleared`.
+        tabB.pipeline.enqueue(
+          orgId,
+          [listOps.patchTask(taskId, { description: 'Private notes' })],
+          { userId },
+        );
+        await vi.waitFor(() => expect(outbox.records.size).toBe(2));
+      };
+      await tabA.clear({ final: true });
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+      expect([...outbox.records.keys()]).toEqual(['theirs']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

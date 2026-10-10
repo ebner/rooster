@@ -14,6 +14,7 @@ import {
 } from '@rooster/core/grants';
 import type {
   DeviceApprove,
+  DeviceRequest,
   Grant,
   GrantPatch,
   OAuthConsentDecision,
@@ -381,9 +382,15 @@ export function toTokenCreate(value: GrantValue, name: string): TokenCreate {
   return { name: name.trim(), ...toGrantInput(value) } as TokenCreate;
 }
 
-/** `POST /device/:userCode/approve`. */
-export function toDeviceApprove(value: GrantValue): DeviceApprove {
-  return toGrantInput(value) as DeviceApprove;
+/**
+ * `POST /device/:userCode/approve`, with the request's `decisionNonce` unchanged: it binds the
+ * approval to the session the request was shown to.
+ */
+export function toDeviceApprove(
+  value: GrantValue,
+  request: Pick<DeviceRequest, 'decisionNonce'>,
+): DeviceApprove {
+  return { decisionNonce: request.decisionNonce, ...toGrantInput(value) } as DeviceApprove;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -542,11 +549,16 @@ export function consentStart(
 }
 
 /** `POST /oauth/consent` with Allow. */
-export function toConsentDecision(value: GrantValue, oauthQuery: string): OAuthConsentDecision {
+export function toConsentDecision(
+  value: GrantValue,
+  request: Pick<OAuthConsentRequest, 'oauthQuery' | 'decisionNonce'>,
+): OAuthConsentDecision {
   const { scopes, constraints, expiresInDays: days } = toGrantInput(value);
   return {
     accept: true,
-    oauthQuery,
+    oauthQuery: request.oauthQuery,
+    // Unchanged: it binds the decision to the session the request was shown to.
+    decisionNonce: request.decisionNonce,
     scopes,
     constraints,
     ...(value.expiry === 'session' ? { sessionOnly: true } : days ? { expiresInDays: days } : {}),

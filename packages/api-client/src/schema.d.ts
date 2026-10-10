@@ -585,7 +585,7 @@ export interface paths {
         };
         /**
          * What a CLI device asks for, before approval
-         * @description Browser session only. The pending device request with this code: the client and the scopes it asked for (`scope` of its `/api/auth/device/code` request; all scopes but `admin` when it sent none; `admin` only for instance admins). Unknown, expired or already handled codes are `404`.
+         * @description Browser session only. The pending device request with this code: the client and the scopes it asked for (`scope` of its `/api/auth/device/code` request; all scopes but `admin` when it sent none; `admin` only for instance admins). Unknown, expired or already handled codes are `404`. `decisionNonce` binds the approval or denial to this user and session.
          */
         get: operations["getDeviceRequest"];
         put?: never;
@@ -607,7 +607,7 @@ export interface paths {
         put?: never;
         /**
          * Approve a CLI device with the chosen scopes and constraints
-         * @description Browser session only. Creates the device grant (scopes no wider than requested, else `422 widening_not_allowed`; `admin` is dropped unless the user is an instance admin); the CLI’s next poll of `/api/auth/device/token` receives a bearer session tied to it. The default label is "rooster CLI on <device>" from the CLI’s User-Agent.
+         * @description Browser session only, with the `decisionNonce` that `GET /device/{userCode}` returned to this user and session (any other, e.g. after switching accounts, is `404`: load the request again). Creates the device grant (scopes no wider than requested, else `422 widening_not_allowed`; `admin` is dropped unless the user is an instance admin); the CLI’s next poll of `/api/auth/device/token` receives a bearer session tied to it. The default label is "rooster CLI on <device>" from the CLI’s User-Agent.
          */
         post: operations["approveDevice"];
         delete?: never;
@@ -627,7 +627,7 @@ export interface paths {
         put?: never;
         /**
          * Deny a CLI device
-         * @description Browser session only. The CLI’s next poll gets `access_denied`.
+         * @description Browser session only, with the `decisionNonce` that `GET /device/{userCode}` returned to this user and session (any other is `404`). The CLI’s next poll gets `access_denied`.
          */
         post: operations["denyDevice"];
         delete?: never;
@@ -1534,13 +1534,13 @@ export interface paths {
         };
         /**
          * What an app asks for, before the user allows it
-         * @description Browser session only. The authorization request behind the consent screen (`/oauth/consent`): the app, its redirect target, the resource, the requested capabilities (`newScopes`: those the existing grant lacks), the existing grant on step-up, and any `authorization_details` pre-fill. An unsigned, altered or expired query (10 minutes) is `404`.
+         * @description Browser session only. The authorization request behind the consent screen (`/oauth/consent`): the app, its redirect target, the resource, the requested capabilities (`newScopes`: those the existing grant lacks), the existing grant on step-up, and any `authorization_details` pre-fill. An unsigned, altered or expired query (10 minutes), or `authorization_details` that are malformed or name nothing that still exists, is `404`. `decisionNonce` binds the decision to this user and session.
          */
         get: operations["getOAuthConsent"];
         put?: never;
         /**
          * Allow or deny an app
-         * @description Browser session only, and only the session that loaded the request with `GET /oauth/consent` (another session, e.g. after switching accounts, gets `404`: load it again). Allow creates or updates my grant for the app (scopes no wider than requested; constraints no wider than the app’s `authorization_details`, else `422 widening_not_allowed`; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Approving nothing at all is `422 nothing_approved`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.
+         * @description Browser session only. `decisionNonce` is the one `GET /oauth/consent` returned to this user and session; any other (e.g. after switching accounts) is `404`: load the request again. Allow creates or updates my grant for the app (scopes no wider than requested; constraints no wider than the app’s `authorization_details`, else `422 widening_not_allowed`; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Approving nothing at all is `422 nothing_approved`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.
          */
         post: operations["decideOAuthConsent"];
         delete?: never;
@@ -1980,7 +1980,8 @@ export interface components {
          *         "groups:write",
          *         "notifications:read"
          *       ],
-         *       "expiresAt": 1767226200000
+         *       "expiresAt": 1767226200000,
+         *       "decisionNonce": "pT8x2Lk0…"
          *     }
          */
         DeviceRequest: {
@@ -1989,9 +1990,11 @@ export interface components {
             clientName: string;
             requestedScopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read" | "admin")[];
             expiresAt: number;
+            decisionNonce: string;
         };
         /**
          * @example {
+         *       "decisionNonce": "pT8x2Lk0…",
          *       "scopes": [
          *         "tasks:write"
          *       ],
@@ -2012,6 +2015,8 @@ export interface components {
          *     }
          */
         DeviceApprove: {
+            /** @description The nonce `GET /device/{userCode}` returned to this user and session, unchanged. */
+            decisionNonce: string;
             /** @description No wider than the device requested (`422 widening_not_allowed`). */
             scopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read" | "admin")[];
             constraints: components["schemas"]["GrantConstraints"];
@@ -2019,6 +2024,15 @@ export interface components {
             label?: string;
             /** @description Omitted: the grant does not expire. */
             expiresInDays?: number;
+        };
+        /**
+         * @description `decisionNonce` is the one `GET /device/{userCode}` returned, unchanged.
+         * @example {
+         *       "decisionNonce": "pT8x2Lk0…"
+         *     }
+         */
+        DeviceDeny: {
+            decisionNonce: string;
         };
         /**
          * @example {
@@ -2116,7 +2130,8 @@ export interface components {
          *         "tasks:write"
          *       ],
          *       "existing": null,
-         *       "prefill": null
+         *       "prefill": null,
+         *       "decisionNonce": "kY3n0Qw2…"
          *     }
          */
         OAuthConsentRequest: {
@@ -2130,12 +2145,14 @@ export interface components {
             newScopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read" | "admin")[];
             existing: components["schemas"]["Grant"] & (Record<string, never> | null);
             prefill: components["schemas"]["GrantConstraints"] & (Record<string, never> | null);
+            decisionNonce: string;
         };
         /**
-         * @description Allow (`accept: true`, with the approved scopes, constraints and expiry or `sessionOnly`) or Deny (`accept: false`). `oauthQuery` is the signed query from `GET /oauth/consent`, unchanged.
+         * @description Allow (`accept: true`, with the approved scopes, constraints and expiry or `sessionOnly`) or Deny (`accept: false`). `oauthQuery` is the signed query and `decisionNonce` the nonce from `GET /oauth/consent`, both unchanged.
          * @example {
          *       "accept": true,
          *       "oauthQuery": "client_id=…&sig=…",
+         *       "decisionNonce": "kY3n0Qw2…",
          *       "scopes": [
          *         "tasks:write"
          *       ],
@@ -2159,6 +2176,7 @@ export interface components {
             /** @enum {boolean} */
             accept: true;
             oauthQuery: string;
+            decisionNonce: string;
             scopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read" | "admin")[];
             constraints: {
                 orgs: "all" | {
@@ -2177,6 +2195,7 @@ export interface components {
             /** @enum {boolean} */
             accept: false;
             oauthQuery: string;
+            decisionNonce: string;
         };
         /**
          * @example {
@@ -7870,7 +7889,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceDeny"];
+            };
+        };
         responses: {
             /** @description Denied */
             204: {

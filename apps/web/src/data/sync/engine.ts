@@ -412,7 +412,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   const handleMessage = (message: SyncMessage) => {
     switch (message.type) {
       case 'cleared':
-        void onClearedElsewhere();
+        void onClearedElsewhere(typeof message.userId === 'string' ? message.userId : undefined);
         return;
       case 'status':
       case 'applied':
@@ -491,7 +491,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
             sweepUserStorage(me.user.id);
             writeOwner(me.user.id);
             await wipe({ keepMe: false, keepUser: me.user.id });
-            channel.post({ type: 'cleared' });
+            channel.post({ type: 'cleared', userId: owner });
           }
         }
         await persister.suspend();
@@ -510,7 +510,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
       // one whose registration was still under way when the account changed.
       void unsubscribeThisBrowser();
       void wipe({ keepMe: true, keepUser: me.user.id }).then(() =>
-        channel.post({ type: 'cleared' }),
+        channel.post({ type: 'cleared', userId: owner }),
       );
     } else if (ranAs !== null && ranAs !== me.user.id) {
       // Already reloaded once for this account and the old one's data is still here (its
@@ -660,9 +660,22 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     }
   }
 
-  async function onClearedElsewhere() {
+  /** `ending`: the account whose session ended in the other tab. */
+  async function onClearedElsewhere(ending: string | undefined) {
     // Before the first await: nothing of this session may go on with the next one's cookies.
     closeSession();
+    if (ending !== undefined) {
+      // This tab may have stored an op of that account after the other tab wiped the shared
+      // outbox (an edit flushed meanwhile): once its own writes landed, it deletes them. Records
+      // of anyone else (the account taking over) stay.
+      await pipeline.writesSettled();
+      await outbox
+        .load()
+        .then((records) =>
+          outbox.remove(records.filter((r) => r.userId === ending).map((r) => r.op.opId)),
+        )
+        .catch(() => {});
+    }
     await persister.suspend();
     queryClient.clear();
     // Signed out, or someone else signed in, in another tab: start over as whoever it is now.
@@ -707,6 +720,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
       watchLeader(0);
     },
     clear: async ({ final = false } = {}) => {
+      const ending = userId ?? ranAs ?? readOwner();
       if (final) {
         writeOwner(null);
         // Sign-out erases the outbox: before the wipe awaits anything, the session closes, so
@@ -717,7 +731,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
       }
       await wipe({ keepMe: !final });
       if (final) await persister.suspend();
-      channel.post({ type: 'cleared' });
+      channel.post(ending === null ? { type: 'cleared' } : { type: 'cleared', userId: ending });
     },
     setUpdateCheck: (check) => {
       updateCheck = check;

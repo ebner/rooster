@@ -291,10 +291,11 @@ describe('AC-9.3 the authorization code flow', () => {
     const ctx = oauthCtx();
     const user = ctx.user('ada@example.com');
     const page = await authorize(ctx, user);
-    await consentRequest(user, page);
+    const { decisionNonce } = await consentRequest(user, page);
     const { redirectTo } = await user.ok<{ redirectTo: string }>('POST', '/api/v1/oauth/consent', {
       accept: false,
       oauthQuery: oauthQueryOf(page),
+      decisionNonce,
     });
     const back = new URL(redirectTo);
     expect(`${back.origin}${back.pathname}`).toBe(REDIRECT_URI);
@@ -319,6 +320,7 @@ describe('AC-9.3 the authorization code flow', () => {
       const post = await user.call('POST', '/api/v1/oauth/consent', {
         accept: true,
         oauthQuery: q,
+        decisionNonce: 'x',
         scopes: ['tasks:read'],
         constraints: { orgs: 'all' },
       });
@@ -409,10 +411,11 @@ describe('OAuth conformance (11 §7)', () => {
     const back = await authorize(ctx, user, { scope: 'admin tasks:read' });
     expect(back.searchParams.get('error')).toBe('invalid_scope');
     const page = await authorize(ctx, user, { scope: 'tasks:read' });
-    await consentRequest(user, page);
+    const { decisionNonce } = await consentRequest(user, page);
     const res = await user.call('POST', '/api/v1/oauth/consent', {
       accept: true,
       oauthQuery: oauthQueryOf(page),
+      decisionNonce,
       scopes: ['admin', 'tasks:read'],
       constraints: { orgs: 'all' },
     });
@@ -740,7 +743,7 @@ describe('tasks:delete only by explicit consent (ADR 0041 §2, ADR 0042 §4)', (
     expect(grantsOf(ctx, user.userId)[0]?.scopes).toContain('tasks:delete');
   });
 
-  it('ignores a pre-fill that names foreign orgs', async () => {
+  it('refuses a pre-fill that names only foreign orgs (a ceiling never reads as absent)', async () => {
     const ctx = oauthCtx();
     const user = ctx.user('ada@example.com');
     const details = JSON.stringify([
@@ -750,7 +753,11 @@ describe('tasks:delete only by explicit consent (ADR 0041 §2, ADR 0042 §4)', (
       },
     ]);
     const page = await authorize(ctx, user, { extra: { authorization_details: details } });
-    expect((await consentRequest(user, page)).prefill).toBeNull();
+    const res = await user.call(
+      'GET',
+      `/api/v1/oauth/consent?oauth_query=${encodeURIComponent(oauthQueryOf(page))}`,
+    );
+    expect(res.status).toBe(404);
   });
 });
 

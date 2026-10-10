@@ -312,7 +312,7 @@ function RequestStep({
             setSaveIssue(issue);
             return;
           }
-          await onAllow(toConsentDecision(toSend, request.oauthQuery));
+          await onAllow(toConsentDecision(toSend, request));
         });
       }}
       aria-labelledby={titleId}

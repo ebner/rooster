@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { defaultKeyHasher } from '@better-auth/api-key';
 import {
   ADMIN_SCOPE,
@@ -15,8 +15,10 @@ import {
 import { uuidv7 } from '@rooster/core/ids';
 import {
   type DeviceApprove,
+  type DeviceDeny,
   type DeviceRequest,
   type Grant,
+  type GrantConstraintsValue,
   type GrantKind,
   type GrantPatch,
   grantConstraintsSchema,
@@ -43,6 +45,7 @@ import {
   session,
   taskGroup,
   user,
+  verification,
 } from '../db/schema/index.ts';
 import type { PriorGroups } from '../events/bus.ts';
 import { AppError, type FieldError } from '../lib/errors.ts';
@@ -127,11 +130,18 @@ export interface PreparedConsent {
   grantId: string;
   clientId: string;
   userId: string;
+  /** The request's redirect URI: a genuine code was issued for it. */
+  redirectUri: string;
   /** True when the decision created the grant (undo deletes it). */
   created: boolean;
   /** Step-up only: what `finishOAuthConsent` writes, merged with the grant as it is then. */
   stepUp: {
     approved: GrantScope[];
+    /**
+     * The grant's access when the decision was taken. A narrowing, expiry change or revocation
+     * meanwhile is the user's later word: the step-up is then dropped, not written over it.
+     */
+    base: GrantAccessFields;
     fields: {
       label: string;
       constraints: string;
@@ -148,10 +158,38 @@ export interface PreparedConsent {
   resources: string[];
 }
 
-/** How long a displayed consent request may be decided (the provider's signed query: 10 min). */
-const CONSENT_VIEW_TTL_MS = 10 * 60 * 1000;
-/** Displayed consent requests remembered at once; the oldest are forgotten first. */
-const CONSENT_VIEWS_MAX = 10_000;
+/** The fields of a grant that decide what it allows. */
+type GrantAccessFields = Pick<
+  GrantRow,
+  'scopes' | 'constraints' | 'expiresAt' | 'idleTimeoutMs' | 'revokedAt'
+>;
+
+function accessFields(row: GrantRow): GrantAccessFields {
+  return {
+    scopes: row.scopes,
+    constraints: row.constraints,
+    expiresAt: row.expiresAt,
+    idleTimeoutMs: row.idleTimeoutMs,
+    revokedAt: row.revokedAt,
+  };
+}
+
+function sameAccess(a: GrantAccessFields, b: GrantAccessFields): boolean {
+  return (
+    a.scopes === b.scopes &&
+    a.constraints === b.constraints &&
+    a.expiresAt === b.expiresAt &&
+    a.idleTimeoutMs === b.idleTimeoutMs &&
+    a.revokedAt === b.revokedAt
+  );
+}
+
+/** The client's signed `authorization_details` ceiling for a consent decision. */
+type ConsentCeiling =
+  | { kind: 'none' }
+  /** Malformed, ambiguous or naming nothing that still exists: the request is refused. */
+  | { kind: 'invalid' }
+  | { kind: 'ok'; constraints: GrantConstraintsValue };
 
 /** The capabilities an OAuth client may get, in contract order. */
 const ALL_OAUTH_SCOPES = GRANT_SCOPES.filter((s) => !OAUTH_EXCLUDED_SCOPES.includes(s));
@@ -248,34 +286,45 @@ export class GrantService {
   ) {}
 
   /**
-   * Consent requests the browser displayed, by session and signed query (expiry, ms). A decision
-   * is accepted only from the session the request was shown to: if the browser's cookie changes
-   * to another account between GET and POST, the decision is refused rather than granting that
-   * account (ASVS 4.1.2). In memory: rooster runs one process, and after a restart the page
-   * simply has to be loaded again.
+   * The decision nonce of a displayed consent request: an HMAC of the viewing user, their
+   * session and the signed query (whose `exp` bounds it). `GET /oauth/consent` hands it to the
+   * page, and the decision must carry it back from the same user and session. If the browser's
+   * cookie changes to another account between showing and deciding, the decision is refused
+   * rather than granting that account, even when the other account once loaded the same request
+   * (ASVS 4.1.2).
    */
-  private readonly consentViews = new Map<string, number>();
-
-  private consentViewKey(actor: Actor, oauthQuery: string): string {
-    const digest = createHash('sha256').update(oauthQuery).digest('base64url');
-    return `${actor.sessionId}:${digest}`;
+  private consentNonce(actor: Actor, oauthQuery: string): string {
+    return this.decisionNonce('rooster-oauth-consent', actor, oauthQuery);
   }
 
-  private rememberConsentView(actor: Actor, oauthQuery: string): void {
-    const now = this.now();
-    const key = this.consentViewKey(actor, oauthQuery);
-    this.consentViews.delete(key);
-    this.consentViews.set(key, now + CONSENT_VIEW_TTL_MS);
-    // Insertion order is expiry order: drop the expired, then the oldest beyond the cap.
-    for (const [k, expiresAt] of this.consentViews) {
-      if (expiresAt > now && this.consentViews.size <= CONSENT_VIEWS_MAX) break;
-      this.consentViews.delete(k);
+  private requireConsentNonce(actor: Actor, oauthQuery: string, nonce: string): void {
+    if (!this.nonceMatches('rooster-oauth-consent', actor, oauthQuery, nonce)) {
+      throw consentNotFound();
     }
   }
 
-  private requireConsentView(actor: Actor, oauthQuery: string): void {
-    const expiresAt = this.consentViews.get(this.consentViewKey(actor, oauthQuery));
-    if (expiresAt === undefined || expiresAt <= this.now()) throw consentNotFound();
+  /** A decision nonce (consent, device approval) for `subject`, shown to this user and session. */
+  private decisionNonce(purpose: string, actor: Actor, subject: string): string {
+    return createHmac('sha256', this.deps.config.authSecret)
+      .update([purpose, actor.userId, actor.sessionId, subject].join('\n'))
+      .digest('base64url');
+  }
+
+  private nonceMatches(purpose: string, actor: Actor, subject: string, nonce: string): boolean {
+    const expected = Buffer.from(this.decisionNonce(purpose, actor, subject));
+    const given = Buffer.from(nonce);
+    return given.length === expected.length && timingSafeEqual(given, expected);
+  }
+
+  /**
+   * The device-approval nonce (as for OAuth consent): the request shown at `/device` can be
+   * decided only by the user and session it was shown to, so a cookie that changed to another
+   * account meanwhile cannot approve the device for that account. Bound to the device code row.
+   */
+  private requireDeviceNonce(actor: Actor, deviceRowId: string, nonce: string): void {
+    if (!this.nonceMatches('rooster-device-approval', actor, deviceRowId, nonce)) {
+      throw deviceNotFound();
+    }
   }
 
   private now(): number {
@@ -1163,6 +1212,7 @@ export class GrantService {
         clientName: CLI_CLIENT_NAME,
         requestedScopes: minimalScopes(this.requestedScopes(actor, row.scope)),
         expiresAt: row.expiresAt.getTime(),
+        decisionNonce: this.decisionNonce('rooster-device-approval', actor, row.id),
       };
     });
   }
@@ -1176,6 +1226,7 @@ export class GrantService {
     requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => {
       const row = this.pendingDevice(tx, actor, userCode);
+      this.requireDeviceNonce(actor, row.id, input.decisionNonce);
       const requested = expandScopes(this.requestedScopes(actor, row.scope));
       // A non-admin's `admin` is dropped, not refused (ADR 0042 §1).
       const scopes = actor.isAdmin ? input.scopes : input.scopes.filter((s) => s !== ADMIN_SCOPE);
@@ -1215,10 +1266,11 @@ export class GrantService {
   }
 
   /** POST /device/:userCode/deny: the CLI's next poll gets `access_denied`. */
-  denyDevice(actor: Actor, userCode: string): void {
+  denyDevice(actor: Actor, userCode: string, input: DeviceDeny): void {
     requireBrowserSession(actor);
     immediate(this.deps.db, (tx) => {
       const row = this.pendingDevice(tx, actor, userCode);
+      this.requireDeviceNonce(actor, row.id, input.decisionNonce);
       tx.update(deviceCode)
         .set({ status: 'denied', userId: actor.userId })
         .where(eq(deviceCode.id, row.id))
@@ -1278,34 +1330,39 @@ export class GrantService {
   }
 
   /**
-   * RFC 9396 `authorization_details` of type `rooster_access` pre-fill the constraints (never
-   * scopes, so never `tasks:delete`). Unreadable or foreign orgs and groups: no pre-fill.
+   * RFC 9396 `authorization_details` of type `rooster_access` (never scopes, so never
+   * `tasks:delete`): the ceiling of the constraints, which the screen pre-fills and the user may
+   * narrow, never widen (11 §2.2, ADR 0046). It fails closed: a malformed or repeated entry is
+   * `invalid`, and so is one naming no org or group that still exists for the user; orgs and
+   * groups that are gone are dropped (narrowing), never read as "no ceiling".
    */
-  private consentPrefill(
-    tx: Tx,
-    userId: string,
-    raw: string | null,
-  ): OAuthConsentRequest['prefill'] {
-    if (raw === null || raw.length > 8192) return null;
+  private consentCeiling(tx: Tx, userId: string, raw: string | null): ConsentCeiling {
+    if (raw === null) return { kind: 'none' };
+    if (raw.length > 8192) return { kind: 'invalid' };
     let details: unknown;
     try {
       details = JSON.parse(raw);
     } catch {
-      return null;
+      return { kind: 'invalid' };
     }
-    const entry = (Array.isArray(details) ? details : []).find(
+    if (!Array.isArray(details)) return { kind: 'invalid' };
+    const entries = details.filter(
       (d): d is Record<string, unknown> =>
         d !== null && typeof d === 'object' && (d as { type?: unknown }).type === 'rooster_access',
     );
-    if (entry === undefined) return null;
-    const parsed = grantConstraintsSchema.safeParse({ orgs: entry.orgs });
-    if (!parsed.success) return null;
-    try {
-      this.validateConstraints(tx, userId, parsed.data);
-    } catch {
-      return null;
-    }
-    return parsed.data;
+    if (entries.length === 0) return { kind: 'none' };
+    if (entries.length > 1) return { kind: 'invalid' };
+    const parsed = grantConstraintsSchema.safeParse({ orgs: entries[0]?.orgs });
+    if (!parsed.success) return { kind: 'invalid' };
+    const live = this.liveConstraints(tx, userId, parsed.data);
+    return live === null ? { kind: 'invalid' } : { kind: 'ok', constraints: live };
+  }
+
+  /** The ceiling of a consent request; an invalid one makes the request unknown (`404`). */
+  private requireConsentCeiling(tx: Tx, userId: string, raw: string | null) {
+    const ceiling = this.consentCeiling(tx, userId, raw);
+    if (ceiling.kind === 'invalid') throw consentNotFound();
+    return ceiling.kind === 'ok' ? ceiling.constraints : null;
   }
 
   /**
@@ -1315,8 +1372,21 @@ export class GrantService {
    * `none`. If no org would remain, the constraints stay as they are.
    */
   private withLiveConstraints(tx: Tx, userId: string, grant: Grant): Grant {
-    const orgs = grant.constraints.orgs;
-    if (orgs === 'all') return grant;
+    const live = this.liveConstraints(tx, userId, grant.constraints);
+    return live === null ? grant : { ...grant, constraints: live };
+  }
+
+  /**
+   * Constraints reduced to orgs and groups that still exist for the user (see
+   * `withLiveConstraints`); null when no org remains.
+   */
+  private liveConstraints(
+    tx: Tx,
+    userId: string,
+    constraints: GrantConstraintsValue,
+  ): GrantConstraintsValue | null {
+    const orgs = constraints.orgs;
+    if (orgs === 'all') return constraints;
     const memberOf = new Set(
       tx
         .select({ orgId: member.organizationId })
@@ -1360,7 +1430,7 @@ export class GrantService {
       }
       return [{ orgId: org.orgId, read, write }];
     });
-    return pruned.length === 0 ? grant : { ...grant, constraints: { orgs: pruned } };
+    return pruned.length === 0 ? null : { orgs: pruned };
   }
 
   /**
@@ -1376,7 +1446,7 @@ export class GrantService {
     requireBrowserSession(actor);
     return readOnly(this.deps.db, (tx) => {
       const req = this.consentQuery(tx, query);
-      this.rememberConsentView(actor, oauthQuery);
+      const prefill = this.requireConsentCeiling(tx, actor.userId, req.authorizationDetails);
       const row = this.oauthRow(tx, actor.userId, req.clientId);
       const existing = this.liveOAuth(row, this.now()) ? row : undefined;
       const have = expandScopes(existing === undefined ? [] : parseScopes(existing.scopes));
@@ -1394,7 +1464,8 @@ export class GrantService {
           existing === undefined
             ? null
             : this.withLiveConstraints(tx, actor.userId, this.toDto(tx, actor, existing)),
-        prefill: this.consentPrefill(tx, actor.userId, req.authorizationDetails),
+        prefill,
+        decisionNonce: this.consentNonce(actor, oauthQuery),
       };
     });
   }
@@ -1417,7 +1488,7 @@ export class GrantService {
     requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => {
       const req = this.consentQuery(tx, query);
-      this.requireConsentView(actor, decision.oauthQuery);
+      this.requireConsentNonce(actor, decision.oauthQuery, decision.decisionNonce);
       const requested = expandScopes(req.scopes);
       // What the user approved, implied scopes included (the web sends a minimal set, e.g.
       // `tasks:delete` standing for writing and reading too), kept where the app asked for it
@@ -1440,7 +1511,7 @@ export class GrantService {
       this.validateConstraints(tx, actor.userId, decision.constraints);
       // The client's `authorization_details` are a ceiling the user may narrow, never widen
       // (11 §2.2, ADR 0046): the screen pre-fills them; the service enforces them.
-      const ceiling = this.consentPrefill(tx, actor.userId, req.authorizationDetails);
+      const ceiling = this.requireConsentCeiling(tx, actor.userId, req.authorizationDetails);
       if (ceiling !== null && !isNarrowing(ceiling, decision.constraints)) {
         throw new AppError(
           'widening_not_allowed',
@@ -1507,8 +1578,9 @@ export class GrantService {
         grantId,
         clientId: req.clientId,
         userId: actor.userId,
+        redirectUri: req.redirectUri,
         created: live === undefined,
-        stepUp: live === undefined ? null : { approved, fields },
+        stepUp: live === undefined ? null : { approved, base: accessFields(live), fields },
         pluginScope: pluginScopes.join(' '),
         resources: [...new Set([...consented, req.resource])],
       };
@@ -1519,26 +1591,74 @@ export class GrantService {
    * POST /oauth/consent, Deny: only checks the request is the user's to answer (displayed to
    * this session).
    */
-  checkOAuthDeny(actor: Actor, query: URLSearchParams | null, oauthQuery: string): void {
+  checkOAuthDeny(
+    actor: Actor,
+    query: URLSearchParams | null,
+    oauthQuery: string,
+    decisionNonce: string,
+  ): void {
     requireBrowserSession(actor);
     readOnly(this.deps.db, (tx) => this.consentQuery(tx, query));
-    this.requireConsentView(actor, oauthQuery);
+    this.requireConsentNonce(actor, oauthQuery, decisionNonce);
   }
 
   /**
-   * After the provider recorded the consent: its scopes become everything the grant covers
-   * (so a later request for an implied scope skips the screen) and its resources every
-   * resource consented so far (a client using both `/mcp` and `/api/v1` is asked once each).
+   * The provider's code for this decision, when `redirectTo` really carries one: addressed to
+   * the request's redirect URI, and stored by the provider for this grant, user, client and
+   * redirect URI. A `code` parameter the provider merely reflected (e.g. on its login redirect)
+   * is not one. Null otherwise.
    */
-  finishOAuthConsent(prepared: PreparedConsent): void {
-    immediate(this.deps.db, (tx) => {
+  private issuedCode(tx: Tx, prepared: PreparedConsent, redirectTo: string): string | null {
+    if (!URL.canParse(redirectTo) || !URL.canParse(prepared.redirectUri)) return null;
+    const url = new URL(redirectTo);
+    const expected = new URL(prepared.redirectUri);
+    if (url.origin !== expected.origin || url.pathname !== expected.pathname) return null;
+    const code = url.searchParams.get('code');
+    if (code === null) return null;
+    const value = authorizationCodeValue(tx, code) as
+      | (ReturnType<typeof authorizationCodeValue> & {
+          type?: unknown;
+          query?: { client_id?: unknown; redirect_uri?: unknown };
+        })
+      | null;
+    if (
+      value === null ||
+      value.type !== 'authorization_code' ||
+      value.referenceId !== prepared.grantId ||
+      value.userId !== prepared.userId ||
+      value.query?.client_id !== prepared.clientId ||
+      value.query?.redirect_uri !== prepared.redirectUri
+    ) {
+      return null;
+    }
+    return code;
+  }
+
+  /**
+   * After the provider answered: commits the decision only when `redirectTo` carries a genuine
+   * code for it (`issuedCode`) and the grant still is what the decision saw. Its scopes become
+   * everything the grant covers (so a later request for an implied scope skips the screen) and
+   * its resources every resource consented so far (a client using both `/mcp` and `/api/v1` is
+   * asked once each). False when nothing was committed: the code, if any, is withdrawn, and the
+   * caller undoes the decision.
+   */
+  finishOAuthConsent(prepared: PreparedConsent, redirectTo: string): boolean {
+    return immediate(this.deps.db, (tx) => {
+      const code = this.issuedCode(tx, prepared, redirectTo);
+      if (code === null) return false;
+      const withdraw = () => {
+        tx.delete(verification)
+          .where(eq(verification.identifier, hashOAuthToken(code)))
+          .run();
+        return false;
+      };
       let row = tx.select().from(accessGrant).where(eq(accessGrant.id, prepared.grantId)).get();
-      // Revoked meanwhile (by the user, or refresh-token reuse): it stays revoked, and the code
-      // just issued cannot be redeemed (`checkOAuthCode`).
-      if (row === undefined || row.revokedAt !== null) return;
+      // Revoked meanwhile (by the user, or refresh-token reuse): it stays revoked.
+      if (row === undefined || row.revokedAt !== null) return withdraw();
       if (prepared.stepUp !== null) {
-        // Step-up keeps what the grant has now (a concurrent narrowing included) and adds what
-        // was approved.
+        // Narrowed, re-dated or revoked while the provider answered: the user's later change
+        // stands, and this decision is dropped (the app has to ask again).
+        if (!sameAccess(accessFields(row), prepared.stepUp.base)) return withdraw();
         const scopes = minimalScopes([...prepared.stepUp.approved, ...parseScopes(row.scopes)]);
         const update = {
           ...prepared.stepUp.fields,
@@ -1554,6 +1674,7 @@ export class GrantService {
         .set({ resources: JSON.stringify(prepared.resources) })
         .where(eq(oauthConsent.referenceId, row.id))
         .run();
+      return true;
     });
   }
 

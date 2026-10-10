@@ -146,6 +146,10 @@ interface Fixture {
   userCode: string;
   /** A signed authorization request of an app (the consent screen's input). */
   oauthQuery: string;
+  /** The consent decision nonce each cookie actor's session was shown. */
+  consentNonces: Partial<Record<ActorKind, string>>;
+  /** The device decision nonce each cookie actor's session was shown for `userCode`. */
+  deviceNonces: Partial<Record<ActorKind, string>>;
   /** One of the owner's two linked sign-in identities. */
   identityId: string;
   /** An identity the owner removed (blocked until allowed again). */
@@ -613,14 +617,21 @@ const ROWS: Record<string, Row> = {
     expect: { ...signedIn(200), ...SESSION_ONLY },
   },
   'POST /api/v1/device/{userCode}/approve': {
-    request: (f) => ({
+    request: (f, actor) => ({
       path: `/api/v1/device/${f.userCode}/approve`,
-      body: { scopes: ['tasks:read'], constraints: { orgs: 'all' } },
+      body: {
+        decisionNonce: f.deviceNonces[actor] ?? 'not-shown',
+        scopes: ['tasks:read'],
+        constraints: { orgs: 'all' },
+      },
     }),
     expect: { ...signedIn(200), ...SESSION_ONLY },
   },
   'POST /api/v1/device/{userCode}/deny': {
-    request: (f) => ({ path: `/api/v1/device/${f.userCode}/deny` }),
+    request: (f, actor) => ({
+      path: `/api/v1/device/${f.userCode}/deny`,
+      body: { decisionNonce: f.deviceNonces[actor] ?? 'not-shown' },
+    }),
     expect: { ...signedIn(204), ...SESSION_ONLY },
   },
   // Phase 9: the OAuth consent screen and linked identities, browser only (ADR 0042).
@@ -631,9 +642,13 @@ const ROWS: Record<string, Row> = {
     expect: { ...signedIn(200), ...SESSION_ONLY },
   },
   'POST /api/v1/oauth/consent': {
-    request: (f) => ({
+    request: (f, actor) => ({
       path: '/api/v1/oauth/consent',
-      body: { accept: false, oauthQuery: f.oauthQuery },
+      body: {
+        accept: false,
+        oauthQuery: f.oauthQuery,
+        decisionNonce: f.consentNonces[actor] ?? 'not-shown',
+      },
     }),
     expect: { ...signedIn(200), ...SESSION_ONLY },
   },
@@ -1022,13 +1037,33 @@ async function fixture(): Promise<Fixture> {
     disabledJar,
     TEST_ENV.ROOSTER_AUTH_SECRET,
   );
-  // A consent decision is taken only by a session that loaded the request (as the page does).
-  for (const jar of [owner.jar, member.jar, nonMember.jar, admin.jar]) {
+  // A consent decision carries the nonce its session was shown (as the page does).
+  const consentNonces: Partial<Record<ActorKind, string>> = {};
+  for (const [kind, jar] of [
+    ['owner', owner.jar],
+    ['member', member.jar],
+    ['nonMember', nonMember.jar],
+    ['admin', admin.jar],
+  ] as const) {
     const shown = await app.request(
       `/api/v1/oauth/consent?oauth_query=${encodeURIComponent(consentPage.search.slice(1))}`,
       { headers: { cookie: jar.header() } },
     );
     expect(shown.status).toBe(200);
+    consentNonces[kind] = ((await shown.json()) as { decisionNonce: string }).decisionNonce;
+  }
+  const deviceNonces: Partial<Record<ActorKind, string>> = {};
+  for (const [kind, jar] of [
+    ['owner', owner.jar],
+    ['member', member.jar],
+    ['nonMember', nonMember.jar],
+    ['admin', admin.jar],
+  ] as const) {
+    const shown = await app.request(`/api/v1/device/${userCode}`, {
+      headers: { cookie: jar.header() },
+    });
+    expect(shown.status).toBe(200);
+    deviceNonces[kind] = ((await shown.json()) as { decisionNonce: string }).decisionNonce;
   }
 
   return {
@@ -1054,6 +1089,8 @@ async function fixture(): Promise<Fixture> {
     spareGrantId: spare.grant.id,
     userCode,
     oauthQuery: consentPage.search.slice(1),
+    consentNonces,
+    deviceNonces,
     identityId,
     removedIdentityId,
     // P10 fixtures (tasks).

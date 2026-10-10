@@ -99,24 +99,26 @@ describe('AC-9.6 the admin capability', () => {
     const admin = ctx.user('admin@example.com');
     const ada = ctx.user('ada@example.com');
     const asked = await deviceCode(ctx, 'tasks:read admin');
-    const shown = await ada.ok<{ requestedScopes: string[] }>(
+    const shown = await ada.ok<{ requestedScopes: string[]; decisionNonce: string }>(
       'GET',
       `/api/v1/device/${asked.user_code}`,
     );
     expect(shown.requestedScopes).toEqual(['tasks:read']);
     const approved = await ada.ok<Grant>('POST', `/api/v1/device/${asked.user_code}/approve`, {
+      decisionNonce: shown.decisionNonce,
       scopes: ['tasks:read', 'admin'],
       constraints: { orgs: 'all' },
     });
     expect(approved.scopes).toEqual(['tasks:read']);
 
     const forAdmin = await deviceCode(ctx, 'tasks:read admin');
-    const adminShown = await admin.ok<{ requestedScopes: string[] }>(
+    const adminShown = await admin.ok<{ requestedScopes: string[]; decisionNonce: string }>(
       'GET',
       `/api/v1/device/${forAdmin.user_code}`,
     );
     expect(adminShown.requestedScopes).toEqual(['tasks:read', 'admin']);
     const grant = await admin.ok<Grant>('POST', `/api/v1/device/${forAdmin.user_code}/approve`, {
+      decisionNonce: adminShown.decisionNonce,
       scopes: ['tasks:read', 'admin'],
       constraints: { orgs: 'all' },
     });

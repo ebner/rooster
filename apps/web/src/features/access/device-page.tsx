@@ -153,7 +153,8 @@ function RequestStep({
       className="flex flex-col gap-6"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!blocked && !pending) void run('approve', () => onApprove(toDeviceApprove(value)));
+        if (!blocked && !pending)
+          void run('approve', () => onApprove(toDeviceApprove(value, request)));
       }}
       aria-labelledby={titleId}
       data-testid="device-request"

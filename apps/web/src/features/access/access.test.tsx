@@ -438,6 +438,7 @@ describe('/device', () => {
           clientName: 'rooster CLI',
           requestedScopes: ['tasks:write'],
           expiresAt: now + 600_000,
+          decisionNonce: 'device-nonce',
         },
       },
     });
@@ -449,6 +450,7 @@ describe('/device', () => {
       fireEvent.click(screen.getByTestId('device-approve'));
     });
     expect(props.onApprove).toHaveBeenCalledWith({
+      decisionNonce: 'device-nonce',
       scopes: ['tasks:write'],
       constraints: { orgs: [{ orgId: acme, read: 'all', write: 'all' }] },
     });

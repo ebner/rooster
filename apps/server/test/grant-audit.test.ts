@@ -2,7 +2,7 @@
 // Each `it` names the finding it covers.
 import type { Grant, Group, Tag, Task } from '@rooster/core/schemas';
 import { describe, expect, it } from 'vitest';
-import { ALL, bearer, pat } from './grant-helpers.ts';
+import { ALL, bearer, deviceCode, deviceNonce, pat, pollToken } from './grant-helpers.ts';
 import { groupNamed, listCtx, sharedOrg } from './list-helpers.ts';
 import { API_RESOURCE, connect, oauthCtx, withToken } from './oauth-helpers.ts';
 
@@ -240,5 +240,159 @@ describe('boundary 3: grants and service authorisation', () => {
     const body = (await move.json()) as { code: string; detail: string };
     expect(body.code).toBe('outside_grant');
     expect(body.detail).toContain('"Today"');
+  });
+});
+
+describe('boundary 3, round 3', () => {
+  it('P2 a grant matches @person on names, never on a colleague’s email prefix', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const quinn = ctx.user('q7@x.test', 'Robin Seven');
+    const org = await sharedOrg(owner, [quinn]);
+    await owner.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'Quarterly plan', assigneeId: quinn.userId },
+      201,
+    );
+    const api = bearer(ctx, (await pat(owner, ['tasks:read'])).token);
+    const titles = async (caller: { ok: <T>(m: string, p: string) => Promise<T> }, q: string) => {
+      const hits = await caller.ok<{ task: Task }[]>(
+        'GET',
+        `/api/v1/search?orgId=${org.id}&q=${encodeURIComponent(q)}`,
+      );
+      const page = await caller.ok<{ items: Task[] }>(
+        'GET',
+        `/api/v1/orgs/${org.id}/tasks?view=everyone&q=${encodeURIComponent(q)}`,
+      );
+      return [hits.map((h) => h.task.title), page.items.map((t) => t.title)];
+    };
+    for (const q of ['@q', '@q7', '@q7@x']) {
+      expect(await titles(api, q), q).toEqual([[], []]);
+    }
+    expect(await titles(api, '@robin')).toEqual([['Quarterly plan'], ['Quarterly plan']]);
+    // The browser still matches emails.
+    expect(await titles(owner, '@q7')).toEqual([['Quarterly plan'], ['Quarterly plan']]);
+  });
+
+  it('P2 a device approval needs the nonce its own session was shown', async () => {
+    const ctx = listCtx();
+    const alice = ctx.user('alice@example.com');
+    const bob = ctx.user('bob@example.com');
+    const code = await deviceCode(ctx, 'tasks:read');
+    // Bob's session once looked at the code too; the page shows it to Alice.
+    await deviceNonce(bob, code.user_code);
+    const decisionNonce = await deviceNonce(alice, code.user_code);
+    // The browser's cookie changes to Bob's; the page posts Alice's decision.
+    const approve = await bob.call('POST', `/api/v1/device/${code.user_code}/approve`, {
+      decisionNonce,
+      scopes: ['tasks:read'],
+      constraints: { orgs: 'all' },
+    });
+    expect(approve.status).toBe(404);
+    const deny = await bob.call('POST', `/api/v1/device/${code.user_code}/deny`, {
+      decisionNonce,
+    });
+    expect(deny.status).toBe(404);
+    const forged = await alice.call('POST', `/api/v1/device/${code.user_code}/approve`, {
+      decisionNonce: 'forged',
+      scopes: ['tasks:read'],
+      constraints: { orgs: 'all' },
+    });
+    expect(forged.status).toBe(404);
+    const grant = await alice.ok<Grant>('POST', `/api/v1/device/${code.user_code}/approve`, {
+      decisionNonce,
+      scopes: ['tasks:read'],
+      constraints: { orgs: 'all' },
+    });
+    const token = await pollToken(ctx, code.device_code);
+    expect(token.status).toBe(200);
+    const me = await bearer(ctx, token.body.access_token as string).ok<{ id: string }>(
+      'GET',
+      '/api/v1/me',
+    );
+    expect(me.id).toBe(alice.userId);
+    expect(grant.kind).toBe('device');
+  });
+
+  it('P3 activity cursors are built from visible entries only', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const bob = ctx.user('bob@example.com');
+    const org = await sharedOrg(owner, [bob]);
+    const prio = await groupNamed(owner, 'Prio', org.id);
+    const today = await groupNamed(owner, 'Today', org.id);
+    const t = await owner.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'T', groupId: prio.id },
+      201,
+    );
+    // Bob's subtask S shows under T; the owner's G under S sits in Today, outside the grant.
+    const s = await bob.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'S', parentId: t.id, assigneeId: bob.userId },
+      201,
+    );
+    const g = await owner.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'G', parentId: s.id, assigneeId: owner.userId },
+      201,
+    );
+    await owner.ok('POST', `/api/v1/tasks/${g.id}/move`, { groupId: today.id });
+    const constraints = {
+      orgs: [{ orgId: org.id, read: { groups: [prio.id] }, write: 'none' as const }],
+    };
+    const api = bearer(ctx, (await pat(owner, ['tasks:read'], constraints)).token);
+    const page = await api.ok<{ items: unknown[]; nextCursor: string | null }>(
+      'GET',
+      `/api/v1/tasks/${s.id}/activity?limit=1`,
+    );
+    expect(page.items).toHaveLength(1);
+    expect(JSON.stringify(page)).not.toContain(g.id);
+    if (page.nextCursor !== null) {
+      expect(Buffer.from(page.nextCursor, 'base64url').toString()).not.toContain(g.id);
+    }
+    // The browser sees the hidden entry and pages past it.
+    const browser = await owner.ok<{ items: unknown[]; nextCursor: string | null }>(
+      'GET',
+      `/api/v1/tasks/${s.id}/activity?limit=1`,
+    );
+    expect(JSON.stringify(browser.items)).toContain(g.id);
+    expect(browser.nextCursor).not.toBeNull();
+  });
+
+  it('P3 a group the grant cannot read is 404 for PATCH, move, delete and restore', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const prio = await groupNamed(owner, 'Prio');
+    const today = await groupNamed(owner, 'Today');
+    const gone = await owner.ok<{ group: Group }>(
+      'POST',
+      '/api/v1/orgs/personal/groups',
+      { name: 'Gone' },
+      201,
+    );
+    await owner.ok('DELETE', `/api/v1/groups/${gone.group.id}`, {}, 204);
+    const constraints = {
+      orgs: [{ orgId: prio.orgId, read: { groups: [prio.id] }, write: 'all' as const }],
+    };
+    const api = bearer(ctx, (await pat(owner, ALL, constraints)).token);
+    const unknown = '0199a1b2-0000-7000-8000-00000000dead';
+    for (const id of [today.id, unknown]) {
+      for (const [method, path, body] of [
+        ['PATCH', `/api/v1/groups/${id}`, { name: 'X' }],
+        ['POST', `/api/v1/groups/${id}/move`, { afterId: prio.id }],
+        ['DELETE', `/api/v1/groups/${id}`, {}],
+      ] as const) {
+        const res = await api.call(method, path, body);
+        expect(res.status, `${method} ${path}`).toBe(404);
+        expect(await res.text()).not.toContain('Today');
+      }
+    }
+    expect((await api.call('POST', `/api/v1/groups/${gone.group.id}/restore`)).status).toBe(404);
+    expect((await api.call('POST', `/api/v1/groups/${unknown}/restore`)).status).toBe(404);
   });
 });

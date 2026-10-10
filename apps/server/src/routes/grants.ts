@@ -4,6 +4,7 @@ import type { Services } from '../services/index.ts';
 import { ANY_CREDENTIAL, AUTHED, actorOf, body, idParam, json, problems } from './common.ts';
 import {
   DeviceApproveSchema,
+  DeviceDenySchema,
   DeviceRequestSchema,
   GrantPatchSchema,
   GrantSchema,
@@ -89,7 +90,7 @@ const getDevice = createRoute({
   operationId: 'getDeviceRequest',
   summary: 'What a CLI device asks for, before approval',
   description:
-    'Browser session only. The pending device request with this code: the client and the scopes it asked for (`scope` of its `/api/auth/device/code` request; all scopes but `admin` when it sent none; `admin` only for instance admins). Unknown, expired or already handled codes are `404`.',
+    'Browser session only. The pending device request with this code: the client and the scopes it asked for (`scope` of its `/api/auth/device/code` request; all scopes but `admin` when it sent none; `admin` only for instance admins). Unknown, expired or already handled codes are `404`. `decisionNonce` binds the approval or denial to this user and session.',
   request: { params: z.object({ userCode: userCodeParam }) },
   responses: { 200: json(DeviceRequestSchema, 'The pending request'), ...problems(401, 404) },
 });
@@ -101,7 +102,7 @@ const approveDevice = createRoute({
   operationId: 'approveDevice',
   summary: 'Approve a CLI device with the chosen scopes and constraints',
   description:
-    'Browser session only. Creates the device grant (scopes no wider than requested, else `422 widening_not_allowed`; `admin` is dropped unless the user is an instance admin); the CLI’s next poll of `/api/auth/device/token` receives a bearer session tied to it. The default label is "rooster CLI on <device>" from the CLI’s User-Agent.',
+    'Browser session only, with the `decisionNonce` that `GET /device/{userCode}` returned to this user and session (any other, e.g. after switching accounts, is `404`: load the request again). Creates the device grant (scopes no wider than requested, else `422 widening_not_allowed`; `admin` is dropped unless the user is an instance admin); the CLI’s next poll of `/api/auth/device/token` receives a bearer session tied to it. The default label is "rooster CLI on <device>" from the CLI’s User-Agent.',
   request: { params: z.object({ userCode: userCodeParam }), body: body(DeviceApproveSchema) },
   responses: {
     200: json(GrantSchema, 'The new grant'),
@@ -115,8 +116,9 @@ const denyDevice = createRoute({
   tags,
   operationId: 'denyDevice',
   summary: 'Deny a CLI device',
-  description: 'Browser session only. The CLI’s next poll gets `access_denied`.',
-  request: { params: z.object({ userCode: userCodeParam }) },
+  description:
+    'Browser session only, with the `decisionNonce` that `GET /device/{userCode}` returned to this user and session (any other is `404`). The CLI’s next poll gets `access_denied`.',
+  request: { params: z.object({ userCode: userCodeParam }), body: body(DeviceDenySchema) },
   responses: { 204: { description: 'Denied' }, ...problems(...AUTHED, 404) },
 });
 
@@ -128,6 +130,7 @@ export function registerGrantRoutes(app: OpenAPIHono<AppEnv>, { grants }: Servic
     ['TokenCreated', TokenCreatedSchema],
     ['DeviceRequest', DeviceRequestSchema],
     ['DeviceApprove', DeviceApproveSchema],
+    ['DeviceDeny', DeviceDenySchema],
   ] as const) {
     app.openAPIRegistry.register(name, schema);
   }
@@ -153,7 +156,7 @@ export function registerGrantRoutes(app: OpenAPIHono<AppEnv>, { grants }: Servic
     ),
   );
   app.openapi(denyDevice, (c) => {
-    grants.denyDevice(actorOf(c), c.req.valid('param').userCode);
+    grants.denyDevice(actorOf(c), c.req.valid('param').userCode, c.req.valid('json'));
     return c.body(null, 204);
   });
 }

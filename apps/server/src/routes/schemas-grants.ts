@@ -1,5 +1,6 @@
 import {
   deviceApproveSchema,
+  deviceDenySchema,
   deviceRequestSchema,
   grantConstraintsSchema,
   grantPatchSchema,
@@ -110,11 +111,19 @@ export const DeviceRequestSchema = named(deviceRequestSchema, 'DeviceRequest', {
       'notifications:read',
     ],
     expiresAt: 1767226200000,
+    decisionNonce: 'pT8x2Lk0…',
   },
+});
+
+export const DeviceDenySchema = named(deviceDenySchema, 'DeviceDeny', {
+  description: '`decisionNonce` is the one `GET /device/{userCode}` returned, unchanged.',
+  example: { decisionNonce: 'pT8x2Lk0…' },
 });
 
 export const DeviceApproveSchema = named(
   describe(deviceApproveSchema.extend({ constraints: GrantConstraintsSchema }), {
+    decisionNonce:
+      'The nonce `GET /device/{userCode}` returned to this user and session, unchanged.',
     scopes: 'No wider than the device requested (`422 widening_not_allowed`).',
     label: 'Default: "rooster CLI on <device>", from the CLI’s User-Agent.',
     expiresInDays: 'Omitted: the grant does not expire.',
@@ -122,6 +131,7 @@ export const DeviceApproveSchema = named(
   'DeviceApprove',
   {
     example: {
+      decisionNonce: 'pT8x2Lk0…',
       scopes: ['tasks:write'],
       constraints: constraintsExample,
       label: 'rooster CLI on laptop',
@@ -165,6 +175,7 @@ export const OAuthConsentRequestSchema = named(
       newScopes: ['tasks:write'],
       existing: null,
       prefill: null,
+      decisionNonce: 'kY3n0Qw2…',
     },
   },
 );
@@ -174,10 +185,11 @@ export const OAuthConsentDecisionSchema = named(
   'OAuthConsentDecision',
   {
     description:
-      'Allow (`accept: true`, with the approved scopes, constraints and expiry or `sessionOnly`) or Deny (`accept: false`). `oauthQuery` is the signed query from `GET /oauth/consent`, unchanged.',
+      'Allow (`accept: true`, with the approved scopes, constraints and expiry or `sessionOnly`) or Deny (`accept: false`). `oauthQuery` is the signed query and `decisionNonce` the nonce from `GET /oauth/consent`, both unchanged.',
     example: {
       accept: true,
       oauthQuery: 'client_id=…&sig=…',
+      decisionNonce: 'kY3n0Qw2…',
       scopes: ['tasks:write'],
       constraints: constraintsExample,
       expiresInDays: 90,

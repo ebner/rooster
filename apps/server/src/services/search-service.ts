@@ -190,7 +190,11 @@ export class SearchService {
         .innerJoin(user, eq(user.id, member.userId))
         .where(inArray(member.organizationId, [...orgIds]))
         .all()) {
-        membersById[m.id] = { name: m.name, email: m.email };
+        // A grant matches `@person` on names only (and the actor's own address): colleague
+        // emails are not readable with a grant, and prefix matching would spell them out one
+        // character at a time. Exact addresses resolve through `/members/resolve`.
+        const email = actor.grant === null || m.id === actor.userId ? m.email : '';
+        membersById[m.id] = { name: m.name, email };
       }
     }
     return {

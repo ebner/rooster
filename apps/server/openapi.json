@@ -482,6 +482,9 @@
           "expiresAt": {
             "type": "integer",
             "minimum": 0
+          },
+          "decisionNonce": {
+            "type": "string"
           }
         },
         "required": [
@@ -489,7 +492,8 @@
           "clientId",
           "clientName",
           "requestedScopes",
-          "expiresAt"
+          "expiresAt",
+          "decisionNonce"
         ],
         "example": {
           "userCode": "WDJBMJHT",
@@ -502,12 +506,19 @@
             "groups:write",
             "notifications:read"
           ],
-          "expiresAt": 1767226200000
+          "expiresAt": 1767226200000,
+          "decisionNonce": "pT8x2Lk0…"
         }
       },
       "DeviceApprove": {
         "type": "object",
         "properties": {
+          "decisionNonce": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The nonce `GET /device/{userCode}` returned to this user and session, unchanged."
+          },
           "scopes": {
             "type": "array",
             "items": {
@@ -544,10 +555,12 @@
           }
         },
         "required": [
+          "decisionNonce",
           "scopes",
           "constraints"
         ],
         "example": {
+          "decisionNonce": "pT8x2Lk0…",
           "scopes": [
             "tasks:write"
           ],
@@ -565,6 +578,23 @@
             ]
           },
           "label": "rooster CLI on laptop"
+        }
+      },
+      "DeviceDeny": {
+        "type": "object",
+        "properties": {
+          "decisionNonce": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "decisionNonce"
+        ],
+        "description": "`decisionNonce` is the one `GET /device/{userCode}` returned, unchanged.",
+        "example": {
+          "decisionNonce": "pT8x2Lk0…"
         }
       },
       "SseHello": {
@@ -833,6 +863,9 @@
                 ]
               }
             ]
+          },
+          "decisionNonce": {
+            "type": "string"
           }
         },
         "required": [
@@ -845,7 +878,8 @@
           "requestedScopes",
           "newScopes",
           "existing",
-          "prefill"
+          "prefill",
+          "decisionNonce"
         ],
         "example": {
           "oauthQuery": "client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fclient.json&…&sig=…",
@@ -868,7 +902,8 @@
             "tasks:write"
           ],
           "existing": null,
-          "prefill": null
+          "prefill": null,
+          "decisionNonce": "kY3n0Qw2…"
         }
       },
       "OAuthConsentDecision": {
@@ -884,6 +919,11 @@
               },
               "oauthQuery": {
                 "type": "string"
+              },
+              "decisionNonce": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
               },
               "scopes": {
                 "type": "array",
@@ -1012,6 +1052,7 @@
             "required": [
               "accept",
               "oauthQuery",
+              "decisionNonce",
               "scopes",
               "constraints"
             ]
@@ -1027,18 +1068,25 @@
               },
               "oauthQuery": {
                 "type": "string"
+              },
+              "decisionNonce": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
               }
             },
             "required": [
               "accept",
-              "oauthQuery"
+              "oauthQuery",
+              "decisionNonce"
             ]
           }
         ],
-        "description": "Allow (`accept: true`, with the approved scopes, constraints and expiry or `sessionOnly`) or Deny (`accept: false`). `oauthQuery` is the signed query from `GET /oauth/consent`, unchanged.",
+        "description": "Allow (`accept: true`, with the approved scopes, constraints and expiry or `sessionOnly`) or Deny (`accept: false`). `oauthQuery` is the signed query and `decisionNonce` the nonce from `GET /oauth/consent`, both unchanged.",
         "example": {
           "accept": true,
           "oauthQuery": "client_id=…&sig=…",
+          "decisionNonce": "kY3n0Qw2…",
           "scopes": [
             "tasks:write"
           ],
@@ -14426,7 +14474,7 @@
         ],
         "operationId": "getDeviceRequest",
         "summary": "What a CLI device asks for, before approval",
-        "description": "Browser session only. The pending device request with this code: the client and the scopes it asked for (`scope` of its `/api/auth/device/code` request; all scopes but `admin` when it sent none; `admin` only for instance admins). Unknown, expired or already handled codes are `404`.",
+        "description": "Browser session only. The pending device request with this code: the client and the scopes it asked for (`scope` of its `/api/auth/device/code` request; all scopes but `admin` when it sent none; `admin` only for instance admins). Unknown, expired or already handled codes are `404`. `decisionNonce` binds the approval or denial to this user and session.",
         "parameters": [
           {
             "schema": {
@@ -14566,7 +14614,7 @@
         ],
         "operationId": "approveDevice",
         "summary": "Approve a CLI device with the chosen scopes and constraints",
-        "description": "Browser session only. Creates the device grant (scopes no wider than requested, else `422 widening_not_allowed`; `admin` is dropped unless the user is an instance admin); the CLI’s next poll of `/api/auth/device/token` receives a bearer session tied to it. The default label is \"rooster CLI on <device>\" from the CLI’s User-Agent.",
+        "description": "Browser session only, with the `decisionNonce` that `GET /device/{userCode}` returned to this user and session (any other, e.g. after switching accounts, is `404`: load the request again). Creates the device grant (scopes no wider than requested, else `422 widening_not_allowed`; `admin` is dropped unless the user is an instance admin); the CLI’s next poll of `/api/auth/device/token` receives a bearer session tied to it. The default label is \"rooster CLI on <device>\" from the CLI’s User-Agent.",
         "parameters": [
           {
             "schema": {
@@ -14841,7 +14889,7 @@
         ],
         "operationId": "denyDevice",
         "summary": "Deny a CLI device",
-        "description": "Browser session only. The CLI’s next poll gets `access_denied`.",
+        "description": "Browser session only, with the `decisionNonce` that `GET /device/{userCode}` returned to this user and session (any other is `404`). The CLI’s next poll gets `access_denied`.",
         "parameters": [
           {
             "schema": {
@@ -14869,6 +14917,16 @@
             "$ref": "#/components/parameters/Client"
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceDeny"
+              }
+            }
+          }
+        },
         "responses": {
           "204": {
             "description": "Denied",
@@ -28287,7 +28345,7 @@
         ],
         "operationId": "getOAuthConsent",
         "summary": "What an app asks for, before the user allows it",
-        "description": "Browser session only. The authorization request behind the consent screen (`/oauth/consent`): the app, its redirect target, the resource, the requested capabilities (`newScopes`: those the existing grant lacks), the existing grant on step-up, and any `authorization_details` pre-fill. An unsigned, altered or expired query (10 minutes) is `404`.",
+        "description": "Browser session only. The authorization request behind the consent screen (`/oauth/consent`): the app, its redirect target, the resource, the requested capabilities (`newScopes`: those the existing grant lacks), the existing grant on step-up, and any `authorization_details` pre-fill. An unsigned, altered or expired query (10 minutes), or `authorization_details` that are malformed or name nothing that still exists, is `404`. `decisionNonce` binds the decision to this user and session.",
         "parameters": [
           {
             "schema": {
@@ -28424,7 +28482,7 @@
         ],
         "operationId": "decideOAuthConsent",
         "summary": "Allow or deny an app",
-        "description": "Browser session only, and only the session that loaded the request with `GET /oauth/consent` (another session, e.g. after switching accounts, gets `404`: load it again). Allow creates or updates my grant for the app (scopes no wider than requested; constraints no wider than the app’s `authorization_details`, else `422 widening_not_allowed`; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Approving nothing at all is `422 nothing_approved`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.",
+        "description": "Browser session only. `decisionNonce` is the one `GET /oauth/consent` returned to this user and session; any other (e.g. after switching accounts) is `404`: load the request again. Allow creates or updates my grant for the app (scopes no wider than requested; constraints no wider than the app’s `authorization_details`, else `422 widening_not_allowed`; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Approving nothing at all is `422 nothing_approved`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.",
         "requestBody": {
           "required": true,
           "content": {

@@ -111,16 +111,28 @@ export const deviceRequestSchema = z.object({
   clientName: z.string(),
   requestedScopes: z.array(grantScopeSchema),
   expiresAt: timestampSchema,
+  /**
+   * Binds the decision to the user and session this request was shown to: send it back
+   * unchanged as the approval's or denial's `decisionNonce`. Reload after a session change.
+   */
+  decisionNonce: z.string(),
 });
+
+/** `decisionNonce` of the device request or consent request being answered. */
+const decisionNonceSchema = z.string().min(1).max(200);
 
 /** POST /device/:userCode/approve — the grant the CLI session gets. */
 export const deviceApproveSchema = z.object({
+  decisionNonce: decisionNonceSchema,
   scopes: grantScopesSchema,
   constraints: grantConstraintsSchema,
   /** Default: "rooster CLI on <device>" from the request's user agent. */
   label: z.string().trim().min(1).max(100).optional(),
   expiresInDays: z.int().min(1).max(3650).optional(),
 });
+
+/** POST /device/:userCode/deny. */
+export const deviceDenySchema = z.object({ decisionNonce: decisionNonceSchema });
 
 /** "This session only": the idle timeout of an OAuth grant (11 §2.4, ADR 0041). */
 export const SESSION_ONLY_IDLE_MS = 24 * 60 * 60 * 1000;
@@ -146,8 +158,16 @@ export const oauthConsentRequestSchema = z.object({
   newScopes: z.array(grantScopeSchema),
   /** The live grant of this (user, client), to pre-fill constraints on step-up; else null. */
   existing: grantSchema.nullable(),
-  /** RFC 9396 `authorization_details` of type `rooster_access`, if the client sent any. */
+  /**
+   * RFC 9396 `authorization_details` of type `rooster_access`, if the client sent any (reduced
+   * to orgs and groups that still exist): the ceiling of the decision's constraints.
+   */
   prefill: grantConstraintsSchema.nullable(),
+  /**
+   * Binds the decision to the user and session this request was shown to: send it back
+   * unchanged as the decision's `decisionNonce`. Reload the request after a session change.
+   */
+  decisionNonce: z.string(),
 });
 
 /**
@@ -159,6 +179,7 @@ export const oauthConsentDecisionSchema = z.discriminatedUnion('accept', [
   z.object({
     accept: z.literal(true),
     oauthQuery: z.string(),
+    decisionNonce: decisionNonceSchema,
     scopes: grantScopesSchema,
     constraints: grantConstraintsSchema,
     /** Omitted = never; ignored with `sessionOnly`. */
@@ -166,7 +187,11 @@ export const oauthConsentDecisionSchema = z.discriminatedUnion('accept', [
     /** "This session only" (`SESSION_ONLY_IDLE_MS`). */
     sessionOnly: z.boolean().optional(),
   }),
-  z.object({ accept: z.literal(false), oauthQuery: z.string() }),
+  z.object({
+    accept: z.literal(false),
+    oauthQuery: z.string(),
+    decisionNonce: decisionNonceSchema,
+  }),
 ]);
 export const oauthConsentResultSchema = z.object({ redirectTo: z.string() });
 
@@ -209,6 +234,7 @@ export type TokenCreate = z.infer<typeof tokenCreateSchema>;
 export type TokenCreated = z.infer<typeof tokenCreatedSchema>;
 export type DeviceRequest = z.infer<typeof deviceRequestSchema>;
 export type DeviceApprove = z.infer<typeof deviceApproveSchema>;
+export type DeviceDeny = z.infer<typeof deviceDenySchema>;
 export type OAuthClientInfo = z.infer<typeof oauthClientInfoSchema>;
 export type OAuthConsentRequest = z.infer<typeof oauthConsentRequestSchema>;
 export type OAuthConsentDecision = z.infer<typeof oauthConsentDecisionSchema>;

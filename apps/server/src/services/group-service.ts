@@ -21,7 +21,7 @@ import {
   type Tx,
 } from './context.ts';
 import { qk, selfAudience, taskAudiences, taskReach } from './event-audience.ts';
-import { authorizeOrgWide, requireScope } from './grant-access.ts';
+import { authorizeOrgWide, requireReadableGroup, requireScope } from './grant-access.ts';
 import {
   chunked,
   clockAllows,
@@ -134,6 +134,7 @@ export class GroupService {
         // The split moves tasks into the new group: a task move, beyond `groups:write`.
         requireScope(actor, 'tasks:write');
         const split = this.splitSource(tx, actor.userId, org.id, input.splitAfterTaskId, now);
+        requireReadableGroup(actor, org.id, split.source.id);
         target = split.source.kind === 'inbox' ? 'top' : { afterId: split.source.id };
         movedIds = split.below;
       }
@@ -193,6 +194,8 @@ export class GroupService {
   update(actor: Actor, groupId: string, patch: GroupPatch, meta: OpMeta): Group {
     return immediate(this.deps.db, (tx) => {
       const group = requireOwnGroup(tx, actor.userId, groupId);
+      // A group the grant cannot read is 404, like an unknown one (11 §2.3).
+      requireReadableGroup(actor, group.orgId, group.id);
       authorizeOrgWide(tx, actor, group.orgId, 'groups:write');
       if (patch.name !== undefined && group.kind === 'inbox') throw inboxImmutable();
       const clock = parseClock(group.fieldClock);
@@ -221,6 +224,8 @@ export class GroupService {
   move(actor: Actor, groupId: string, intent: OrderingIntent, meta: OpMeta): GroupMoveResult {
     return immediate(this.deps.db, (tx) => {
       const group = requireOwnGroup(tx, actor.userId, groupId);
+      // A group the grant cannot read is 404, like an unknown one (11 §2.3).
+      requireReadableGroup(actor, group.orgId, group.id);
       authorizeOrgWide(tx, actor, group.orgId, 'groups:write');
       if (group.kind === 'inbox') throw inboxImmutable();
       const clock = parseClock(group.fieldClock);
@@ -248,6 +253,8 @@ export class GroupService {
   remove(actor: Actor, groupId: string, input: GroupDelete, meta?: OpMeta): void {
     immediate(this.deps.db, (tx) => {
       const group = requireOwnGroup(tx, actor.userId, groupId);
+      // A group the grant cannot read is 404, like an unknown one (11 §2.3).
+      requireReadableGroup(actor, group.orgId, group.id);
       authorizeOrgWide(tx, actor, group.orgId, 'groups:write');
       requireScope(actor, 'tasks:delete');
       if (group.kind === 'inbox') throw inboxImmutable();
@@ -288,6 +295,7 @@ export class GroupService {
         const target = requireOwnGroup(tx, actor.userId, input.moveTasksTo, {
           orgId: group.orgId,
         });
+        requireReadableGroup(actor, group.orgId, target.id);
         this.placements.placeInGroup(tx, {
           userId: actor.userId,
           group: target,
@@ -328,6 +336,8 @@ export class GroupService {
   restore(actor: Actor, groupId: string, meta?: OpMeta): Group {
     return immediate(this.deps.db, (tx) => {
       const group = requireOwnGroup(tx, actor.userId, groupId, { includeDeleted: true });
+      // A group the grant cannot read is 404, like an unknown one (11 §2.3).
+      requireReadableGroup(actor, group.orgId, group.id);
       authorizeOrgWide(tx, actor, group.orgId, 'groups:write');
       requireScope(actor, 'tasks:write');
       if (group.deletedAt === null) return toGroupDto(group);

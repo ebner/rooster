@@ -33,8 +33,11 @@ export type SyncMessage =
       type: 'status';
       status: Pick<SyncState, 'syncing' | 'failures' | 'lastError' | 'sessionExpired'>;
     }
-  /** Signed out, or another user signed in: drop every local copy. */
-  | { type: 'cleared' };
+  /**
+   * Signed out, or another user signed in: drop every local copy. `userId`: the account whose
+   * session ended; every tab deletes that account's outbox records it may still have written.
+   */
+  | { type: 'cleared'; userId?: string };
 
 export interface SyncChannel {
   post(message: SyncMessage): void;

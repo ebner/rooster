@@ -118,7 +118,7 @@ function DeviceRoute() {
       onDeny={async () => {
         if (!userCode || !request.data) return;
         try {
-          await deny.mutateAsync({ userCode });
+          await deny.mutateAsync({ userCode, decisionNonce: request.data.decisionNonce });
           setOutcome({ kind: 'denied', clientName: request.data.clientName });
         } catch (error) {
           settle(error, t('device.denyFailed'));

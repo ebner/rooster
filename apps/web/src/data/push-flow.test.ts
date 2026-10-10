@@ -151,6 +151,14 @@ describe('a session that ends while push is being turned on (ADR 0051)', () => {
     expect(made?.unsubscribe).toHaveBeenCalled();
   });
 
+  test('a registration whose answer was lost drops its unmarked subscription', async () => {
+    // The server may have committed it; without a marker nothing would unsubscribe it later.
+    http.POST.mockImplementationOnce(() => Promise.reject(new TypeError('network')));
+    await expect(enablePush(new QueryClient(), 'u1', key)).rejects.toThrow();
+    expect(current?.unsubscribe).toHaveBeenCalled();
+    expect(localStorage.getItem('rooster.user.u1.pushDevice')).toBeNull();
+  });
+
   test('a finished registration is left to the marker and the sweep', async () => {
     await enablePush(new QueryClient(), 'u1', key);
     const made = current;

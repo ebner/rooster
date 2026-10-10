@@ -81,6 +81,10 @@ interface Fixture {
   grantId: string;
   /** Set by setups (P9): an app's signed authorization request, a linked identity. */
   oauthQuery: string;
+  /** The owner's decision nonce for `oauthQuery`. */
+  consentNonce: string;
+  /** The owner's decision nonce for the pending device code `userCode`. */
+  deviceNonce: string;
   identityId: string;
 }
 
@@ -163,6 +167,11 @@ async function startDevice(f: Fixture, scope = 'tasks:read tasks:write'): Promis
   if (res.status !== 200) throw new Error(`device code: ${res.status} ${await res.text()}`);
   const body = (await res.json()) as { user_code: string; device_code: string };
   f.userCode = body.user_code;
+  // The decision nonce the owner's `/device` page is shown.
+  const shown = await f.app.request(`/api/v1/device/${body.user_code}`, {
+    headers: { cookie: f.jars.owner.header() },
+  });
+  f.deviceNonce = ((await shown.json()) as { decisionNonce: string }).decisionNonce;
   return body.device_code;
 }
 
@@ -175,7 +184,10 @@ async function deviceSession(
   const approve = await send(
     f,
     'POST',
-    { path: `/api/v1/device/${f.userCode}/approve`, body: approval },
+    {
+      path: `/api/v1/device/${f.userCode}/approve`,
+      body: { ...approval, decisionNonce: f.deviceNonce },
+    },
     'owner',
   );
   if (approve.status !== 200) throw new Error(`approve: ${approve.status}`);
@@ -226,12 +238,12 @@ async function startConsent(f: Fixture): Promise<void> {
   const page = new URL(res.headers.get('location') ?? '', BASE_URL);
   if (page.pathname !== '/oauth/consent') throw new Error(`authorize: ${page.href}`);
   f.oauthQuery = page.search.slice(1);
-  // A consent decision is taken only by a session that loaded the request (as the page does).
-  for (const jar of Object.values(f.jars)) {
-    await f.app.request(`/api/v1/oauth/consent?oauth_query=${encodeURIComponent(f.oauthQuery)}`, {
-      headers: { cookie: jar.header() },
-    });
-  }
+  // A consent decision carries the nonce the owner's session was shown (as the page does).
+  const shown = await f.app.request(
+    `/api/v1/oauth/consent?oauth_query=${encodeURIComponent(f.oauthQuery)}`,
+    { headers: { cookie: f.jars.owner.header() } },
+  );
+  f.consentNonce = ((await shown.json()) as { decisionNonce: string }).decisionNonce;
 }
 
 /** P9: a linked sign-in identity of the owner (stored in `f.identityId`). */
@@ -1414,7 +1426,7 @@ const SPECS: Record<string, Spec> = {
   'POST /api/v1/device/{userCode}/approve': {
     ok: (f) => ({
       path: `/api/v1/device/${f.userCode}/approve`,
-      body: { scopes: ['tasks:read'], constraints: { orgs: 'all' } },
+      body: { decisionNonce: f.deviceNonce, scopes: ['tasks:read'], constraints: { orgs: 'all' } },
     }),
     setup: async (f) => {
       await startDevice(f, 'tasks:read tasks:write');
@@ -1425,13 +1437,20 @@ const SPECS: Record<string, Spec> = {
         code: 'widening_not_allowed',
         request: (f) => ({
           path: `/api/v1/device/${f.userCode}/approve`,
-          body: { scopes: ['tasks:delete'], constraints: { orgs: 'all' } },
+          body: {
+            decisionNonce: f.deviceNonce,
+            scopes: ['tasks:delete'],
+            constraints: { orgs: 'all' },
+          },
         }),
       },
     ],
   },
   'POST /api/v1/device/{userCode}/deny': {
-    ok: (f) => ({ path: `/api/v1/device/${f.userCode}/deny` }),
+    ok: (f) => ({
+      path: `/api/v1/device/${f.userCode}/deny`,
+      body: { decisionNonce: f.deviceNonce },
+    }),
     setup: async (f) => {
       await startDevice(f);
     },
@@ -1457,6 +1476,7 @@ const SPECS: Record<string, Spec> = {
       body: {
         accept: true,
         oauthQuery: f.oauthQuery,
+        decisionNonce: f.consentNonce,
         scopes: ['tasks:read'],
         constraints: { orgs: 'all' },
         sessionOnly: true,
@@ -1469,7 +1489,7 @@ const SPECS: Record<string, Spec> = {
         name: 'deny',
         request: (f) => ({
           path: '/api/v1/oauth/consent',
-          body: { accept: false, oauthQuery: f.oauthQuery },
+          body: { accept: false, oauthQuery: f.oauthQuery, decisionNonce: f.consentNonce },
         }),
       },
       {
@@ -1478,7 +1498,11 @@ const SPECS: Record<string, Spec> = {
         code: 'not_found',
         request: () => ({
           path: '/api/v1/oauth/consent',
-          body: { accept: false, oauthQuery: 'client_id=contract-app&sig=x' },
+          body: {
+            accept: false,
+            oauthQuery: 'client_id=contract-app&sig=x',
+            decisionNonce: 'x',
+          },
         }),
       },
     ],
@@ -1771,6 +1795,8 @@ function fixture(options: FixtureOptions = {}): Fixture {
     userCode: '',
     grantId: '',
     oauthQuery: '',
+    consentNonce: '',
+    deviceNonce: '',
     identityId: '',
   };
 }

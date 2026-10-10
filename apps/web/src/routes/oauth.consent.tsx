@@ -134,7 +134,14 @@ function ConsentRoute() {
       notice={notice}
       confirmOrgs={() => confirmGrantOrgs(orgs.map((org) => org.id))}
       onAllow={(decision) => answer(true, decision)}
-      onDeny={() => answer(false, { accept: false, oauthQuery: request.data?.oauthQuery ?? '' })}
+      onDeny={async () => {
+        if (!request.data) return;
+        await answer(false, {
+          accept: false,
+          oauthQuery: request.data.oauthQuery,
+          decisionNonce: request.data.decisionNonce,
+        });
+      }}
     />
   );
 }

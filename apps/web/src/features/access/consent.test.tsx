@@ -126,17 +126,19 @@ describe('consent defaults (11 §3.1: least privilege)', () => {
 
   test('the decision: minimal scopes; session only → sessionOnly, else the day count', () => {
     const value = defaultConsentValue(requests.verified, orgs);
-    expect(toConsentDecision({ ...value, expiry: 'session' }, 'q')).toEqual({
+    const shown = { oauthQuery: 'q', decisionNonce: 'n' };
+    expect(toConsentDecision({ ...value, expiry: 'session' }, shown)).toEqual({
       accept: true,
       oauthQuery: 'q',
+      decisionNonce: 'n',
       scopes: ['tasks:write'],
       constraints: value.constraints,
       sessionOnly: true,
     });
-    const days = toConsentDecision({ ...value, expiry: 30 }, 'q');
+    const days = toConsentDecision({ ...value, expiry: 30 }, shown);
     expect(days).toMatchObject({ expiresInDays: 30 });
     expect(days).not.toHaveProperty('sessionOnly');
-    expect(toConsentDecision({ ...value, expiry: 'never' }, 'q')).not.toHaveProperty(
+    expect(toConsentDecision({ ...value, expiry: 'never' }, shown)).not.toHaveProperty(
       'expiresInDays',
     );
   });
@@ -286,7 +288,11 @@ describe('/oauth/consent', () => {
       fireEvent.click(screen.getByTestId('consent-approve'));
     });
     expect(props.onAllow).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionOnly: true, oauthQuery: requests.verified.oauthQuery }),
+      expect.objectContaining({
+        sessionOnly: true,
+        oauthQuery: requests.verified.oauthQuery,
+        decisionNonce: requests.verified.decisionNonce,
+      }),
     );
     expect(props.onAllow).not.toHaveBeenCalledWith(
       expect.objectContaining({ expiresInDays: expect.anything() }),
@@ -321,6 +327,7 @@ describe('admin capability (ADR 0041/0042)', () => {
     clientId: 'rooster-cli',
     clientName: 'rooster CLI',
     expiresAt: now + 600_000,
+    decisionNonce: 'device-nonce',
   };
 
   test('the device page never shows admin to a non-admin, even when requested', () => {

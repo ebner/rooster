@@ -59,7 +59,7 @@ const getConsent = createRoute({
   operationId: 'getOAuthConsent',
   summary: 'What an app asks for, before the user allows it',
   description:
-    'Browser session only. The authorization request behind the consent screen (`/oauth/consent`): the app, its redirect target, the resource, the requested capabilities (`newScopes`: those the existing grant lacks), the existing grant on step-up, and any `authorization_details` pre-fill. An unsigned, altered or expired query (10 minutes) is `404`.',
+    'Browser session only. The authorization request behind the consent screen (`/oauth/consent`): the app, its redirect target, the resource, the requested capabilities (`newScopes`: those the existing grant lacks), the existing grant on step-up, and any `authorization_details` pre-fill. An unsigned, altered or expired query (10 minutes), or `authorization_details` that are malformed or name nothing that still exists, is `404`. `decisionNonce` binds the decision to this user and session.',
   request: { query: z.object({ oauth_query: oauthQueryParam }) },
   responses: { 200: json(OAuthConsentRequestSchema, 'The request'), ...problems(401, 404) },
 });
@@ -71,7 +71,7 @@ const postConsent = createRoute({
   operationId: 'decideOAuthConsent',
   summary: 'Allow or deny an app',
   description:
-    'Browser session only, and only the session that loaded the request with `GET /oauth/consent` (another session, e.g. after switching accounts, gets `404`: load it again). Allow creates or updates my grant for the app (scopes no wider than requested; constraints no wider than the app’s `authorization_details`, else `422 widening_not_allowed`; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Approving nothing at all is `422 nothing_approved`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.',
+    'Browser session only. `decisionNonce` is the one `GET /oauth/consent` returned to this user and session; any other (e.g. after switching accounts) is `404`: load the request again. Allow creates or updates my grant for the app (scopes no wider than requested; constraints no wider than the app’s `authorization_details`, else `422 widening_not_allowed`; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Approving nothing at all is `422 nothing_approved`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.',
   request: { body: body(OAuthConsentDecisionSchema) },
   responses: {
     200: json(OAuthConsentResultSchema, 'Where to send the browser'),
@@ -87,6 +87,19 @@ async function redirectUrl(result: unknown): Promise<string | null> {
   const value = result instanceof Response ? ((await result.json()) as unknown) : result;
   const url = (value as { url?: unknown } | null)?.url;
   return typeof url === 'string' && url !== '' ? url : null;
+}
+
+/** An error answer addressed to the request's redirect URI (not a reflected parameter). */
+function isErrorRedirect(url: string, redirectUri: string): boolean {
+  if (!URL.canParse(url) || !URL.canParse(redirectUri)) return false;
+  const answer = new URL(url);
+  const target = new URL(redirectUri);
+  return (
+    answer.origin === target.origin &&
+    answer.pathname === target.pathname &&
+    answer.searchParams.has('error') &&
+    !answer.searchParams.has('code')
+  );
 }
 
 /** Discovery documents are public and read cross-origin by browser-based clients. */
@@ -157,7 +170,7 @@ export function registerOAuthRoutes(app: OpenAPIHono<AppEnv>, deps: P9RouteDeps)
     const headers = () => new Headers(c.req.raw.headers);
     const request = () => new Request(c.req.url, { method: 'POST', headers: headers() });
     if (!decision.accept) {
-      services.grants.checkOAuthDeny(actor, query, decision.oauthQuery);
+      services.grants.checkOAuthDeny(actor, query, decision.oauthQuery, decision.decisionNonce);
       const url = await redirectUrl(
         await provider.oauth2Consent({
           headers: headers(),
@@ -193,16 +206,17 @@ export function registerOAuthRoutes(app: OpenAPIHono<AppEnv>, deps: P9RouteDeps)
           'OAuth consent: the provider refused the decision',
         );
       }
-      const answered = url === null || !URL.canParse(url) ? null : new URL(url).searchParams;
-      if (answered?.has('code') !== true) {
-        services.grants.undoOAuthConsent(actor, prepared);
-        // The provider's own error redirect (e.g. `invalid_scope`) still goes to the app.
-        if (url !== null && answered?.has('error') === true)
-          return c.json({ redirectTo: url }, 200);
-        throw consentNotFound();
+      // Committed only for a genuine code (the service checks it is stored for this grant,
+      // user, client and redirect URI, and that the grant did not change meanwhile).
+      if (url !== null && services.grants.finishOAuthConsent(prepared, url)) {
+        return c.json({ redirectTo: url }, 200);
       }
-      services.grants.finishOAuthConsent(prepared);
-      return c.json({ redirectTo: url as string }, 200);
+      services.grants.undoOAuthConsent(actor, prepared);
+      // The provider's own error redirect (e.g. `invalid_scope`) still goes to the app.
+      if (url !== null && isErrorRedirect(url, prepared.redirectUri)) {
+        return c.json({ redirectTo: url }, 200);
+      }
+      throw consentNotFound();
     });
   });
 

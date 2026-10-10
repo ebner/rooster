@@ -8,6 +8,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { ApiError } from './errors';
 import { api, unwrap } from './http';
 import { queryKeys } from './query-keys';
+import { useRefetchWhenSessionClears } from './session-bound';
 import type { MutationResult, QueryResult } from './types';
 
 /**
@@ -17,11 +18,14 @@ import type { MutationResult, QueryResult } from './types';
 
 /**
  * `GET /oauth/consent?oauth_query=…`: who is asking for what. Not retried and never refetched:
- * the signed query is single-use and short-lived, so a second answer can't be better.
+ * the signed query is single-use and short-lived, so a second answer can't be better. Except
+ * after a session change (sign-out, another account; ADR 0051): its `decisionNonce` belongs to
+ * the session it was shown to, so the request is fetched again rather than answered with it.
  */
 export function useOAuthConsentRequest(
   oauthQuery: string | undefined,
 ): QueryResult<OAuthConsentRequest> {
+  useRefetchWhenSessionClears(queryKeys.oauthConsent(oauthQuery ?? ''));
   return useQuery({
     queryKey: queryKeys.oauthConsent(oauthQuery ?? ''),
     queryFn: async () =>

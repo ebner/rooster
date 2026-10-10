@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { addDays, todayIn } from '@rooster/core/dates';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runCli } from '../src/run.ts';
+import { approveDevice, denyDevice, pendingDevice } from './support/device.ts';
 import { type CliHarness, cliHarness, fakeIo } from './support/fake-io.ts';
 import { type RoosterServer, startServer, type TestUser } from './support/rooster-server.ts';
 
@@ -358,12 +359,8 @@ describe('the device flow (07 §2)', () => {
         if (code === undefined) await new Promise((r) => setTimeout(r, 10));
       }
       expect(code).toBeDefined();
-      const pending = await user.api<{ requestedScopes: string[] }>(
-        'GET',
-        `/api/v1/device/${code}`,
-      );
-      expect(pending.data.requestedScopes).toEqual(['tasks:write']);
-      const approved = await user.api('POST', `/api/v1/device/${code}/approve`, {
+      expect((await pendingDevice(user, code ?? '')).requestedScopes).toEqual(['tasks:write']);
+      const approved = await approveDevice(user, code ?? '', {
         scopes: ['tasks:write'],
         constraints: { orgs: 'all' },
       });
@@ -418,7 +415,7 @@ describe('the device flow (07 §2)', () => {
         code = /Code: (\S+)/.exec(io.out.join(''))?.[1];
         if (code === undefined) await new Promise((r) => setTimeout(r, 10));
       }
-      expect((await user.api('POST', `/api/v1/device/${code}/deny`)).status).toBe(204);
+      expect((await denyDevice(user, code ?? '')).status).toBe(204);
       expect(await login).toBe(3);
       expect(io.err.join('')).toContain('denied');
     } finally {

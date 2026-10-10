@@ -90,6 +90,13 @@ const DISABLED_PATHS = [
   '/get-access-token',
   '/refresh-token',
   '/account-info',
+  // Sessions are listed and revoked through `/api/v1/me/sessions` (UserService), without their
+  // tokens; better-auth's list returns every session's token, CLI device bearer tokens included,
+  // and its get and update return the browser's own (httpOnly) session token to scripts. The
+  // server reads sessions through `auth.api.getSession`, which this list does not affect.
+  '/list-sessions',
+  '/get-session',
+  '/update-session',
   // The OAuth provider (ADR 0041): rooster answers consent through `/api/v1/oauth/consent`
   // (server-side `auth.api.oauth2Consent`); introspection, UserInfo, client and consent CRUD,
   // resource admin, prelogin, continue and end-session are not offered. The mount allows only

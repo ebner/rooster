@@ -204,11 +204,15 @@ interface PushOperation {
   stale(): boolean;
   /** The subscription the operation holds: dropped the moment the session's data clears. */
   hold(subscription: Pick<PushSubscription, 'unsubscribe'>): void;
-  /** Settled: from here on the device marker (and the sweep) cover the subscription. */
+  /**
+   * Settled: from here on the device marker (and the sweep) cover the subscription. One left
+   * without a marker (the registration failed, or its answer was lost after the server
+   * committed it) is dropped now: nothing would unsubscribe it when the session ends.
+   */
   done(): void;
 }
 
-function pushOperation(): PushOperation {
+function pushOperation(userId: string): PushOperation {
   let held: Pick<PushSubscription, 'unsubscribe'> | null = null;
   // At once, not when the request settles: the response may never arrive (the tab closes),
   // and the sweep finds no marker for a registration still under way.
@@ -220,7 +224,10 @@ function pushOperation(): PushOperation {
     hold: (subscription) => {
       held = subscription;
     },
-    done: scope.done,
+    done: () => {
+      if (held && readMarker(userId) === null) void held.unsubscribe().catch(() => false);
+      scope.done();
+    },
   };
 }
 
@@ -289,7 +296,7 @@ export async function enablePush(
   userId: string,
   publicKey: string,
 ): Promise<EnablePushResult> {
-  const session = pushOperation();
+  const session = pushOperation(userId);
   try {
     const permission = await Notification.requestPermission();
     if (permission === 'denied') return 'denied';
@@ -380,7 +387,7 @@ export function useRemovePushDevice(userId: string | undefined): MutationResult<
 export async function resyncPush(): Promise<void> {
   const [userId] = markedUsers();
   if (!userId || Notification.permission !== 'granted') return;
-  const session = pushOperation();
+  const session = pushOperation(userId);
   try {
     await renewOnOpen(userId, session);
   } finally {

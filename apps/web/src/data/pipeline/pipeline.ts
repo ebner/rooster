@@ -550,6 +550,11 @@ export class ListPipeline {
     return ops;
   }
 
+  /** Resolves once every outbox write queued so far has landed (or was skipped). */
+  writesSettled(): Promise<void> {
+    return this.persisted;
+  }
+
   /**
    * Chains an outbox write; failures (quota, private mode) leave the op in memory only. A write
    * still waiting when `reset()` runs is skipped.

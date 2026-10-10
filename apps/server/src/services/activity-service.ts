@@ -165,36 +165,9 @@ export class ActivityService {
           id: c.id,
           item: { kind: 'comment', comment: toCommentDto(c) },
         }));
-      if (query.filter !== 'comments') {
-        for (const a of tx
-          .select()
-          .from(activity)
-          .where(
-            and(
-              eq(activity.taskId, row.id),
-              before === null
-                ? undefined
-                : or(
-                    lt(activity.createdAt, before[0]),
-                    and(eq(activity.createdAt, before[0]), lt(activity.id, before[1])),
-                  ),
-            ),
-          )
-          .orderBy(desc(activity.createdAt), desc(activity.id))
-          .limit(limit + 1)
-          .all()) {
-          entries.push({
-            at: a.createdAt,
-            id: a.id,
-            item: { kind: 'activity', activity: toActivityDto(a) },
-          });
-        }
-      }
-      entries.sort((a, b) => b.at - a.at || compareText(b.id, a.id));
-      const page = entries.slice(0, limit);
-      const oldest = page[page.length - 1];
       // Entries naming another task (a subtask added, a move between parents) are left out
-      // when the grant cannot read that task; the cursor still follows the whole page.
+      // when the grant cannot read that task, before paging: the page and its cursor are built
+      // from visible entries only (a cursor naming a hidden entry would leak its ID and time).
       const readable = (id: string) => {
         const other = tx
           .select({ id: task.id, parentId: task.parentId, orgId: task.orgId, title: task.title })
@@ -203,15 +176,48 @@ export class ActivityService {
           .get();
         return other !== undefined && canReadTask(tx, actor, other);
       };
-      const shown = (e: FeedEntry) =>
-        actor.grant === null ||
-        e.item.kind !== 'activity' ||
-        referencedTasks(e.item.activity).every(readable);
+      const shown = (a: typeof activity.$inferSelect) =>
+        actor.grant === null || referencedTasks(toActivityDto(a)).every(readable);
+      if (query.filter !== 'comments') {
+        let after = before;
+        let visible = 0;
+        for (;;) {
+          const batch = tx
+            .select()
+            .from(activity)
+            .where(
+              and(
+                eq(activity.taskId, row.id),
+                after === null
+                  ? undefined
+                  : or(
+                      lt(activity.createdAt, after[0]),
+                      and(eq(activity.createdAt, after[0]), lt(activity.id, after[1])),
+                    ),
+              ),
+            )
+            .orderBy(desc(activity.createdAt), desc(activity.id))
+            .limit(limit + 1)
+            .all();
+          for (const a of batch) {
+            if (!shown(a)) continue;
+            visible++;
+            entries.push({
+              at: a.createdAt,
+              id: a.id,
+              item: { kind: 'activity', activity: toActivityDto(a) },
+            });
+          }
+          const last = batch[batch.length - 1];
+          if (batch.length <= limit || visible > limit || last === undefined) break;
+          after = [last.createdAt, last.id];
+        }
+      }
+      entries.sort((a, b) => b.at - a.at || compareText(b.id, a.id));
+      const page = entries.slice(0, limit);
+      const oldest = page[page.length - 1];
       return {
-        items: page
-          .reverse()
-          .filter(shown)
-          .map((e) => e.item),
+        items: page.reverse().map((e) => e.item),
         nextCursor:
           entries.length > limit && oldest !== undefined
             ? encodeCursor([oldest.at, oldest.id])
