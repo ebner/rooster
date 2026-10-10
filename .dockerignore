@@ -11,4 +11,11 @@
 **/test-results
 **/playwright-report
 **/coverage
+# Runtime data: the root data dir, the server's local-dev ROOSTER_DATA_DIR=./data, and any
+# SQLite files or backups lying around. Not `**/data`: apps/web/src/data is source.
 data
+apps/server/data
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.db-journal
