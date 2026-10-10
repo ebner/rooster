@@ -193,6 +193,72 @@ describe('sync engine (04 §6)', () => {
     stop();
   });
 
+  test('answers that arrive after an online 401 on /me do not bring the list back', async () => {
+    const outbox = createMemoryOutbox();
+    const transport = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const { engine, queryClient } = await boot({
+      storage: memoryStorage().storage,
+      outbox,
+      transport,
+    });
+    await fetchMe(queryClient, me(userId));
+    const state = await queryClient.fetchQuery({
+      queryKey: myListKey(orgId),
+      queryFn: () => engine.pipeline.fetch(orgId),
+    });
+    const today = Object.values(state.groups).find((g) => g.name === 'Today')?.id as string;
+    // The first op's request is out; its answer comes after the session ended.
+    const send = transport.send;
+    let answer: () => void = () => {};
+    const sent = vi.fn();
+    transport.send = (op, org, signal) => {
+      sent();
+      return new Promise((resolve, reject) => {
+        answer = () => void send(op, org, signal).then(resolve, reject);
+      });
+    };
+    // So is a list read.
+    const fetchMyList = transport.fetchMyList;
+    let answerRead: () => void = () => {};
+    transport.fetchMyList = (org) =>
+      new Promise((resolve, reject) => {
+        answerRead = () => void fetchMyList(org).then(resolve, reject);
+      });
+    engine.pipeline.enqueue(
+      orgId,
+      [listOps.createTask({ id: 'n1', title: 'Sent', groupId: today })],
+      { userId },
+    );
+    await vi.waitFor(() => expect(sent).toHaveBeenCalled());
+    const read = engine.pipeline.fetch(orgId);
+    await queryClient
+      .fetchQuery({
+        queryKey: ['me'],
+        queryFn: () => Promise.reject(new ApiError('unauthenticated', 401)),
+        staleTime: 0,
+        retry: false,
+      })
+      .catch(() => {});
+    expect(queryClient.getQueryData(myListKey(orgId))).toBeUndefined();
+    // Queued meanwhile (an editor flushing on unmount): it stays for this user's next sign-in.
+    engine.pipeline.enqueue(
+      orgId,
+      [listOps.createTask({ id: 'n2', title: 'Later', groupId: today })],
+      { userId },
+    );
+    answer();
+    answerRead();
+    await expect(read).rejects.toBeInstanceOf(ApiError);
+    await vi.waitFor(() => expect(transport.state(orgId).tasks.n1?.title).toBe('Sent'));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(queryClient.getQueryData(myListKey(orgId))).toBeUndefined();
+    expect(engine.pipeline.baseOf(orgId)).toBeUndefined();
+    expect(engine.pipeline.pending).toBe(1);
+    await vi.waitFor(() => expect([...outbox.records.keys()].length).toBe(1));
+    expect([...outbox.records.values()][0]?.op.entityId).toBe('n2');
+    expect(transport.state(orgId).tasks.n2).toBeUndefined();
+  });
+
   test('sign-out clears everything and tells the other tabs', async () => {
     const { data, storage } = memoryStorage();
     const outbox = createMemoryOutbox();

@@ -21,6 +21,7 @@ const {
 } = await import('./push');
 const { forgetPushBeforeSignOut } = await import('./auth');
 const { sweepUserStorage } = await import('../lib/user-storage');
+const { sessionDataCleared } = await import('./session-events');
 
 const key =
   'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
@@ -106,6 +107,53 @@ describe('turning push on and off', () => {
       UnsupportedPushServiceError,
     );
     expect(http.POST).not.toHaveBeenCalled();
+  });
+});
+
+describe('a session that ends while push is being turned on (ADR 0051)', () => {
+  /** What the sync engine does on a 401 on `/me`: the session's data and markers go. */
+  const endSession = () => {
+    sessionDataCleared();
+    sweepUserStorage();
+  };
+
+  test('a registration answered after the session ended leaves no subscription or marker', async () => {
+    let answer: () => void = () => {};
+    http.POST.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = () =>
+            resolve({
+              data: { id: 'device-1', userAgent: null, createdAt: 1, lastOkAt: null },
+              response: new Response(null, { status: 200 }),
+            });
+        }),
+    );
+    const pending = enablePush(new QueryClient(), 'u1', key);
+    await vi.waitFor(() => expect(http.POST).toHaveBeenCalled());
+    const made = current;
+    endSession();
+    answer();
+    await expect(pending).rejects.toMatchObject({ code: 'aborted' });
+    expect(made?.unsubscribe).toHaveBeenCalled();
+    expect(localStorage.getItem('rooster.user.u1.pushDevice')).toBeNull();
+    expect(localStorage.getItem('rooster.user.u1.pushEndpoint')).toBeNull();
+  });
+
+  test('a session that ended during the prompt registers nothing', async () => {
+    vi.stubGlobal('Notification', {
+      permission: 'default',
+      requestPermission: vi.fn(async () => {
+        endSession();
+        return 'granted';
+      }),
+    });
+    await expect(enablePush(new QueryClient(), 'u1', key)).rejects.toMatchObject({
+      code: 'aborted',
+    });
+    expect(http.POST).not.toHaveBeenCalled();
+    expect(current?.unsubscribe).toHaveBeenCalled();
+    expect(localStorage.getItem('rooster.user.u1.pushDevice')).toBeNull();
   });
 });
 

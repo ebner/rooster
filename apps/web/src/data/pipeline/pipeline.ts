@@ -262,6 +262,11 @@ export class ListPipeline {
    * skipped, so it cannot put records back after sign-out cleared the outbox.
    */
   private generation = 0;
+  /**
+   * Bumped by `endSession()` and `reset()`: a read or a confirmation that was out before
+   * belongs to a session whose caches are gone, and must not write them back.
+   */
+  private session = 0;
   private readonly user: (() => string | null) | undefined;
   private lastError: string | null = null;
   private readonly sendTimeout: number;
@@ -301,7 +306,9 @@ export class ListPipeline {
   /** The query function for `['my-list', orgId]`: fetch, rebase, replay pending ops. */
   async fetch(orgId: string): Promise<ListState> {
     const seqAtStart = this.confirmSeq;
+    const session = this.session;
     const list = await this.transport.fetchMyList(orgId);
+    if (session !== this.session) throw new ApiError('aborted', 0);
     const previous = this.view(orgId) ?? this.bases.get(orgId);
     let base = normalizeMyList(orgId, list, previous);
     for (const { seq, item } of this.confirmed) {
@@ -371,8 +378,25 @@ export class ListPipeline {
 
   private closed = false;
 
+  /**
+   * The session ended (an online 401 on `/me`; ADR 0051): the confirmed states go, and reads
+   * and confirmations still out are ignored when they answer, so nothing recreates the caches
+   * the engine just removed. The queue and the outbox stay: they are the user's, and flush
+   * once that user signs in again (ADR 0019).
+   */
+  endSession(): void {
+    this.session += 1;
+    this.bases.clear();
+    this.confirmed.length = 0;
+    this.lazySyncs.clear();
+    this.deletedRows.clear();
+    this.deletedComments.clear();
+    this.changed();
+  }
+
   reset(): void {
     this.generation += 1;
+    this.session += 1;
     this.queue = [];
     this.bases.clear();
     this.confirmed.length = 0;
@@ -728,6 +752,7 @@ export class ListPipeline {
           continue;
         }
         if (!useSyncStore.getState().syncing) this.publish(true);
+        const session = this.session;
         let response: unknown;
         try {
           response = await this.send(head);
@@ -744,7 +769,8 @@ export class ListPipeline {
           this.write(() => this.outbox?.remove([head.op.opId]));
           this.channel?.post({ type: 'applied', opId: head.op.opId, response });
           try {
-            this.confirm(head, response);
+            // The server has it; the caches of a session that ended meanwhile stay gone.
+            if (session === this.session) this.confirm(head, response);
           } catch (error) {
             // The server has the op: a merge bug must not resend it. The refetch shows its state.
             console.error('rooster: could not merge a confirmation', error);

@@ -548,6 +548,9 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     saveTimer = null;
     events.stop();
     started = false;
+    // Before the caches go: an answer still out (a list read, an op's confirmation) must not
+    // bring them back. The queued ops stay, in memory and in the outbox.
+    pipeline.endSession();
     queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== 'me' });
     sessionDataCleared();
     sweepUserStorage();

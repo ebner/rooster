@@ -5,6 +5,7 @@ import { pushMarkerPattern, unsubscribeThisBrowser } from '../features/pwa/push-
 import { userStorageKey } from '../lib/user-storage';
 import { ApiError } from './errors';
 import { api, unwrap } from './http';
+import { sessionScope } from './session-events';
 import type { MutationResult, QueryResult } from './types';
 
 /**
@@ -197,15 +198,20 @@ export function useThisDevice(
   });
 }
 
+type Session = ReturnType<typeof sessionScope>;
+
 /**
  * Subscribes this browser with the current key and registers it with the server. A
  * subscription made with an older key is replaced first: `subscribe` refuses a different key
- * while one exists.
+ * while one exists. `session` is the session the operation started in: when it ended meanwhile
+ * (a 401, sign-out, another account), the sweep found no marker to unsubscribe for, so this
+ * operation drops its subscription itself and writes no marker (ADR 0051).
  */
 async function subscribeAndRegister(
   userId: string,
   publicKey: string,
-  renewsEndpoint?: string,
+  renewsEndpoint: string | undefined,
+  session: Session,
 ): Promise<string> {
   const reg = await registration();
   let subscription = await reg.pushManager.getSubscription();
@@ -220,6 +226,12 @@ async function subscribeAndRegister(
     userVisibleOnly: true,
     applicationServerKey: base64UrlToBytes(publicKey),
   });
+  const held = subscription;
+  const abandon = async () => {
+    await held.unsubscribe().catch(() => false);
+    throw new ApiError('aborted', 0);
+  };
+  if (session.stale()) return abandon();
   const body = subscriptionBody(subscription, navigator.userAgent, renewsEndpoint);
   if (!isAllowedPushEndpoint(body.endpoint)) {
     await subscription.unsubscribe();
@@ -229,12 +241,14 @@ async function subscribeAndRegister(
   try {
     device = await unwrap(api.POST('/api/v1/me/push-subscriptions', { body }));
   } catch (error) {
+    if (session.stale()) return abandon();
     if (error instanceof ApiError && error.status === 422) {
       await subscription.unsubscribe();
       throw new UnsupportedPushServiceError();
     }
     throw error;
   }
+  if (session.stale()) return abandon();
   writeMarker(userId, device.id, body.endpoint);
   return device.id;
 }
@@ -250,11 +264,12 @@ export async function enablePush(
   userId: string,
   publicKey: string,
 ): Promise<EnablePushResult> {
+  const session = sessionScope();
   const permission = await Notification.requestPermission();
   if (permission === 'denied') return 'denied';
   if (permission !== 'granted') return 'dismissed';
   try {
-    await subscribeAndRegister(userId, publicKey);
+    await subscribeAndRegister(userId, publicKey, undefined, session);
   } finally {
     await queryClient.invalidateQueries({ queryKey: ['push'] });
   }
@@ -336,6 +351,7 @@ export function useRemovePushDevice(userId: string | undefined): MutationResult<
 export async function resyncPush(): Promise<void> {
   const [userId] = markedUsers();
   if (!userId || Notification.permission !== 'granted') return;
+  const session = sessionScope();
   const { publicKey } = await unwrap(api.GET('/api/v1/push/vapid-public-key'));
   const subscription = await (await registration()).pushManager.getSubscription();
   const held = subscription?.endpoint ? canonicalEndpoint(subscription.endpoint) : null;
@@ -354,7 +370,7 @@ export async function resyncPush(): Promise<void> {
   const candidates = registered === null || registered === held ? [held] : [held, registered];
   for (const renews of candidates) {
     try {
-      await subscribeAndRegister(userId, publicKey, renews);
+      await subscribeAndRegister(userId, publicKey, renews, session);
       return;
     } catch (error) {
       if (!isRenewalRefused(error)) throw error;
