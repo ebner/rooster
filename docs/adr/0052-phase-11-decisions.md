@@ -22,7 +22,8 @@ Phase 11 changes no API contract, so it is released as **1.5.0** (strict SemVer)
 - **The keyboard page is generated** from the keymap registry (`pnpm docs:keyboard`). CI fails when it is out of date, so shortcut docs are never written by hand (hard rule 8).
 
 ## 3. Screenshots
-- `pnpm docs:screenshots` starts the e2e stack (mock IdP, a fresh server) and seeds a fictional demo team through the public API. The team has several members and orgs, and its data covers groups, tags, subtasks, recurring tasks, reminders, comments, mentions and attachments. Then the script captures the key screens with Playwright, in light and dark, on desktop (1440 px) and phone (iPhone 15), in English.
+- **Light only.** The app has no dark theme (D-22, which stays for 1.5.0; a dark theme is in the backlog). The pipeline's dark projects skip themselves until one exists.
+- `pnpm docs:screenshots` starts the e2e stack (mock IdP, a fresh server) and seeds a fictional demo team through the public API. The team has several members and orgs, and its data covers groups, tags, subtasks, recurring tasks, reminders, comments, mentions and attachments. Then the script captures the key screens with Playwright, on desktop (1440 px) and phone (iPhone 15), in English.
 - The images are committed in `docs/screenshots/` and used by the guide and the README. They are regenerated deliberately, not in every CI run.
 - The demo data is synthetic. No real people, companies or addresses appear.
 
@@ -55,3 +56,16 @@ Admin → System shows all of it, next to the existing sections.
 ## 8. Performance
 - The pass seeds one org with 2,000 tasks. The 10 §4 budgets apply unchanged.
 - Keypress → paint in My tasks with 2,000 open tasks is held to the AC-2.12 budget (p95 ≤ 50 ms). If that needs list virtualisation or a similar change, the change is recorded in an ADR, and keyboard and screen reader behaviour stay intact.
+
+## 9. Spec gaps found while writing the guide
+The documentation pass compared the spec with the code. Decided:
+- **Build in Phase 11 (WP 11.7):** the list header's "⋯" menu (02 §2) and Settings → Behaviour's switches for dates in titles and the completion hide delay (FR-SET-2).
+- **Amend the spec to match the code:**
+  - **No Prometheus `/metrics`.** `ROOSTER_METRICS_TOKEN` is removed from the config.
+  - **The image is built for linux/amd64 only.**
+- **Fixed as bugs:**
+  - the admin push-keys copy, which contradicted ADR 0040;
+  - the phone swipe reveal, drawn at the wrong offset;
+  - phone rows squeezing the title;
+  - raw Markdown in inbox excerpts.
+- **Added:** a "Rebuild search index" action in Admin → System.

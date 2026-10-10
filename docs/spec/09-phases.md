@@ -268,10 +268,11 @@ Phase 11 changes no API contract, so it is a minor release (ADR 0052). v2.0 wait
 |---|---|
 | 11.1 Security | The OWASP ASVS L2 subset in `docs/security/asvs.md`: each chosen requirement, its status and its evidence (a test, a file or an ADR). CI runs `pnpm audit --prod` (a high or critical finding fails) and a gitleaks secret scan (10 §6); the 10 §6 security tests exist. A per-user attachment storage quota (`ROOSTER_USER_STORAGE_MB`, ADR 0052). |
 | 11.2 Security audit | See below (AC-11.1). Runs after 11.1 lands. |
-| 11.3 Accessibility | axe (WCAG 2.2 AA) on every screen, in light and dark, on desktop and phone; a keyboard-only e2e of the core journey; checks of the list's accessible names against 10 §5; fixes. `docs/accessibility-checklist.md` is the manual pass with VoiceOver (iOS, macOS) and NVDA + Firefox, run by the maintainer per release. |
+| 11.3 Accessibility | axe (WCAG 2.2 AA) on every screen, on desktop and phone; a keyboard-only e2e of the core journey; checks of the list's accessible names against 10 §5; fixes. `docs/accessibility-checklist.md` is the manual pass with VoiceOver (iOS, macOS) and NVDA + Firefox, run by the maintainer per release. |
 | 11.4 Performance | A seeded 2,000-task org. Server: `GET /my-list` time with 1,000 and 2,000 tasks, mutation p95 and idle RSS against 10 §4. Web: keypress → paint and scrolling with 2,000 open tasks in My tasks. The bundle budget holds. A look at slimming the Docker image (AGENTS.md Deferred). |
 | 11.5 Operations | `GET /admin/system` and the Admin → System page (08 §9: version, DB and WAL sizes, the last backup, job runs, SMTP and push status, SSE connections, attachment storage). The backup and restore drill (10 §3.6) and the migration test from the previous release's fixture DB, both in CI. `compose.litestream.yaml` and its documentation (08 §4). |
-| 11.6 Documentation | The user guide in `docs/guide/{en,sv}/` (Markdown, the single source), also rendered in the app at `/help` (lazy, offline, linked from the `?` cheat sheet, the user menu and settings). The keyboard page is generated from `keymap.ts`. The operator guide `docs/operator.md` and `CONTRIBUTING.md`. Screenshots from a seeded demo team (`pnpm docs:screenshots`: light and dark, desktop and phone, English) in the guide and the README. |
+| 11.6 Documentation | The user guide in `docs/guide/{en,sv}/` (Markdown, the single source), also rendered in the app at `/help` (lazy, offline, linked from the `?` cheat sheet, the user menu and settings). The keyboard page is generated from `keymap.ts`. The operator guide `docs/operator.md` and `CONTRIBUTING.md`. Screenshots from a seeded demo team (`pnpm docs:screenshots`: desktop and phone, English; light only, D-22) in the guide and the README. |
+| 11.7 Spec gaps | The list header's "⋯" menu (02 §2: add group, show completed, collapse all, expand all, export, print, with a print stylesheet) and Settings → Behaviour's missing switches (FR-SET-2: dates in titles on/off, the completion hide delay 1.5 s / 3 s / until reload). |
 
 - **Full security audit** of the whole codebase, not only the diffs reviewed phase by phase, by an independent reviewer with read-only access.
   - **One focused review per trust boundary.** Each brief names the files, the assets and the attacks to try. The boundaries are:
@@ -294,10 +295,11 @@ Phase 11 changes no API contract, so it is a minor release (ADR 0052). v2.0 wait
   - every trust boundary above has a final re-check reporting it clean;
   - `docs/security/security-review.md` lists each finding with its boundary, ASVS item, severity, and the fixing commit or the ADR that accepts it.
 - AC-11.2 CI fails on a high or critical `pnpm audit --prod` finding or a gitleaks hit, and both pass. `docs/security/asvs.md` gives evidence for every listed requirement. An upload that would take a user past their storage quota gets `413 storage_quota_exceeded`, and nothing is stored.
-- AC-11.3 axe reports no WCAG 2.2 AA violation on any screen, in either theme, on desktop or phone. A keyboard-only e2e signs in, creates a task with a natural-language date, adds a subtask, moves, completes and undoes, searches with the palette and changes a setting, without the pointer. A task row's accessible name matches 10 §5.
+- AC-11.3 axe reports no WCAG 2.2 AA violation on any screen, on desktop or phone. A keyboard-only e2e signs in, creates a task with a natural-language date, adds a subtask, moves, completes and undoes, searches with the palette and changes a setting, without the pointer. A task row's accessible name matches 10 §5.
 - AC-11.4 With 2,000 tasks in one org: `GET /my-list` with 1,000 tasks takes ≤ 50 ms server time, the mutation p95 is ≤ 20 ms, and idle RSS is ≤ 150 MB. Keypress → paint stays at a p95 ≤ 50 ms with 2,000 open tasks in My tasks. The initial bundle stays ≤ 450 KB.
 - AC-11.5 CI restores a backup taken by the Docker image into a fresh container and finds the data, and migrates the 1.4.0 fixture DB to the current schema. Admin → System shows every item of 08 §9.
 - AC-11.6 `/help` shows the guide in English and Swedish, offline too. `pnpm docs:screenshots` regenerates every screenshot from the seeded demo team. CI fails when the keyboard page no longer matches the keymap. The README shows the screenshots.
+- AC-11.7 The header "⋯" menu collapses and expands all groups, toggles completed tasks, adds a group, exports and prints the list (the print shows only the list), and each item has a keyboard path. Turning off dates in titles keeps "fri" literal; the hide delay applies, including "until reload".
 
 ---
 
@@ -305,3 +307,7 @@ Phase 11 changes no API contract, so it is a minor release (ADR 0052). v2.0 wait
 
 Work that is specified but not scheduled into a phase. Pick an item up by moving it into a phase (or a minor release after v1.0) and renumbering its WP and AC IDs.
 
+
+### Dark theme (D-22, Q-03)
+
+Moved here on 2026-10-10 (ADR 0052). Every colour is already a semantic token, so dark mode redefines the semantic layer under `[data-theme="dark"]` (03 §1). The work: a contrast-tested dark token set, a System / Light / Dark choice in Settings → Profile, the PWA theme colour, the brand assets on dark grounds, axe in both themes, and the dark screenshots (the `docs:screenshots` dark projects are ready and skip themselves until then).

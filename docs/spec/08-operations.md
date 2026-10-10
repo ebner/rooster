@@ -17,7 +17,7 @@ Goal: **one container, one volume, one env file.** Nothing has to be run by hand
   3. Wait for in-flight requests (≤ 10 s).
   4. Stop the scheduler.
   5. Close the DB.
-- Multi-arch: linux/amd64 and linux/arm64, using `docker buildx`. Published to `ghcr.io/<owner>/rooster:<version>` and `:latest`.
+- linux/amd64 (ADR 0052 §9; arm64 is not built). Published to `ghcr.io/201works/rooster` as `x.y.z`, `x.y`, `x` and `latest`.
 - Target size: under 350 MB uncompressed in total, of which rooster's own layers (bundled server, web build, native modules: SQLite and, from P10, sharp with libvips) are under 100 MB (ADR 0048). The distroless Node 24 base accounts for about 200 MB. RAM use is about 100 to 150 MB.
 
 ## 2. `/data` layout
@@ -64,7 +64,6 @@ On boot, the server:
 | `ROOSTER_S3_ENDPOINT`, `_REGION`, `_BUCKET`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`, `_FORCE_PATH_STYLE` | | — | Setting the bucket switches attachments to S3. |
 | `ROOSTER_BACKUP_CRON` | | `0 3 * * *` | Set to `off` to disable. |
 | `ROOSTER_BACKUP_KEEP_DAILY` / `_WEEKLY` | | `7` / `4` | |
-| `ROOSTER_METRICS_TOKEN` | | — | Enables `/metrics`. |
 | `TZ` | | `UTC` | Server timezone, used only for logs. User-facing time logic uses user timezones. |
 
 Every variable also accepts a `<NAME>_FILE` form (Docker secrets): when it is set, the value is read from that file.
@@ -158,7 +157,7 @@ The required claims are `email`, `email_verified` and `name`, with `picture` opt
 - After an upgrade, PWAs detect the new version through the SSE `hello` event and the SW update check, then show "New version available".
 
 ## 9. Monitoring
-- Docker healthcheck plus `/readyz`. Optional Prometheus `/metrics`.
+- Docker healthcheck plus `/readyz`. There is no Prometheus endpoint (ADR 0052 §9).
 - Logs are pino JSON on stdout; use `docker logs`, Loki or similar.
 - Admin → System shows the version, the DB and WAL sizes, the last backup, job runs, SMTP and push status, and the SSE connection count.
 
