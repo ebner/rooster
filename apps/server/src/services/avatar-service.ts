@@ -89,7 +89,7 @@ export function avatarUrl(userId: string, avatarAt: number): string {
 export class AvatarService {
   /** PUT and DELETE of one user's avatar run one at a time (same blob key). */
   private readonly locks = new KeyedLock();
-  /** Uploads in flight per user (each holds a temp file). */
+  /** Uploads and removals in flight per user (uploads hold a temp file or a decoded image). */
   private readonly uploads = new UploadSlots();
 
   constructor(
@@ -221,7 +221,14 @@ export class AvatarService {
   /** DELETE /me/avatar: back to the sign-in provider's picture. A no-op without an upload. */
   async remove(actor: Actor): Promise<Me> {
     requireBrowserSession(actor);
-    await this.locks.run(actor.userId, () => this.removeUpload(actor));
+    // Shares the uploads' slots: everything that waits for the per-user lock (behind a slow
+    // storage backend) is bounded, `429` past it.
+    const slot = this.uploads.acquire(actor.userId);
+    try {
+      await this.locks.run(actor.userId, () => this.removeUpload(actor));
+    } finally {
+      slot.release();
+    }
     return this.users.getMe(actor);
   }
 

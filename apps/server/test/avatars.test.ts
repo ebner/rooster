@@ -163,6 +163,37 @@ describe('avatars (FR-SET-1)', () => {
     store.put = realPut;
   });
 
+  it('removals waiting behind a stalled upload are bounded too (429 with Retry-After)', async () => {
+    const ctx = await team();
+    const slots = (ctx.app.services.avatars as unknown as { uploads: UploadSlots }).uploads;
+    const store = ctx.app.services.blobs.current;
+    const realPut = store.put.bind(store);
+    let open = () => {};
+    const stalled = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    let storing = 0;
+    store.put = async (...args: Parameters<typeof realPut>) => {
+      storing += 1;
+      await stalled;
+      return realPut(...args);
+    };
+    const upload = put(ctx, ctx.a, fileForm(await png(64, 64), 'me.png'));
+    await until(() => storing === 1, 2_000, 'storage reached');
+    // Two removals wait for the per-user lock; a third has no slot left.
+    const waiting = [1, 2].map(() => ctx.a.call('DELETE', '/api/v1/me/avatar'));
+    await until(() => slots.inFlight(ctx.a.userId).uploads === 3, 2_000, 'removals queued');
+    const refused = await ctx.a.call('DELETE', '/api/v1/me/avatar');
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('retry-after')).toBe('5');
+    expect(((await refused.json()) as Problem).code).toBe('rate_limited');
+    open();
+    expect((await upload).status).toBe(200);
+    expect((await Promise.all(waiting)).map((r) => r.status)).toEqual([200, 200]);
+    expect(slots.inFlight(ctx.a.userId)).toEqual({ uploads: 0, bytes: 0 });
+    store.put = realPut;
+  });
+
   it('serialises an upload and a removal: the blob always matches the row', async () => {
     const ctx = await team();
     await put(ctx, ctx.a, fileForm(await png(64, 64), 'one.png'));

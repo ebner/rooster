@@ -1,6 +1,7 @@
 // Phase 10 (04 §4.8, ADR 0049 §3.4–3.5): the S3 blob store, with an injected client whose
 // `send` is a fake (presigning is local: no network anywhere).
 
+import { type AddressInfo, createServer as createNetServer, type Socket } from 'node:net';
 import { Readable } from 'node:stream';
 import {
   DeleteObjectCommand,
@@ -13,12 +14,14 @@ import { eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.ts';
 import { isValidBlobKey } from '../src/blob/keys.ts';
+import { S3BlobStore } from '../src/blob/s3-store.ts';
 import { LocalBlobStore } from '../src/blob/store.ts';
 import { parseConfig } from '../src/config.ts';
 import { attachment, blobGc, user } from '../src/db/schema/index.ts';
 import { createLogger } from '../src/lib/logger.ts';
 import { fileForm, png, sendForm } from './blob-helpers.ts';
 import { createTestDb, createUserWithSession, tempDir, testConfig } from './helpers.ts';
+import { until } from './sse-client.ts';
 
 const dirs: (() => void)[] = [];
 afterEach(() => {
@@ -279,4 +282,44 @@ describe('S3 configuration', () => {
     const ftp = parseConfig({ ...base, ROOSTER_S3_ENDPOINT: 'ftp://s3.example.com' });
     expect(!ftp.ok && ftp.errors.join()).toMatch(/ROOSTER_S3_ENDPOINT/);
   });
+});
+
+describe('S3 request deadlines', () => {
+  it('a backend that never answers fails put, get and delete instead of hanging', async () => {
+    // Accepts connections and reads requests, but never answers.
+    const sockets = new Set<Socket>();
+    const server = createNetServer((socket) => {
+      sockets.add(socket);
+      socket.on('data', () => {});
+      socket.on('close', () => sockets.delete(socket));
+      socket.on('error', () => {});
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const { port } = server.address() as AddressInfo;
+    const store = new S3BlobStore({
+      bucket: 'rooster-files',
+      endpoint: `http://127.0.0.1:${port}`,
+      region: 'eu-north-1',
+      accessKeyId: 'AKIDTEST',
+      secretAccessKey: 'secret-test-key',
+      forcePathStyle: true,
+      timeoutMs: 300,
+    });
+    const key = 'avatars/0199c5a2-d7e8-76f9-8a0b-7b8c9d0e1f01';
+    try {
+      for (const op of [
+        () => store.put(key, Buffer.from('x'), 'image/webp'),
+        () => store.get(key),
+        () => store.delete(key),
+      ]) {
+        const start = Date.now();
+        await expect(op()).rejects.toThrow();
+        expect(Date.now() - start).toBeLessThan(3_000);
+      }
+      // The aborted requests' connections are closed, not left open.
+      await until(() => sockets.size === 0, 2_000, 'connections closed');
+    } finally {
+      server.close();
+    }
+  }, 15_000);
 });
