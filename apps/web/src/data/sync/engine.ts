@@ -547,7 +547,17 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     // Mutation results too: some hold a secret shown once (a new token, a feed URL, an invite).
     queryClient.getMutationCache().clear();
     sessionDataCleared();
-    sweepUserStorage();
+    // Only the ending account's keys: another tab may have made someone else the owner
+    // meanwhile. Push is per browser, so it goes only while the browser is still that
+    // account's (or no one's).
+    const owner = readOwner();
+    if (ended !== null) {
+      sweepUserStorageOf(ended, undefined, () =>
+        owner === null || owner === ended ? unsubscribeThisBrowser() : Promise.resolve(false),
+      );
+    } else if (owner === null) {
+      sweepUserStorage();
+    }
     // The cached profile must not count as signed in either (the /login guard reads it); its
     // refetch answers 401 again, which the route guard turns into /login?redirect=….
     void queryClient.resetQueries({ queryKey: ['me'] }).catch(() => {});

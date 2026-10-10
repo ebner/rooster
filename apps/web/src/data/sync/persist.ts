@@ -270,20 +270,37 @@ export function createCachePersister(
       const keep = userId === null ? null : cacheStorageKey(userId);
       return removeWhere((key) => key !== keep);
     },
-    tidy: (account) =>
-      chain(async () => {
+    tidy: (account) => {
+      // Fenced: housekeeping started for one owner stops as soon as another tab changed the
+      // owner, so it never deletes what the account taking over has saved meanwhile.
+      const current = () => owner() === account;
+      return chain(async () => {
+        if (!current()) return;
         const raw = await storage.get(legacyCacheStorageKey);
         if (raw !== undefined && account !== null && legacyOwner(raw) === account) {
           const key = cacheStorageKey(account);
-          if ((await storage.get(key)) === undefined) await storage.set(key, raw);
+          if (current() && (await storage.get(key)) === undefined) await storage.set(key, raw);
         }
-      }).then(() => removeWhere((key) => account === null || key !== cacheStorageKey(account))),
+      }).then(() =>
+        removeWhere((key) => account === null || key !== cacheStorageKey(account), current),
+      );
+    },
   };
 
-  /** Deletes the snapshot keys `doomed` picks (the legacy key included), after earlier writes. */
-  function removeWhere(doomed: (key: string) => boolean): Promise<void> {
+  /**
+   * Deletes the snapshot keys `doomed` picks (the legacy key included), after earlier writes.
+   * Never the snapshot of the browser's owner at the moment of each deletion (another tab may
+   * have made someone else the owner meanwhile), and nothing more once `valid` turns false.
+   */
+  function removeWhere(
+    doomed: (key: string) => boolean,
+    valid: () => boolean = () => true,
+  ): Promise<void> {
     return chain(async () => {
       for (const key of await storage.keys()) {
+        if (!valid()) return;
+        const current = owner();
+        if (current !== null && key === cacheStorageKey(current)) continue;
         if (isSnapshotKey(key) && doomed(key)) await storage.del(key);
       }
     });

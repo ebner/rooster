@@ -1299,6 +1299,78 @@ describe('per-account storage across tabs (ADR 0051/0056)', () => {
   });
 });
 
+describe('session expiry after another account took over (ADR 0051/0056)', () => {
+  test("a late 401 for the old account leaves the new one's keys and push alone", async () => {
+    const unsubscribe = vi.fn(async () => true);
+    const registration = { pushManager: { getSubscription: async () => ({ unsubscribe }) } };
+    vi.stubGlobal('navigator', {
+      ...globalThis.navigator,
+      serviceWorker: { getRegistration: async () => registration },
+    });
+    try {
+      const other = '01900000-0000-7000-8000-000000000002';
+      localStorage.setItem('rooster.cacheOwner', userId);
+      const { queryClient } = await boot({
+        storage: memoryStorage().storage,
+        outbox: createMemoryOutbox(),
+        transport: createFixtureTransport({ userId }),
+      });
+      await fetchMe(queryClient, me(userId));
+      localStorage.setItem(recentsKey(userId), '[{"title":"Mine"}]');
+      // Another tab signed in as someone else, who turned push on there.
+      localStorage.setItem('rooster.cacheOwner', other);
+      localStorage.setItem(recentsKey(other), '[{"title":"Theirs"}]');
+      localStorage.setItem(`rooster.user.${other}.pushDevice`, 'device-b');
+      await queryClient
+        .fetchQuery({
+          queryKey: ['me'],
+          queryFn: () => Promise.reject(new ApiError('unauthenticated', 401)),
+          staleTime: 0,
+          retry: false,
+        })
+        .catch(() => {});
+      expect(localStorage.getItem(recentsKey(userId))).toBeNull();
+      expect(localStorage.getItem(recentsKey(other))).not.toBeNull();
+      expect(localStorage.getItem(`rooster.user.${other}.pushDevice`)).toBe('device-b');
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(unsubscribe).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test('a 401 while the browser is still that account drops its push too', async () => {
+    const unsubscribe = vi.fn(async () => true);
+    const registration = { pushManager: { getSubscription: async () => ({ unsubscribe }) } };
+    vi.stubGlobal('navigator', {
+      ...globalThis.navigator,
+      serviceWorker: { getRegistration: async () => registration },
+    });
+    try {
+      localStorage.setItem('rooster.cacheOwner', userId);
+      const { queryClient } = await boot({
+        storage: memoryStorage().storage,
+        outbox: createMemoryOutbox(),
+        transport: createFixtureTransport({ userId }),
+      });
+      await fetchMe(queryClient, me(userId));
+      localStorage.setItem(`rooster.user.${userId}.pushDevice`, 'device-a');
+      await queryClient
+        .fetchQuery({
+          queryKey: ['me'],
+          queryFn: () => Promise.reject(new ApiError('unauthenticated', 401)),
+          staleTime: 0,
+          retry: false,
+        })
+        .catch(() => {});
+      expect(localStorage.getItem(`rooster.user.${userId}.pushDevice`)).toBeNull();
+      await vi.waitFor(() => expect(unsubscribe).toHaveBeenCalled());
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe('secrets in mutation results (ADR 0051)', () => {
   test('an online 401 on /me drops every mutation result', async () => {
     const { engine, queryClient } = await boot({

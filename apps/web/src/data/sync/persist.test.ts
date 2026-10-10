@@ -70,11 +70,12 @@ describe('persisted query cache (04 §6.1)', () => {
       del: async (k) => void data.delete(k),
       keys: async () => [...data.keys()],
     };
+    let owner: string | null = 'u1';
     const persister = createCachePersister(
       () => undefined,
       storage,
       Date.now,
-      () => 'u1',
+      () => owner,
     );
     persister.confirmed(Date.now());
     await persister.persistClient(client([query(['me'], { user: { id: 'u1' } })]));
@@ -82,6 +83,8 @@ describe('persisted query cache (04 §6.1)', () => {
     expect((await persister.restoreClient())?.clientState.queries[0]?.state.data).toEqual({
       user: { id: 'u1' },
     });
+    // Sign-out: the owner goes first, then every snapshot.
+    owner = null;
     await persister.removeClient();
     await persister.suspend();
     await persister.persistClient(client([query(['me'], { user: { id: 'u2' } })]));
@@ -137,17 +140,19 @@ describe('persisted query cache (04 §6.1)', () => {
 
     test('cleanup by key never touches the account taking over, even mid-save', async () => {
       const { data, storage } = memory();
+      // Both tabs read the one owner of the browser (localStorage): B took over.
+      let owner: string | null = 'u2';
       const tabA = createCachePersister(
         () => undefined,
         storage,
         Date.now,
-        () => 'u1',
+        () => owner,
       );
       const tabB = createCachePersister(
         () => undefined,
         storage,
         Date.now,
-        () => 'u2',
+        () => owner,
       );
       await tabA.persistClient(snapshot('u1'));
       // Tab A removes the ending account while tab B saves the new one: no read-then-delete.
@@ -156,17 +161,50 @@ describe('persisted query cache (04 §6.1)', () => {
       await tabA.persistClient(snapshot('u1'));
       await Promise.all([tabA.removeExcept('u2'), tabB.persistClient(snapshot('u2'))]);
       expect([...data.keys()]).toEqual([cacheStorageKey('u2')]);
+      // A sign-out elsewhere (owner still u2) leaves the owner's snapshot; once no one owns
+      // the browser, everything goes.
+      await tabA.removeClient();
+      expect([...data.keys()]).toEqual([cacheStorageKey('u2')]);
+      owner = null;
       await tabA.removeClient();
       expect(data.size).toBe(0);
     });
 
-    test('a start keeps only the owner: the old account-less snapshot moves to it, or goes', async () => {
+    test('start-up housekeeping stops once another tab changed the owner', async () => {
       const { data, storage } = memory();
+      let owner: string | null = 'u1';
       const persister = createCachePersister(
         () => undefined,
         storage,
         Date.now,
-        () => 'u1',
+        () => owner,
+      );
+      await persister.persistClient(snapshot('u1'));
+      // The start's listing is slow; another tab signs in as u2 and saves meanwhile.
+      const listKeys = storage.keys;
+      storage.keys = async () => {
+        const found = await listKeys();
+        owner = 'u2';
+        data.set(cacheStorageKey('u2'), 'the new account');
+        return [...found, cacheStorageKey('u2')];
+      };
+      await persister.tidy('u1');
+      expect(data.get(cacheStorageKey('u2'))).toBe('the new account');
+      // Even without the fence, the owner's own snapshot is never deleted.
+      storage.keys = listKeys;
+      owner = 'u2';
+      await persister.removeExcept('u1');
+      expect(data.get(cacheStorageKey('u2'))).toBe('the new account');
+    });
+
+    test('a start keeps only the owner: the old account-less snapshot moves to it, or goes', async () => {
+      const { data, storage } = memory();
+      let owner: string | null = 'u1';
+      const persister = createCachePersister(
+        () => undefined,
+        storage,
+        Date.now,
+        () => owner,
       );
       persister.confirmed(Date.now());
       await persister.persistClient(snapshot('u1'));
@@ -180,9 +218,11 @@ describe('persisted query cache (04 §6.1)', () => {
       expect(await persister.restoreClient()).toBeDefined();
       // Someone else's old snapshot is not migrated; with no owner every snapshot goes.
       data.set(legacyCacheStorageKey, own);
+      owner = 'u2';
       await persister.tidy('u2');
       expect(data.has(legacyCacheStorageKey)).toBe(false);
       expect(data.has(cacheStorageKey('u2'))).toBe(false);
+      owner = null;
       await persister.tidy(null);
       expect([...data.keys()]).toEqual(['unrelated']);
     });
