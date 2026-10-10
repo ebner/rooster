@@ -11,6 +11,7 @@ step "typecheck";    pnpm typecheck
 step "dependency audit"; pnpm audit --prod --audit-level high   # 10 §6: high or critical fails
 step "secret scan";  bash scripts/secret-scan.sh
 step "i18n";         pnpm i18n:check
+step "docs";         pnpm docs:keyboard --check   # the keyboard page matches keymap.ts (ADR 0053)
 step "unit+coverage"; pnpm test:coverage  # full run: coverage globs are repo-relative
 step "api client";   pnpm gen:api && git diff --exit-code -- apps/server/openapi.json packages/api-client/src/schema.d.ts
 step "build";        pnpm build
