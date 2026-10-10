@@ -297,3 +297,41 @@ describe('a closed pipeline (ADR 0051)', () => {
     expect(send).not.toHaveBeenCalled();
   });
 });
+
+describe('the send gate after the write-ahead (ADR 0056)', () => {
+  test('a session that ends while the outbox write runs sends nothing', async () => {
+    const transport = fixture();
+    const send = vi.spyOn(transport, 'send');
+    const { createMemoryOutbox } = await import('../sync/outbox');
+    const memory = createMemoryOutbox();
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const outbox = {
+      ...memory,
+      put: async (records: Parameters<typeof memory.put>[0]) => {
+        await held;
+        return memory.put(records);
+      },
+    };
+    let allowed = true;
+    const pipeline = new ListPipeline({
+      transport,
+      queryClient: new QueryClient(),
+      clientId: 'client-1',
+      outbox,
+      canSend: () => allowed,
+    });
+    await pipeline.fetch(orgId);
+    pipeline.enqueue(orgId, [listOps.deleteTask('x')], { userId });
+    await new Promise((r) => setTimeout(r, 10));
+    // The session ends while the op is still being written.
+    allowed = false;
+    release();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(send).not.toHaveBeenCalled();
+    expect(pipeline.pending).toBe(1);
+    expect(memory.records.size).toBe(1);
+  });
+});

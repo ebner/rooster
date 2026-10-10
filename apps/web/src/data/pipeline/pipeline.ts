@@ -770,6 +770,9 @@ export class ListPipeline {
       while (this.queue.length > 0 && !this.paused && this.isLeader() && this.canSend()) {
         // Write-ahead: an op is in the outbox before its request leaves.
         await this.persisted;
+        // The session may have ended (or the page closed) while the write ran: the request
+        // would then carry whatever cookie the browser holds now (ADR 0056).
+        if (this.paused || !this.isLeader() || !this.canSend()) break;
         if (!this.isOnline()) {
           this.publish();
           await this.sleep(offlineRecheckMs);
