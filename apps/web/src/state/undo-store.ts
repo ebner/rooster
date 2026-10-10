@@ -1,5 +1,6 @@
 import type { ListOpSpec } from '@rooster/core/reducers';
 import { create } from 'zustand';
+import { onSessionDataCleared } from '../data/session-events';
 
 /** 02 §3.7: the last 50 user operations, session-scoped. */
 export const undoLimit = 50;
@@ -46,3 +47,6 @@ export const useUndoStore = create<UndoStore>()((set, get) => ({
   pushUndoKeepRedo: (entry) => set((s) => ({ undo: capped([...s.undo, entry]) })),
   clear: () => set({ undo: [], redo: [] }),
 }));
+
+// Undo replays ops through the pipeline: another session must never inherit them.
+onSessionDataCleared(() => useUndoStore.getState().clear());

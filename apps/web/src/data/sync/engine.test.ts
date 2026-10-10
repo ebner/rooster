@@ -209,6 +209,39 @@ describe('sync engine (04 §6)', () => {
     expect(localStorage.getItem('rooster.cacheOwner')).toBeNull();
   });
 
+  test('a document that ran as one account stops everything and reloads when /me is another', async () => {
+    const { storage } = memoryStorage();
+    const transport = createFixtureTransport({ userId });
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...globalThis.location, reload });
+    const { useUndoStore } = await import('../../state/undo-store');
+    const { readDraft, writeDraft } = await import('../../features/collab/drafts');
+    try {
+      const { engine, queryClient } = await boot({
+        storage,
+        outbox: createMemoryOutbox(),
+        transport,
+      });
+      await fetchMe(queryClient, me(userId));
+      useUndoStore.getState().push({ orgId, label: 'x', inverseOps: [], redoOps: [] });
+      writeDraft('task-1', 'Unsent');
+      const cleared = vi.fn();
+      const stop = onSessionDataCleared(cleared);
+      // Signed in as someone else in another tab: that tab already took over the browser.
+      const other = '01900000-0000-7000-8000-000000000002';
+      localStorage.setItem('rooster.cacheOwner', other);
+      await fetchMe(queryClient, me(other));
+      stop();
+      expect(cleared).toHaveBeenCalled();
+      expect(engine.pipeline.pending).toBe(0);
+      expect(useUndoStore.getState().undo).toEqual([]);
+      expect(readDraft('task-1')).toBe('');
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   test("a clear in another tab stops this tab's uploads before anything else is awaited", async () => {
     const { storage } = memoryStorage();
     let handler: ((m: SyncMessage) => void) | null = null;

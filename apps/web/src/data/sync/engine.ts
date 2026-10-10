@@ -3,6 +3,7 @@ import {
   persistQueryClientRestore,
   persistQueryClientSave,
 } from '@tanstack/react-query-persist-client';
+import { unsubscribeThisBrowser } from '../../features/pwa/push-local';
 import { sweepUserStorage } from '../../lib/user-storage';
 import { useSyncStore } from '../../state/sync-store';
 import { ApiError } from '../errors';
@@ -187,6 +188,8 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   const clientId = getClientId();
   /** Set once a fresh `/me` confirmed who is signed in: only then may ops be sent. */
   let userId: string | null = null;
+  /** The account this document has run as; unlike `userId` it survives a lost session. */
+  let ranAs: string | null = null;
   let leadership: Leadership | null = null;
 
   const pipeline = new ListPipeline({
@@ -387,13 +390,50 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     onState: (sseState) => useSyncStore.setState({ sseState }),
   });
 
+  /**
+   * Synchronously, before anything awaits: nothing of the session that ends may send another
+   * request (the next one would carry another account's cookies) or reach its caches.
+   */
+  function closeSession() {
+    saving = false;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = null;
+    events.stop();
+    pipeline.reset();
+    queryClient.getMutationCache().clear();
+    sessionDataCleared();
+  }
+
   let started = false;
   function onUser(me: Me) {
     const owner = readOwner();
+    if (ranAs !== null && ranAs !== me.user.id) {
+      // This document ran as another account (signed in elsewhere in this browser). Its
+      // continuations (pending requests, revealed secrets, undo, drafts, consent) belong to
+      // that account: stop them, then start over as the new one. The tab that signed in has normally wiped the shared outbox and cache already (below);
+      // wiping again here could drop ops the new account has queued since.
+      closeSession();
+      let cleared: Promise<unknown> = Promise.resolve();
+      if (owner && owner !== me.user.id) {
+        void unsubscribeThisBrowser();
+        sweepUserStorage(me.user.id);
+        writeOwner(me.user.id);
+        cleared = wipe({ keepMe: false }).then(() => channel.post({ type: 'cleared' }));
+      }
+      void cleared
+        .then(() => persister.suspend())
+        .catch(() => {})
+        .finally(() => globalThis.location?.reload());
+      return;
+    }
     if (owner && owner !== me.user.id) {
-      // Another account on this browser: nothing of the previous one may leak or be sent.
+      // Another account on this browser: nothing of the previous one may leak or be sent. A
+      // push subscription here is not this user's (their marker would have been swept), even
+      // one whose registration was still under way when the account changed.
+      void unsubscribeThisBrowser();
       void wipe({ keepMe: true }).then(() => channel.post({ type: 'cleared' }));
     }
+    ranAs = me.user.id;
     sweepUserStorage(me.user.id);
     writeOwner(me.user.id);
     userId = me.user.id;
@@ -515,11 +555,8 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
 
   async function onClearedElsewhere() {
     // Before the first await: nothing of this session may go on with the next one's cookies.
-    sessionDataCleared();
-    saving = false;
-    events.stop();
+    closeSession();
     await persister.suspend();
-    pipeline.reset();
     queryClient.clear();
     // Signed out, or someone else signed in, in another tab: start over as whoever it is now.
     globalThis.location?.reload();
