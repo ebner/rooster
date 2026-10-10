@@ -380,7 +380,9 @@
   "usage": {
     "missingValue": "{flag} needs a value.",
     "unexpected": "Unexpected argument “{arg}”.",
-    "seeHelp": "See rooster --help."
+    "seeHelp": "See rooster --help.",
+    "unknownOption": "Unknown option {flag}.",
+    "noValue": "{flag} takes no value."
   },
   "error": {
     "network": "Can’t reach {server}. Check the address and your connection.",

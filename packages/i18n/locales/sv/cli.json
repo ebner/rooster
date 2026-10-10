@@ -380,7 +380,9 @@
   "usage": {
     "missingValue": "{flag} behöver ett värde.",
     "unexpected": "Oväntat argument ”{arg}”.",
-    "seeHelp": "Se rooster --help."
+    "seeHelp": "Se rooster --help.",
+    "unknownOption": "Okänd flagga {flag}.",
+    "noValue": "{flag} tar inget värde."
   },
   "error": {
     "network": "Når inte {server}. Kontrollera adressen och din anslutning.",

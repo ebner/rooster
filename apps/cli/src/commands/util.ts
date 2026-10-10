@@ -21,10 +21,11 @@ export function stringOptions(def: Record<string, { type?: string }>): string[] 
 
 /**
  * Reads `rawArgs` (global flags already taken out) up to `--`. A string option takes the next
- * word as its value; a value that is missing or is itself a long option (`--title --no-remind`,
- * `--no-remind --remind`) is refused rather than guessed (exit 2): such a value is passed as
- * `--title=--no-remind`. So a switch is never read out of an option's value, and no option
- * silently loses its value, whatever citty made of the same words.
+ * word as its value; a value that is missing or starts with `-` (a lone `-`, stdin, aside) is
+ * refused rather than guessed (exit 2): such a value is passed as `--title=--no-remind`. So a
+ * switch is never read out of an option's value, and no option silently loses its value. The
+ * whole command line was already checked the same way, globals included (`argv-check.ts`);
+ * this is the commands' own reading of it.
  */
 export function readOptions(rawArgs: readonly string[], strings: readonly string[]): GivenOptions {
   const values = new Map<string, string[]>();
@@ -49,7 +50,7 @@ export function readOptions(rawArgs: readonly string[], strings: readonly string
       continue;
     }
     const value = rawArgs[i + 1];
-    if (value === undefined || value.startsWith('--')) {
+    if (value === undefined || (value.startsWith('-') && value !== '-')) {
       throw new CliError(EXIT.usage, t('usage.missingValue', { flag: `--${name}` }));
     }
     add(name, value);

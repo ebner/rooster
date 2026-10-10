@@ -1,4 +1,5 @@
 import { type ArgsDef, type CommandDef, defineCommand, renderUsage, runCommand } from 'citty';
+import { checkArgv } from './argv-check.ts';
 import { appsCommand, tokenCommand } from './commands/access.ts';
 import { adminCommand } from './commands/admin.ts';
 import { loginCommand, logoutCommand, printVersion, whoamiCommand } from './commands/auth.ts';
@@ -114,6 +115,11 @@ export async function renderHelp(args: readonly string[]): Promise<string> {
     text += `\n\n${t('help.tagForms')}`;
   }
   return `${text}\n`;
+}
+
+/** Refuses a command line whose options any reader would split differently (`argv-check.ts`). */
+export function checkCommandLine(argv: readonly string[]): Promise<void> {
+  return checkArgv(argv, rootCommand, EXTRA_SUBCOMMANDS);
 }
 
 /** Runs the command line without globals (already extracted). */

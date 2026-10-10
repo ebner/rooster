@@ -250,3 +250,9 @@ added below as an amendment.
   - A missing value, or one that looks like a long option, is a usage error (exit 2) and sends nothing, so grant scopes and constraints are never taken from a misread flag. A value that starts with `--` is passed with `=`.
 - **`--repeat` / MCP `repeat`:** the phrase is read on the effective due date, so implicit anchors come from that date and never from today.
 - **TUI undo:** it keeps its write sequence and Idempotency-Keys until the whole undo succeeds (ADR 0047). A reminder that is already gone counts as removed.
+- **Command-line check:** before global flags are extracted or citty sees anything, the CLI checks the original argv against the command tree (`argv-check.ts`).
+  - Only declared spellings are accepted; citty's camelCase aliases are refused.
+  - A value is never another flag, and booleans take no value.
+  - Every refusal is exit 2.
+  - A value or positional that starts with `-` is passed with `=` or after `--`.
+- **MCP:** summaries and the My tasks resource contain only canonical or escaped server values. A count that isn't a nonnegative integer is reported as unknown.

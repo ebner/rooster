@@ -1,4 +1,5 @@
 import type { ArgsDef, CommandDef } from 'citty';
+import { NEGATABLE } from './argv-check.ts';
 
 /** One completable command path (`ls`, `group rm`): its subcommands and flags. */
 export interface CompletionEntry {
@@ -24,12 +25,6 @@ export const GLOBAL_FLAGS = [
   '--verbose',
   '--help',
 ] as const;
-
-/**
- * String flags whose `--no-` form also means something, per command path (citty reads
- * `--no-remind` as `remind: false`; `edit` takes it as "clear my reminders").
- */
-const NEGATABLE: Readonly<Record<string, readonly string[]>> = { edit: ['remind'] };
 
 const resolve = async <T>(value: T | Promise<T> | (() => T | Promise<T>) | undefined) =>
   typeof value === 'function' ? await (value as () => T | Promise<T>)() : await value;

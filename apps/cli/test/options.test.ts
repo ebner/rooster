@@ -151,3 +151,123 @@ describe('login and ls: missing values are refused before anything is sent', () 
     expect(params.get('completed')).toBe('false');
   });
 });
+
+describe('review verification: the whole command line is checked before globals are lifted', () => {
+  const editRoutes = () => {
+    const dto = {
+      id: '0192f3a0-0000-7000-8000-000000000001',
+      orgId: ORG.id,
+      seq: 41,
+      parentId: null,
+      subtaskPosition: null,
+      title: 'Report',
+      hasDescription: false,
+      assigneeId: ME.id,
+      createdBy: ME.id,
+      dueDate: null,
+      dueTime: null,
+      dueTz: null,
+      startDate: null,
+      completedAt: null,
+      tagIds: [],
+      counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
+      placement: null,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    return {
+      'GET /api/v1/tasks/resolve': dto,
+      'GET /api/v1/tasks/*': { ...dto, description: '', parentChain: [], subtasks: [] },
+      'PATCH /api/v1/tasks/*': (call: { body: unknown }) => ({
+        task: { ...dto, ...(call.body as object) },
+        ignoredFields: [],
+      }),
+      'GET /api/v1/orgs/*/tags': [],
+      'POST /api/v1/me/tokens': tokenRoute,
+    };
+  };
+  const writes = <T extends { method: string }>(calls: T[]) =>
+    calls.filter((c) => c.method !== 'GET');
+
+  it.each([
+    // citty would read these camelCase spellings past any check of the declared names.
+    [['edit', '41', '--descFile', '--no-remind', '-'], '--descFile'],
+    [
+      ['token', 'create', 'agent', '--scope', 'tasks:write', '--writeGroup', 'acme/Prio'],
+      '--writeGroup',
+    ],
+    [['edit', '41', '--no-title'], '--no-title'],
+    [['add', 'x', '-z'], '-z'],
+    [['ls', '--allOrgs'], '--allOrgs'],
+  ])('%j: unknown spelling %s exits 2 and sends nothing', async (argv, flag) => {
+    const result = await run(editRoutes(), argv);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain(`Unknown option ${flag}`);
+    expect(writes(result.calls)).toEqual([]);
+  });
+
+  it.each([
+    [['token', 'create', 'agent', '--scope', '--quiet', 'tasks:write'], '--scope'],
+    [['token', 'create', 'agent', '--scope', '-q', 'tasks:write'], '--scope'],
+    [['edit', '41', '--title', '--org=acme', 'changed'], '--title'],
+    [['edit', '41', '--title', '--json', 'changed'], '--title'],
+    [['edit', '41', '--title', '-y', 'changed'], '--title'],
+    [['--profile', '--json', 'ls'], '--profile'],
+  ])('%j: a global flag is never lifted out of %s', async (argv, flag) => {
+    const result = await run(editRoutes(), argv);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain(`${flag} needs a value`);
+    expect(writes(result.calls)).toEqual([]);
+  });
+
+  it('a boolean takes no value', async () => {
+    const result = await run(editRoutes(), ['add', 'x', '--bottom=false']);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('--bottom takes no value');
+  });
+
+  it('declared spellings, globals anywhere, = values and the tag form still work', async () => {
+    const ok = await run(editRoutes(), ['--json', 'edit', '41', '--title=--org=acme', '-q']);
+    expect(ok.code).toBe(0);
+    expect(writes(ok.calls).map((c) => c.body)).toEqual([{ title: '--org=acme' }]);
+    const token = await run(editRoutes(), [
+      'token',
+      'create',
+      'agent',
+      '--scope',
+      'tasks:write',
+      '--write-group',
+      'acme/Inbox',
+      '--json',
+    ]);
+    expect(token.stderr).not.toContain('Unknown option');
+    expect(token.stderr).not.toContain('needs a value');
+  });
+});
+
+describe('checkArgv', () => {
+  it('accepts the tag form, negations of booleans and edit --no-remind', async () => {
+    const { checkCommandLine } = await import('../src/cli.ts');
+    for (const argv of [
+      ['tag', '42', '-urgent', '+home'],
+      ['tag', 'add', 'home', '--color', 'blue'],
+      ['add', 'x', '--no-parse', '--remind', '1h', '--', '-literal'],
+      ['edit', '41', '--no-remind'],
+      ['login', '--org', 'acme', '--no-browser'],
+      ['ls', '--org', 'acme', '--tag', 'x'],
+      ['__complete', 'groups', '--profile', 'work'],
+      ['add', 'x', '--desc-file', '-'],
+      ['--version'],
+      ['add', '--help'],
+    ]) {
+      await expect(checkCommandLine(argv)).resolves.toBeUndefined();
+    }
+    for (const argv of [
+      ['add', 'x', '--no-remind'],
+      ['tag', '-urgent'],
+      ['ls', '--tag', '-x'],
+    ]) {
+      await expect(checkCommandLine(argv)).rejects.toBeInstanceOf(CliError);
+    }
+  });
+});

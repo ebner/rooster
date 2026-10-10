@@ -91,6 +91,9 @@ export const canonical = {
   /** An IANA zone name ("Europe/Stockholm", "UTC", "Etc/GMT+1"). */
   zone: (value: unknown): string | null =>
     typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_+\-/]{0,63}$/.test(value) ? value : null,
+  /** A count: a nonnegative safe integer. */
+  count: (value: unknown): number | null =>
+    Number.isSafeInteger(value) && (value as number) >= 0 ? (value as number) : null,
   /** A problem `code` or a field name (`validation_failed`, `dueDate`). */
   word: (value: unknown): string | null =>
     typeof value === 'string' && /^[A-Za-z][A-Za-z_]{0,63}$/.test(value) ? value : null,

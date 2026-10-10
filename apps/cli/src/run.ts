@@ -1,5 +1,5 @@
 import { RoosterApiError } from './api.ts';
-import { dispatch } from './cli.ts';
+import { checkCommandLine, dispatch } from './cli.ts';
 import { ConfigLockedError } from './config.ts';
 import { CliError, EXIT, type ExitCode } from './errors.ts';
 import { extractGlobals } from './globals.ts';
@@ -38,6 +38,8 @@ export async function runCli(
   let runtime: Runtime;
   let rest: string[];
   try {
+    // On the original argv, before global flags are lifted out of it.
+    await withLocale(fallbackLocale, () => checkCommandLine(argv));
     const extracted = withLocale(fallbackLocale, () => extractGlobals(argv));
     rest = extracted.rest;
     runtime = new Runtime(io, extracted.globals, options);
