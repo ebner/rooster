@@ -18,6 +18,7 @@ export const ProblemSchema = named(
           }),
         )
         .optional(),
+      usedBytes: z.int().nonnegative().optional(),
     }),
     {
       code: 'Stable, machine-readable error code; branch on this, never on `title` or `detail`.',
@@ -26,7 +27,10 @@ export const ProblemSchema = named(
         '`409 tag_name_taken`: the ID of the entity that already has the name, so an offline client can remap its own.',
       candidates:
         '`409 ambiguous_ref` (`GET /tasks/resolve`): the tasks the ref could mean, at most 10.',
-      limitBytes: '`413 payload_too_large` on an upload: the limit in bytes.',
+      limitBytes:
+        '`413 payload_too_large` on an upload: the size limit in bytes; `413 storage_quota_exceeded`: the user’s storage quota in bytes.',
+      usedBytes:
+        '`413 storage_quota_exceeded`: the bytes the user’s attachments already take (`limitBytes - usedBytes` is what is left).',
     },
   ),
   'Problem',

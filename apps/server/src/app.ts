@@ -25,7 +25,7 @@ import {
   ResponseViolations,
   responseValidation,
 } from './lib/response-contract.ts';
-import { DOCS_PATH, securityHeaders } from './lib/security-headers.ts';
+import { DOCS_PATH, noStoreApi, securityHeaders } from './lib/security-headers.ts';
 import { webApp } from './lib/web-app.ts';
 import { registerMcpRoutes } from './mcp/route.ts';
 import { registerAdminRoutes } from './routes/admin.ts';
@@ -111,8 +111,18 @@ export function createApp(deps: AppDeps): App {
   const { config, db, logger, version } = deps;
   const clock = deps.clock ?? Date.now;
   const events = new EventBus(logger);
-  const services = createServices({ db, config, logger, clock, events, ...deps.transports });
-  const hub = new SseHub(events, {
+  // The hub is created below, after the services it serves; Admin → System reads it lazily.
+  let hub: SseHub | undefined;
+  const services = createServices({
+    db,
+    config,
+    logger,
+    clock,
+    events,
+    ...deps.transports,
+    sseConnections: () => hub?.size ?? 0,
+  });
+  hub = new SseHub(events, {
     version,
     gitSha: config.gitSha,
     clock,
@@ -147,6 +157,7 @@ export function createApp(deps: AppDeps): App {
       c.json({ checked: violations.checked, violations: violations.list }),
     );
   }
+  app.use('/api/v1/*', noStoreApi());
   // Before the auth mount, which buffers the whole body (auth/mount.ts).
   app.use('/api/auth/*', bodyLimitFor(AUTH_BODY_LIMIT));
   // The upload routes stream their bodies under their own limits (lib/body-limit.ts).

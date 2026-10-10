@@ -33,6 +33,9 @@ RUN pnpm --filter @rooster/web build \
 # Runtime folder: the bundled server (all JS deps inlined by tsdown), the web build, and a
 # node_modules containing only the native modules that cannot be bundled (better-sqlite3, and
 # sharp with its prebuilt libvips for the target platform).
+# Slimming (WP 11.4): better-sqlite3 ships prebuilt binaries for every platform; only this
+# one stays (glibc Linux, the architecture being built). The web build's source maps go too:
+# the server never serves them (lib/web-app.ts refuses *.map).
 RUN mkdir -p /out /out-data \
  && cp -r apps/server/dist /out/dist \
  && cp -r apps/web/dist /out/public \
@@ -40,7 +43,13 @@ RUN mkdir -p /out /out-data \
  && SHARP_VERSION="$(node -p "require('./apps/server/node_modules/sharp/package.json').version")" \
  && printf '{"name":"rooster-server","private":true,"type":"module","dependencies":{"better-sqlite3":"%s","sharp":"%s"}}\n' "$SQLITE_VERSION" "$SHARP_VERSION" > /out/package.json \
  && cd /out && npm install --omit=dev --no-audit --no-fund --no-package-lock \
- && rm -rf /out/node_modules/better-sqlite3/deps /out/node_modules/better-sqlite3/src
+ && rm -rf /out/node_modules/better-sqlite3/deps /out/node_modules/better-sqlite3/src \
+ && ARCH="$(node -p process.arch)" \
+ && PREBUILDS=/out/node_modules/better-sqlite3/prebuilds \
+ && if [ -f "$PREBUILDS/linux-${ARCH}.node" ]; then \
+      find "$PREBUILDS" -type f ! -name "linux-${ARCH}.node" -delete; \
+    fi \
+ && find /out/public -name '*.map' -type f -delete
 
 # ---- runtime ----
 FROM gcr.io/distroless/nodejs24-debian12:nonroot@sha256:14d42e2511532589a7c7e01a753667a74fcc96266e137e8125006b87b0c32d0a AS runtime
@@ -50,7 +59,10 @@ LABEL org.opencontainers.image.title="rooster" \
       org.opencontainers.image.source="https://github.com/201works/rooster" \
       org.opencontainers.image.version="${ROOSTER_VERSION}" \
       org.opencontainers.image.revision="${ROOSTER_GIT_SHA}"
+# MALLOC_ARENA_MAX: glibc's per-thread malloc arenas keep memory freed after a burst of
+# requests, which held idle RSS above the 150 MB budget (10 §4); two arenas return it (WP 11.4).
 ENV NODE_ENV=production \
+    MALLOC_ARENA_MAX=2 \
     ROOSTER_DATA_DIR=/data \
     ROOSTER_GIT_SHA=${ROOSTER_GIT_SHA} \
     PORT=3000

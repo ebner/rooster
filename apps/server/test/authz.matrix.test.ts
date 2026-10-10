@@ -343,6 +343,10 @@ const ROWS: Record<string, Row> = {
     request: (f) => ({ path: `/api/v1/admin/users/${f.otherMemberId}`, body: { disabled: true } }),
     expect: { ...adminOnly(200), ...grants(403, 403, 403, 403) },
   },
+  'GET /api/v1/admin/system': {
+    request: () => ({ path: '/api/v1/admin/system' }),
+    expect: { ...adminOnly(200), ...grants(403, 403, 403, 403) },
+  },
   'GET /api/v1/admin/backups': {
     request: () => ({ path: '/api/v1/admin/backups' }),
     expect: { ...adminOnly(200), ...grants(403, 403, 403, 403) },

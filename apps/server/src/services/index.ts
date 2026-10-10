@@ -2,6 +2,7 @@ import type { S3Client } from '@aws-sdk/client-s3';
 import { BlobGc } from '../blob/gc.ts';
 import { type BlobStores, createBlobStores } from '../blob/store.ts';
 import { EventBus } from '../events/bus.ts';
+import { JobBoard } from '../jobs/job-board.ts';
 import { TaskQueue } from '../lib/task-queue.ts';
 import { MailService } from '../mail/mail-service.ts';
 import { type MailTransport, smtpTransport } from '../mail/transport.ts';
@@ -32,6 +33,7 @@ import { ReminderService } from './reminder-service.ts';
 import { RetentionService } from './retention-service.ts';
 import { SearchService } from './search-service.ts';
 import { SignInPolicy } from './sign-in-policy.ts';
+import { SystemService } from './system-service.ts';
 import { TagService } from './tag-service.ts';
 import { expansionRemovalStep, TaskService } from './task-service.ts';
 import { UserService } from './user-service.ts';
@@ -81,6 +83,11 @@ export interface Services {
   avatars: AvatarService;
   /** Calendar feeds (FR-CAL). */
   icalFeeds: IcalService;
+  // P11 (ADR 0052 §7).
+  /** The scheduler's last run of each job (`main.ts` hands it to the scheduler). */
+  jobBoard: JobBoard;
+  /** Admin → System. */
+  system: SystemService;
 }
 
 /** Outbound transports; tests inject fakes. */
@@ -93,14 +100,20 @@ export interface DeliveryTransports {
   s3Client?: S3Client;
 }
 
+/** P11: what Admin → System reads from outside the services. */
+export interface SystemInputs {
+  /** Open SSE streams; the hub is created after the services. */
+  sseConnections?: () => number;
+}
+
 /** Push and email sends in flight at once. */
 const DELIVERY_CONCURRENCY = 4;
 
 export function createServices(
-  input: Omit<ServiceDeps, 'events'> & { events?: EventBus } & DeliveryTransports,
+  input: Omit<ServiceDeps, 'events'> & { events?: EventBus } & DeliveryTransports & SystemInputs,
   options: OrgServiceOptions = {},
 ): Services {
-  const { pushSender, mailTransport, s3Client, ...rest } = input;
+  const { pushSender, mailTransport, s3Client, sseConnections, ...rest } = input;
   const deps: ServiceDeps = { ...rest, events: input.events ?? new EventBus(input.logger) };
   const ordering = new OrderingService();
   const placements = new PlacementService(deps, ordering);
@@ -155,6 +168,8 @@ export function createServices(
   deps.events.on((event) => {
     if (event.type === 'task.purged' || event.type === 'org.deleted') blobGc.kick();
   });
+  const backups = new BackupService(deps);
+  const jobBoard = new JobBoard();
   return {
     orgs,
     users,
@@ -181,7 +196,7 @@ export function createServices(
     exports: new ExportService(deps),
     idempotency,
     retention: new RetentionService(deps, placements, idempotency, notifications),
-    backups: new BackupService(deps),
+    backups,
     activity,
     comments: new CommentService(deps, followers, notifications),
     followers,
@@ -199,6 +214,15 @@ export function createServices(
     attachments: new AttachmentService(deps, blobs, blobGc, activity),
     avatars: new AvatarService(deps, blobs, users),
     icalFeeds: new IcalService(deps, VERSION),
+    jobBoard,
+    system: new SystemService(deps, {
+      version: VERSION,
+      startedAt: deps.clock(),
+      backups,
+      blobs,
+      jobs: jobBoard,
+      sseConnections: sseConnections ?? (() => 0),
+    }),
   };
 }
 

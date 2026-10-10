@@ -15,6 +15,7 @@ import { and, desc, eq, gt, isNull } from 'drizzle-orm';
 import { orgMemberPref, session, user } from '../db/schema/index.ts';
 import type { Audience, DomainEventType, QueryKey } from '../events/bus.ts';
 import { AppError } from '../lib/errors.ts';
+import { userStorage } from './attachment-queries.ts';
 import {
   type Actor,
   emitAfterCommit,
@@ -132,6 +133,7 @@ export class UserService {
       orgs: listMemberships(tx, actor.userId)
         .filter((m) => grantReachesOrg(actor, m.org.id))
         .map(toOrgDto),
+      storage: userStorage(tx, actor.userId, this.deps.config.userStorageQuotaBytes),
     };
   }
 

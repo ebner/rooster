@@ -81,6 +81,7 @@ export const meExample = {
   prefs: prefsExample,
   isAdmin: false,
   orgs: [personalOrgExample, orgExample],
+  storage: { usedBytes: 48_213_504, quotaBytes: 1_073_741_824 },
 };
 
 export const memberExample = {
@@ -373,6 +374,38 @@ export const COMPONENT_EXAMPLES: Record<string, unknown> = {
   },
   TaskPage: { items: [taskExample], nextCursor: 'eyJvIjo1MH0' },
   Backup: backupExample,
+  AdminSystem: {
+    version: '1.5.0',
+    gitSha: '7e6a2dd',
+    startedAt: T - 3 * DAY,
+    database: { sizeBytes: 18_874_368, walSizeBytes: 4_120_032 },
+    lastBackup: {
+      name: 'rooster-2026-10-09T03-00-00-000Z.db',
+      createdAt: T - 5 * 3_600_000,
+      sizeBytes: 17_825_792,
+    },
+    jobs: [
+      { job: 'purge', lastRunAt: T - 4.5 * 3_600_000, lastStatus: 'ok', lastError: null },
+      { job: 'due-reminders', lastRunAt: T - 60_000, lastStatus: 'ok', lastError: null },
+      {
+        job: 'backup',
+        lastRunAt: T - 5 * 3_600_000,
+        lastStatus: 'failed',
+        lastError: 'SQLITE_FULL: database or disk is full',
+      },
+      { job: 'pragma-optimize', lastRunAt: null, lastStatus: null, lastError: null },
+    ],
+    smtp: { configured: true },
+    push: { keySource: 'generated', subscriptions: 7 },
+    sse: { connections: 4 },
+    storage: {
+      backend: 'local',
+      attachmentBytes: 734_003_200,
+      attachmentCount: 412,
+      userQuotaBytes: 1_073_741_824,
+    },
+    counts: { users: 12, orgs: 15, tasks: 2_048 },
+  },
   TaskDetail: taskDetailExample,
   SubtaskReorder: { afterId: null, beforeId: EX.subtask },
   SubtaskReorderResult: { subtaskPosition: 'Zz' },

@@ -1,6 +1,7 @@
 import { Cron } from 'croner';
 import { logSafeError } from '../lib/log-safe-error.ts';
 import type { Logger } from '../lib/logger.ts';
+import type { JobBoard } from './job-board.ts';
 
 export type JobFn = () => void | Promise<void>;
 
@@ -14,7 +15,14 @@ export interface Scheduler {
   stop(): void;
 }
 
-export function createScheduler(logger: Logger): Scheduler {
+/**
+ * `board` (Admin → System) records each job's last run; `clock` stamps them (ms epoch).
+ */
+export function createScheduler(
+  logger: Logger,
+  options: { board?: JobBoard; clock?: () => number } = {},
+): Scheduler {
+  const { board, clock = Date.now } = options;
   const jobs = new Map<string, Cron>();
   return {
     register(name, pattern, fn) {
@@ -22,13 +30,17 @@ export function createScheduler(logger: Logger): Scheduler {
       const log = logger.child({ job: name });
       // No croner `name`: that registers the job in croner's process-global list.
       const protect = () => log.warn('previous run still busy; skipped');
+      board?.register(name);
       const job = new Cron(pattern, { protect }, async () => {
         const start = performance.now();
+        const startedAt = clock();
         try {
           await fn();
           log.debug({ ms: Math.round(performance.now() - start) }, 'job finished');
+          board?.finished(name, startedAt);
         } catch (err) {
           log.error({ err: logSafeError(err) }, 'job failed');
+          board?.finished(name, startedAt, err);
         }
       });
       jobs.set(name, job);

@@ -21,6 +21,7 @@ import type {
 import { and, eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it } from 'vitest';
 import { activity, follower, notification, taskGroup } from '../src/db/schema/index.ts';
+import { commentExcerpt } from '../src/services/comment-service.ts';
 import {
   type Caller,
   createTask,
@@ -781,5 +782,19 @@ describe('search, export and retention of comments', () => {
     now += 91 * DAY;
     // Two assignments and A's comment (B follows the task); the read one is gone.
     expect((await notifications(b)).items.map((n) => n.type)).toEqual(['assigned', 'assigned']);
+  });
+});
+
+describe('notification excerpts', () => {
+  it('render the comment as plain text: no emphasis, link or code marks; mentions as @Name', () => {
+    const body = `**Heads up** ${formatMention('Bo Ek', '0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e02')}: see [the plan](https://example.com/plan)\nand run \`pnpm test\` *today*.`;
+    expect(commentExcerpt(body)).toBe('Heads up @Bo Ek: see the plan and run pnpm test today.');
+  });
+
+  it('collapse whitespace across paragraphs and lists, and truncate long comments', () => {
+    expect(commentExcerpt('First.\n\n- one\n- two')).toBe('First. one two');
+    const long = commentExcerpt(`**Start** ${'word '.repeat(200)}`);
+    expect(long.startsWith('Start word')).toBe(true);
+    expect(long.endsWith('…')).toBe(true);
   });
 });

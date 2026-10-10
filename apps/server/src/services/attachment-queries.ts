@@ -51,3 +51,26 @@ export function attachmentsForTask(tx: Tx, taskId: string): Attachment[] {
     .all()
     .map(toAttachmentDto);
 }
+
+/**
+ * The bytes of every attachment `userId` uploaded that still exists (ADR 0052 §6): rows on
+ * tasks in Trash count until the purge deletes them, and so would a row with `deleted_at`
+ * set, whose blob is only freed when the row goes. Thumbnails and avatars are not counted.
+ */
+export function userStorageUsed(tx: Tx, userId: string): number {
+  const row = tx
+    .select({ bytes: sql<number>`coalesce(sum(${attachment.size}), 0)` })
+    .from(attachment)
+    .where(eq(attachment.uploaderId, userId))
+    .get();
+  return row?.bytes ?? 0;
+}
+
+/** `GET /me`'s `storage`: the usage and the quota (null without one). */
+export function userStorage(
+  tx: Tx,
+  userId: string,
+  quotaBytes: number | null,
+): { usedBytes: number; quotaBytes: number | null } {
+  return { usedBytes: userStorageUsed(tx, userId), quotaBytes };
+}

@@ -1,7 +1,9 @@
 import { createReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi';
+import { adminSystemSchema } from '@rooster/core/schemas';
 import type { AppEnv } from '../lib/context.ts';
+import { named } from '../lib/openapi.ts';
 import type { Services } from '../services/index.ts';
 import { AUTHED, actorOf, body, idParam, json, problems } from './common.ts';
 import {
@@ -14,6 +16,23 @@ import {
 } from './schemas.ts';
 
 const tags = ['admin'];
+
+/** P11 (ADR 0052 §7). */
+export const AdminSystemSchema = named(adminSystemSchema, 'AdminSystem');
+
+const getSystem = createRoute({
+  method: 'get',
+  path: '/api/v1/admin/system',
+  tags,
+  operationId: 'getSystemStatus',
+  summary: 'Instance status for Admin → System (instance admins)',
+  description:
+    'The version, git SHA and start time; the database and WAL file sizes; the newest backup; the last run of each scheduled job since the server started (`null` before its first run); whether SMTP is configured; where the push keys come from and how many devices are subscribed; open realtime connections; attachment storage (backend, bytes, files and the per-user quota); and the number of users, organisations and live tasks.',
+  responses: {
+    200: json(AdminSystemSchema, 'The instance status'),
+    ...problems(401, 'forbidden'),
+  },
+});
 
 const listAllowlist = createRoute({
   method: 'get',
@@ -146,8 +165,9 @@ const reindexSearch = createRoute({
 
 export function registerAdminRoutes(
   app: OpenAPIHono<AppEnv>,
-  { admin, backups, search }: Services,
+  { admin, backups, search, system }: Services,
 ): void {
+  app.openapi(getSystem, (c) => c.json(system.status(actorOf(c)), 200));
   app.openapi(reindexSearch, (c) => c.json(search.reindex(actorOf(c)), 200));
   app.openapi(listBackups, (c) => c.json(backups.list(actorOf(c)), 200));
   app.openapi(createBackup, (c) => c.json(backups.createManual(actorOf(c)), 201));

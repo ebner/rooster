@@ -16,6 +16,7 @@ const ADMIN_ROUTES: [string, string, unknown?][] = [
   ['POST', '/api/v1/admin/allowlist', { kind: 'domain', value: 'new.example' }],
   ['GET', '/api/v1/admin/users'],
   ['GET', '/api/v1/admin/backups'],
+  ['GET', '/api/v1/admin/system'],
   ['POST', '/api/v1/admin/backups'],
   ['POST', '/api/v1/admin/search/reindex'],
 ];
@@ -42,7 +43,7 @@ describe('AC-9.6 the admin capability', () => {
     const admin = ctx.user('admin@example.com');
     const { token, grant } = await pat(admin, ['admin']);
     expect(grant.scopes).toEqual(['admin']);
-    expect(await statuses(ctx, token)).toEqual([200, 201, 200, 200, 201, 200]);
+    expect(await statuses(ctx, token)).toEqual([200, 201, 200, 200, 200, 201, 200]);
     const reindex = await bearer(ctx, token).ok<{ indexed: number }>(
       'POST',
       '/api/v1/admin/search/reindex',

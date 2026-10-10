@@ -26,7 +26,12 @@ import { AppError } from '../lib/errors.ts';
 import { matchesEtag } from '../lib/etag.ts';
 import type { ActivityService } from './activity-service.ts';
 import { viaFor } from './activity-service.ts';
-import { type AttachmentRow, attachmentCounts, toAttachmentDto } from './attachment-queries.ts';
+import {
+  type AttachmentRow,
+  attachmentCounts,
+  toAttachmentDto,
+  userStorageUsed,
+} from './attachment-queries.ts';
 import {
   type Actor,
   afterCommit,
@@ -43,6 +48,12 @@ import { requireTask, type TaskRow, taskDeleted } from './list-access.ts';
 
 /** Presigned S3 download URLs live this long (ADR 0049 §3.5). */
 export const SIGNED_URL_TTL_S = 60;
+
+/** `1024 MB` → `1 GB`; whole megabytes otherwise. */
+function formatMb(bytes: number): string {
+  const mb = Math.floor(bytes / (1024 * 1024));
+  return mb % 1024 === 0 ? `${mb / 1024} GB` : `${mb} MB`;
+}
 
 const attachmentNotFound = () => new AppError('not_found', 404, 'Attachment not found.');
 
@@ -120,10 +131,14 @@ export class AttachmentService {
     const written: string[] = [];
     let recorded = false;
     try {
+      // Before anything is stored; checked again where the row is recorded, since another
+      // upload of the same user may finish in between (ADR 0052 §6).
+      readOnly(this.deps.db, (tx) => this.checkQuota(tx, actor.userId, file.size));
       const row = await this.prepare(file, orgId, store, written);
       const saved = immediate(this.deps.db, (tx) => {
         const target = this.writableTask(tx, actor, taskId);
         if (target.orgId !== orgId) throw new AppError('not_found', 404, 'Task not found.');
+        this.checkQuota(tx, actor.userId, row.size);
         tx.insert(attachment)
           .values({ ...row, taskId: target.id, uploaderId: actor.userId })
           .run();
@@ -142,6 +157,25 @@ export class AttachmentService {
       await rm(file.path, { force: true });
       if (!recorded && written.length > 0) this.discard(written, store.kind);
     }
+  }
+
+  /**
+   * `413 storage_quota_exceeded` when `size` more bytes would take the user's attachments past
+   * `ROOSTER_USER_STORAGE_MB` (ADR 0052 §6). Inside the write transaction that records the
+   * upload, two concurrent uploads cannot both pass.
+   */
+  private checkQuota(tx: Tx, userId: string, size: number): void {
+    const quota = this.deps.config.userStorageQuotaBytes;
+    if (quota === null) return;
+    const used = userStorageUsed(tx, userId);
+    if (used + size <= quota) return;
+    throw new AppError(
+      'storage_quota_exceeded',
+      413,
+      `This file would take your attachments past your storage quota of ${formatMb(quota)}; delete some attachments first.`,
+      undefined,
+      { limitBytes: quota, usedBytes: used },
+    );
   }
 
   /** Sniffs, checks and stores the upload's blobs; the row to insert (without task and uploader). */

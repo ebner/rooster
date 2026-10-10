@@ -4,7 +4,14 @@ import type { App, AppDeps } from '../src/app.ts';
 import type { AppDb } from '../src/db/client.ts';
 import type { Actor } from '../src/services/index.ts';
 import type { FakeMail, FakePush } from './delivery-fakes.ts';
-import { asJar, type CookieJar, createTestApp, createUserWithSession } from './helpers.ts';
+import {
+  addSession,
+  asJar,
+  CookieJar,
+  createTestApp,
+  createUserWithSession,
+  TEST_ENV,
+} from './helpers.ts';
 
 export interface Caller {
   userId: string;
@@ -34,6 +41,8 @@ export interface ListCtx {
   mail: FakeMail;
   /** A signed-in user with a personal org (default groups: Today, Prio, Upcoming). */
   user(email: string, name?: string): Caller;
+  /** A new session for a user already in the database (e.g. from a fixture). */
+  signedIn(userId: string): Caller;
 }
 
 export function listCtx(
@@ -54,8 +63,14 @@ export function listCtx(
     ...(options.cimdFetch === undefined ? {} : { cimdFetch: options.cimdFetch }),
     apiRateLimit: options.apiRateLimit ?? false,
   });
-  const user = (email: string, name?: string): Caller => {
-    const u = createUserWithSession(app, db, { email, ...(name === undefined ? {} : { name }) });
+  const user = (email: string, name?: string): Caller =>
+    callerFor(createUserWithSession(app, db, { email, ...(name === undefined ? {} : { name }) }));
+  const signedIn = (userId: string): Caller => {
+    const jar = new CookieJar();
+    const sessionId = addSession(db, userId, jar, TEST_ENV.ROOSTER_AUTH_SECRET);
+    return callerFor({ userId, sessionId, jar });
+  };
+  const callerFor = (u: { userId: string; sessionId: string; jar: CookieJar }): Caller => {
     const actor = app.services.users.resolveActor(u.userId, u.sessionId);
     if (actor === null) throw new Error('actor');
     const call = async (
@@ -86,7 +101,7 @@ export function listCtx(
     };
     return { userId: u.userId, jar: u.jar, actor, call, ok };
   };
-  return { app, db, push, mail, user };
+  return { app, db, push, mail, user, signedIn };
 }
 
 export const myList = (c: Caller, org = 'personal', query = '') =>

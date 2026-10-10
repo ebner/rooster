@@ -77,6 +77,10 @@ export const PROBLEM_CODES = {
   invite_invalid: { status: 410, detail: 'This invite can no longer be used (expired).' },
   push_gone: { status: 410, detail: 'This device is no longer subscribed; subscribe again.' },
   payload_too_large: { status: 413, detail: 'The request body exceeds the limit of 1024 KB.' },
+  storage_quota_exceeded: {
+    status: 413,
+    detail: 'This file would take your attachments past your storage quota of 1 GB.',
+  },
   unsupported_media_type: { status: 415, detail: 'Send JSON (application/json).' },
   validation_failed: { status: 422, detail: 'The request did not pass validation.' },
   idempotency_key_reuse: {

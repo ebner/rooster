@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, statSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Logger } from '../lib/logger.ts';
 import { type AppDb, openDb } from './client.ts';
@@ -31,6 +31,24 @@ function timestampForFile(date: Date): string {
   return date.toISOString().replace(/[:.]/g, '-');
 }
 
+/** Database files hold every user's data: owner-only, whatever made them. */
+export const PRIVATE_FILE_MODE = 0o600;
+
+/**
+ * A restored database (a copied snapshot, `litestream restore`) arrives with the mode of
+ * whatever wrote it, often 0644; new files already get 0600 from the process umask (main.ts).
+ */
+function restrictDatabaseFiles(dbFile: string, logger: Logger): void {
+  for (const file of [dbFile, `${dbFile}-wal`, `${dbFile}-shm`]) {
+    try {
+      const stat = statSync(file, { throwIfNoEntry: false });
+      if (stat !== undefined && (stat.mode & 0o077) !== 0) chmodSync(file, PRIVATE_FILE_MODE);
+    } catch (err) {
+      logger.warn({ file, code: (err as NodeJS.ErrnoException).code }, 'cannot restrict file mode');
+    }
+  }
+}
+
 /**
  * Boot steps 2–5 of docs/spec/08-operations.md §2: ensure the directories, back up an
  * existing database before an update (pending migrations or a different server version than
@@ -48,6 +66,7 @@ export function prepareDatabase(
   }
   const existed = existsSync(paths.dbFile) && statSync(paths.dbFile).size > 0;
   const db = openDb(paths.dbFile);
+  restrictDatabaseFiles(paths.dbFile, logger);
   try {
     const migrations = hasPendingMigrations(db, migrationsDir);
     // A missing version on an existing database (booted before this was recorded) counts as

@@ -33,7 +33,7 @@ export interface paths {
         };
         /**
          * The signed-in user, settings, orgs in sidebar order, and isAdmin
-         * @description The first call of every client: the profile, display settings (locale, timezone, week start, date and time format), `prefs`, every org I belong to with my role in sidebar order, and whether I am an instance admin. The CLI uses it to pick the default org.
+         * @description The first call of every client: the profile, display settings (locale, timezone, week start, date and time format), `prefs`, every org I belong to with my role in sidebar order, whether I am an instance admin, and my attachment storage (`storage`: the bytes my uploads take and the quota, null without one). The CLI uses it to pick the default org.
          */
         get: operations["getMe"];
         put?: never;
@@ -318,6 +318,26 @@ export interface paths {
          * @description Creates my membership with the invite’s role, my Inbox and the default groups. Already a member: a no-op that returns the org. An email invite only admits its address (`403 invite_email_mismatch`); a used, expired or revoked invite is `410 invite_invalid`.
          */
         post: operations["acceptInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/system": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Instance status for Admin → System (instance admins)
+         * @description The version, git SHA and start time; the database and WAL file sizes; the newest backup; the last run of each scheduled job since the server started (`null` before its first run); whether SMTP is configured; where the push keys come from and how many devices are subscribed; open realtime connections; attachment storage (backend, bytes, files and the per-user quota); and the number of users, organisations and live tasks.
+         */
+        get: operations["getSystemStatus"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1560,7 +1580,7 @@ export interface paths {
         put?: never;
         /**
          * Attach a file to a task (multipart, online only)
-         * @description One multipart part named `file`, streamed to storage; above `ROOSTER_UPLOAD_MAX_MB` (default 25 MB) the upload is cut off with `413`. Needs the same access as editing the task. The stored type is sniffed from the content, never taken from the client: a file that claims to be a PNG, JPEG, GIF, WebP or AVIF image but is not one is `415 mime_mismatch`. Such images get their size and a 320 px WebP thumbnail. At most 100 attachments per task (`409 too_many_attachments`). Uploads are not idempotent (`Idempotency-Key` is not stored) and records `attachment_added` in the activity.
+         * @description One multipart part named `file`, streamed to storage; above `ROOSTER_UPLOAD_MAX_MB` (default 25 MB) the upload is cut off with `413`. Needs the same access as editing the task. The stored type is sniffed from the content, never taken from the client: a file that claims to be a PNG, JPEG, GIF, WebP or AVIF image but is not one is `415 mime_mismatch`. Such images get their size and a 320 px WebP thumbnail. At most 100 attachments per task (`409 too_many_attachments`). The attachments a user uploaded that still exist (Trash included, thumbnails not) may not exceed `ROOSTER_USER_STORAGE_MB` (default 1024 MB): an upload past it is `413 storage_quota_exceeded`, with `limitBytes` and `usedBytes`, and nothing is stored. Uploads are not idempotent (`Idempotency-Key` is not stored) and records `attachment_added` in the activity.
          */
         post: operations["uploadAttachment"];
         delete?: never;
@@ -2152,7 +2172,7 @@ export interface components {
             }[];
             /** @description `409 tag_name_taken`: the ID of the entity that already has the name, so an offline client can remap its own. */
             existingId?: string;
-            /** @description `413 payload_too_large` on an upload: the limit in bytes. */
+            /** @description `413 payload_too_large` on an upload: the size limit in bytes; `413 storage_quota_exceeded`: the user’s storage quota in bytes. */
             limitBytes?: number;
             /** @description `409 ambiguous_ref` (`GET /tasks/resolve`): the tasks the ref could mean, at most 10. */
             candidates?: {
@@ -2161,6 +2181,8 @@ export interface components {
                 seq: number | null;
                 title: string;
             }[];
+            /** @description `413 storage_quota_exceeded`: the bytes the user’s attachments already take (`limitBytes - usedBytes` is what is left). */
+            usedBytes?: number;
         };
         /**
          * @example {
@@ -2241,7 +2263,11 @@ export interface components {
          *           "position": "a1",
          *           "collapsed": false
          *         }
-         *       ]
+         *       ],
+         *       "storage": {
+         *         "usedBytes": 48213504,
+         *         "quotaBytes": 1073741824
+         *       }
          *     }
          */
         Me: {
@@ -2569,6 +2595,113 @@ export interface components {
             valid: boolean;
             /** @enum {string|null} */
             reason: "expired" | "revoked" | "used" | "org_deleted" | null;
+        };
+        /**
+         * @example {
+         *       "version": "1.5.0",
+         *       "gitSha": "7e6a2dd",
+         *       "startedAt": 1791273600000,
+         *       "database": {
+         *         "sizeBytes": 18874368,
+         *         "walSizeBytes": 4120032
+         *       },
+         *       "lastBackup": {
+         *         "name": "rooster-2026-10-09T03-00-00-000Z.db",
+         *         "createdAt": 1791514800000,
+         *         "sizeBytes": 17825792
+         *       },
+         *       "jobs": [
+         *         {
+         *           "job": "purge",
+         *           "lastRunAt": 1791516600000,
+         *           "lastStatus": "ok",
+         *           "lastError": null
+         *         },
+         *         {
+         *           "job": "due-reminders",
+         *           "lastRunAt": 1791532740000,
+         *           "lastStatus": "ok",
+         *           "lastError": null
+         *         },
+         *         {
+         *           "job": "backup",
+         *           "lastRunAt": 1791514800000,
+         *           "lastStatus": "failed",
+         *           "lastError": "SQLITE_FULL: database or disk is full"
+         *         },
+         *         {
+         *           "job": "pragma-optimize",
+         *           "lastRunAt": null,
+         *           "lastStatus": null,
+         *           "lastError": null
+         *         }
+         *       ],
+         *       "smtp": {
+         *         "configured": true
+         *       },
+         *       "push": {
+         *         "keySource": "generated",
+         *         "subscriptions": 7
+         *       },
+         *       "sse": {
+         *         "connections": 4
+         *       },
+         *       "storage": {
+         *         "backend": "local",
+         *         "attachmentBytes": 734003200,
+         *         "attachmentCount": 412,
+         *         "userQuotaBytes": 1073741824
+         *       },
+         *       "counts": {
+         *         "users": 12,
+         *         "orgs": 15,
+         *         "tasks": 2048
+         *       }
+         *     }
+         */
+        AdminSystem: {
+            version: string;
+            gitSha: string | null;
+            startedAt: number;
+            database: {
+                sizeBytes: number;
+                walSizeBytes: number;
+            };
+            lastBackup: {
+                name: string;
+                createdAt: number;
+                sizeBytes: number;
+            } | null;
+            jobs: {
+                job: string;
+                lastRunAt: number | null;
+                /** @enum {string|null} */
+                lastStatus: "ok" | "failed" | null;
+                lastError: string | null;
+            }[];
+            smtp: {
+                configured: boolean;
+            };
+            push: {
+                /** @enum {string} */
+                keySource: "env" | "generated" | "none";
+                subscriptions: number;
+            };
+            sse: {
+                connections: number;
+            };
+            storage: {
+                /** @enum {string} */
+                backend: "local" | "s3";
+                attachmentBytes: number;
+                attachmentCount: number;
+                userQuotaBytes: number | null;
+            };
+            counts: {
+                users: number;
+                orgs: number;
+                tasks: number;
+            };
         };
         /**
          * @example {
@@ -6194,6 +6327,54 @@ export interface operations {
             };
             /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getSystemStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The instance status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSystem"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `forbidden`. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13595,7 +13776,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The file exceeds `ROOSTER_UPLOAD_MAX_MB`. Codes: `payload_too_large`. */
+            /** @description The file exceeds `ROOSTER_UPLOAD_MAX_MB`, or it would take the uploader past their storage quota (`ROOSTER_USER_STORAGE_MB`). Codes: `payload_too_large`, `storage_quota_exceeded`. */
             413: {
                 headers: {
                     [name: string]: unknown;

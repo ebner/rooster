@@ -118,7 +118,12 @@ const attachmentParams = z.object({ id: idParam('id', 'Attachment ID') });
 export function uploadProblems(limit: string, ...items: Parameters<typeof problems>) {
   const out = problems(...items);
   const tooLarge = out[413];
-  if (tooLarge !== undefined) out[413] = { ...tooLarge, description: `The file exceeds ${limit}` };
+  if (tooLarge !== undefined) {
+    const quota = items.includes('storage_quota_exceeded')
+      ? ', or it would take the uploader past their storage quota (`ROOSTER_USER_STORAGE_MB`)'
+      : '';
+    out[413] = { ...tooLarge, description: `The file exceeds ${limit}${quota}` };
+  }
   const unsupported = out[415];
   if (unsupported !== undefined) {
     out[415] = {
@@ -137,7 +142,7 @@ const uploadAttachment = createRoute({
   operationId: 'uploadAttachment',
   summary: 'Attach a file to a task (multipart, online only)',
   description:
-    'One multipart part named `file`, streamed to storage; above `ROOSTER_UPLOAD_MAX_MB` (default 25 MB) the upload is cut off with `413`. Needs the same access as editing the task. The stored type is sniffed from the content, never taken from the client: a file that claims to be a PNG, JPEG, GIF, WebP or AVIF image but is not one is `415 mime_mismatch`. Such images get their size and a 320 px WebP thumbnail. At most 100 attachments per task (`409 too_many_attachments`). Uploads are not idempotent (`Idempotency-Key` is not stored) and records `attachment_added` in the activity.',
+    'One multipart part named `file`, streamed to storage; above `ROOSTER_UPLOAD_MAX_MB` (default 25 MB) the upload is cut off with `413`. Needs the same access as editing the task. The stored type is sniffed from the content, never taken from the client: a file that claims to be a PNG, JPEG, GIF, WebP or AVIF image but is not one is `415 mime_mismatch`. Such images get their size and a 320 px WebP thumbnail. At most 100 attachments per task (`409 too_many_attachments`). The attachments a user uploaded that still exist (Trash included, thumbnails not) may not exceed `ROOSTER_USER_STORAGE_MB` (default 1024 MB): an upload past it is `413 storage_quota_exceeded`, with `limitBytes` and `usedBytes`, and nothing is stored. Uploads are not idempotent (`Idempotency-Key` is not stored) and records `attachment_added` in the activity.',
   request: {
     params: z.object({ id: idParam('id', 'Task ID') }),
     body: multipartFile('The file. Its name is kept (cleaned) as the attachment’s file name.'),
@@ -151,6 +156,7 @@ const uploadAttachment = createRoute({
       'conflict_deleted',
       'too_many_attachments',
       'mime_mismatch',
+      'storage_quota_exceeded',
     ),
   },
 });

@@ -67,6 +67,9 @@ export function problemExample(code: ProblemCode): Problem {
           ],
         }
       : {}),
+    ...(code === 'storage_quota_exceeded'
+      ? { limitBytes: 1_073_741_824, usedBytes: 1_060_000_000 }
+      : {}),
     ...(status === 422 && code !== 'idempotency_key_reuse'
       ? {
           errors: [{ path: 'title', message: 'Too small: expected string to have >=1 characters' }],

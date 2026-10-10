@@ -1,6 +1,6 @@
-import { createReadStream } from 'node:fs';
+import { createReadStream, openAsBlob } from 'node:fs';
 import { ATTACHMENT_FILENAME_MAX } from '@rooster/core/limits';
-import { fileTypeFromFile } from 'file-type';
+import { fileTypeFromBlob } from 'file-type';
 import type { Sharp, SharpOptions } from 'sharp';
 
 /**
@@ -46,7 +46,10 @@ export interface Sniffed {
  * undetected type is `text/plain` for UTF-8 text without NUL bytes, else octet-stream.
  */
 export async function sniffFile(path: string): Promise<Sniffed> {
-  const detected = await fileTypeFromFile(path);
+  // Not `fileTypeFromFile`: it imports `strtok3` at runtime by a computed specifier, which the
+  // bundle (dist/main.js; the image has no node_modules for it) cannot resolve. A file-backed
+  // Blob is read lazily, only as far as the detectors need, and carries the size they use.
+  const detected = await fileTypeFromBlob(await openAsBlob(path));
   if (detected !== undefined) return { mime: detected.mime, ext: detected.ext };
   return (await isUtf8Text(path))
     ? { mime: 'text/plain', ext: 'txt' }

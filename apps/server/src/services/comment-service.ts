@@ -1,5 +1,6 @@
+import { commentToPlainText, parseCommentMarkdown } from '@rooster/core/comment-markdown';
 import { uuidv7 } from '@rooster/core/ids';
-import { mentionedUserIds, mentionsToPlain } from '@rooster/core/mentions';
+import { mentionedUserIds } from '@rooster/core/mentions';
 import type { Comment, CommentCreate, CommentPatch } from '@rooster/core/schemas';
 import { and, eq, inArray } from 'drizzle-orm';
 import { comment, member } from '../db/schema/index.ts';
@@ -39,9 +40,13 @@ export function toCommentDto(row: CommentRow): Comment {
 
 const commentNotFound = () => new AppError('not_found', 404, 'Comment not found.');
 
-/** The plain-text excerpt of a comment for notifications (mentions as `@Name`). */
+/**
+ * The plain-text excerpt of a comment for notifications (email, push, the inbox): the
+ * Markdown-light rendered as text, as the web inbox shows it (mentions as `@Name`, links as
+ * their label, no emphasis or code marks).
+ */
 export function commentExcerpt(body: string): string {
-  const plain = mentionsToPlain(body).replace(/\s+/g, ' ').trim();
+  const plain = commentToPlainText(parseCommentMarkdown(body)).replace(/\s+/g, ' ').trim();
   return plain.length <= EXCERPT_MAX ? plain : `${plain.slice(0, EXCERPT_MAX - 1)}…`;
 }
 

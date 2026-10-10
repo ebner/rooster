@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { chmodSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -206,6 +206,21 @@ describe('prepareDatabase', () => {
     db.close();
     for (const sub of ['', 'backups', 'attachments']) {
       expect(statSync(join(root, sub)).mode & 0o777).toBe(0o700);
+    }
+  });
+
+  it('makes a restored database owner-only (0600) at boot', () => {
+    boot(V1);
+    const dbFile = join(dir.path, 'rooster.db');
+    // As a copied snapshot or `litestream restore` leaves it.
+    chmodSync(dbFile, 0o644);
+    const { db } = prepareDatabase(dir.path, silent, V1);
+    try {
+      for (const file of [dbFile, `${dbFile}-wal`, `${dbFile}-shm`]) {
+        if (existsSync(file)) expect(statSync(file).mode & 0o777, file).toBe(0o600);
+      }
+    } finally {
+      db.close();
     }
   });
 

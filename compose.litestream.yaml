@@ -1,0 +1,69 @@
+# Optional overlay: continuous replication of the database to S3-compatible storage with a
+# Litestream 0.5 sidecar, for point-in-time restore (08 §4, 08 §7).
+#
+#   docker compose -f compose.yaml -f compose.litestream.yaml up -d
+#
+# Set these in the same .env as rooster (Compose reads it for the ${…} below):
+#   LITESTREAM_S3_BUCKET             required, e.g. rooster-backups
+#   LITESTREAM_S3_PATH               prefix in the bucket (default: rooster)
+#   LITESTREAM_S3_REGION             default: us-east-1
+#   LITESTREAM_S3_ENDPOINT           for MinIO, R2, Garage, B2 …: https://s3.example.com (empty for AWS)
+#   LITESTREAM_ACCESS_KEY_ID         required
+#   LITESTREAM_SECRET_ACCESS_KEY     required
+#
+# Litestream replicates rooster.db only. Attachments (unless they are on S3 already) and the
+# built-in snapshots in /data/backups still need their own off-site copy (08 §7).
+#
+# Restore (the latest state, or -timestamp 2026-10-09T12:00:00Z for a point in time):
+#   docker compose -f compose.yaml -f compose.litestream.yaml stop rooster litestream
+#   docker compose -f compose.yaml -f compose.litestream.yaml run --rm --no-deps --entrypoint sh \
+#     litestream -c 'litestream restore -o /data/restored.db /data/rooster.db \
+#       && mv /data/rooster.db /data/rooster.db.before-restore \
+#       && rm -f /data/rooster.db-wal /data/rooster.db-shm \
+#       && mv /data/restored.db /data/rooster.db'
+#   docker compose -f compose.yaml -f compose.litestream.yaml up -d
+services:
+  litestream:
+    image: litestream/litestream:0.5.17@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a
+    restart: unless-stopped
+    command: ["replicate", "-config", "/etc/litestream.yml"]
+    # rooster's user: the database files are 0600 and owned by it, and any file Litestream
+    # creates next to them (the WAL, the shared memory file) must stay writable for rooster.
+    user: "65532:65532"
+    # Starts once rooster has created and migrated the database (the image's healthcheck).
+    depends_on:
+      rooster:
+        condition: service_healthy
+    environment:
+      LITESTREAM_S3_BUCKET: ${LITESTREAM_S3_BUCKET:?set LITESTREAM_S3_BUCKET in .env}
+      LITESTREAM_S3_PATH: ${LITESTREAM_S3_PATH:-rooster}
+      LITESTREAM_S3_REGION: ${LITESTREAM_S3_REGION:-us-east-1}
+      LITESTREAM_S3_ENDPOINT: ${LITESTREAM_S3_ENDPOINT:-}
+      LITESTREAM_ACCESS_KEY_ID: ${LITESTREAM_ACCESS_KEY_ID:?set LITESTREAM_ACCESS_KEY_ID in .env}
+      LITESTREAM_SECRET_ACCESS_KEY: ${LITESTREAM_SECRET_ACCESS_KEY:?set LITESTREAM_SECRET_ACCESS_KEY in .env}
+    configs:
+      - source: litestream
+        target: /etc/litestream.yml
+    volumes:
+      - rooster-data:/data
+
+configs:
+  litestream:
+    # `$$` keeps the variables for Litestream, which expands them from its environment at start,
+    # so the credentials never appear in the container's configuration.
+    content: |
+      dbs:
+        - path: /data/rooster.db
+          # rooster keeps SQLite's automatic checkpoints, busy_timeout = 5000 and
+          # synchronous = NORMAL, as Litestream recommends; its write load is light.
+          replica:
+            type: s3
+            bucket: $${LITESTREAM_S3_BUCKET}
+            path: $${LITESTREAM_S3_PATH}
+            region: $${LITESTREAM_S3_REGION}
+            endpoint: $${LITESTREAM_S3_ENDPOINT}
+            access-key-id: $${LITESTREAM_ACCESS_KEY_ID}
+            secret-access-key: $${LITESTREAM_SECRET_ACCESS_KEY}
+      snapshot:
+        interval: 24h
+        retention: 168h

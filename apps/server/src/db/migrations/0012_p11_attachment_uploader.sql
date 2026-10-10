@@ -1,0 +1,1 @@
+CREATE INDEX `attachment_uploader` ON `attachment` (`uploader_id`,`size`);

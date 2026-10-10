@@ -22,12 +22,17 @@ export interface Problem {
   existingId?: string;
   /** `409 ambiguous_ref` (`GET /tasks/resolve`): the tasks the ref could mean, at most 10. */
   candidates?: { id: string; orgId: string; seq: number | null; title: string }[];
-  /** P10 `413 payload_too_large` on uploads: the limit in bytes. */
+  /** P10 `413 payload_too_large` on uploads: the limit in bytes (P11: also the user's quota). */
   limitBytes?: number;
+  /** P11 `413 storage_quota_exceeded`: the bytes the user's attachments already take. */
+  usedBytes?: number;
 }
 
 /** RFC 9457 extension members a service may attach to a problem. */
-export type ProblemExtensions = Pick<Problem, 'existingId' | 'candidates' | 'limitBytes'>;
+export type ProblemExtensions = Pick<
+  Problem,
+  'existingId' | 'candidates' | 'limitBytes' | 'usedBytes'
+>;
 
 /** Domain error thrown from services; rendered as problem+json with a stable `code`. */
 export class AppError extends Error {

@@ -72,6 +72,8 @@ export const attachment = sqliteTable(
   },
   (t) => [
     index('attachment_task').on(t.taskId).where(sql`deleted_at IS NULL`),
+    // P11 (ADR 0052 §6): a user's storage, summed on every upload and GET /me (covering).
+    index('attachment_uploader').on(t.uploaderId, t.size),
     check('attachment_storage', sql`storage IN ('local','s3')`),
   ],
 );

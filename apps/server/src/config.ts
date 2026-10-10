@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { USER_STORAGE_MB_DEFAULT } from '@rooster/core/limits';
 import { Cron } from 'croner';
 import { z } from 'zod';
 
@@ -184,6 +185,8 @@ const envSchema = z.object({
   ROOSTER_VAPID_PRIVATE: vapidKey(32),
   ROOSTER_VAPID_SUBJECT: vapidSubject,
   ROOSTER_UPLOAD_MAX_MB: intInRange(25, 1, 10_240),
+  /** P11: attachment bytes per uploader in MB; `0` = no quota (ADR 0052 §6). Up to 1 PB. */
+  ROOSTER_USER_STORAGE_MB: intInRange(USER_STORAGE_MB_DEFAULT, 0, 1_073_741_824),
   /** P10: the only host S3 requests go to (SSRF, 04 §4.11). */
   ROOSTER_S3_ENDPOINT: z
     .url({ protocol: /^https?$/, error: 'must be an absolute http(s) URL' })
@@ -200,7 +203,6 @@ const envSchema = z.object({
   ROOSTER_OAUTH_DCR: onOffFlag(false),
   /** P9: the best-effort discovery documents (11 §6.1). The OAuth metadata stays either way. */
   ROOSTER_AGENT_DISCOVERY: onOffFlag(true),
-  ROOSTER_METRICS_TOKEN: z.string().min(16, 'must be at least 16 characters').optional(),
   ROOSTER_GIT_SHA: z.string().default('dev'),
   /** Test-only (AC-8.4): check every /api/v1 response against the OpenAPI document. */
   ROOSTER_VALIDATE_RESPONSES: booleanFlag(false),
@@ -269,6 +271,9 @@ function toConfig(env: Env) {
         : null,
     vapidSubject: env.ROOSTER_VAPID_SUBJECT ?? `mailto:${env.ROOSTER_ADMIN_EMAILS[0] ?? ''}`,
     uploadMaxMb: env.ROOSTER_UPLOAD_MAX_MB,
+    /** Bytes; null without a quota (`ROOSTER_USER_STORAGE_MB=0`). */
+    userStorageQuotaBytes:
+      env.ROOSTER_USER_STORAGE_MB === 0 ? null : env.ROOSTER_USER_STORAGE_MB * 1024 * 1024,
     s3:
       env.ROOSTER_S3_BUCKET !== undefined &&
       env.ROOSTER_S3_ACCESS_KEY_ID !== undefined &&
@@ -289,7 +294,6 @@ function toConfig(env: Env) {
     },
     oauthDcr: env.ROOSTER_OAUTH_DCR,
     agentDiscovery: env.ROOSTER_AGENT_DISCOVERY,
-    metricsToken: env.ROOSTER_METRICS_TOKEN ?? null,
     gitSha: env.ROOSTER_GIT_SHA,
     validateResponses: env.ROOSTER_VALIDATE_RESPONSES,
   };

@@ -82,6 +82,13 @@ export class BackupService {
     }));
   }
 
+  /** The newest snapshot of any kind (Admin → System); the caller authorises. */
+  latest(): Backup | null {
+    const newest = this.entries()[0];
+    if (newest === undefined) return null;
+    return { name: newest.name, size: newest.size, createdAt: newest.createdAt, kind: newest.kind };
+  }
+
   /** "Back up now" (manual kind). */
   createManual(actor: Actor): Backup {
     requireAdminAccess(actor);

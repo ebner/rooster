@@ -30,7 +30,7 @@ const getMe = createRoute({
   operationId: 'getMe',
   summary: 'The signed-in user, settings, orgs in sidebar order, and isAdmin',
   description:
-    'The first call of every client: the profile, display settings (locale, timezone, week start, date and time format), `prefs`, every org I belong to with my role in sidebar order, and whether I am an instance admin. The CLI uses it to pick the default org.',
+    'The first call of every client: the profile, display settings (locale, timezone, week start, date and time format), `prefs`, every org I belong to with my role in sidebar order, whether I am an instance admin, and my attachment storage (`storage`: the bytes my uploads take and the quota, null without one). The CLI uses it to pick the default org.',
   responses: { 200: json(MeSchema, 'The signed-in user'), ...problems(401, ANY_CREDENTIAL) },
 });
 

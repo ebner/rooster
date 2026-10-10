@@ -57,3 +57,15 @@ export function securityHeaders(formOrigins: readonly string[] = []): Middleware
     if (own !== null) c.res.headers.set('Content-Security-Policy', own);
   };
 }
+
+/**
+ * ASVS 8.2.1: API responses carry user data, so browsers and shared caches must not keep them
+ * (`no-store`). A route that sets its own policy keeps it: downloads revalidate with their ETag
+ * (`private, no-cache`), the event stream sends `no-cache`.
+ */
+export function noStoreApi(): MiddlewareHandler<AppEnv> {
+  return async (c, next) => {
+    await next();
+    if (!c.res.headers.has('cache-control')) c.res.headers.set('Cache-Control', 'no-store');
+  };
+}

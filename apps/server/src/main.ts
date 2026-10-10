@@ -58,7 +58,7 @@ const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
 
 const connections = trackConnections(server as Server);
 
-const scheduler = createScheduler(logger);
+const scheduler = createScheduler(logger, { board: app.services.jobBoard });
 registerJobs(scheduler, { db, services: app.services, config });
 
 let shuttingDown = false;

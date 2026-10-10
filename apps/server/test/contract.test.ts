@@ -739,6 +739,11 @@ const SPECS: Record<string, Spec> = {
     cases: [{ status: 403, code: 'forbidden', request: () => adminAsMember('backups') }],
   },
   'POST /api/v1/admin/backups': { ok: () => ({ path: '/api/v1/admin/backups' }), as: 'admin' },
+  'GET /api/v1/admin/system': {
+    ok: () => ({ path: '/api/v1/admin/system' }),
+    as: 'admin',
+    cases: [{ status: 403, code: 'forbidden', request: () => adminAsMember('system') }],
+  },
   'GET /api/v1/admin/backups/{name}': {
     ok: (f) => ({ path: `/api/v1/admin/backups/${f.backupName}` }),
     as: 'admin',
