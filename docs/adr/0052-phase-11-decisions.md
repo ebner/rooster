@@ -69,3 +69,6 @@ The documentation pass compared the spec with the code. Decided:
   - phone rows squeezing the title;
   - raw Markdown in inbox excerpts.
 - **Added:** a "Rebuild search index" action in Admin → System.
+
+## 10. Bundle budget
+The initial-bundle budget was raised (10 §4) from 450 KB to **500 KB** gzip. Phase 11 brought it to about 449 KB: Help entry points, the header ⋯ menu, accessible row names and new strings in the startup catalog. The lazy-loading rule is unchanged: UI that appears only on interaction still loads lazily (AGENTS.md).

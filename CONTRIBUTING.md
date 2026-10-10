@@ -79,7 +79,7 @@ Tests are part of the work. Name acceptance tests after their criterion (`AC-4.2
 | `pnpm lint` / `pnpm format` | Biome (check / fix). |
 | `pnpm i18n:check` | English–Swedish parity, valid ICU messages, no unused keys. |
 | `pnpm gen:api` | Emits `apps/server/openapi.json` and regenerates `packages/api-client/src/schema.d.ts`. Never edit `schema.d.ts` by hand; CI fails when either file is stale. |
-| `pnpm build && pnpm bundle:check` | The initial JavaScript for My tasks stays ≤ 450 KB gzip (ADR 0016). |
+| `pnpm build && pnpm bundle:check` | The initial JavaScript for My tasks stays ≤ 500 KB gzip (ADR 0016, ADR 0052). |
 | `pnpm --filter @rooster/cli smoke` | The built CLI against an in-memory server. |
 | `pnpm e2e` | Playwright: the mock IdP, a fresh server and Vite are started for you. |
 

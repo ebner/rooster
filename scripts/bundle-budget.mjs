@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 10 §4: initial JS (gzip) for /o/:slug/my ≤ 450 KB (ADR 0016). Reads the Vite manifest of a
+// 10 §4: initial JS (gzip) for /o/:slug/my ≤ 500 KB (ADR 0016, raised in ADR 0052 §10). Reads the Vite manifest of a
 // web build and sums the gzip size of every JS chunk the browser loads to render that route:
 // the entry, the route chunks on the matched path (`_app` → `_tasks` → `my`), their static
 // imports, and the active locale's catalog (the larger one, to be safe), which `main.tsx`
@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
-const BUDGET_KB = 450;
+const BUDGET_KB = 500;
 const ROUTE_CHAIN = [
   'src/routes/_app.tsx?tsr-split=component',
   'src/routes/_app/o.$orgSlug._tasks.tsx?tsr-split=component',
