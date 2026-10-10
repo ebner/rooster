@@ -1,5 +1,6 @@
 import type { TimeFormat } from '@rooster/core/dates';
 import { formatTime } from '@rooster/core/dates';
+import { DEFAULT_PREFS } from '@rooster/core/limits';
 import {
   defaultPrefEnabled,
   isPrefCell,
@@ -41,7 +42,12 @@ export interface NotificationChannels {
   email: boolean;
 }
 
-export type DeliveryPrefs = Pick<Prefs, 'reminderTime' | 'digestTime' | 'emailMode'>;
+/**
+ * The timing prefs this page edits. `allDayReminderTime` (P10, FR-REM-2) is optional for callers
+ * that predate it; the page then shows the default.
+ */
+export type DeliveryPrefs = Pick<Prefs, 'reminderTime' | 'digestTime' | 'emailMode'> &
+  Partial<Pick<Prefs, 'allDayReminderTime'>>;
 
 export interface DeliverySettings {
   value: DeliveryPrefs;
@@ -166,6 +172,7 @@ export function NotificationsPage({
     type === rows[0] && channel === columns[0] ? force : undefined;
   const email = channels?.email === true;
   const pushOn = channels?.push === true;
+  const allDayTime = delivery?.value.allDayReminderTime ?? DEFAULT_PREFS.allDayReminderTime;
 
   const matrix =
     error && !prefs ? (
@@ -246,11 +253,20 @@ export function NotificationsPage({
       >
         {matrix}
       </SettingsSection>
-      {delivery && (pushOn || email) && (
+      {delivery && (
         <SettingsSection
           title={t('notifications.timingTitle')}
           description={t('notifications.timingBody')}
         >
+          {/* Task reminders (FR-REM-2) reach the inbox on every server, so this one always shows. */}
+          <Select
+            label={t('notifications.allDayReminderTime')}
+            description={t('notifications.allDayReminderTimeHint')}
+            options={timeOptions(allDayTime, delivery.locale, delivery.timeFormat)}
+            value={allDayTime}
+            onChange={(allDayReminderTime) => delivery.onChange({ allDayReminderTime })}
+            className="max-w-pane-min"
+          />
           {pushOn && (
             <Select
               label={t('notifications.reminderTime')}

@@ -59,7 +59,7 @@ import { announce, ListLiveRegion } from './announcer';
 import { BulkBar } from './bulk-bar';
 import { completionHoldMs, ListController, type Translate, type ViewModel } from './controller';
 import { GroupHeader } from './group-header';
-import { LazyMoveToPopover, LazyTagPicker } from './lazy';
+import { LazyMoveToPopover, LazyRecurringDeletePopover, LazyTagPicker } from './lazy';
 import { ListContext, type ListContextValue } from './list-context';
 import { MobileListChrome } from './mobile-list-chrome';
 import { buildRows, type Row, type RowCache } from './model/rows';
@@ -438,14 +438,14 @@ export function MyListView({
   useEffect(() => setTags(tags ?? []), [tags]);
   const paneRef = useRef(pane);
   paneRef.current = pane;
-  const prefsRef = useRef({
+  const livePrefs = {
     parseTitles: prefs?.parseTitleDates ?? true,
     holdMs: prefs?.completeHideMs ?? completionHoldMs,
-  });
-  prefsRef.current = {
-    parseTitles: prefs?.parseTitleDates ?? true,
-    holdMs: prefs?.completeHideMs ?? completionHoldMs,
+    // P10: optimistic reminder times for all-day tasks (ReducerContext).
+    ...(prefs?.allDayReminderTime ? { allDayReminderTime: prefs.allDayReminderTime } : {}),
   };
+  const prefsRef = useRef(livePrefs);
+  prefsRef.current = livePrefs;
 
   const controller = useMemo(
     () =>
@@ -774,6 +774,13 @@ export function MyListView({
           )
       : null;
   const tagIds = popover?.kind === 'tag' ? controller.selectedTaskIds() : [];
+  // FR-REC-4: anchored to the row's title (phones ask in a sheet, MobileListChrome).
+  const recurringAnchor =
+    popover?.kind === 'recurringDelete' && !mobile
+      ? root.current?.querySelector(
+          `[data-row-id="${popover.rowId}"] [data-focus-target], [data-row-id="${popover.rowId}"] input, [data-row-id="${popover.rowId}"]`,
+        )
+      : null;
   const assignAnchor =
     popover?.kind === 'assign' && !mobile && members
       ? popover.rowId === 'bulk'
@@ -853,6 +860,18 @@ export function MyListView({
       {moveAnchor && (
         <Suspense fallback={null}>
           <LazyMoveToPopover anchor={moveAnchor} ids={controller.selectedTaskIds()} />
+        </Suspense>
+      )}
+      {recurringAnchor && popover && (
+        <Suspense fallback={null}>
+          <LazyRecurringDeletePopover
+            anchor={recurringAnchor}
+            title={controller.task(popover.rowId)?.title ?? ''}
+            onChoose={(choice) => controller.deleteRecurring(popover.rowId, choice)}
+            onCancel={() =>
+              controller.ui().set({ popover: null, focusSeq: controller.ui().focusSeq + 1 })
+            }
+          />
         </Suspense>
       )}
       {tagAnchor && tagIds.length > 0 && (

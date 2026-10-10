@@ -1,5 +1,6 @@
 import { formatRelative, formatTime } from '@rooster/core/dates';
 import { type Locale, supportedLocales } from '@rooster/i18n/core';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CurrentUser, ProfilePatch } from '../../data/types';
 import { Avatar } from '../../ui/avatar';
@@ -13,6 +14,8 @@ export interface ProfilePageProps {
   onChange: (patch: ProfilePatch) => void;
   /** Switches the UI language at once (and stores it on the profile). */
   onLocaleChange: (locale: Locale) => void;
+  /** P10 (FR-SET-1): upload or remove the picture (`AvatarField`); without it, a note. */
+  avatar?: ReactNode;
 }
 
 /** A fixed sample for the format previews, far from "today" so it never reads "Tomorrow". */
@@ -21,7 +24,7 @@ const sampleToday = '2026-01-01';
 const sampleTime = '14:30';
 
 /** FR-SET-1: name, language, timezone, week start, date and time format. Saved per field. */
-export function ProfilePage({ user, onChange, onLocaleChange }: ProfilePageProps) {
+export function ProfilePage({ user, onChange, onLocaleChange, avatar }: ProfilePageProps) {
   const { t } = useTranslation('settings');
   const { t: tc } = useTranslation();
   const datePreview = (dateFormat: CurrentUser['dateFormat']) =>
@@ -54,7 +57,7 @@ export function ProfilePage({ user, onChange, onLocaleChange }: ProfilePageProps
             <p className="truncate text-sm text-text-muted">{user.email}</p>
           </div>
         </div>
-        <p className="text-sm text-text-muted">{t('profile.pictureNote')}</p>
+        {avatar ?? <p className="text-sm text-text-muted">{t('profile.pictureNote')}</p>}
       </SettingsSection>
 
       <SettingsSection title={t('profile.regionTitle')} description={t('profile.regionBody')}>

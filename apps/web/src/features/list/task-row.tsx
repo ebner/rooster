@@ -1,17 +1,27 @@
 import { Check, ChevronRight, GripVertical } from 'lucide-react';
-import { type MouseEvent, memo, useCallback } from 'react';
+import { type MouseEvent, memo, Suspense, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
 import { type ListUiState, useListUi } from '../../state/list-store';
 import { iconStrokeWidth } from '../../ui/button';
 import { TaskCheckbox } from '../../ui/task-checkbox';
 import { DateCell, type DueValue } from '../dates';
+import type { ReminderSlotProps } from '../dates/date-popover';
 import { RowAssignee } from '../people/assignee-avatar';
 import { DropLine } from './drop-line';
 import { GridCell, GridRow } from './grid';
+import { LazyTaskReminders } from './lazy';
 import { useListContext } from './list-context';
 import type { TaskRow as TaskRowModel } from './model/rows';
-import { DescriptionIndicator, GroupChip, RowTagChips, SubtaskCounter } from './task-meta';
+import {
+  AttachmentCount,
+  DescriptionIndicator,
+  GroupChip,
+  ReminderIndicator,
+  RepeatIndicator,
+  RowTagChips,
+  SubtaskCounter,
+} from './task-meta';
 import { TitleInput } from './title-input';
 import { useKeyboardDragHandle } from './use-list-dnd';
 
@@ -162,6 +172,15 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
   );
 
   const onDueChange = (next: DueValue | null) => controller.setDue([id], next);
+  // P10: the picker's reminder section; it loads (and fetches the reminders) when shown.
+  const renderReminders = useCallback(
+    (slot: ReminderSlotProps) => (
+      <Suspense fallback={null}>
+        <LazyTaskReminders taskId={id} controller={controller} ctx={dateCtx} slot={slot} />
+      </Suspense>
+    ),
+    [id, controller, dateCtx],
+  );
 
   const label = task.title || t('row.untitled');
   return (
@@ -313,7 +332,12 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
             {row.groupChip !== undefined && <GroupChip name={row.groupChip} />}
             <RowTagChips task={task} />
             <DescriptionIndicator task={task} />
+            <ReminderIndicator task={task} ctx={dateCtx} />
             <SubtaskCounter task={task} />
+            <AttachmentCount task={task} />
+            {task.recurrence && (
+              <RepeatIndicator rule={task.recurrence} basis={task.recurrenceBasis} ctx={dateCtx} />
+            )}
             {assignee !== null && <RowAssignee orgId={controller.orgId} assigneeId={assignee} />}
           </span>
         )}
@@ -328,10 +352,15 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
               dueTime: task.dueTime,
               dueTz: task.dueTz,
               startDate: task.startDate,
+              recurrence: task.recurrence ?? null,
+              recurrenceBasis: task.recurrenceBasis ?? null,
             }}
             startDate={task.startDate}
             onChange={onDueChange}
             ctx={dateCtx}
+            repeatable
+            renderReminders={renderReminders}
+            showReminders={task.nextReminderAt != null}
             // Phones give the title the room of the fixed date column (labels stay right-aligned).
             className="max-tablet:w-auto"
             completed={done}

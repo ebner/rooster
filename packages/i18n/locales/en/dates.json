@@ -138,8 +138,105 @@
       "readOnly": "Read-only",
       "rangeSet": "Range set",
       "rangePickStart": "Pick start",
-      "rangeTyped": "Typed range"
+      "rangeTyped": "Typed range",
+      "repeatPreset": "Weekly, with reminders",
+      "repeatCustom": "Custom: every 2 months on the last Friday, 4 times",
+      "repeatWeekdays": "Custom: every 2 weeks on Mon and Thu",
+      "remindersTimed": "Timed task: chips, presets, custom “2h”",
+      "remindersNoDate": "No due date: dormant chip, absolute only",
+      "remindersFull": "Five reminders (the limit)",
+      "reminderChips": "Chips: pending, absolute, sent, dormant (focus)",
+      "sheetRepeat": "Phone date sheet: Repeat and Reminders rows"
     },
-    "range": "Date popover: start date"
+    "range": "Date popover: start date",
+    "repeatReminders": "Repeat and reminders"
+  },
+  "repeat": {
+    "label": "Repeat",
+    "add": "Repeat",
+    "remove": "Stop repeating",
+    "none": "Doesn’t repeat",
+    "presets": "How often",
+    "custom": "Custom…",
+    "rule": {
+      "daily": "{count, plural, one {Daily} other {Every # days}}",
+      "weekly": "{count, plural, one {Weekly on {days}} other {Every # weeks on {days}}}",
+      "weekdays": "Every weekday",
+      "monthlyDay": "{count, plural, one {Monthly on the {day}} other {Every # months on the {day}}}",
+      "monthlyNth": "{count, plural, one {Monthly on the {nth} {weekday}} other {Every # months on the {nth} {weekday}}}",
+      "yearly": "{count, plural, one {Yearly on {date}} other {Every # years on {date}}}",
+      "after": {
+        "DAILY": "{count, plural, one {# day} other {# days}} after completion",
+        "WEEKLY": "{count, plural, one {# week} other {# weeks}} after completion",
+        "MONTHLY": "{count, plural, one {# month} other {# months}} after completion",
+        "YEARLY": "{count, plural, one {# year} other {# years}} after completion"
+      },
+      "endCount": "{rule}, {count, plural, one {# time} other {# times}}",
+      "endUntil": "{rule}, until {date}"
+    },
+    "ordinalDay": "{day, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}",
+    "monthDay": {
+      "monthFirst": "{month} {day}",
+      "dayFirst": "{day} {month}"
+    },
+    "nth": {
+      "1": "first",
+      "2": "second",
+      "3": "third",
+      "4": "fourth",
+      "last": "last"
+    },
+    "every": "Every",
+    "unitLabel": "Repeat unit",
+    "unit": {
+      "DAILY": "{count, plural, one {day} other {days}}",
+      "WEEKLY": "{count, plural, one {week} other {weeks}}",
+      "MONTHLY": "{count, plural, one {month} other {months}}",
+      "YEARLY": "{count, plural, one {year} other {years}}"
+    },
+    "on": "On",
+    "monthlyLabel": "Day of the month",
+    "monthlyDay": "On the {day}",
+    "monthlyNth": "On the {nth} {weekday}",
+    "afterCompletion": "Count from completion",
+    "ends": "Ends",
+    "endNever": "Never",
+    "endUntil": "On a date",
+    "endCount": "After a number of times",
+    "untilLabel": "Last date",
+    "untilPlaceholder": "Type a date… (e.g. 31 dec)",
+    "countLabel": "Times"
+  },
+  "reminder": {
+    "label": "Reminders",
+    "add": "Add",
+    "addReminder": "Add reminder",
+    "toggle": "Reminder",
+    "loading": "Loading reminders…",
+    "presets": "Remind me",
+    "atDue": "At due time",
+    "onTheDay": "On the day",
+    "onTheDayAt": "On the day at {time}",
+    "preset15m": "15 min before",
+    "preset1h": "1 hour before",
+    "preset1d": "1 day before",
+    "minutesBefore": "{count} min before",
+    "hoursBefore": "{count} h before",
+    "daysBefore": "{count, plural, one {# day} other {# days}} before",
+    "chip": "{offset} · {when}",
+    "dormant": "needs a due date",
+    "firedSr": "(sent)",
+    "remove": "Remove reminder {reminder}",
+    "full": "You can have at most {count} reminders on a task.",
+    "absoluteOnly": "Set a due date to be reminded before it. Without one, pick a date and time.",
+    "custom": "Custom…",
+    "customLabel": "Custom reminder",
+    "customPlaceholder": "e.g. 2h, 3d or fri 14:00",
+    "customPlaceholderAbsolute": "e.g. fri 14:00",
+    "error": {
+      "invalid": "Can't understand that",
+      "needsDue": "That needs a due date. Pick a date and time instead.",
+      "past": "That time has passed"
+    }
   }
 }

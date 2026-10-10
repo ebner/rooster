@@ -2,6 +2,7 @@ import { uuidv7 } from '@rooster/core/ids';
 import { ancestorsOf, type ListState, listOps, orderedGroups } from '@rooster/core/reducers';
 import type { Comment, Task } from '@rooster/core/schemas';
 import {
+  Bell,
   Check,
   ChevronDown,
   Copy,
@@ -12,6 +13,7 @@ import {
   Minimize2,
   MoreHorizontal,
   Plus,
+  Repeat,
   SquareArrowOutUpRight,
   Trash2,
   X,
@@ -57,11 +59,20 @@ import { CommentComposer, type CommentComposerHandle } from '../collab/comment-c
 import { FollowerStack, FollowToggle } from '../collab/followers';
 import { LazyPaneActivity } from '../collab/lazy';
 import { DateCell, DateLabel, type DueValue, useViewerDateContext } from '../dates';
+import type { ReminderSlotProps } from '../dates/date-popover';
+import { LazyDatePopover } from '../dates/lazy';
 import { QuickDateSheet } from '../dates/quick-date-sheet';
+import { useRuleText } from '../dates/recurrence-text';
+import { ReminderChips, useReminderViews } from '../dates/reminder-chips';
 import { completionHoldMs, ListController, type Translate } from '../list/controller';
 import { motionMs } from '../list/gestures';
 import { GroupSheet } from '../list/group-sheet';
-import { LazyTagPicker } from '../list/lazy';
+import {
+  LazyRecurringDeletePopover,
+  LazyRecurringDeleteSheet,
+  LazyTagPicker,
+  LazyTaskReminders,
+} from '../list/lazy';
 import type { ListContextValue } from '../list/list-context';
 import type { Row } from '../list/model/rows';
 import { AssigneeField } from '../people/assignee-field';
@@ -174,6 +185,14 @@ function PaneContent({
   const [dateOpen, setDateOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const [assigneeOpen, setAssigneeOpen] = useState(false);
+  /** P10: the picker opened on its Repeat or Reminder section (the pane's own rows). */
+  const [dateSection, setDateSection] = useState<'repeat' | 'reminder' | null>(null);
+  /** P10 (FR-REC-4): "Delete this task / this and following" is showing. */
+  const [askDelete, setAskDelete] = useState(false);
+  const repeatButton = useRef<HTMLButtonElement>(null);
+  const reminderButton = useRef<HTMLButtonElement>(null);
+  const moreButton = useRef<HTMLSpanElement>(null);
+  const ruleText = useRuleText(dateCtx);
   const [activityFilter, setActivityFilter] = useActivityFilter(userId);
   const composerRef = useRef<CommentComposerHandle>(null);
   const keyboard = useKeyboardInset();
@@ -204,12 +223,22 @@ function PaneContent({
         prefs: () => ({
           parseTitles: prefs?.parseTitleDates ?? true,
           holdMs: prefs?.completeHideMs ?? completionHoldMs,
+          ...(prefs?.allDayReminderTime ? { allDayReminderTime: prefs.allDayReminderTime } : {}),
         }),
         tags: () => tagsRef.current,
         store: createListStore({ showCompleted: true }),
         rootTaskId: taskId,
       }),
-    [orgId, userId, pipeline, tList, taskId, prefs?.parseTitleDates, prefs?.completeHideMs],
+    [
+      orgId,
+      userId,
+      pipeline,
+      tList,
+      taskId,
+      prefs?.parseTitleDates,
+      prefs?.completeHideMs,
+      prefs?.allDayReminderTime,
+    ],
   );
 
   const context = useMemo<Omit<ListContextValue, 'controller' | 'baseLevel'>>(
@@ -252,16 +281,40 @@ function PaneContent({
     commitTitle();
     const complete = task.completedAt === null;
     if (listTask) controller.toggleComplete([taskId]);
-    else run(tList('undo.edited'), [listOps.completeTask(taskId, complete)]);
+    else {
+      // P10: a recurring task names its next instance, so the undo can remove it again.
+      const nextId = complete && task.recurrence && task.dueDate ? uuidv7() : undefined;
+      run(tList('undo.edited'), [listOps.completeTask(taskId, complete, nextId)]);
+    }
   };
   const duplicate = () => {
     commitTitle();
     controller.duplicate([taskId]);
   };
   const remove = () => {
+    // FR-REC-4: a repeating task asks "this / this and following" first.
+    if (task?.recurrence && task.dueDate && task.completedAt === null) {
+      setAskDelete(true);
+      return;
+    }
     controller.deleteTasks([taskId]);
     pane.close();
   };
+  const removeRecurring = (choice: 'this' | 'following') => {
+    setAskDelete(false);
+    const [label, op] =
+      choice === 'this'
+        ? [tList('undo.skipped'), listOps.skipTask(taskId, uuidv7())]
+        : [tList('undo.seriesDeleted'), listOps.deleteTask(taskId)];
+    controller.run(label, [op], { toast: true });
+    pane.close();
+  };
+  /** The reminder section of the date picker (02 §7 item 5), as the row's picker shows it. */
+  const renderReminders = (slot: ReminderSlotProps) => (
+    <Suspense fallback={null}>
+      <LazyTaskReminders taskId={taskId} controller={controller} ctx={dateCtx} slot={slot} />
+    </Suspense>
+  );
   const copyLink = async () => {
     if (await copyText(taskUrl(orgSlug, taskId))) toast({ message: t('toolbar.linkCopied') });
   };
@@ -356,6 +409,15 @@ function PaneContent({
     [pipeline, orgId, taskId, userId],
   );
 
+  // P10: the viewer's reminders on the task (personal; ADR 0049 §2.4).
+  const reminderViews = useReminderViews(
+    detail.data?.reminders,
+    { dueDate: task?.dueDate ?? null, dueTime: task?.dueTime ?? null },
+    dateCtx,
+  );
+  const removeReminder = (reminder: Parameters<ListController['removeReminder']>[1]) =>
+    controller.removeReminder(taskId, reminder);
+
   useKeymapHandlers(
     inPane({
       escape: leavePane,
@@ -424,7 +486,12 @@ function PaneContent({
     dueTime: task.dueTime,
     dueTz: task.dueTz,
     startDate: task.startDate,
+    recurrence: task.recurrence ?? null,
+    recurrenceBasis: task.recurrenceBasis ?? null,
   };
+  const repeatLabel = task.recurrence
+    ? ruleText(task.recurrence, task.recurrenceBasis)
+    : tDates('repeat.none');
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="detail-pane" data-task-id={taskId}>
@@ -481,50 +548,65 @@ function PaneContent({
             onPress={duplicate}
           />
           <FullScreenButton fullScreen={fullScreen} pane={pane} />
-          <MenuTrigger>
-            <IconButton icon={MoreHorizontal} aria-label={t('toolbar.more')} />
-            <MenuPopover placement="bottom end">
-              <Menu aria-label={t('toolbar.more')}>
-                {task.placement && groups.length > 0 && (
-                  <SubmenuTrigger>
-                    <MenuItem icon={FolderInput}>{t('toolbar.moveTo')}</MenuItem>
-                    <MenuPopover placement="start top">
-                      <Menu
-                        aria-label={t('toolbar.moveTo')}
-                        selectionMode="single"
-                        selectedKeys={[task.placement.groupId]}
-                        onAction={(key) => controller.moveToGroup(String(key), [taskId])}
-                      >
-                        {groups.map((g) => (
-                          <MenuItem key={g.id} id={g.id}>
-                            {g.name}
-                          </MenuItem>
-                        ))}
-                      </Menu>
-                    </MenuPopover>
-                  </SubmenuTrigger>
-                )}
-                <MenuItem icon={Hash} onAction={copyId}>
-                  {t('toolbar.copyId')}
-                </MenuItem>
-                <MenuItem
-                  icon={SquareArrowOutUpRight}
-                  onAction={() => window.open(taskUrl(orgSlug, taskId), '_blank', 'noopener')}
-                >
-                  {t('toolbar.openInNewTab')}
-                </MenuItem>
-                <MenuSeparator />
-                <MenuItem
-                  icon={Trash2}
-                  tone="danger"
-                  shortcut={primaryKeys('deleteTask')}
-                  onAction={remove}
-                >
-                  {t('toolbar.delete')}
-                </MenuItem>
-              </Menu>
-            </MenuPopover>
-          </MenuTrigger>
+          {askDelete && moreButton.current && (
+            <Suspense fallback={null}>
+              <LazyRecurringDeletePopover
+                anchor={moreButton.current}
+                title={task.title}
+                onChoose={removeRecurring}
+                onCancel={() => {
+                  setAskDelete(false);
+                  moreButton.current?.querySelector('button')?.focus();
+                }}
+              />
+            </Suspense>
+          )}
+          <span ref={moreButton} className="inline-flex">
+            <MenuTrigger>
+              <IconButton icon={MoreHorizontal} aria-label={t('toolbar.more')} />
+              <MenuPopover placement="bottom end">
+                <Menu aria-label={t('toolbar.more')}>
+                  {task.placement && groups.length > 0 && (
+                    <SubmenuTrigger>
+                      <MenuItem icon={FolderInput}>{t('toolbar.moveTo')}</MenuItem>
+                      <MenuPopover placement="start top">
+                        <Menu
+                          aria-label={t('toolbar.moveTo')}
+                          selectionMode="single"
+                          selectedKeys={[task.placement.groupId]}
+                          onAction={(key) => controller.moveToGroup(String(key), [taskId])}
+                        >
+                          {groups.map((g) => (
+                            <MenuItem key={g.id} id={g.id}>
+                              {g.name}
+                            </MenuItem>
+                          ))}
+                        </Menu>
+                      </MenuPopover>
+                    </SubmenuTrigger>
+                  )}
+                  <MenuItem icon={Hash} onAction={copyId}>
+                    {t('toolbar.copyId')}
+                  </MenuItem>
+                  <MenuItem
+                    icon={SquareArrowOutUpRight}
+                    onAction={() => window.open(taskUrl(orgSlug, taskId), '_blank', 'noopener')}
+                  >
+                    {t('toolbar.openInNewTab')}
+                  </MenuItem>
+                  <MenuSeparator />
+                  <MenuItem
+                    icon={Trash2}
+                    tone="danger"
+                    shortcut={primaryKeys('deleteTask')}
+                    onAction={remove}
+                  >
+                    {t('toolbar.delete')}
+                  </MenuItem>
+                </Menu>
+              </MenuPopover>
+            </MenuTrigger>
+          </span>
           <IconButton
             icon={X}
             aria-label={t('toolbar.close')}
@@ -607,6 +689,23 @@ function PaneContent({
                 )}
               </PropButton>
             </MobileProp>
+            <MobileProp label={t('props.reminders')}>
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 py-2">
+                <ReminderChips views={reminderViews} ctx={dateCtx} onRemove={removeReminder} />
+                <IconButton
+                  icon={Plus}
+                  aria-label={tDates('reminder.addReminder')}
+                  onPress={() => setDateSection('reminder')}
+                />
+              </div>
+            </MobileProp>
+            <MobileProp label={t('props.repeat')}>
+              <PropButton onPress={() => setDateSection('repeat')} data-testid="sheet-repeat">
+                <span className={cn('min-w-0 truncate', !task.recurrence && 'text-text-muted')}>
+                  {repeatLabel}
+                </span>
+              </PropButton>
+            </MobileProp>
             {task.placement && groups.length > 0 && (
               <MobileProp label={t('props.group')}>
                 <PropButton onPress={() => setGroupOpen(true)} aria-label={t('props.groupLabel')}>
@@ -672,20 +771,83 @@ function PaneContent({
                 </dd>
               </>
             )}
-            <dt className="flex h-property-row items-center text-text-muted">{t('props.due')}</dt>
-            <dd className="flex h-property-row min-w-0 items-center">
-              <DateCell
-                value={due}
-                startDate={task.startDate}
-                ctx={dateCtx}
-                completed={done}
-                rowHovered
-                isOpen={dateOpen}
-                onOpenChange={setDateOpen}
-                onChange={(next) => controller.setDue([taskId], next)}
-                className="justify-start"
-              />
+            <dt className="flex h-property-row items-center self-start text-text-muted">
+              {t('props.due')}
+            </dt>
+            <dd className="flex min-w-0 flex-col items-start">
+              <div className="flex h-property-row min-w-0 items-center">
+                <DateCell
+                  value={due}
+                  startDate={task.startDate}
+                  ctx={dateCtx}
+                  completed={done}
+                  rowHovered
+                  isOpen={dateOpen}
+                  onOpenChange={setDateOpen}
+                  onChange={(next) => controller.setDue([taskId], next)}
+                  className="justify-start"
+                  repeatable
+                  renderReminders={renderReminders}
+                  showReminders={(detail.data?.reminders?.length ?? 0) > 0}
+                />
+              </div>
+              {/* 02 §7 (P10): the viewer's reminders, under the due date. */}
+              <fieldset
+                className="flex min-w-0 flex-wrap items-center gap-1.5 pb-1"
+                data-testid="pane-reminders"
+              >
+                <legend className="sr-only">{t('props.reminders')}</legend>
+                <ReminderChips
+                  views={reminderViews}
+                  ctx={dateCtx}
+                  onRemove={removeReminder}
+                  className="contents"
+                />
+                <Button
+                  ref={reminderButton}
+                  size="sm"
+                  variant="ghost"
+                  icon={Bell}
+                  onPress={() => setDateSection('reminder')}
+                  className="-ms-2"
+                >
+                  {tDates('reminder.addReminder')}
+                </Button>
+              </fieldset>
             </dd>
+            <dt className="flex h-property-row items-center text-text-muted">
+              {t('props.repeat')}
+            </dt>
+            <dd className="flex h-property-row min-w-0 items-center">
+              <Button
+                ref={repeatButton}
+                size="sm"
+                variant="ghost"
+                icon={Repeat}
+                onPress={() => setDateSection('repeat')}
+                className={cn('-ms-2 max-w-full', !task.recurrence && 'text-text-muted')}
+                data-testid="pane-repeat"
+              >
+                <span className="truncate">{repeatLabel}</span>
+              </Button>
+            </dd>
+            {dateSection !== null && !mobile && (
+              <Suspense fallback={null}>
+                <LazyDatePopover
+                  triggerRef={dateSection === 'repeat' ? repeatButton : reminderButton}
+                  isOpen
+                  onOpenChange={(open) => !open && setDateSection(null)}
+                  value={due}
+                  onChange={(next) => controller.setDue([taskId], next)}
+                  ctx={dateCtx}
+                  placement="bottom start"
+                  repeatable
+                  renderReminders={renderReminders}
+                  initialSection={dateSection}
+                  showReminders={dateSection === 'reminder'}
+                />
+              </Suspense>
+            )}
             {task.placement && groups.length > 0 && (
               <>
                 <dt className="flex h-property-row items-center text-text-muted">
@@ -870,13 +1032,30 @@ function PaneContent({
       {mobile && (
         <>
           <QuickDateSheet
-            isOpen={dateOpen}
-            onOpenChange={setDateOpen}
+            isOpen={dateOpen || dateSection !== null}
+            onOpenChange={(open) => {
+              if (open) return;
+              setDateOpen(false);
+              setDateSection(null);
+            }}
             value={due}
             ctx={dateCtx}
             subject={task.title}
             onCommit={(next) => controller.setDue([taskId], next)}
+            repeatable
+            renderReminders={renderReminders}
+            initialSection={dateSection ?? undefined}
           />
+          {askDelete && (
+            <Suspense fallback={null}>
+              <LazyRecurringDeleteSheet
+                isOpen
+                title={task.title}
+                onChoose={removeRecurring}
+                onCancel={() => setAskDelete(false)}
+              />
+            </Suspense>
+          )}
           <GroupSheet
             isOpen={groupOpen}
             onOpenChange={setGroupOpen}

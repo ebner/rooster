@@ -1,6 +1,7 @@
 import {
   diffDays,
   dueInstant,
+  formatRelative,
   formatTime,
   type IsoDate,
   parseIsoDate,
@@ -35,6 +36,31 @@ function hhmmIn(timeZone: string, instant: number): string {
   const hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
   const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
   return `${hour}:${minute}`;
+}
+
+/** An instant as a viewer-local date and `HH:MM` (reminders, P10). */
+export function instantToLocal(instant: number, timezone: string): LocalDue {
+  return { date: todayIn(timezone, instant), time: hhmmIn(timezone, instant) };
+}
+
+/**
+ * The relative label of an instant for the viewer: "Today 13:00", "Fri 9 AM", "Oct 12 14:00"
+ * (02 §8.3), as the row's bell and the reminder chips show it.
+ */
+export function formatInstant(
+  instant: number,
+  ctx: Pick<ViewerDateContext, 'today' | 'locale' | 'dateFormat' | 'timeFormat' | 'timezone'>,
+): string {
+  const local = instantToLocal(instant, ctx.timezone);
+  return formatRelative(
+    { dueDate: local.date, dueTime: local.time },
+    {
+      today: ctx.today,
+      locale: ctx.locale,
+      dateFormat: ctx.dateFormat,
+      timeFormat: ctx.timeFormat,
+    },
+  );
 }
 
 /**

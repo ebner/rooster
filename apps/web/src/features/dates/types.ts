@@ -1,4 +1,5 @@
 import type { DateFormat, IsoDate, Locale, TimeFormat, WeekStart } from '@rooster/core/dates';
+import type { RecurrenceBasis } from '@rooster/core/recurrence';
 
 /**
  * A task's due fields as stored (05 §5): a floating `YYYY-MM-DD` date, an optional
@@ -14,6 +15,13 @@ export interface DueValue {
   dueTime: string | null;
   dueTz: string | null;
   startDate?: IsoDate | null | undefined;
+  /**
+   * P10 (FR-REC): the repeat rule and its basis, part of the due unit. Left out (undefined)
+   * means "unchanged" in a patch; null stops the series. The picker only sets them when it
+   * shows or changes a repeat.
+   */
+  recurrence?: string | null | undefined;
+  recurrenceBasis?: RecurrenceBasis | null | undefined;
 }
 
 /** No due date (and so no start date). */
@@ -39,11 +47,13 @@ export interface ViewerDateContext {
   timezone: string;
 }
 
-/** True when both describe the same due date, time and start date. */
+/** True when both describe the same due date, time, start date and repeat. */
 export function sameDue(a: DueValue | null, b: DueValue | null): boolean {
   const x = a ?? noDue;
   const y = b ?? noDue;
   if (x.dueDate !== y.dueDate || x.dueTime !== y.dueTime) return false;
   if ((x.startDate ?? null) !== (y.startDate ?? null)) return false;
+  if ((x.recurrence ?? null) !== (y.recurrence ?? null)) return false;
+  if (x.recurrence && (x.recurrenceBasis ?? 'due') !== (y.recurrenceBasis ?? 'due')) return false;
   return x.dueTime === null || x.dueTz === y.dueTz;
 }

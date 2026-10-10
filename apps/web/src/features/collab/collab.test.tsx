@@ -183,6 +183,18 @@ describe('InboxPage (FR-NOT-1)', () => {
     expect(rows[2]?.hasAttribute('data-unread')).toBe(false);
   });
 
+  test('P10: a reminder has no actor, shows the due moment and marks a late one', () => {
+    renderInbox();
+    const rows = screen.getAllByTestId('notification');
+    const onTime = rows[6] as HTMLElement;
+    const late = rows[7] as HTMLElement;
+    expect(onTime.textContent).toContain('Reminder · due Mon 2 PM');
+    expect(onTime.textContent).toContain('Write Q4 plan');
+    expect(onTime.textContent).not.toContain('Rooster');
+    expect(within(onTime).queryByTestId('reminder-late')).toBeNull();
+    expect(within(late).getByTestId('reminder-late').textContent).toContain('sent late');
+  });
+
   test('J/↓ move, Enter opens, U toggles read, Shift+U marks all read', () => {
     const props = renderInbox();
     act(() => {

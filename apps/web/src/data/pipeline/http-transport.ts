@@ -61,6 +61,12 @@ function request(op: ListOp, orgId: string, signal?: AbortSignal): Promise<Fetch
         body: wire(op.payload),
         ...init,
       });
+    case 'task.skip':
+      return api.POST('/api/v1/tasks/{id}/skip', {
+        params: { path: { id } },
+        body: wire(op.payload),
+        ...init,
+      });
     case 'task.delete':
       return api.DELETE('/api/v1/tasks/{id}', { params: { path: { id } }, ...init });
     case 'task.restore':
@@ -148,6 +154,18 @@ function request(op: ListOp, orgId: string, signal?: AbortSignal): Promise<Fetch
       return api.DELETE('/api/v1/comments/{id}', { params: { path: { id } }, ...init });
     case 'comment.restore':
       return api.POST('/api/v1/comments/{id}/restore', { params: { path: { id } }, ...init });
+    // P10 (ADR 0049 §2.7): reminders go through the outbox like follows; `entityId` is the reminder.
+    case 'reminder.create':
+      return api.POST('/api/v1/tasks/{id}/reminders', {
+        params: { path: { id: op.taskId } },
+        body: wire(op.payload),
+        ...init,
+      });
+    case 'reminder.delete':
+      return api.DELETE('/api/v1/tasks/{id}/reminders/{reminderId}', {
+        params: { path: { id: op.taskId, reminderId: id } },
+        ...init,
+      });
   }
 }
 

@@ -46,6 +46,7 @@ function NotificationsRoute() {
     reminderTime: me.data?.prefs?.reminderTime ?? DEFAULT_PREFS.reminderTime,
     digestTime: me.data?.prefs?.digestTime ?? DEFAULT_PREFS.digestTime,
     emailMode: me.data?.prefs?.emailMode ?? DEFAULT_PREFS.emailMode,
+    allDayReminderTime: me.data?.prefs?.allDayReminderTime ?? DEFAULT_PREFS.allDayReminderTime,
   };
   return (
     <NotificationsPage

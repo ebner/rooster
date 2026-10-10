@@ -11,7 +11,10 @@
     "colonChip": "↵ again to turn into group “{name}”",
     "pasteChip": "Create {count, plural, one {# task} other {# tasks}}? ↵",
     "breadcrumb": "{title} ›",
-    "hasDescription": "Has description"
+    "hasDescription": "Has description",
+    "reminder": "Reminder: {when}",
+    "repeats": "Repeats: {rule}",
+    "attachments": "{count, plural, one {# attachment} other {# attachments}}"
   },
   "group": {
     "untitled": "New group",
@@ -92,7 +95,12 @@
     "duplicated": "{count, plural, one {Task duplicated} other {# tasks duplicated}}",
     "tagged": "Tag added",
     "untagged": "Tag removed",
-    "madeSubtask": "{count, plural, one {Made a subtask of “{parent}”} other {Made # tasks subtasks of “{parent}”}}"
+    "madeSubtask": "{count, plural, one {Made a subtask of “{parent}”} other {Made # tasks subtasks of “{parent}”}}",
+    "skipped": "Task deleted · the series continues",
+    "seriesDeleted": "Task deleted · it no longer repeats",
+    "dateClearedReminders": "Date cleared · reminders paused",
+    "reminderAdded": "Reminder added",
+    "reminderRemoved": "Reminder removed"
   },
   "dnd": {
     "handleRole": "Drag handle",
@@ -121,7 +129,12 @@
       "subtask_depth": "subtasks can only be nested 5 levels deep",
       "invalid_parent": "the parent task isn’t available",
       "tag_name_taken": "a tag with that name already exists",
-      "not_subtask": "only subtasks can be reordered that way"
+      "not_subtask": "only subtasks can be reordered that way",
+      "reminder_needs_due": "a reminder before the due date needs a due date",
+      "reminder_in_past": "that reminder time has passed",
+      "too_many_reminders": "a task can have at most 5 reminders",
+      "not_recurring": "the task doesn’t repeat",
+      "id_conflict": "it was already saved differently"
     }
   },
   "state": {
@@ -227,8 +240,13 @@
     "editorLink": "Link (with text selected)",
     "editorToolbar": "Focus the formatting toolbar",
     "postComment": "Post comment",
+    "attachFile": "Attach files",
+    "lightboxPrevious": "Previous image",
+    "lightboxNext": "Next image",
+    "lightboxClose": "Close the image",
     "toggleRead": "Mark as read or unread",
-    "markAllRead": "Mark all read"
+    "markAllRead": "Mark all read",
+    "dateReminder": "Reminders"
   },
   "dev": {
     "section": "My tasks list",
@@ -248,8 +266,11 @@
       "planNotes": "Goals, budget and the three open questions from the kickoff.",
       "passport": "Renew passport",
       "offsite": "Plan the team offsite",
-      "done": "Send the slides"
-    }
+      "done": "Send the slides",
+      "weekly": "Water the plants"
+    },
+    "recurringDeletePopover": "Anchored popover (focus)",
+    "recurringDeleteSheet": "Phone sheet"
   },
   "subtasks": {
     "add": "Add subtask",
@@ -270,5 +291,12 @@
     "createdUnassigned": "{count, plural, one {Added} other {# tasks added}} without an assignee",
     "someone": "someone",
     "suggestions": "People"
+  },
+  "recurringDelete": {
+    "title": "Delete a repeating task",
+    "body": "“{title}” repeats. Delete only this one, or this one and the ones that would follow?",
+    "this": "Delete this task",
+    "following": "Delete this and following",
+    "cancel": "Cancel"
   }
 }

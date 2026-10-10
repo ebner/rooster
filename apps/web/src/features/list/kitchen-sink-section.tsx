@@ -4,12 +4,17 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ListTransportContext, useListPipeline } from '../../data/list';
 import { createFixtureTransport } from '../../data/pipeline/fixture-transport';
+import { cn } from '../../lib/cn';
+import { popoverSurface } from '../../ui/popover';
 import { useViewerDateContext } from '../dates';
-import { Group, Section } from '../dev-ui/layout';
+import { Group, Section, Specimen } from '../dev-ui/layout';
 import { BulkBar } from './bulk-bar';
 import { ListController } from './controller';
 import { ListContext } from './list-context';
 import { MyListView } from './my-list-view';
+import { RecurringDeleteBody, RecurringDeleteSheet } from './recurring-delete';
+
+const noop = () => {};
 
 const fixtureUser = '01900000-0000-7000-8000-000000000001';
 const fixtureOrg = '01900000-0000-7000-8000-0000000000aa';
@@ -44,7 +49,8 @@ function BulkBarSpecimen() {
 export function ListSection() {
   const { t } = useTranslation('list');
   const setup = useMemo(() => {
-    const today = todayIn(Intl.DateTimeFormat().resolvedOptions().timeZone, Date.now());
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const today = todayIn(zone, Date.now());
     const transport = createFixtureTransport({
       userId: fixtureUser,
       tags: [
@@ -77,8 +83,21 @@ export function ListSection() {
           },
           { title: t('dev.tasks.passport'), dueDate: addDays(today, -2) },
         ],
-        3: [{ title: t('dev.tasks.offsite'), dueDate: addDays(today, 1) }],
+        3: [
+          { title: t('dev.tasks.offsite'), dueDate: addDays(today, 1) },
+          // P10: the bell, the paperclip and the repeat icon in the row meta.
+          {
+            title: t('dev.tasks.weekly'),
+            dueDate: addDays(today, 1),
+            dueTime: '14:00',
+            dueTz: zone,
+            recurrence: 'FREQ=WEEKLY',
+            reminders: [60],
+            attachments: 2,
+          },
+        ],
       },
+      timezone: zone,
     });
     return { transport, queryClient: new QueryClient() };
   }, [t]);
@@ -94,6 +113,28 @@ export function ListSection() {
           </Group>
           <Group title={t('dev.bulkBar')}>
             <BulkBarSpecimen />
+          </Group>
+          <Group title={t('recurringDelete.title')}>
+            <Specimen label={t('dev.recurringDeletePopover')}>
+              <div className={cn(popoverSurface, 'w-date-popover p-3')}>
+                <RecurringDeleteBody
+                  title={t('dev.tasks.weekly')}
+                  onChoose={noop}
+                  onCancel={noop}
+                  autoFocus={false}
+                  data-force="focus"
+                />
+              </div>
+            </Specimen>
+            <Specimen label={t('dev.recurringDeleteSheet')}>
+              <RecurringDeleteSheet
+                isOpen
+                isStatic
+                title={t('dev.tasks.weekly')}
+                onChoose={noop}
+                onCancel={noop}
+              />
+            </Specimen>
           </Group>
         </ListTransportContext.Provider>
       </QueryClientProvider>

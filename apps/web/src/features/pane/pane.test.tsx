@@ -1,3 +1,4 @@
+import { todayIn } from '@rooster/core/dates';
 import type { ListOp } from '@rooster/core/reducers';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -255,5 +256,58 @@ describe('#tag tokens (02 §3.4)', () => {
         'brandnew',
       ),
     );
+  });
+});
+
+describe('P10: repeat, reminders and the recurring delete in the pane', () => {
+  const today = () => todayIn(fixtureMe.user.timezone, Date.now());
+
+  test('the Repeat row and the Reminders line under the due date', async () => {
+    const { sent } = await setup({
+      timezone: fixtureMe.user.timezone,
+      tasks: {
+        1: [
+          { title: 'Weekly', dueDate: today(), recurrence: 'FREQ=DAILY', reminders: [60] },
+          'Plain',
+        ],
+      },
+    });
+    fireEvent.click(rowOf('Weekly'));
+    await screen.findByTestId('pane-title');
+    expect(screen.getByTestId('pane-repeat').textContent).toBe('Daily');
+    const reminders = screen.getByTestId('pane-reminders');
+    const chip = await within(reminders).findByTestId('reminder-chip');
+    expect(chip.textContent).toContain('1 h before');
+    fireEvent.click(within(chip).getByRole('button', { name: /^Remove reminder/ }));
+    await waitFor(() => expect(sent.some((op) => op.kind === 'reminder.delete')).toBe(true));
+    await waitFor(() => expect(within(reminders).queryByTestId('reminder-chip')).toBeNull());
+
+    fireEvent.click(within(reminders).getByRole('button', { name: 'Add reminder' }));
+    const section = await screen.findByTestId('reminder-section');
+    fireEvent.click(within(section).getByRole('button', { name: '15 min before' }));
+    await waitFor(() => expect(sent.some((op) => op.kind === 'reminder.create')).toBe(true));
+    await waitFor(() => expect(within(reminders).getByTestId('reminder-chip')).toBeTruthy());
+    // Adding keeps the picker open (02 §7); Esc closes it.
+    fireEvent.keyDown(within(section).getAllByRole('button')[0] as HTMLElement, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('reminder-section')).toBeNull());
+
+    fireEvent.click(rowOf('Plain'));
+    await waitFor(() =>
+      expect(screen.getByTestId('pane-repeat').textContent).toBe('Doesn’t repeat'),
+    );
+  });
+
+  test('Tab+Delete on a repeating task asks first; "this task" skips it', async () => {
+    const { sent } = await setup({
+      tasks: { 1: [{ title: 'Standup', dueDate: today(), recurrence: 'FREQ=DAILY' }] },
+    });
+    fireEvent.click(rowOf('Standup'));
+    await screen.findByTestId('pane-title');
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Delete/ }));
+    const prompt = await screen.findByTestId('recurring-delete');
+    fireEvent.click(within(prompt).getByTestId('recurring-delete-this'));
+    await waitFor(() => expect(sent.some((op) => op.kind === 'task.skip')).toBe(true));
+    expect(sent.some((op) => op.kind === 'task.delete')).toBe(false);
   });
 });

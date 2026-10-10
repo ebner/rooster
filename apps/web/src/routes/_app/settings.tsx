@@ -12,6 +12,7 @@ const sections: readonly SettingsSection[] = [
   'profile',
   'behaviour',
   'notifications',
+  'calendar',
   'security',
   'data',
 ];

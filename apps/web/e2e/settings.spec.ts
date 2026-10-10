@@ -24,7 +24,7 @@ for (const viewport of [
     await page.goto('/settings');
     await expect(page).toHaveURL(/\/settings\/profile$/);
     const menu = page.getByRole('navigation', { name: 'Settings sections' });
-    await expect(menu.getByRole('link')).toHaveCount(5);
+    await expect(menu.getByRole('link')).toHaveCount(6);
     await expect(menu.getByRole('link', { name: 'Profile' })).toHaveAttribute(
       'aria-current',
       'page',

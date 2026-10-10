@@ -1,6 +1,8 @@
 import { compareRows, isRow } from '@rooster/core/everyone';
 import { uuidv7 } from '@rooster/core/ids';
+import { DEFAULT_PREFS } from '@rooster/core/limits';
 import { generateNKeysBetween } from '@rooster/core/ordering';
+import { normalizeRule } from '@rooster/core/recurrence';
 import {
   ancestorsOf,
   applyOp,
@@ -14,12 +16,14 @@ import {
   subtreeHeight,
   tasksInGroup,
 } from '@rooster/core/reducers';
+import { type ReminderSpec, resolveFireAt } from '@rooster/core/reminders';
 import type {
   ActivityItem,
   ActivityPage,
   Comment,
   Group,
   MyList,
+  Reminder,
   Tag,
   Task,
   TaskDetail,
@@ -47,6 +51,13 @@ export type FixtureTask =
       assignee?: string | null;
       /** P6: comment bodies, oldest first, by the fixture user. */
       comments?: readonly string[];
+      /** P10: a repeat rule (needs `dueDate`), stored normalised. */
+      recurrence?: string;
+      recurrenceBasis?: 'due' | 'completion';
+      /** P10: the fixture user's relative reminders, minutes before the due moment. */
+      reminders?: readonly number[];
+      /** P10: the attachment count the row shows. */
+      attachments?: number;
     };
 
 export interface FixtureOptions {
@@ -61,6 +72,8 @@ export interface FixtureOptions {
   tags?: readonly { name: string; color?: TagColor }[];
   /** P6: the other members (assignees must be one of them or the fixture user). */
   members?: readonly { userId: string; name: string }[];
+  /** P10: the fixture user's zone (completion dates, all-day reminders). Default UTC. */
+  timezone?: string;
 }
 
 /**
@@ -77,8 +90,52 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
   descriptions: Map<string, string>;
   /** P6: every comment by ID (deleted ones carry `deleted`). */
   comments: Map<string, Comment & { deleted?: boolean }>;
+  /** P10: the fixture user's reminders by task. */
+  reminders: Map<string, Reminder[]>;
 } {
   const { userId, latencyMs = 0 } = options;
+  const owner = {
+    timezone: options.timezone ?? 'UTC',
+    allDayReminderTime: DEFAULT_PREFS.allDayReminderTime,
+  };
+  const reminders = new Map<string, Reminder[]>();
+  const fireAtFor = (r: Pick<Reminder, 'kind' | 'offsetMinutes' | 'remindAt'>, task: Task) =>
+    resolveFireAt(r, task, owner);
+  const addReminder = (task: Task, spec: ReminderSpec, id: string = uuidv7()): Reminder => {
+    const list = reminders.get(task.id) ?? [];
+    const same = list.find((r) =>
+      'at' in spec ? r.remindAt === spec.at : r.offsetMinutes === spec.offsetMinutes,
+    );
+    if (same) return same;
+    const relative = 'offsetMinutes' in spec;
+    const base = {
+      kind: relative ? ('relative' as const) : ('absolute' as const),
+      offsetMinutes: relative ? spec.offsetMinutes : null,
+      remindAt: relative ? null : spec.at,
+    };
+    const reminder: Reminder = {
+      id,
+      taskId: task.id,
+      ...base,
+      fireAt: fireAtFor(base, task),
+      firedAt: null,
+      createdAt: Date.now(),
+    };
+    reminders.set(task.id, [...list, reminder]);
+    return reminder;
+  };
+  /** The earliest pending reminder (the row's bell), after resolving against the task's due. */
+  const bellOf = (task: Task): number | null => {
+    const list = (reminders.get(task.id) ?? []).map((r) => ({ ...r, fireAt: fireAtFor(r, task) }));
+    reminders.set(task.id, list);
+    if (task.completedAt !== null) return null;
+    let min: number | null = null;
+    for (const r of list) {
+      if (r.firedAt === null && r.fireAt !== null && (min === null || r.fireAt < min))
+        min = r.fireAt;
+    }
+    return min;
+  };
   const orgs = new Map<string, ListState>();
   const tagsByOrg = new Map<string, Tag[]>();
   const descriptions = new Map<string, string>();
@@ -165,11 +222,19 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
         tagIds: (spec.tags ?? []).map((name) => tagNamed(orgId, name).id),
         completedAt: spec.completed ? 1 : null,
         hasDescription: (spec.description ?? '').trim() !== '',
-        counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
+        counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: spec.attachments ?? 0 },
         placement: ownRow ? { groupId, position } : null,
         createdAt: seq,
         updatedAt: 0,
+        recurrence:
+          spec.recurrence && spec.dueDate
+            ? normalizeRule(spec.recurrence, spec.dueDate, spec.recurrenceBasis ?? 'due')
+            : null,
+        recurrenceBasis: spec.recurrence && spec.dueDate ? (spec.recurrenceBasis ?? 'due') : null,
+        nextReminderAt: null,
       };
+      for (const offsetMinutes of spec.reminders ?? []) addReminder(task, { offsetMinutes });
+      task.nextReminderAt = bellOf(task);
       if (spec.description) descriptions.set(id, spec.description);
       for (const [i, body] of (spec.comments ?? []).entries()) {
         const commentId = uuidv7();
@@ -254,6 +319,7 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
     tags: tagsOf,
     descriptions,
     comments,
+    reminders,
     failNext: (status, code = `http_${status}`) => {
       failure = new ApiError(code, status);
     },
@@ -274,6 +340,10 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
             .reverse()
             .map((t) => ({ id: t.id, title: t.title })),
           followers: followers.get(taskId) ?? [],
+          attachments: [],
+          reminders: [...(reminders.get(taskId) ?? [])].sort(
+            (a, b) => (a.fireAt ?? Number.MAX_SAFE_INTEGER) - (b.fireAt ?? Number.MAX_SAFE_INTEGER),
+          ),
         };
         return structuredClone(detail);
       }
@@ -448,6 +518,37 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
           comments.set(comment.id, { ...comment, deleted: op.kind === 'comment.delete' });
           break;
         }
+        case 'reminder.create': {
+          const task = before.tasks[op.taskId];
+          if (!task) throw new ApiError('not_found', 404);
+          const { id, ...spec } = op.payload;
+          if (!('at' in spec) && !task.dueDate) throw new ApiError('reminder_needs_due', 422);
+          if ((reminders.get(task.id)?.length ?? 0) >= 5) {
+            throw new ApiError('too_many_reminders', 409);
+          }
+          const reminder = addReminder(task, spec as ReminderSpec, id);
+          orgs.set(orgId, {
+            ...before,
+            tasks: { ...before.tasks, [task.id]: { ...task, nextReminderAt: bellOf(task) } },
+          });
+          return structuredClone(reminder);
+        }
+        case 'reminder.delete': {
+          const task = before.tasks[op.taskId];
+          if (!task) throw new ApiError('not_found', 404);
+          reminders.set(
+            task.id,
+            (reminders.get(task.id) ?? []).filter((r) => r.id !== op.entityId),
+          );
+          orgs.set(orgId, {
+            ...before,
+            tasks: { ...before.tasks, [task.id]: { ...task, nextReminderAt: bellOf(task) } },
+          });
+          return undefined;
+        }
+        case 'task.skip':
+          if (!before.tasks[op.entityId]?.recurrence) throw new ApiError('not_recurring', 422);
+          break;
         default:
           break;
       }
@@ -458,7 +559,35 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
           throw new ApiError('group_not_empty', 409);
         }
       }
-      let after = applyOp(before, op, { userId, now: op.editTime });
+      let after = applyOp(before, op, {
+        userId,
+        now: op.editTime,
+        timezone: owner.timezone,
+        allDayReminderTime: owner.allDayReminderTime,
+      });
+      // P10: the next instance carries the relative reminders (FR-REM-5); every bell follows
+      // its task's due unit, like the server's `fire_at` (ADR 0049 §2.1).
+      const nextId =
+        op.kind === 'task.complete' || op.kind === 'task.skip' ? op.payload.nextId : undefined;
+      const spawned = nextId ? after.tasks[nextId] : undefined;
+      if (spawned && !before.tasks[nextId as string]) {
+        for (const r of reminders.get(op.entityId) ?? []) {
+          if (r.kind === 'relative' && r.offsetMinutes !== null) {
+            addReminder(spawned, { offsetMinutes: r.offsetMinutes });
+          }
+        }
+      }
+      if (op.kind === 'task.create' && op.payload.reminders?.length) {
+        const created = after.tasks[op.entityId];
+        if (created) for (const spec of op.payload.reminders) addReminder(created, spec);
+      }
+      for (const [id, task] of Object.entries(after.tasks)) {
+        if (!reminders.has(id)) continue;
+        const bell = bellOf(task);
+        if (bell !== (task.nextReminderAt ?? null)) {
+          after = { ...after, tasks: { ...after.tasks, [id]: { ...task, nextReminderAt: bell } } };
+        }
+      }
       if (op.kind === 'task.duplicate') {
         // The server gives copied subtasks ids of its own; replace the derived ones.
         const copy = after.tasks[op.payload.id];
@@ -500,8 +629,15 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
           return undefined;
         case 'task.patch':
           return { task: structuredClone(task), ignoredFields: [] };
-        case 'task.complete':
-          return { task: structuredClone(task) };
+        case 'task.complete': {
+          const next = op.payload.nextId ? after.tasks[op.payload.nextId] : undefined;
+          return { task: structuredClone(task), ...(next ? { next: structuredClone(next) } : {}) };
+        }
+        case 'task.skip': {
+          const next = op.payload.nextId ? after.tasks[op.payload.nextId] : undefined;
+          return { next: next ? structuredClone(next) : null };
+        }
+
         case 'task.move':
           return { placement: task?.placement };
         case 'task.bulk':

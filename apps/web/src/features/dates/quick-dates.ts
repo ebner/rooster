@@ -62,3 +62,10 @@ export function quickDateForEvent(event: ChordEvent): QuickDate | undefined {
   if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return undefined;
   return quickDates.find((q) => q.code === event.code);
 }
+
+/** Alt+R (02 §7, P10): the picker's reminder section, matched by `event.code` like the chips. */
+export function reminderChord(event: ChordEvent): boolean {
+  return (
+    event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.code === 'KeyR'
+  );
+}

@@ -1,6 +1,15 @@
 import { diffDays, type IsoDate } from '@rooster/core/dates';
-import { CalendarRange, Plus, X } from 'lucide-react';
-import { type KeyboardEvent, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
+import { firstOccurrence } from '@rooster/core/recurrence';
+import { Bell, CalendarRange, Plus, Repeat, X } from 'lucide-react';
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { PopoverProps as AriaPopoverProps } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
@@ -13,12 +22,35 @@ import { Popover } from '../../ui/popover';
 import { CalendarGrid, type PickMethod, type CalendarRange as Range } from './calendar-grid';
 import { toDueValue, toLocalDue, useDateText } from './date-text';
 import { type ParsedDate, type ParsedRange, parsePickerInput, parseRangeInput } from './parser';
-import { type QuickDateId, quickDateForEvent, quickDates, quickDateValue } from './quick-dates';
+import {
+  type QuickDateId,
+  quickDateForEvent,
+  quickDates,
+  quickDateValue,
+  reminderChord,
+} from './quick-dates';
+import { type RepeatChoice, RepeatSection, repeatChoiceOf, repeatFields } from './repeat-section';
 import { parseTimeInput, TimeField } from './time-field';
 import { type DueValue, sameDue, type ViewerDateContext } from './types';
 
-/** 03 §3.4: the popover is 320 px wide with 12 px padding. */
-export const datePopoverClass = 'w-date-popover p-3';
+/** 03 §3.4: the popover is 320 px wide with 12 px padding; tall sections scroll inside it. */
+export const datePopoverClass = 'w-date-popover overflow-y-auto p-3';
+
+/** A section of the picker below the calendar (P10). */
+export type DateSection = 'repeat' | 'reminder';
+
+/** What the reminder slot gets from the picker (P10, 02 §7 item 5). */
+export interface ReminderSlotProps {
+  /** The due the reminders resolve against: the draft, or the task's value. */
+  due: DueValue;
+  /** Focus the section's first control (Alt+R, "Add reminder"). */
+  autoFocus: boolean;
+  /**
+   * Saves the date draft now, without closing, so that a relative reminder added next
+   * resolves against it (a reminder is its own op, sent at once).
+   */
+  applyDraft: () => void;
+}
 
 export interface DatePanelProps {
   /** The due value when the picker opened. */
@@ -41,6 +73,19 @@ export interface DatePanelProps {
   defaultRangeMode?: boolean | undefined;
   /** Kitchen sink: force the key-hint platform. */
   platform?: Platform | undefined;
+  /** P10: offer "↻ Repeat" (single tasks; not the bulk bar). */
+  repeatable?: boolean | undefined;
+  /**
+   * P10: the "🔔 Reminder" section's content (the task's reminders and presets). Without it
+   * the picker offers no reminders (the bulk bar, the kitchen sink's plain picker).
+   */
+  renderReminders?: ((slot: ReminderSlotProps) => ReactNode) | undefined;
+  /** P10: open with this section shown and focused ("Repeat" row, "Add reminder"). */
+  initialSection?: DateSection | undefined;
+  /** P10: show the reminder section from the start (the task has reminders). */
+  showReminders?: boolean | undefined;
+  /** P10: saves a value without closing (see `ReminderSlotProps.applyDraft`). */
+  onApply?: ((next: DueValue | null) => void) | undefined;
 }
 
 type RangeStep = 'start' | 'due';
@@ -68,6 +113,11 @@ export function DatePanel({
   defaultText = '',
   defaultRangeMode,
   platform,
+  repeatable = false,
+  renderReminders,
+  initialSection,
+  showReminders = false,
+  onApply,
 }: DatePanelProps) {
   const { t } = useTranslation('dates', { lng: ctx.locale });
   const text = useDateText(ctx);
@@ -93,6 +143,21 @@ export function DatePanel({
   );
   const panelRef = useRef<HTMLDivElement>(null);
   const focusGridRef = useRef(false);
+  // P10: the repeat draft. A preset follows the date; the stored rule is derived on commit.
+  const [initialRepeat] = useState(() =>
+    repeatable
+      ? repeatChoiceOf(value.recurrence, value.recurrenceBasis, initial?.date ?? null)
+      : null,
+  );
+  const [repeat, setRepeat] = useState<RepeatChoice | null>(initialRepeat);
+  const [repeatOpen, setRepeatOpen] = useState(
+    repeatable && (initialRepeat !== null || initialSection === 'repeat'),
+  );
+  const [reminderOpen, setReminderOpen] = useState(
+    Boolean(renderReminders) && (showReminders || initialSection === 'reminder'),
+  );
+  /** The section the user just opened, which takes focus. */
+  const [focusSection, setFocusSection] = useState<DateSection | null>(initialSection ?? null);
 
   const parseCtx = useMemo(
     () => ({
@@ -127,17 +192,49 @@ export function DatePanel({
     panelRef.current?.querySelector<HTMLElement>('[role="grid"] [tabindex="0"]')?.focus();
   }, [rangeMode]);
 
+  /**
+   * The value with the repeat draft applied (P10): the stored rule for the value's date, or
+   * `recurrence: null` when a repeat was removed. Without a repeat either way the fields are
+   * left out, so the series is untouched.
+   */
+  const withRepeat = (next: DueValue | null): DueValue | null => {
+    if (next === null || !next.dueDate || !repeatable) return next;
+    const fields = repeat ? repeatFields(repeat, next.dueDate) : null;
+    if (fields) return { ...next, ...fields };
+    return value.recurrence ? { ...next, recurrence: null, recurrenceBasis: null } : next;
+  };
+
   const draft = useMemo((): DueValue | null | undefined => {
     const date = draftDate ?? (draftTime ? ctx.today : null);
     // A start waiting for its due date only counts when the due date already fits.
     const start = rangeMode ? draftStart : null;
+    const repeatOf = (d: IsoDate | null) => (repeat && d ? repeatFields(repeat, d) : null);
+    const sameRepeat =
+      !repeatable ||
+      ((repeatOf(date)?.recurrence ?? null) === (value.recurrence ?? null) &&
+        (repeatOf(date)?.recurrenceBasis ?? null) ===
+          (value.recurrence ? (value.recurrenceBasis ?? 'due') : null));
     const unchanged =
       date === (initial?.date ?? null) &&
       draftTime === (initial?.time ?? null) &&
-      (date && start && diffDays(start, date) < 0 ? start : null) === initialStart;
+      (date && start && diffDays(start, date) < 0 ? start : null) === initialStart &&
+      sameRepeat;
     if (unchanged) return undefined;
-    return date ? toDueValue({ date, time: draftTime }, ctx.timezone, start) : null;
-  }, [draftDate, draftTime, draftStart, rangeMode, initial, initialStart, ctx.today, ctx.timezone]);
+    return date ? withRepeat(toDueValue({ date, time: draftTime }, ctx.timezone, start)) : null;
+  }, [
+    draftDate,
+    draftTime,
+    draftStart,
+    rangeMode,
+    initial,
+    initialStart,
+    ctx.today,
+    ctx.timezone,
+    repeat,
+    value.recurrence,
+    value.recurrenceBasis,
+    repeatable,
+  ]);
 
   useEffect(() => {
     onDraftChange?.(draft);
@@ -161,7 +258,7 @@ export function DatePanel({
       return;
     }
     const time = options.time ?? draftTime;
-    onCommit(toDueValue({ date, time }, ctx.timezone));
+    onCommit(withRepeat(toDueValue({ date, time }, ctx.timezone)));
   };
 
   /** Range mode: the first pick sets the start, the second the due date (then commits). */
@@ -183,7 +280,7 @@ export function DatePanel({
       return;
     }
     const time = options.time ?? draftTime;
-    onCommit(toDueValue({ date: due, time }, ctx.timezone, start));
+    onCommit(withRepeat(toDueValue({ date: due, time }, ctx.timezone, start)));
   };
 
   const pickQuick = (id: QuickDateId) => {
@@ -202,17 +299,26 @@ export function DatePanel({
     if (parsed === undefined) commitDraft();
     else if (parsed?.kind === 'range') {
       const time = parsed.time ?? draftTime;
-      onCommit(toDueValue({ date: parsed.date, time }, ctx.timezone, parsed.start));
+      onCommit(withRepeat(toDueValue({ date: parsed.date, time }, ctx.timezone, parsed.start)));
     } else if (parsed) {
       // A single date keeps a start date that still comes before it.
       const time = parsed.time ?? draftTime;
       onCommit(
-        toDueValue({ date: parsed.date, time }, ctx.timezone, rangeMode ? draftStart : null),
+        withRepeat(
+          toDueValue({ date: parsed.date, time }, ctx.timezone, rangeMode ? draftStart : null),
+        ),
       );
     }
   };
 
   const onKeyDownCapture = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (renderReminders && reminderChord(event)) {
+      // Alt+R (02 §7): opens the reminder section, or closes it again.
+      event.preventDefault();
+      event.stopPropagation();
+      toggleReminders();
+      return;
+    }
     const quick = quickDateForEvent(event);
     if (!quick) return;
     event.preventDefault();
@@ -233,6 +339,39 @@ export function DatePanel({
     setRangeMode(true);
     setRangeStep('start');
     setDraftStart(null);
+  };
+
+  /** A repeat change (P10). Without a date the series starts on its first occurrence. */
+  const changeRepeat = (next: RepeatChoice | null) => {
+    setRepeat(next);
+    if (!next) {
+      setRepeatOpen(false);
+      return;
+    }
+    if (draftDate === null) {
+      const today = repeatFields(next, ctx.today);
+      const first = today
+        ? firstOccurrence(today.recurrence, today.recurrenceBasis, ctx.today)
+        : null;
+      if (first) {
+        setDraftDate(first);
+        setFocusedDate(first);
+      }
+    }
+  };
+
+  const openRepeat = () => {
+    setRepeatOpen(true);
+    setFocusSection('repeat');
+  };
+
+  const toggleReminders = () => {
+    setReminderOpen((open) => !open);
+    setFocusSection('reminder');
+  };
+
+  const applyDraft = () => {
+    if (draft !== undefined) onApply?.(draft);
   };
 
   const removeStart = () => {
@@ -378,6 +517,49 @@ export function DatePanel({
           </Button>
         )}
       </div>
+      {(repeatable && !repeatOpen) || (renderReminders && !reminderOpen) ? (
+        <div className="-mt-1 flex items-center gap-2">
+          {repeatable && !repeatOpen && (
+            <Button variant="ghost" size="sm" icon={Repeat} onPress={openRepeat}>
+              {t('repeat.add')}
+            </Button>
+          )}
+          {renderReminders && !reminderOpen && (
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={Bell}
+              onPress={toggleReminders}
+              className="ms-auto"
+              aria-keyshortcuts="Alt+R"
+            >
+              {t('reminder.toggle')}
+              <Kbd shortcut="Alt+R" {...(platform ? { platform } : {})} />
+            </Button>
+          )}
+        </div>
+      ) : null}
+      {repeatOpen && (
+        <div className="border-t border-border pt-3">
+          <RepeatSection
+            choice={repeat}
+            dueDate={draftDate ?? initial?.date ?? ctx.today}
+            ctx={ctx}
+            onChange={changeRepeat}
+            autoFocus={focusSection === 'repeat'}
+          />
+        </div>
+      )}
+      {renderReminders && reminderOpen && (
+        <div className="border-t border-border pt-3">
+          {renderReminders({
+            due:
+              draft === undefined ? value : (draft ?? { ...value, dueDate: null, dueTime: null }),
+            autoFocus: focusSection === 'reminder',
+            applyDraft,
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -396,6 +578,11 @@ export interface DatePopoverProps {
   ctx: ViewerDateContext;
   /** Defaults to below the anchor, right-aligned (the date column is on the right). */
   placement?: AriaPopoverProps['placement'] | undefined;
+  /** P10: see `DatePanelProps`. */
+  repeatable?: boolean | undefined;
+  renderReminders?: DatePanelProps['renderReminders'];
+  initialSection?: DateSection | undefined;
+  showReminders?: boolean | undefined;
 }
 
 /**
@@ -411,6 +598,10 @@ export function DatePopover({
   onChange,
   ctx,
   placement = 'bottom end',
+  repeatable,
+  renderReminders,
+  initialSection,
+  showReminders,
 }: DatePopoverProps) {
   const { t } = useTranslation('dates', { lng: ctx.locale });
   const pending = useRef<DueValue | null | undefined>(undefined);
@@ -437,6 +628,13 @@ export function DatePopover({
         onCancel={() => finish(undefined)}
         onDraftChange={(draft) => {
           pending.current = draft;
+        }}
+        repeatable={repeatable}
+        renderReminders={renderReminders}
+        initialSection={initialSection}
+        showReminders={showReminders}
+        onApply={(next) => {
+          if (!sameDue(next, value)) onChange(next);
         }}
       />
     </Popover>

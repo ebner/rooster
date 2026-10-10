@@ -1,1 +1,63 @@
-{}
+{
+  "heading": "Attachments",
+  "count": "{count, number}",
+  "add": "Attach files",
+  "empty": "Drop files on this task, paste an image or",
+  "emptyPick": "choose files",
+  "offline": "You’re offline. Attachments can be added and deleted again once you’re back online.",
+  "dropHere": "Drop to attach",
+  "dropHint": "Files are added to this task",
+  "pastedName": "Pasted image {stamp}",
+  "imagesLabel": "Images",
+  "filesLabel": "Files",
+  "open": "Open {name}",
+  "download": "Download {name}",
+  "noPreview": "No preview",
+  "meta": "{size} · {name} · {date}",
+  "someone": "Someone",
+  "delete": "Delete {name}",
+  "confirmDelete": "Delete {name}? This can’t be undone.",
+  "confirm": "Delete",
+  "cancel": "Cancel",
+  "deleted": "Attachment deleted",
+  "deleteFailed": "Couldn’t delete the attachment.",
+  "upload": {
+    "queued": "Waiting…",
+    "progress": "Uploading {name}",
+    "cancel": "Cancel uploading {name}",
+    "dismiss": "Dismiss",
+    "retry": "Retry"
+  },
+  "error": {
+    "tooLarge": "{name} is too large. Files can be at most {limit}.",
+    "tooLargeNoLimit": "{name} is larger than the upload limit.",
+    "mimeMismatch": "{name} isn’t what its file name says it is, so it wasn’t added.",
+    "unsupported": "{name} can’t be uploaded as an attachment.",
+    "tooMany": "This task has the most attachments it can have ({max, number}).",
+    "offline": "{name} couldn’t be uploaded. Check your connection and try again.",
+    "forbidden": "You can’t add attachments to this task.",
+    "gone": "This task no longer exists.",
+    "failed": "{name} couldn’t be uploaded."
+  },
+  "lightbox": {
+    "label": "{name}, image {index, number} of {total, number}",
+    "position": "{index, number} of {total, number}",
+    "previous": "Previous image",
+    "next": "Next image",
+    "close": "Close",
+    "download": "Download",
+    "loadFailed": "Couldn’t show this image. You can still download it."
+  },
+  "dev": {
+    "section": "Attachments",
+    "mixed": "Images and files",
+    "empty": "Empty",
+    "uploads": "Uploads and errors",
+    "offline": "Offline",
+    "confirm": "Confirm delete",
+    "readOnly": "Someone else’s files",
+    "drop": "Drop overlay",
+    "lightbox": "Lightbox",
+    "openLightbox": "Open the lightbox"
+  }
+}

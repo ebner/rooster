@@ -12,10 +12,11 @@ describe('Settings on phones: the index and a drilled-in section', () => {
       '/settings/profile',
       '/settings/behaviour',
       '/settings/notifications',
+      '/settings/calendar',
       '/settings/security',
       '/settings/data',
     ]);
-    expect(within(nav).getAllByRole('listitem')).toHaveLength(5);
+    expect(within(nav).getAllByRole('listitem')).toHaveLength(6);
     expect(links[2]?.textContent).toBe(
       'NotificationsIn app, push, email, task reminders and the daily digest',
     );

@@ -72,7 +72,10 @@ describe('Settings → Notifications', () => {
     renderPage({ channels: { push: false, email: false } });
     expect(screen.queryByText('Due reminder')).toBeNull();
     expect(screen.queryByText('push section')).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Timing' })).toBeNull();
+    // Task reminders still reach the inbox: only the all-day reminder time remains (P10).
+    expect(screen.getByRole('heading', { name: 'Timing' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /All-day reminder time/ })).toBeTruthy();
+    expect(screen.queryByText('Due reminder time')).toBeNull();
     expect(screen.getAllByRole('switch')).toHaveLength(7);
   });
 
@@ -97,6 +100,15 @@ describe('Settings → Notifications', () => {
     expect(screen.getByRole('button', { name: /Daily digest time/ }).textContent).toContain('7 AM');
     fireEvent.click(screen.getByRole('radio', { name: 'Immediately' }));
     expect(props.delivery?.onChange).toHaveBeenCalledWith({ emailMode: 'immediate' });
+  });
+
+  test('P10: the all-day reminder time defaults to 09:00 and saves', () => {
+    const props = renderPage();
+    const field = screen.getByRole('button', { name: /All-day reminder time/ });
+    expect(field.textContent).toContain('9 AM');
+    fireEvent.click(field);
+    fireEvent.click(screen.getByRole('option', { name: '8:30 AM' }));
+    expect(props.delivery?.onChange).toHaveBeenCalledWith({ allDayReminderTime: '08:30' });
   });
 });
 

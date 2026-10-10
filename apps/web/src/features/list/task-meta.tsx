@@ -1,11 +1,14 @@
 import type { Tag, Task } from '@rooster/core/schemas';
-import { AlignLeft, ListTree } from 'lucide-react';
+import { AlignLeft, Bell, ListTree, Paperclip, Repeat } from 'lucide-react';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
 import { useTagsStore } from '../../state/tags-store';
 import { iconStrokeWidth } from '../../ui/button';
 import { Chip } from '../../ui/chip';
+import type { ViewerDateContext } from '../dates';
+import { formatInstant } from '../dates/date-text';
+import { useRuleText } from '../dates/recurrence-text';
 
 /** 03 §3.1: at most three chips (one on phones), then "+N". */
 export const maxRowChips = 3;
@@ -69,6 +72,78 @@ export function DescriptionIndicator({ task, className }: { task: Task; classNam
     >
       <AlignLeft className="size-3" strokeWidth={iconStrokeWidth} aria-hidden />
       <span className="sr-only">{t('row.hasDescription')}</span>
+    </span>
+  );
+}
+
+const metaIcon = 'inline-flex shrink-0 items-center text-text-muted';
+
+/**
+ * `bell` (03 §3.1, FR-REM-4): the viewer has a pending reminder on the task; the tooltip and
+ * screen-reader text name the next one ("Reminder: Fri 13:00"). Reminders are personal, so
+ * `nextReminderAt` is the viewer's own (ADR 0049 §2.4).
+ */
+export function ReminderIndicator({
+  task,
+  ctx,
+  className,
+}: {
+  task: Task;
+  ctx: ViewerDateContext;
+  className?: string;
+}) {
+  const { t } = useTranslation('list');
+  if (task.nextReminderAt === null || task.nextReminderAt === undefined) return null;
+  const label = t('row.reminder', { when: formatInstant(task.nextReminderAt, ctx) });
+  return (
+    <span data-testid="reminder-indicator" className={cn(metaIcon, className)} title={label}>
+      <Bell className="size-3" strokeWidth={iconStrokeWidth} aria-hidden />
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
+/** `paperclip 3` (03 §3.1, P10): the task's live attachments. */
+export function AttachmentCount({ task, className }: { task: Task; className?: string }) {
+  const { t } = useTranslation('list');
+  const count = task.counts.attachments;
+  if (count === 0) return null;
+  const label = t('row.attachments', { count });
+  return (
+    <span
+      data-testid="attachment-count"
+      className={cn(metaIcon, 'gap-0.5 text-xs tabular-nums', className)}
+      title={label}
+    >
+      <Paperclip className="size-3" strokeWidth={iconStrokeWidth} aria-hidden />
+      <span aria-hidden>{count}</span>
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
+/**
+ * `repeat` (03 §3.1, FR-REC): the task repeats; the tooltip summarises the rule. Render it only
+ * for tasks with a rule (it formats the rule on every render).
+ */
+export function RepeatIndicator({
+  rule,
+  basis,
+  ctx,
+  className,
+}: {
+  rule: string;
+  basis: Task['recurrenceBasis'];
+  ctx: ViewerDateContext;
+  className?: string;
+}) {
+  const { t } = useTranslation('list');
+  const ruleText = useRuleText(ctx);
+  const label = t('row.repeats', { rule: ruleText(rule, basis) });
+  return (
+    <span data-testid="repeat-indicator" className={cn(metaIcon, className)} title={label}>
+      <Repeat className="size-3" strokeWidth={iconStrokeWidth} aria-hidden />
+      <span className="sr-only">{label}</span>
     </span>
   );
 }

@@ -138,8 +138,105 @@
       "readOnly": "Skrivskyddad",
       "rangeSet": "Intervall valt",
       "rangePickStart": "Välj start",
-      "rangeTyped": "Skrivet intervall"
+      "rangeTyped": "Skrivet intervall",
+      "repeatPreset": "Varje vecka, med påminnelser",
+      "repeatCustom": "Anpassad: sista fredagen varannan månad, 4 gånger",
+      "repeatWeekdays": "Anpassad: varannan vecka på måndag och torsdag",
+      "remindersTimed": "Uppgift med klockslag: chips, förval, egen ”2h”",
+      "remindersNoDate": "Utan förfallodatum: vilande chip, bara fast tid",
+      "remindersFull": "Fem påminnelser (gränsen)",
+      "reminderChips": "Chips: väntande, fast tid, skickad, vilande (fokus)",
+      "sheetRepeat": "Datumark på telefon: raderna Upprepa och Påminnelser"
     },
-    "range": "Datumväljare: startdatum"
+    "range": "Datumväljare: startdatum",
+    "repeatReminders": "Upprepning och påminnelser"
+  },
+  "repeat": {
+    "label": "Upprepa",
+    "add": "Upprepa",
+    "remove": "Sluta upprepa",
+    "none": "Upprepas inte",
+    "presets": "Hur ofta",
+    "custom": "Anpassa…",
+    "rule": {
+      "daily": "{count, selectordinal, =1 {Varje dag} =2 {Varannan dag} one {Var #:a dag} other {Var #:e dag}}",
+      "weekly": "{count, selectordinal, =1 {Varje vecka på {days}} =2 {Varannan vecka på {days}} one {Var #:a vecka på {days}} other {Var #:e vecka på {days}}}",
+      "weekdays": "Varje vardag",
+      "monthlyDay": "{count, selectordinal, =1 {Den {day} varje månad} =2 {Den {day} varannan månad} one {Den {day} var #:a månad} other {Den {day} var #:e månad}}",
+      "monthlyNth": "{count, selectordinal, =1 {Den {nth} {weekday}en varje månad} =2 {Den {nth} {weekday}en varannan månad} one {Den {nth} {weekday}en var #:a månad} other {Den {nth} {weekday}en var #:e månad}}",
+      "yearly": "{count, selectordinal, =1 {Varje år den {date}} =2 {Vartannat år den {date}} one {Vart #:a år den {date}} other {Vart #:e år den {date}}}",
+      "after": {
+        "DAILY": "{count, plural, one {# dag} other {# dagar}} efter att den är klar",
+        "WEEKLY": "{count, plural, one {# vecka} other {# veckor}} efter att den är klar",
+        "MONTHLY": "{count, plural, one {# månad} other {# månader}} efter att den är klar",
+        "YEARLY": "{count, plural, one {# år} other {# år}} efter att den är klar"
+      },
+      "endCount": "{rule}, {count, plural, one {# gång} other {# gånger}}",
+      "endUntil": "{rule}, till och med {date}"
+    },
+    "ordinalDay": "{day, selectordinal, one {#:a} other {#:e}}",
+    "monthDay": {
+      "monthFirst": "{day} {month}",
+      "dayFirst": "{day} {month}"
+    },
+    "nth": {
+      "1": "första",
+      "2": "andra",
+      "3": "tredje",
+      "4": "fjärde",
+      "last": "sista"
+    },
+    "every": "Intervall",
+    "unitLabel": "Upprepningsenhet",
+    "unit": {
+      "DAILY": "{count, plural, one {dag} other {dagar}}",
+      "WEEKLY": "{count, plural, one {vecka} other {veckor}}",
+      "MONTHLY": "{count, plural, one {månad} other {månader}}",
+      "YEARLY": "{count, plural, one {år} other {år}}"
+    },
+    "on": "På",
+    "monthlyLabel": "Dag i månaden",
+    "monthlyDay": "Den {day}",
+    "monthlyNth": "Den {nth} {weekday}en",
+    "afterCompletion": "Räkna från när den blir klar",
+    "ends": "Slutar",
+    "endNever": "Aldrig",
+    "endUntil": "Ett visst datum",
+    "endCount": "Efter ett antal gånger",
+    "untilLabel": "Sista datum",
+    "untilPlaceholder": "Skriv ett datum… (t.ex. 31 dec)",
+    "countLabel": "Gånger"
+  },
+  "reminder": {
+    "label": "Påminnelser",
+    "add": "Lägg till",
+    "addReminder": "Lägg till påminnelse",
+    "toggle": "Påminnelse",
+    "loading": "Hämtar påminnelser…",
+    "presets": "Påminn mig",
+    "atDue": "Vid förfallotiden",
+    "onTheDay": "Samma dag",
+    "onTheDayAt": "Samma dag kl. {time}",
+    "preset15m": "15 min före",
+    "preset1h": "1 timme före",
+    "preset1d": "1 dag före",
+    "minutesBefore": "{count} min före",
+    "hoursBefore": "{count} tim före",
+    "daysBefore": "{count, plural, one {# dag} other {# dagar}} före",
+    "chip": "{offset} · {when}",
+    "dormant": "behöver ett förfallodatum",
+    "firedSr": "(skickad)",
+    "remove": "Ta bort påminnelsen {reminder}",
+    "full": "En uppgift kan ha högst {count} påminnelser.",
+    "absoluteOnly": "Sätt ett förfallodatum för att bli påmind före det. Utan datum väljer du dag och tid.",
+    "custom": "Anpassa…",
+    "customLabel": "Egen påminnelse",
+    "customPlaceholder": "t.ex. 2h, 3d eller fre 14:00",
+    "customPlaceholderAbsolute": "t.ex. fre 14:00",
+    "error": {
+      "invalid": "Det förstod jag inte",
+      "needsDue": "Det kräver ett förfallodatum. Välj dag och tid i stället.",
+      "past": "Den tiden har redan passerat"
+    }
   }
 }

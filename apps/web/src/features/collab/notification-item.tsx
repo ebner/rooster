@@ -1,12 +1,13 @@
 import type { Notification } from '@rooster/core/schemas';
 import type { Locale } from '@rooster/i18n/core';
-import { Mail, MailOpen } from 'lucide-react';
+import { Bell, Mail, MailOpen } from 'lucide-react';
 import { Button as AriaButton } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { primaryKeys } from '../../keymap';
 import { cn } from '../../lib/cn';
 import { formatTimeAgo } from '../../lib/format';
 import { Avatar } from '../../ui/avatar';
+import { iconStrokeWidth } from '../../ui/button';
 import { IconButton } from '../../ui/icon-button';
 import type { ViewerDateContext } from '../dates';
 import { DueText } from './due-text';
@@ -43,6 +44,26 @@ export function NotificationSentence({
   if (type === 'invite_accepted') {
     return <>{t('type.invite_accepted', { org: orgName })}</>;
   }
+  if (type === 'reminder') {
+    // FR-REM-3: "Reminder · due Fri 14:00 · Sent late". The task title follows on its own line.
+    return (
+      <>
+        <span className="font-semibold text-text">{t('type.reminder')}</span>
+        {data.to?.dueDate && (
+          <>
+            {' · '}
+            {t('reminder.due')} <DueText due={data.to} ctx={dateCtx} />
+          </>
+        )}
+        {data.late && (
+          <span className="font-medium text-text" data-testid="reminder-late">
+            {' · '}
+            {t('reminder.late')}
+          </span>
+        )}
+      </>
+    );
+  }
   return <>{t(`type.${type}`)}</>;
 }
 
@@ -65,6 +86,7 @@ export function NotificationItem({
   const unread = notification.readAt === null;
   const actor = notification.actor;
   const actorName = actor?.name ?? t('system');
+  const reminder = notification.type === 'reminder';
   const ago = formatTimeAgo(notification.createdAt, now, locale, t('justNow'));
   return (
     <div
@@ -89,17 +111,31 @@ export function NotificationItem({
         <span className="flex h-control w-2 shrink-0 items-center" aria-hidden>
           {unread && <span className="size-2 rounded-full bg-bg-accent" />}
         </span>
-        <Avatar
-          id={actor?.id ?? notification.id}
-          name={actorName}
-          src={actor?.image ?? undefined}
-          size={32}
-          decorative
-        />
+        {reminder ? (
+          <span
+            aria-hidden
+            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-bg-accent-subtle text-text-secondary"
+          >
+            <Bell className="size-4" strokeWidth={iconStrokeWidth} />
+          </span>
+        ) : (
+          <Avatar
+            id={actor?.id ?? notification.id}
+            name={actorName}
+            src={actor?.image ?? undefined}
+            size={32}
+            decorative
+          />
+        )}
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           {unread && <span className="sr-only">{t('unread')}</span>}
           <span className={cn('text-sm text-text-secondary', unread && 'text-text')}>
-            <span className="font-semibold text-text">{actorName}</span>{' '}
+            {/* A reminder is the user's own (FR-REM-3): no actor in front of it. */}
+            {!reminder && (
+              <>
+                <span className="font-semibold text-text">{actorName}</span>{' '}
+              </>
+            )}
             <NotificationSentence notification={notification} orgName={orgName} dateCtx={dateCtx} />
           </span>
           {notification.task && (

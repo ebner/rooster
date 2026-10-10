@@ -7,6 +7,7 @@ import { cn } from '../../lib/cn';
 import { iconStrokeWidth } from '../../ui/button';
 import { Tooltip } from '../../ui/tooltip';
 import { DateLabel, DateLabelContent, dueStateClass, useDateLabel } from './date-label';
+import type { DatePanelProps } from './date-popover';
 import { LazyDatePopover } from './lazy';
 import type { DueValue, ViewerDateContext } from './types';
 
@@ -39,6 +40,12 @@ export interface DateCellProps {
    * the icon then appears on row hover and focus-within without re-rendering.
    */
   rowHovered?: boolean | undefined;
+  /** P10: the picker offers "↻ Repeat" (see `DatePanelProps`). */
+  repeatable?: boolean | undefined;
+  /** P10: the picker's reminder section (see `DatePanelProps.renderReminders`). */
+  renderReminders?: DatePanelProps['renderReminders'];
+  /** P10: open the reminder section from the start (the viewer has reminders on the task). */
+  showReminders?: boolean | undefined;
   /** Extra description for screen readers, e.g. the id of the row's title. */
   'aria-describedby'?: string | undefined;
   /** Kitchen sink: render a state statically ("hover", "focus"). */
@@ -64,6 +71,9 @@ export function DateCell({
   isOpen: isOpenProp,
   onOpenChange,
   rowHovered = false,
+  repeatable,
+  renderReminders,
+  showReminders,
   'aria-describedby': describedBy,
   'data-force': force,
   className,
@@ -169,6 +179,9 @@ export function DateCell({
             value={value}
             onChange={onChange}
             ctx={ctx}
+            repeatable={repeatable}
+            renderReminders={renderReminders}
+            showReminders={showReminders}
           />
         </Suspense>
       )}

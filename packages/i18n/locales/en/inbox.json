@@ -28,5 +28,9 @@
     "due_removed": "removed the due date of your task",
     "invite_accepted": "joined {org}",
     "reminder": "Reminder"
+  },
+  "reminder": {
+    "due": "due",
+    "late": "sent late"
   }
 }

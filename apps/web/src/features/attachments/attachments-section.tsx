@@ -1,5 +1,6 @@
 import type { Attachment } from '@rooster/core/schemas';
-import type { RefObject } from 'react';
+import { type RefObject, Suspense, useEffect } from 'react';
+import { lazyWithPreload, preloadWhenIdle } from '../../lib/lazy';
 
 export interface AttachmentsSectionProps {
   orgId: string;
@@ -13,7 +14,23 @@ export interface AttachmentsSectionProps {
   paneRef: RefObject<HTMLDivElement | null>;
 }
 
-/** P10 (FR-ATT, 02 §9.2 item 7): the pane's attachments. Placeholder until WP 10.2 lands. */
-export function AttachmentsSection(_props: AttachmentsSectionProps) {
-  return null;
+// 10 §4: the grid, uploads and the lightbox load with the first opened pane, not the app.
+const LazyAttachmentsPanel = lazyWithPreload(() =>
+  import('./attachments-panel').then((m) => m.AttachmentsPanel),
+);
+
+let prefetched = false;
+
+/** P10 (FR-ATT, 02 §9.2 item 7): the pane's attachments. */
+export function AttachmentsSection(props: AttachmentsSectionProps) {
+  useEffect(() => {
+    if (prefetched) return;
+    prefetched = true;
+    preloadWhenIdle([LazyAttachmentsPanel.preload]);
+  }, []);
+  return (
+    <Suspense fallback={null}>
+      <LazyAttachmentsPanel {...props} />
+    </Suspense>
+  );
 }

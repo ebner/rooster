@@ -38,9 +38,9 @@ test('the Settings tab opens the index; a section drills in and ‹ Settings goe
     .tap();
   await expect(page).toHaveURL(/\/settings$/);
   const index = page.getByRole('navigation', { name: 'Settings sections' });
-  await expect(index.getByRole('link')).toHaveCount(5);
+  await expect(index.getByRole('link')).toHaveCount(6);
   await expect(index.getByRole('link', { name: /Notifications/ })).toContainText(
-    'In app, push, email and the daily digest',
+    'In app, push, email, task reminders and the daily digest',
   );
   // Every row is a touch-size target.
   for (const box of await index
@@ -63,7 +63,7 @@ test('the Settings tab opens the index; a section drills in and ‹ Settings goe
 
   await header.getByRole('link', { name: 'Back to Settings' }).tap();
   await expect(page).toHaveURL(/\/settings$/);
-  await expect(index.getByRole('link')).toHaveCount(5);
+  await expect(index.getByRole('link')).toHaveCount(6);
 });
 
 test('a deep link opens the section, and back leads to the index', async ({ page }) => {

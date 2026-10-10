@@ -1,1 +1,63 @@
-{}
+{
+  "heading": "Bilagor",
+  "count": "{count, number}",
+  "add": "Bifoga filer",
+  "empty": "Släpp filer på uppgiften, klistra in en bild eller",
+  "emptyPick": "välj filer",
+  "offline": "Du är offline. Bilagor kan läggas till och tas bort igen när du är online.",
+  "dropHere": "Släpp för att bifoga",
+  "dropHint": "Filerna läggs till på uppgiften",
+  "pastedName": "Inklistrad bild {stamp}",
+  "imagesLabel": "Bilder",
+  "filesLabel": "Filer",
+  "open": "Öppna {name}",
+  "download": "Ladda ner {name}",
+  "noPreview": "Ingen förhandsvisning",
+  "meta": "{size} · {name} · {date}",
+  "someone": "Någon",
+  "delete": "Ta bort {name}",
+  "confirmDelete": "Ta bort {name}? Det går inte att ångra.",
+  "confirm": "Ta bort",
+  "cancel": "Avbryt",
+  "deleted": "Bilagan har tagits bort",
+  "deleteFailed": "Det gick inte att ta bort bilagan.",
+  "upload": {
+    "queued": "Väntar…",
+    "progress": "Laddar upp {name}",
+    "cancel": "Avbryt uppladdningen av {name}",
+    "dismiss": "Stäng",
+    "retry": "Försök igen"
+  },
+  "error": {
+    "tooLarge": "{name} är för stor. Filer får vara högst {limit}.",
+    "tooLargeNoLimit": "{name} är större än vad som får laddas upp.",
+    "mimeMismatch": "{name} är inte det filnamnet säger, så den lades inte till.",
+    "unsupported": "{name} kan inte laddas upp som bilaga.",
+    "tooMany": "Uppgiften har redan så många bilagor som går ({max, number}).",
+    "offline": "{name} kunde inte laddas upp. Kontrollera anslutningen och försök igen.",
+    "forbidden": "Du kan inte lägga till bilagor på den här uppgiften.",
+    "gone": "Uppgiften finns inte längre.",
+    "failed": "{name} kunde inte laddas upp."
+  },
+  "lightbox": {
+    "label": "{name}, bild {index, number} av {total, number}",
+    "position": "{index, number} av {total, number}",
+    "previous": "Föregående bild",
+    "next": "Nästa bild",
+    "close": "Stäng",
+    "download": "Ladda ner",
+    "loadFailed": "Bilden kan inte visas. Du kan fortfarande ladda ner den."
+  },
+  "dev": {
+    "section": "Bilagor",
+    "mixed": "Bilder och filer",
+    "empty": "Tom",
+    "uploads": "Uppladdningar och fel",
+    "offline": "Offline",
+    "confirm": "Bekräfta borttagning",
+    "readOnly": "Någon annans filer",
+    "drop": "Släppyta",
+    "lightbox": "Bildvisare",
+    "openLightbox": "Öppna bildvisaren"
+  }
+}

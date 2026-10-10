@@ -22,6 +22,7 @@ import type { Platform } from './lib/platform';
  * - `composer`: handled by the comment composer itself (features/collab, 02 §9.2 item 8). Its
  *   Tab+Enter arrives as the `openPaneFocus` chord, which the pane turns into "post".
  * - `palette`: no keys; a command only the palette runs (`keys: []`, skipped by the cheat sheet).
+ * - `lightbox`: handled by the attachment lightbox itself (features/attachments, P10).
  */
 export type ShortcutScope =
   | 'global'
@@ -32,7 +33,8 @@ export type ShortcutScope =
   | 'picker'
   | 'editor'
   | 'composer'
-  | 'palette';
+  | 'palette'
+  | 'lightbox';
 
 /**
  * Where a command appears in the command palette (04 §5.3, FR-VIEW-4); entries without it are
@@ -179,6 +181,12 @@ export const keymap = {
   // The comment composer (features/collab binds them; 02 §9.2 item 8).
   postComment: { keys: ['Mod+Enter', 'Tab+Enter'], scope: 'composer', section: 'pane' },
 
+  // Attachments (P10, FR-ATT; features/attachments): attach in the pane, and the lightbox.
+  attachFile: { keys: ['Tab+U'], scope: 'list', section: 'pane' },
+  lightboxPrevious: { keys: ['ArrowLeft'], scope: 'lightbox', section: 'pane' },
+  lightboxNext: { keys: ['ArrowRight'], scope: 'lightbox', section: 'pane' },
+  lightboxClose: { keys: ['Escape'], scope: 'lightbox', section: 'pane' },
+
   // The inbox (FR-NOT-1); ↑/↓ (K/J), Home/End move between notifications, Enter opens one.
   toggleRead: { keys: ['U'], scope: 'navigate', section: 'inbox' },
   markAllRead: { keys: ['Shift+U'], scope: 'navigate', section: 'inbox' },
@@ -189,6 +197,8 @@ export const keymap = {
   dateNextWeek: { keys: ['Alt+W'], scope: 'picker', section: 'dates' },
   dateWeekend: { keys: ['Alt+E'], scope: 'picker', section: 'dates' },
   dateNone: { keys: ['Alt+0'], scope: 'picker', section: 'dates' },
+  // P10 (02 §7): opens the picker's reminder section.
+  dateReminder: { keys: ['Alt+R'], scope: 'picker', section: 'dates' },
 
   // Palette-only commands (no keys; the palette registers their handlers).
   makeSubtaskOf: { keys: [], scope: 'palette', section: 'editing', palette: 'task' },

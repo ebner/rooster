@@ -29,6 +29,7 @@ import {
   resolveGroupToken,
   type Span,
   tagTokenAt,
+  titleReminderTokens,
 } from './title-tokens';
 
 /** 02 §8.1: parsing runs debounced on every keystroke. */
@@ -80,6 +81,8 @@ interface Highlight {
   group: Span | null;
   /** `@name` in a new task of a shared org (02 §3.4, P6). */
   assignee: Span | null;
+  /** P10 (02 §8.1): `!15m`/`!1h`/`!1d`/`!due` reminder tokens. */
+  reminders: Span[];
 }
 
 interface Suggest {
@@ -156,6 +159,7 @@ export function TitleInput({
     tags: [],
     group: null,
     assignee: null,
+    reminders: [],
   });
   const [suggest, setSuggest] = useState<Suggest | null>(null);
   const [memberSuggest, setMemberSuggest] = useState<MemberSuggest | null>(null);
@@ -186,12 +190,17 @@ export function TitleInput({
     // A group named like a date ("Today") is the group, not a date phrase.
     const dateText = group ? blankSpan(withoutWho, group) : withoutWho;
     const match = parseTitles ? findTitleDate(dateText, dateCtx, skip) : null;
+    // `!1h` needs a due date: the title's own phrase or the task's (02 §8.1, P10).
+    const reminders = parseTitles
+      ? titleReminderTokens(text, skip, match !== null || controller.hasDueFor(rowId))
+      : [];
     setHighlight({
       text,
       span: match ? { start: match.start, end: match.end } : null,
       tags: findTagTokens(text, skip),
       group: group ? { start: group.start, end: group.end } : null,
       assignee: who ? { start: who.start, end: who.end } : null,
+      reminders: reminders.map(({ start, end }) => ({ start, end })),
     });
   };
 
@@ -453,9 +462,12 @@ export function TitleInput({
     if (matches(native, 'deleteEmpty', platform)) {
       const at = el.selectionStart ?? 0;
       const collapsed = at === el.selectionEnd;
-      const span = [highlight.span, highlight.group, highlight.assignee].find(
-        (s) => s && at === s.end,
-      );
+      const span = [
+        highlight.span,
+        highlight.group,
+        highlight.assignee,
+        ...highlight.reminders,
+      ].find((s) => s && at === s.end);
       if (collapsed && span && highlight.text === el.value) {
         // 02 §8.1: Backspace right after a token cancels it instead of deleting a character.
         event.preventDefault();
@@ -495,7 +507,7 @@ export function TitleInput({
   const onClick = (event: MouseEvent<HTMLInputElement>) => {
     // Clicking the highlighted phrase cancels it for this edit (02 §8.1).
     const at = event.currentTarget.selectionStart ?? -1;
-    const span = [highlight.span, highlight.group, highlight.assignee].find(
+    const span = [highlight.span, highlight.group, highlight.assignee, ...highlight.reminders].find(
       (s) => s && at > s.start && at < s.end,
     );
     if (span && highlight.text === value()) {
@@ -518,7 +530,9 @@ export function TitleInput({
   };
 
   const { text, span, group, assignee } = highlight;
-  const marks = [span, group, assignee, ...highlight.tags].filter((m): m is Span => m !== null);
+  const marks = [span, group, assignee, ...highlight.tags, ...highlight.reminders].filter(
+    (m): m is Span => m !== null,
+  );
   const listId = `tag-suggest-${rowId}`;
   const memberListId = `member-suggest-${rowId}`;
   const open = memberSuggest

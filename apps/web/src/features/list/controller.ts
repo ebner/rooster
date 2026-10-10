@@ -1,5 +1,5 @@
 import { uuidv7 } from '@rooster/core/ids';
-import { BULK_MAX } from '@rooster/core/limits';
+import { BULK_MAX, DEFAULT_PREFS } from '@rooster/core/limits';
 import {
   type ApplyContext,
   ancestorsOf,
@@ -11,12 +11,14 @@ import {
   type ListState,
   listOps,
   normalGroups,
+  type ReducerContext,
   SUBTASK_DEPTH_MAX,
   subtreeHeight,
   type TaskCreateBody,
   tasksInGroup,
 } from '@rooster/core/reducers';
-import type { OrderingIntent, Tag, Task, TaskMove } from '@rooster/core/schemas';
+import type { ReminderSpec } from '@rooster/core/reminders';
+import type { OrderingIntent, Reminder, Tag, Task, TaskMove } from '@rooster/core/schemas';
 import type { SmartView, ViewSection } from '@rooster/core/views';
 import type { DroppedOp, ListPipeline } from '../../data/list';
 import {
@@ -68,8 +70,11 @@ export interface ControllerDeps {
   t: Translate;
   rows: () => readonly Row[];
   dateContext: () => ViewerDateContext;
-  /** User prefs: title parsing (02 §8.1) and the completion hold (02 §3.6), read live. */
-  prefs?: () => { parseTitles: boolean; holdMs: number };
+  /**
+   * User prefs: title parsing (02 §8.1), the completion hold (02 §3.6) and (P10) the all-day
+   * reminder time that relative reminders on all-day tasks resolve against, read live.
+   */
+  prefs?: () => { parseTitles: boolean; holdMs: number; allDayReminderTime?: string };
   holdMs?: number;
   collapseMs?: number;
   /** The UI store of this list (My tasks: the app-wide one; the pane's subtasks: their own). */
@@ -163,8 +168,21 @@ export class ListController {
     return this.deps.t;
   }
 
+  /**
+   * What the reducers need (P10 adds the viewer's timezone and all-day reminder time: the
+   * completion date of a recurring task and optimistic reminder times).
+   */
+  reducerContext(): ReducerContext {
+    return {
+      userId: this.deps.userId,
+      timezone: this.deps.dateContext().timezone,
+      allDayReminderTime:
+        this.deps.prefs?.().allDayReminderTime ?? DEFAULT_PREFS.allDayReminderTime,
+    };
+  }
+
   private ctx(): ApplyContext {
-    return { userId: this.deps.userId, now: Date.now() };
+    return { ...this.reducerContext(), now: Date.now() };
   }
 
   private parseTitles(): boolean {
@@ -269,6 +287,8 @@ export class ListController {
     ignored: readonly Span[],
     groupTokens: boolean,
     assigneeTokens = false,
+    /** P10: the task (or draft) has a due date already, so `!1h` tokens apply on their own. */
+    hasDue = false,
   ): ParsedLine {
     const ctx = this.deps.dateContext();
     const members = assigneeTokens ? this.deps.members?.() : undefined;
@@ -276,16 +296,24 @@ export class ListController {
     const text = who ? blankSpan(raw, who) : raw;
     const assignee = who ? { assigneeId: who.userId } : {};
     const hit = groupTokens ? this.groupToken(text, ignored) : null;
+    const parse = (line: string) => parseTitle(line, ctx, ignored, this.parseTitles(), hasDue);
     if (hit) {
-      const parsed = parseTitle(blankSpan(text, hit), ctx, ignored, this.parseTitles());
+      const parsed = parse(blankSpan(text, hit));
       if (parsed.title !== '') return { ...parsed, groupId: hit.groupId, ...assignee };
     }
-    const parsed = parseTitle(text, ctx, ignored, this.parseTitles());
+    const parsed = parse(text);
     if (!who) return parsed;
     // A title made only of the token keeps it as text (a task called "@anna" stays that).
-    return parsed.title !== ''
-      ? { ...parsed, ...assignee }
-      : parseTitle(raw, ctx, ignored, this.parseTitles());
+    return parsed.title !== '' ? { ...parsed, ...assignee } : parse(raw);
+  }
+
+  /** `reminders` for a task create (P10): the title's `!1h` tokens, relative to the due date. */
+  private reminderField(offsets: readonly number[] | undefined): {
+    reminders?: { offsetMinutes: number }[];
+  } {
+    return offsets && offsets.length > 0
+      ? { reminders: offsets.map((offsetMinutes) => ({ offsetMinutes })) }
+      : {};
   }
 
   // -------------------------------------------------------------------------------------
@@ -297,7 +325,7 @@ export class ListController {
     const before = this.state();
     if (!before || specs.length === 0) return null;
     const inverseOps = inverseOfSequence(specs, before, this.ctx());
-    this.deps.pipeline.enqueue(this.orgId, specs, { userId: this.deps.userId });
+    this.deps.pipeline.enqueue(this.orgId, specs, this.reducerContext());
     if (inverseOps.length === 0) return null;
     const entry: UndoEntry = { orgId: this.orgId, label, inverseOps, redoOps: specs };
     useUndoStore.getState().push(entry);
@@ -323,7 +351,7 @@ export class ListController {
     const before = this.deps.pipeline.view(entry.orgId);
     if (!before) return false;
     const inverseOps = inverseOfSequence(entry.redoOps, before, this.ctx());
-    this.deps.pipeline.enqueue(entry.orgId, entry.redoOps, { userId: this.deps.userId });
+    this.deps.pipeline.enqueue(entry.orgId, entry.redoOps, this.reducerContext());
     useUndoStore.getState().pushUndoKeepRedo({ ...entry, inverseOps });
     announce(this.t('undo.redone', { label: entry.label }));
     return true;
@@ -343,7 +371,7 @@ export class ListController {
     // Redoing a create must restore, not re-create: recompute redo from the inverse.
     const redoOps = inverseOfSequence(entry.inverseOps, before, this.ctx());
     for (const id of Object.keys(this.store().hiding)) this.clearHiding(id);
-    this.deps.pipeline.enqueue(entry.orgId, entry.inverseOps, { userId: this.deps.userId });
+    this.deps.pipeline.enqueue(entry.orgId, entry.inverseOps, this.reducerContext());
     useUndoStore.getState().pushRedo({ ...entry, redoOps });
     announce(this.t('undo.undone', { label: entry.label }));
   }
@@ -675,6 +703,7 @@ export class ListController {
       ignored,
       Boolean(draft?.sectionId && !draft.parentId && !this.isEveryone()),
       Boolean(draft),
+      this.hasDueFor(rowId),
     );
     if (draft) {
       if (parsed.title === '') return {};
@@ -687,7 +716,10 @@ export class ListController {
     const due = parsed.due;
     const dueChanged =
       due !== undefined &&
-      (due.dueDate !== task.dueDate || due.dueTime !== task.dueTime || due.dueTz !== task.dueTz);
+      (due.dueDate !== task.dueDate ||
+        due.dueTime !== task.dueTime ||
+        due.dueTz !== task.dueTz ||
+        (due.recurrence !== undefined && due.recurrence !== task.recurrence));
     const patch = {
       ...(parsed.title === task.title ? {} : { title: parsed.title }),
       ...(dueChanged ? { ...due, startDate: null } : {}),
@@ -695,8 +727,19 @@ export class ListController {
     const specs: ListOpSpec[] = [];
     if (Object.keys(patch).length > 0) specs.push(listOps.patchTask(rowId, patch));
     specs.push(...this.tagSpecs([rowId], parsed.tags ?? []));
+    // P10: `!1h` on an existing task adds the viewer's reminders (after the date, if any).
+    for (const offsetMinutes of parsed.reminders ?? []) {
+      specs.push(listOps.createReminder(rowId, uuidv7(), { offsetMinutes }));
+    }
     if (specs.length > 0) this.run(this.t('undo.edited'), specs);
     return {};
+  }
+
+  /** Whether a row's task or draft already has a due date (P10: `!1h` needs one). */
+  hasDueFor(rowId: string): boolean {
+    const draft = this.store().drafts.find((d) => d.id === rowId);
+    if (draft) return Boolean(draft.due?.dueDate);
+    return Boolean(this.task(rowId)?.dueDate);
   }
 
   /** Splits `#tag` names into existing org tags and new names (case-insensitive). */
@@ -769,6 +812,7 @@ export class ListController {
           ...(tagIds.length > 0 ? { tagIds } : {}),
           ...(newNames.length > 0 ? { tagNames: newNames } : {}),
           ...this.assigneeField(p.assigneeId),
+          ...this.reminderField(p.reminders),
         }),
       );
       // A task for someone else lands in their Inbox, not here: the next one follows mine.
@@ -856,6 +900,7 @@ export class ListController {
           ...(p.due ?? draft.due ?? {}),
           ...(tagIds.length > 0 ? { tagIds } : {}),
           ...(newNames.length > 0 ? { tagNames: newNames } : {}),
+          ...this.reminderField(p.reminders),
         }),
       );
       previous = id;
@@ -1087,12 +1132,20 @@ export class ListController {
         ? this.t('undo.completed', { title: first.title })
         : this.t('undo.completedMany', { count: targets.length })
       : this.t('undo.reopened', { count: targets.length });
-    const specs =
-      targets.length === 1
-        ? [listOps.completeTask(targets[0] as string, complete)]
-        : chunk(targets).map((part) =>
+    // P10 (ADR 0049 §1.6): a recurring task completes on its own, naming its next instance,
+    // so the next one shows at once and the undo can remove it again.
+    const repeating = complete
+      ? targets.filter((id) => this.task(id)?.recurrence && this.task(id)?.dueDate)
+      : [];
+    const rest = targets.filter((id) => !repeating.includes(id));
+    const specs = [
+      ...repeating.map((id) => listOps.completeTask(id, true, uuidv7())),
+      ...(rest.length === 1
+        ? [listOps.completeTask(rest[0] as string, complete)]
+        : chunk(rest).map((part) =>
             listOps.bulk(this.orgId, { op: complete ? 'complete' : 'uncomplete', ids: part }),
-          );
+          )),
+    ];
     for (const id of targets) {
       if (complete) this.startHiding(id, options.immediate ? 0 : undefined);
       else this.clearHiding(id);
@@ -1147,19 +1200,54 @@ export class ListController {
     return rows[index + 1]?.id ?? rows[index - 1]?.id ?? null;
   }
 
-  /** Tab+Delete, Delete in Navigate, the bulk bar: soft delete with undo. */
+  /**
+   * Tab+Delete, Delete in Navigate, the bulk bar: soft delete with undo. One recurring task
+   * asks first (FR-REC-4): `deleteRecurring` answers. Bulk delete is always plain.
+   */
   deleteTasks(ids: readonly string[] = this.selectedTaskIds()): void {
     const live = ids.filter((id) => this.task(id));
     if (live.length === 0) return;
+    if (live.length === 1 && this.isRecurring(live[0] as string)) {
+      this.store().set({ popover: { kind: 'recurringDelete', rowId: live[0] as string } });
+      return;
+    }
+    this.deleteNow(live);
+  }
+
+  /** A task with a repeat rule (FR-REC): deleting it asks "this / this and following". */
+  isRecurring(id: string): boolean {
+    const task = this.task(id);
+    return Boolean(task?.recurrence && task.dueDate && task.completedAt === null);
+  }
+
+  /**
+   * The answer to the recurring delete question (ADR 0049 §1.7): "this" skips the occurrence
+   * (to Trash, the next instance follows; undo restores it and removes the next one), and
+   * "following" is the plain delete, which ends the series.
+   */
+  deleteRecurring(id: string, choice: 'this' | 'following'): void {
+    this.store().set({ popover: null });
+    if (!this.task(id)) return;
+    if (choice === 'following') {
+      this.deleteNow([id], this.t('undo.seriesDeleted'));
+      return;
+    }
+    const next = this.nextNavigableAfter([id]);
+    this.run(this.t('undo.skipped'), [listOps.skipTask(id, uuidv7())], { toast: true });
+    this.store().select(next);
+  }
+
+  private deleteNow(live: readonly string[], message?: string): void {
     const next = this.nextNavigableAfter(live);
     const specs =
       live.length === 1
         ? [listOps.deleteTask(live[0] as string)]
         : chunk(live).map((part) => listOps.bulk(this.orgId, { op: 'delete', ids: part }));
     const label =
-      live.length === 1
+      message ??
+      (live.length === 1
         ? this.t('undo.deleted')
-        : this.t('undo.deletedMany', { count: live.length });
+        : this.t('undo.deletedMany', { count: live.length }));
     this.run(label, specs, { toast: true });
     this.store().select(next);
   }
@@ -1184,6 +1272,8 @@ export class ListController {
       dueTime: string | null;
       dueTz: string | null;
       startDate?: string | null | undefined;
+      recurrence?: string | null | undefined;
+      recurrenceBasis?: 'due' | 'completion' | null | undefined;
     } | null,
   ): void {
     const value = {
@@ -1191,6 +1281,13 @@ export class ListController {
       dueTime: due?.dueTime ?? null,
       dueTz: due?.dueTz ?? null,
       startDate: due?.startDate ?? null,
+      // P10: left out, the series is kept; clearing the date ends it (ADR 0049 §1.8).
+      ...(due?.dueDate && due.recurrence !== undefined
+        ? {
+            recurrence: due.recurrence,
+            recurrenceBasis: due.recurrence ? (due.recurrenceBasis ?? 'due') : null,
+          }
+        : {}),
     };
     const live = ids.filter((id) => this.task(id));
     if (live.length === 0) return;
@@ -1200,9 +1297,36 @@ export class ListController {
         : chunk(live).map((part) =>
             listOps.bulk(this.orgId, { op: 'setDue', ids: part, args: value }),
           );
-    this.run(due ? this.t('undo.dated') : this.t('undo.dateCleared'), specs, {
-      toast: due === null,
-    });
+    // ADR 0049 §2.2: relative reminders go dormant with the date; the undo revives them.
+    const paused = due === null && live.some((id) => this.task(id)?.nextReminderAt);
+    const label = due
+      ? this.t('undo.dated')
+      : paused
+        ? this.t('undo.dateClearedReminders')
+        : this.t('undo.dateCleared');
+    this.run(label, specs, { toast: due === null });
+  }
+
+  // -------------------------------------------------------------------------------------
+  // Reminders (FR-REM, ADR 0049 §2.7): personal, through the outbox
+  // -------------------------------------------------------------------------------------
+
+  /** Adds one of the viewer's reminders; the bell and the chips show it at once. */
+  addReminder(taskId: string, spec: ReminderSpec): void {
+    this.run(this.t('undo.reminderAdded'), [listOps.createReminder(taskId, uuidv7(), spec)]);
+  }
+
+  /** Removes one of the viewer's reminders (undo re-creates it with the same id). */
+  removeReminder(taskId: string, reminder: Reminder): void {
+    const restore =
+      reminder.kind === 'relative' && reminder.offsetMinutes !== null
+        ? { offsetMinutes: reminder.offsetMinutes }
+        : reminder.remindAt !== null
+          ? { at: reminder.remindAt }
+          : undefined;
+    this.run(this.t('undo.reminderRemoved'), [
+      listOps.deleteReminder(taskId, reminder.id, restore),
+    ]);
   }
 
   // -------------------------------------------------------------------------------------
@@ -1339,7 +1463,7 @@ export class ListController {
     const specs = targets.flatMap((g) => (g ? [listOps.patchGroup(g.id, { collapsed })] : []));
     if (specs.length === 0) return;
     // Collapse state is a view preference: persisted, but not an undo entry (02 §3.7 list).
-    this.deps.pipeline.enqueue(this.orgId, specs, { userId: this.deps.userId });
+    this.deps.pipeline.enqueue(this.orgId, specs, this.reducerContext());
   }
 
   /**
@@ -1379,9 +1503,11 @@ export class ListController {
   setExpanded(taskId: string, expanded: boolean): void {
     const state = this.state();
     if (!state || state.expandedTaskIds.includes(taskId) === expanded) return;
-    this.deps.pipeline.enqueue(this.orgId, [listOps.setExpanded(taskId, expanded)], {
-      userId: this.deps.userId,
-    });
+    this.deps.pipeline.enqueue(
+      this.orgId,
+      [listOps.setExpanded(taskId, expanded)],
+      this.reducerContext(),
+    );
   }
 
   toggleExpanded(taskId: string): void {
@@ -1694,8 +1820,7 @@ export class ListController {
     const specs = Object.values(state.groups)
       .filter((g) => g.kind === 'normal' && g.collapsed !== (g.id !== groupId))
       .map((g) => listOps.patchGroup(g.id, { collapsed: g.id !== groupId }));
-    if (specs.length > 0)
-      this.deps.pipeline.enqueue(this.orgId, specs, { userId: this.deps.userId });
+    if (specs.length > 0) this.deps.pipeline.enqueue(this.orgId, specs, this.reducerContext());
   }
 
   /** "+ Add group": at the end, caret in the name. */

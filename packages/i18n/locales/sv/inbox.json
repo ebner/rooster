@@ -28,5 +28,9 @@
     "due_removed": "tog bort förfallodatumet för din uppgift",
     "invite_accepted": "gick med i {org}",
     "reminder": "Påminnelse"
+  },
+  "reminder": {
+    "due": "förfaller",
+    "late": "skickades sent"
   }
 }

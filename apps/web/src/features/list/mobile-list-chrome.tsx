@@ -1,7 +1,7 @@
 import { orderedGroups } from '@rooster/core/reducers';
 import type { Task } from '@rooster/core/schemas';
 import { Calendar, CheckCircle2, FolderInput, Hash, Trash2, UserRound, X } from 'lucide-react';
-import { type RefObject, useMemo, useState } from 'react';
+import { type RefObject, Suspense, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMyList } from '../../data/list';
 import type { OrgMember } from '../../data/types';
@@ -21,6 +21,7 @@ import { TagSheet } from '../tags/tag-sheet';
 import { announce } from './announcer';
 import type { ListController } from './controller';
 import { type GroupChoice, GroupSheet } from './group-sheet';
+import { LazyRecurringDeleteSheet, LazyTaskReminders } from './lazy';
 import { useListContext } from './list-context';
 import { type SwipePrefs, SwipeRows } from './swipe-rows';
 import { titleInputHandle } from './title-input';
@@ -32,6 +33,8 @@ function dueOf(task: Task | undefined): DueValue {
         dueTime: task.dueTime,
         dueTz: task.dueTz,
         startDate: task.startDate,
+        recurrence: task.recurrence ?? null,
+        recurrenceBasis: task.recurrenceBasis ?? null,
       }
     : noDue;
 }
@@ -210,6 +213,16 @@ export function MobileListChrome({
         />
       )}
 
+      {popover?.kind === 'recurringDelete' && (
+        <Suspense fallback={null}>
+          <LazyRecurringDeleteSheet
+            isOpen
+            title={controller.task(popover.rowId)?.title ?? ''}
+            onChoose={(choice) => controller.deleteRecurring(popover.rowId, choice)}
+            onCancel={closePopover}
+          />
+        </Suspense>
+      )}
       <QuickDateSheet
         isOpen={popover?.kind === 'date' && sheetIds.length > 0}
         onOpenChange={(open) => !open && closePopover()}
@@ -217,6 +230,22 @@ export function MobileListChrome({
         ctx={dateCtx}
         subject={subject}
         onCommit={(next) => controller.setDue(sheetIds, next)}
+        // P10: one task repeats and has reminders; several get a plain date.
+        repeatable={sheetIds.length === 1}
+        renderReminders={
+          sheetIds.length === 1
+            ? (slot) => (
+                <Suspense fallback={null}>
+                  <LazyTaskReminders
+                    taskId={sheetIds[0] as string}
+                    controller={controller}
+                    ctx={dateCtx}
+                    slot={slot}
+                  />
+                </Suspense>
+              )
+            : undefined
+        }
       />
       <GroupSheet
         isOpen={popover?.kind === 'moveTo' && sheetIds.length > 0}

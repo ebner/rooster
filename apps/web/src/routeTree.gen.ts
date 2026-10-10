@@ -22,6 +22,7 @@ import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as OauthConsentRouteImport } from './routes/oauth.consent'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings.index'
 import { Route as AppSettingsBehaviourRouteImport } from './routes/_app/settings.behaviour'
+import { Route as AppSettingsCalendarRouteImport } from './routes/_app/settings.calendar'
 import { Route as AppSettingsDataRouteImport } from './routes/_app/settings.data'
 import { Route as AppSettingsNotificationsRouteImport } from './routes/_app/settings.notifications'
 import { Route as AppSettingsProfileRouteImport } from './routes/_app/settings.profile'
@@ -98,6 +99,11 @@ const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
 const AppSettingsBehaviourRoute = AppSettingsBehaviourRouteImport.update({
   id: '/behaviour',
   path: '/behaviour',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
+const AppSettingsCalendarRoute = AppSettingsCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
   getParentRoute: () => AppSettingsRoute,
 } as any)
 const AppSettingsDataRoute = AppSettingsDataRouteImport.update({
@@ -180,6 +186,7 @@ export interface FileRoutesByFullPath {
   '/invite/$token': typeof InviteTokenRoute
   '/oauth/consent': typeof OauthConsentRoute
   '/settings/behaviour': typeof AppSettingsBehaviourRoute
+  '/settings/calendar': typeof AppSettingsCalendarRoute
   '/settings/data': typeof AppSettingsDataRoute
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/profile': typeof AppSettingsProfileRoute
@@ -206,6 +213,7 @@ export interface FileRoutesByTo {
   '/invite/$token': typeof InviteTokenRoute
   '/oauth/consent': typeof OauthConsentRoute
   '/settings/behaviour': typeof AppSettingsBehaviourRoute
+  '/settings/calendar': typeof AppSettingsCalendarRoute
   '/settings/data': typeof AppSettingsDataRoute
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/profile': typeof AppSettingsProfileRoute
@@ -235,6 +243,7 @@ export interface FileRoutesById {
   '/invite/$token': typeof InviteTokenRoute
   '/oauth/consent': typeof OauthConsentRoute
   '/_app/settings/behaviour': typeof AppSettingsBehaviourRoute
+  '/_app/settings/calendar': typeof AppSettingsCalendarRoute
   '/_app/settings/data': typeof AppSettingsDataRoute
   '/_app/settings/notifications': typeof AppSettingsNotificationsRoute
   '/_app/settings/profile': typeof AppSettingsProfileRoute
@@ -264,6 +273,7 @@ export interface FileRouteTypes {
     | '/invite/$token'
     | '/oauth/consent'
     | '/settings/behaviour'
+    | '/settings/calendar'
     | '/settings/data'
     | '/settings/notifications'
     | '/settings/profile'
@@ -290,6 +300,7 @@ export interface FileRouteTypes {
     | '/invite/$token'
     | '/oauth/consent'
     | '/settings/behaviour'
+    | '/settings/calendar'
     | '/settings/data'
     | '/settings/notifications'
     | '/settings/profile'
@@ -318,6 +329,7 @@ export interface FileRouteTypes {
     | '/invite/$token'
     | '/oauth/consent'
     | '/_app/settings/behaviour'
+    | '/_app/settings/calendar'
     | '/_app/settings/data'
     | '/_app/settings/notifications'
     | '/_app/settings/profile'
@@ -438,6 +450,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsBehaviourRouteImport
       parentRoute: typeof AppSettingsRoute
     }
+    '/_app/settings/calendar': {
+      id: '/_app/settings/calendar'
+      path: '/calendar'
+      fullPath: '/settings/calendar'
+      preLoaderRoute: typeof AppSettingsCalendarRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
     '/_app/settings/data': {
       id: '/_app/settings/data'
       path: '/data'
@@ -534,6 +553,7 @@ declare module '@tanstack/react-router' {
 
 interface AppSettingsRouteChildren {
   AppSettingsBehaviourRoute: typeof AppSettingsBehaviourRoute
+  AppSettingsCalendarRoute: typeof AppSettingsCalendarRoute
   AppSettingsDataRoute: typeof AppSettingsDataRoute
   AppSettingsNotificationsRoute: typeof AppSettingsNotificationsRoute
   AppSettingsProfileRoute: typeof AppSettingsProfileRoute
@@ -543,6 +563,7 @@ interface AppSettingsRouteChildren {
 
 const AppSettingsRouteChildren: AppSettingsRouteChildren = {
   AppSettingsBehaviourRoute: AppSettingsBehaviourRoute,
+  AppSettingsCalendarRoute: AppSettingsCalendarRoute,
   AppSettingsDataRoute: AppSettingsDataRoute,
   AppSettingsNotificationsRoute: AppSettingsNotificationsRoute,
   AppSettingsProfileRoute: AppSettingsProfileRoute,

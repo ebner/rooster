@@ -240,7 +240,7 @@ test('the kitchen sink shows the collaboration pieces, axe-clean', async ({ page
   await section.scrollIntoViewIfNeeded();
   await expect(section.getByTestId('activity-feed').first()).toBeVisible();
   await expect(section.getByTestId('mention-suggestions')).toBeVisible();
-  await expect(section.getByTestId('notification')).toHaveCount(6);
+  await expect(section.getByTestId('notification')).toHaveCount(8);
   const results = await new AxeBuilder({ page }).include('#collab').withTags(wcag).analyze();
   expect(
     results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(' | ')}`),

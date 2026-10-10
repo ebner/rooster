@@ -219,10 +219,13 @@ export function useUpdateNotificationPrefs(): MutationResult<
 }
 
 /** The `user.prefs` keys of Settings → Notifications (FR-NOT-2/3). */
-export type DeliveryPrefs = Pick<Prefs, 'reminderTime' | 'digestTime' | 'emailMode'>;
+export type DeliveryPrefs = Pick<
+  Prefs,
+  'reminderTime' | 'digestTime' | 'emailMode' | 'allDayReminderTime'
+>;
 
 /**
- * `PATCH /me` `{prefs}` for the reminder and digest times and the email mode: optimistic on
+ * `PATCH /me` `{prefs}` for the reminder, all-day reminder and digest times and the email mode: optimistic on
  * the cached `/me`, rolled back on failure. Online-only settings (hard rule 4).
  */
 export function useUpdateDeliveryPrefs(): MutationResult<Partial<DeliveryPrefs>> {

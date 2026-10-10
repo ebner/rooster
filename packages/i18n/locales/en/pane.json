@@ -44,7 +44,9 @@
     "createdBy": "Created by {name} · {ago}",
     "you": "you",
     "justNow": "just now",
-    "assignee": "Assignee"
+    "assignee": "Assignee",
+    "repeat": "Repeat",
+    "reminders": "Reminders"
   },
   "description": {
     "label": "Description",

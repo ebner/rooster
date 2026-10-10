@@ -1,1 +1,47 @@
-{}
+{
+  "title": "Calendar feed",
+  "body": "Subscribe in Google Calendar, Apple Calendar or Outlook to see your open tasks with a due date. Each feed has its own secret link; calendar apps check it for changes on their own schedule, often only a few times a day.",
+  "new": "New feed",
+  "scope": "Tasks from",
+  "unknownOrg": "An organisation you’ve left",
+  "allOrgs": "All organisations",
+  "create": "Create feed",
+  "cancel": "Cancel",
+  "empty": "No calendar feeds yet.",
+  "loadFailed": "Couldn’t load your calendar feeds.",
+  "saveFailed": "Couldn’t save. Try again.",
+  "offline": "You’re offline. Calendar feeds can be changed once you’re back online.",
+  "limit": "You have {max, number} feeds, the most you can have. Revoke one to create another.",
+  "created": "Created {date}",
+  "lastUsed": "Last fetched {when}",
+  "neverUsed": "Not fetched yet",
+  "justNow": "just now",
+  "regenerate": "New link",
+  "regenerateNamed": "New link for {name}",
+  "regenerateConfirm": "Get a new link for {name}? The current link stops working at once, so calendars that subscribe to it need the new one.",
+  "revoke": "Revoke",
+  "revokeNamed": "Revoke {name}",
+  "revokeConfirm": "Revoke the feed for {name}? Calendars that subscribe to it stop getting updates.",
+  "revoked": "Feed revoked",
+  "reveal": {
+    "title": "Your feed for {name}",
+    "secret": "Keep this link secret: anyone who has it can see your task titles and due dates. It is shown only now. If it gets out, get a new link.",
+    "label": "Feed link",
+    "copy": "Copy link",
+    "copied": "Copied",
+    "subscribe": "Subscribe",
+    "done": "Done"
+  },
+  "dev": {
+    "section": "Calendar feed",
+    "list": "Feeds",
+    "empty": "No feeds",
+    "creating": "New feed",
+    "reveal": "Link shown once",
+    "confirm": "Revoke confirm",
+    "full": "At the limit",
+    "error": "Couldn’t load",
+    "offline": "Offline",
+    "avatar": "Profile picture"
+  }
+}

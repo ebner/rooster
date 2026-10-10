@@ -1,3 +1,4 @@
+import { dueInstant } from '@rooster/core/dates';
 import { isLocale, type Locale } from '@rooster/i18n/core';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,7 +8,18 @@ import { Group, Section, Specimen } from '../dev-ui/layout';
 import { DateCell } from './date-cell';
 import { DateLabel } from './date-label';
 import { DatePanel, datePopoverClass } from './date-popover';
-import { sampleDateContext, sampleDue, sampleToday } from './fixtures';
+import {
+  sampleDateContext,
+  sampleDue,
+  sampleOwner,
+  sampleReminder,
+  sampleToday,
+  sampleZone,
+} from './fixtures';
+import { QuickDateSheet } from './quick-date-sheet';
+import { ReminderChips, useReminderViews } from './reminder-chips';
+import { ReminderSection } from './reminder-section';
+import { RepeatSection } from './repeat-section';
 import { type DueValue, noDue, type ViewerDateContext } from './types';
 
 const due = sampleDue;
@@ -110,6 +122,7 @@ export function DatesSection() {
           </div>
         </Specimen>
       </Group>
+      <RepeatReminderGroup locale={locale} />
       <Group title={t('dev.range')}>
         {rangeSamples.map(({ id, locale: lang, value, text, rangeMode }) => (
           <Specimen
@@ -148,3 +161,125 @@ const rangeSamples: readonly RangeSample[] = [
   { id: 'rangeTyped', locale: 'en', value: noDue, text: 'oct 10 - 12', rangeMode: true },
   { id: 'rangeSet', locale: 'sv', value: due('2026-11-02', '14:00', '2026-10-28'), text: '' },
 ];
+
+const timedDue = sampleDue('2026-10-09', '14:00');
+const allDayDue = sampleDue('2026-10-12');
+
+/** P10: the picker's Repeat and Reminder sections, and the reminder chips in every state. */
+function RepeatReminderGroup({ locale }: { locale: Locale }) {
+  const { t } = useTranslation('dates');
+  const ctx = sampleDateContext(locale);
+  const noop = () => {};
+  const reminders = [
+    sampleReminder(1, { offsetMinutes: 60 }, timedDue),
+    sampleReminder(2, { at: dueInstant('2026-10-09', '08:00', sampleZone) }, timedDue),
+    sampleReminder(3, { offsetMinutes: 1440 }, timedDue, true),
+  ];
+  const dormant = [sampleReminder(4, { offsetMinutes: 15 }, null)];
+  const full = [0, 15, 60, 120, 1440].map((offsetMinutes, i) =>
+    sampleReminder(10 + i, { offsetMinutes }, allDayDue),
+  );
+  const chipViews = useReminderViews([...reminders, ...dormant], timedDue, ctx);
+  const weekly = {
+    ...sampleDue('2026-10-09'),
+    recurrence: 'FREQ=WEEKLY;BYDAY=FR',
+    recurrenceBasis: 'due' as const,
+  };
+  const reminderSection = (items: typeof reminders, value: DueValue, custom?: string) => (
+    <div className={cn(popoverSurface, datePopoverClass)}>
+      <ReminderSection
+        items={items}
+        due={value}
+        owner={sampleOwner}
+        ctx={ctx}
+        onAdd={noop}
+        onRemove={noop}
+        defaultCustom={custom}
+      />
+    </div>
+  );
+  return (
+    <Group title={t('dev.repeatReminders')}>
+      <Specimen label={t('dev.state.repeatPreset')}>
+        <div className={cn(popoverSurface, datePopoverClass)}>
+          <DatePanel
+            value={weekly}
+            ctx={ctx}
+            onCommit={noop}
+            onCancel={noop}
+            autoFocus={false}
+            repeatable
+            renderReminders={(slot) => (
+              <ReminderSection
+                items={reminders}
+                due={slot.due}
+                owner={sampleOwner}
+                ctx={ctx}
+                onAdd={noop}
+                onRemove={noop}
+              />
+            )}
+            showReminders
+          />
+        </div>
+      </Specimen>
+      <Specimen label={t('dev.state.repeatCustom')}>
+        <div className={cn(popoverSurface, datePopoverClass)}>
+          <RepeatSection
+            choice={{
+              kind: 'custom',
+              rule: 'FREQ=MONTHLY;INTERVAL=2;BYDAY=-1FR;COUNT=4',
+              basis: 'due',
+            }}
+            dueDate="2026-10-30"
+            ctx={ctx}
+            onChange={noop}
+            defaultCustom
+          />
+        </div>
+      </Specimen>
+      <Specimen label={t('dev.state.repeatWeekdays')}>
+        <div className={cn(popoverSurface, datePopoverClass)}>
+          <RepeatSection
+            choice={{ kind: 'custom', rule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TH', basis: 'due' }}
+            dueDate="2026-10-12"
+            ctx={ctx}
+            onChange={noop}
+            defaultCustom
+          />
+        </div>
+      </Specimen>
+      <Specimen label={t('dev.state.remindersTimed')}>
+        {reminderSection(reminders, timedDue, '2h')}
+      </Specimen>
+      <Specimen label={t('dev.state.remindersNoDate')}>
+        {reminderSection(dormant, noDue, 'fri 14:00')}
+      </Specimen>
+      <Specimen label={t('dev.state.remindersFull')}>{reminderSection(full, allDayDue)}</Specimen>
+      <Specimen label={t('dev.state.sheetRepeat')}>
+        <QuickDateSheet
+          isOpen
+          isStatic
+          onOpenChange={noop}
+          value={weekly}
+          ctx={ctx}
+          onCommit={noop}
+          repeatable
+          renderReminders={(slot) => (
+            <ReminderSection
+              items={reminders}
+              due={slot.due}
+              owner={sampleOwner}
+              ctx={ctx}
+              onAdd={noop}
+              onRemove={noop}
+            />
+          )}
+        />
+      </Specimen>
+      <Specimen label={t('dev.state.reminderChips')}>
+        <ReminderChips views={chipViews} ctx={ctx} onRemove={noop} data-force="focus" />
+      </Specimen>
+    </Group>
+  );
+}

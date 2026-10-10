@@ -3,7 +3,13 @@ import type { Org } from '../../data/types';
 /** Views a sidebar org section can link to (02 §2). `everyone` is for shared orgs only. */
 export type OrgViewId = 'my' | 'today' | 'week' | 'overdue' | 'nodate' | 'everyone';
 
-export type SettingsSection = 'profile' | 'behaviour' | 'notifications' | 'security' | 'data';
+export type SettingsSection =
+  | 'profile'
+  | 'behaviour'
+  | 'notifications'
+  | 'calendar'
+  | 'security'
+  | 'data';
 
 /** The personal org is addressed by the `personal` alias (05 §2), giving stable URLs. */
 export function orgUrlSlug(org: Pick<Org, 'isPersonal' | 'slug'>): string {

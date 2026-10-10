@@ -11,7 +11,10 @@
     "colonChip": "↵ igen för att göra om till gruppen ”{name}”",
     "pasteChip": "Skapa {count, plural, one {# uppgift} other {# uppgifter}}? ↵",
     "breadcrumb": "{title} ›",
-    "hasDescription": "Har beskrivning"
+    "hasDescription": "Har beskrivning",
+    "reminder": "Påminnelse: {when}",
+    "repeats": "Upprepas: {rule}",
+    "attachments": "{count, plural, one {# bilaga} other {# bilagor}}"
   },
   "group": {
     "untitled": "Ny grupp",
@@ -92,7 +95,12 @@
     "duplicated": "{count, plural, one {Uppgiften duplicerades} other {# uppgifter duplicerades}}",
     "tagged": "Taggen lades till",
     "untagged": "Taggen togs bort",
-    "madeSubtask": "{count, plural, one {Blev deluppgift till ”{parent}”} other {# uppgifter blev deluppgifter till ”{parent}”}}"
+    "madeSubtask": "{count, plural, one {Blev deluppgift till ”{parent}”} other {# uppgifter blev deluppgifter till ”{parent}”}}",
+    "skipped": "Uppgiften togs bort · serien fortsätter",
+    "seriesDeleted": "Uppgiften togs bort · den upprepas inte längre",
+    "dateClearedReminders": "Datumet togs bort · påminnelserna är pausade",
+    "reminderAdded": "Påminnelsen lades till",
+    "reminderRemoved": "Påminnelsen togs bort"
   },
   "dnd": {
     "handleRole": "Draghandtag",
@@ -121,7 +129,12 @@
       "subtask_depth": "deluppgifter kan bara ligga 5 nivåer djupt",
       "invalid_parent": "den överordnade uppgiften är inte tillgänglig",
       "tag_name_taken": "det finns redan en tagg med det namnet",
-      "not_subtask": "bara deluppgifter kan ordnas om på det sättet"
+      "not_subtask": "bara deluppgifter kan ordnas om på det sättet",
+      "reminder_needs_due": "en påminnelse före förfallodatumet kräver ett förfallodatum",
+      "reminder_in_past": "den tiden för påminnelsen har redan passerat",
+      "too_many_reminders": "en uppgift kan ha högst 5 påminnelser",
+      "not_recurring": "uppgiften upprepas inte",
+      "id_conflict": "den var redan sparad på ett annat sätt"
     }
   },
   "state": {
@@ -227,8 +240,13 @@
     "editorLink": "Länk (med markerad text)",
     "editorToolbar": "Gå till formateringsverktygen",
     "postComment": "Skicka kommentar",
+    "attachFile": "Bifoga filer",
+    "lightboxPrevious": "Föregående bild",
+    "lightboxNext": "Nästa bild",
+    "lightboxClose": "Stäng bilden",
     "toggleRead": "Markera som läst eller oläst",
-    "markAllRead": "Markera alla som lästa"
+    "markAllRead": "Markera alla som lästa",
+    "dateReminder": "Påminnelser"
   },
   "dev": {
     "section": "Listan Mina uppgifter",
@@ -248,8 +266,11 @@
       "planNotes": "Mål, budget och de tre öppna frågorna från uppstarten.",
       "passport": "Förnya passet",
       "offsite": "Planera teamdagen",
-      "done": "Skicka bilderna"
-    }
+      "done": "Skicka bilderna",
+      "weekly": "Vattna blommorna"
+    },
+    "recurringDeletePopover": "Förankrad popover (fokus)",
+    "recurringDeleteSheet": "Ark på telefon"
   },
   "subtasks": {
     "add": "Lägg till deluppgift",
@@ -270,5 +291,12 @@
     "createdUnassigned": "{count, plural, one {Uppgiften lades till} other {# uppgifter lades till}} utan ansvarig",
     "someone": "någon",
     "suggestions": "Personer"
+  },
+  "recurringDelete": {
+    "title": "Ta bort en återkommande uppgift",
+    "body": "”{title}” upprepas. Vill du ta bort bara den här, eller den här och de som skulle följa?",
+    "this": "Ta bort den här uppgiften",
+    "following": "Ta bort den här och kommande",
+    "cancel": "Avbryt"
   }
 }

@@ -1,8 +1,10 @@
 import {
+  Bell,
   CalendarDays,
   CalendarOff,
   CalendarPlus,
   type LucideIcon,
+  Repeat,
   Sofa,
   Sun,
   Sunrise,
@@ -10,9 +12,11 @@ import {
 import { type ReactNode, Suspense, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BottomSheet, SheetOption } from '../../ui/bottom-sheet';
+import type { DatePanelProps, DateSection } from './date-popover';
 import { toDueValue, toLocalDue, useDateText } from './date-text';
 import { LazyDatePanel } from './lazy';
 import { type QuickDateId, quickDateValue } from './quick-dates';
+import { useRuleText } from './recurrence-text';
 import type { DueValue, ViewerDateContext } from './types';
 
 /** 02 §13.2: the quick date sheet's options, in this order. */
@@ -37,6 +41,12 @@ export interface QuickDateSheetProps {
   isStatic?: boolean;
   /** Kitchen sink: open on the calendar. */
   defaultPicking?: boolean;
+  /** P10: one task: offer "Repeat" (see `DatePanelProps`). */
+  repeatable?: boolean | undefined;
+  /** P10: one task: the reminder section (see `DatePanelProps.renderReminders`). */
+  renderReminders?: DatePanelProps['renderReminders'];
+  /** P10: open on the full picker with this section (the pane's Repeat and Reminders rows). */
+  initialSection?: DateSection | undefined;
 }
 
 /**
@@ -53,14 +63,28 @@ export function QuickDateSheet({
   subject,
   isStatic = false,
   defaultPicking = false,
+  repeatable = false,
+  renderReminders,
+  initialSection,
 }: QuickDateSheetProps) {
   const { t } = useTranslation('dates', { lng: ctx.locale });
   const { t: tm } = useTranslation('mobile');
   const text = useDateText(ctx);
-  const [picking, setPicking] = useState(defaultPicking);
+  const ruleText = useRuleText(ctx);
+  const startPicking = defaultPicking || initialSection !== undefined;
+  const [picking, setPicking] = useState(startPicking);
+  /** P10: the section the full picker opens with ("Repeat…", "Reminders…" rows). */
+  const [section, setSection] = useState<DateSection | undefined>(initialSection);
   useEffect(() => {
-    if (!isOpen) setPicking(defaultPicking);
-  }, [isOpen, defaultPicking]);
+    if (!isOpen) {
+      setPicking(startPicking);
+      setSection(initialSection);
+    }
+  }, [isOpen, startPicking, initialSection]);
+  const pickSection = (next: DateSection) => {
+    setSection(next);
+    setPicking(true);
+  };
 
   const commit = (next: DueValue | null) => {
     onCommit(next);
@@ -86,6 +110,10 @@ export function QuickDateSheet({
               autoFocus={false}
               onCommit={commit}
               onCancel={() => setPicking(false)}
+              repeatable={repeatable}
+              renderReminders={renderReminders}
+              initialSection={section}
+              onApply={(next) => onCommit(next)}
             />
           </Suspense>
         </div>
@@ -108,6 +136,23 @@ export function QuickDateSheet({
             label={tm('date.pick')}
             onPress={() => setPicking(true)}
           />
+          {repeatable && (
+            <SheetOption
+              icon={Repeat}
+              label={t('repeat.label')}
+              detail={
+                value.recurrence ? ruleText(value.recurrence, value.recurrenceBasis) : undefined
+              }
+              onPress={() => pickSection('repeat')}
+            />
+          )}
+          {renderReminders && (
+            <SheetOption
+              icon={Bell}
+              label={t('reminder.label')}
+              onPress={() => pickSection('reminder')}
+            />
+          )}
           <SheetOption
             icon={CalendarOff}
             label={t('chip.noDate')}

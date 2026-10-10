@@ -1,1 +1,47 @@
-{}
+{
+  "title": "Kalenderflöde",
+  "body": "Prenumerera i Google Kalender, Apple Kalender eller Outlook för att se dina öppna uppgifter som har ett förfallodatum. Varje flöde har en egen hemlig länk. Kalenderappar hämtar ändringar när de själva vill, ofta bara några gånger om dagen.",
+  "new": "Nytt flöde",
+  "scope": "Uppgifter från",
+  "unknownOrg": "En organisation du har lämnat",
+  "allOrgs": "Alla organisationer",
+  "create": "Skapa flöde",
+  "cancel": "Avbryt",
+  "empty": "Inga kalenderflöden än.",
+  "loadFailed": "Det gick inte att läsa in dina kalenderflöden.",
+  "saveFailed": "Det gick inte att spara. Försök igen.",
+  "offline": "Du är offline. Kalenderflöden kan ändras när du är online igen.",
+  "limit": "Du har {max, number} flöden, så många som går. Återkalla ett för att skapa ett nytt.",
+  "created": "Skapat {date}",
+  "lastUsed": "Senast hämtat {when}",
+  "neverUsed": "Inte hämtat än",
+  "justNow": "nyss",
+  "regenerate": "Ny länk",
+  "regenerateNamed": "Ny länk för {name}",
+  "regenerateConfirm": "Skapa en ny länk för {name}? Den nuvarande länken slutar fungera direkt, så kalendrar som prenumererar på den behöver den nya.",
+  "revoke": "Återkalla",
+  "revokeNamed": "Återkalla {name}",
+  "revokeConfirm": "Återkalla flödet för {name}? Kalendrar som prenumererar på det slutar att uppdateras.",
+  "revoked": "Flödet har återkallats",
+  "reveal": {
+    "title": "Ditt flöde för {name}",
+    "secret": "Håll länken hemlig: alla som har den kan se dina uppgifters rubriker och förfallodatum. Den visas bara nu. Skapa en ny länk om den kommer på avvägar.",
+    "label": "Flödets länk",
+    "copy": "Kopiera länk",
+    "copied": "Kopierad",
+    "subscribe": "Prenumerera",
+    "done": "Klar"
+  },
+  "dev": {
+    "section": "Kalenderflöde",
+    "list": "Flöden",
+    "empty": "Inga flöden",
+    "creating": "Nytt flöde",
+    "reveal": "Länken visas en gång",
+    "confirm": "Bekräfta återkallning",
+    "full": "Vid gränsen",
+    "error": "Kunde inte läsas in",
+    "offline": "Offline",
+    "avatar": "Profilbild"
+  }
+}

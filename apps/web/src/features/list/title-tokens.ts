@@ -2,6 +2,8 @@ import {
   type DateParseContext,
   findDateInTitle,
   findGroupToken,
+  findReminderTokens,
+  type ReminderTokenMatch,
   stripBackticks,
   type TitleDateMatch,
 } from '@rooster/core/dates';
@@ -32,10 +34,34 @@ export function findTitleDate(
 
 export interface ParsedTitle {
   title: string;
-  /** Present when a date phrase was found and applied. */
-  due?: { dueDate: string; dueTime: string | null; dueTz: string | null };
+  /**
+   * Present when a date phrase was found and applied; a recurrence phrase ("every mon", P10)
+   * adds the series' rule and basis.
+   */
+  due?: {
+    dueDate: string;
+    dueTime: string | null;
+    dueTz: string | null;
+    recurrence?: string;
+    recurrenceBasis?: 'due' | 'completion';
+  };
   /** `#tag` names found (02 §3.4), in title order, without duplicates (case-insensitive). */
   tags?: string[];
+  /** P10 (02 §8.1): `!15m`/`!1h`/`!1d`/`!due` as minutes before the due moment, in order. */
+  reminders?: number[];
+}
+
+/**
+ * The `!15m` reminder tokens a title applies (02 §8.1, P10): only with a due date, from the
+ * title's own date phrase or the task's (`hasDue`); otherwise they stay plain text.
+ */
+export function titleReminderTokens(
+  text: string,
+  ignored: readonly Span[],
+  hasDue: boolean,
+): ReminderTokenMatch[] {
+  if (!hasDue) return [];
+  return findReminderTokens(text).filter((t) => !ignored.some((span) => overlaps(span, t)));
 }
 
 const collapse = (text: string) => text.replace(/\s+/g, ' ').trim();
@@ -127,7 +153,19 @@ export function parseTitle(
   ctx: ViewerDateContext,
   ignored: readonly Span[] = [],
   enabled = true,
+  /** P10: the task already has a due date, so `!1h` applies without a date phrase. */
+  hasDue = false,
 ): ParsedTitle {
+  const match = enabled ? findTitleDate(raw, ctx, ignored) : null;
+  const reminderTokens = enabled ? titleReminderTokens(raw, ignored, hasDue || match !== null) : [];
+  if (reminderTokens.length > 0) {
+    // Parsed without the tokens, which are removed like the date phrase.
+    const rest = reminderTokens.reduce((text, token) => blankSpan(text, token), raw);
+    const parsed = parseTitle(rest, ctx, ignored, enabled, hasDue);
+    if (parsed.title === '') return { title: collapse(stripBackticks(raw)) };
+    const offsets = [...new Set(reminderTokens.map((t) => t.offsetMinutes))];
+    return { ...parsed, reminders: offsets };
+  }
   const tagTokens = findTagTokens(raw, ignored);
   const seen = new Set<string>();
   const tags = tagTokens
@@ -142,7 +180,6 @@ export function parseTitle(
   const untagged = tagTokens.length > 0 ? removeSpans(raw, tagTokens) : raw;
   const withTags = (parsed: ParsedTitle): ParsedTitle =>
     tags.length > 0 && parsed.title !== '' ? { ...parsed, tags } : parsed;
-  const match = enabled ? findTitleDate(raw, ctx, ignored) : null;
   if (match) {
     const title = collapse(stripBackticks(removeSpans(raw, [match, ...tagTokens])));
     if (title !== '') {
@@ -152,6 +189,9 @@ export function parseTitle(
           dueDate: match.date,
           dueTime: match.time,
           dueTz: match.time ? ctx.timezone : null,
+          ...(match.recurrence
+            ? { recurrence: match.recurrence.rule, recurrenceBasis: match.recurrence.basis }
+            : {}),
         },
       });
     }

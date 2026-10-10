@@ -44,7 +44,9 @@
     "createdBy": "Skapad av {name} · {ago}",
     "you": "dig",
     "justNow": "just nu",
-    "assignee": "Ansvarig"
+    "assignee": "Ansvarig",
+    "repeat": "Upprepa",
+    "reminders": "Påminnelser"
   },
   "description": {
     "label": "Beskrivning",

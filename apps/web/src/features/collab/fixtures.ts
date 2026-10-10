@@ -195,5 +195,29 @@ export function fixtureNotifications(now: number): Notification[] {
       readAt: at(10),
       createdAt: at(6000),
     },
+    // P10 (FR-REM-3): the user's own reminders have no actor; the second fired late.
+    {
+      ...common,
+      id: id(56),
+      type: 'reminder',
+      actor: null,
+      data: {
+        reminderId: id(60),
+        fireAt: at(1),
+        late: false,
+        to: { dueDate: '2026-10-12', dueTime: '14:00' },
+      },
+      readAt: null,
+      createdAt: at(1),
+    },
+    {
+      ...common,
+      id: id(57),
+      type: 'reminder',
+      actor: null,
+      data: { reminderId: id(61), fireAt: at(7000), late: true },
+      readAt: at(10),
+      createdAt: at(6900),
+    },
   ];
 }
