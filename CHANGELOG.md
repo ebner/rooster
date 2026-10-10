@@ -6,6 +6,52 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+Hardening (Phase 11): a full security audit, accessibility, performance with 2,000 tasks, the user guide in the app, and operations tooling.
+
+### Added
+- **The user guide**, in English and Swedish, in the app at `/help` (G then H, or the `?` cheat sheet, the user menu and Settings) and in `docs/guide/`. It works offline. The README and the guide show screenshots of a demo team.
+- **The list's ⋯ menu:** add group, show completed, collapse or expand all groups (Shift+← / Shift+→), export, and print (Ctrl/⌘+P prints just the list).
+- **Settings → Behaviour:** turn off recognising dates in task names, and choose how long completed tasks stay (1.5 s, 3 s or until reload).
+- **Admin → System:** version, database and WAL size, last backup, job runs, mail and push status, live connections, attachment storage, and a "Rebuild search index" action.
+- **Storage quota:** `ROOSTER_USER_STORAGE_MB` (default 1024 MB of attachments per user, 0 for none). Settings → Data shows what you use.
+- **Removed sign-ins:** an identity you unlink in Settings → Security can no longer sign you in until you allow it again there.
+- **Operations:** `compose.litestream.yaml` for continuous replication, the operator guide (`docs/operator.md`), `CONTRIBUTING.md`, the ASVS L2 map (`docs/security/asvs.md`) and a manual screen-reader checklist.
+
+### Changed
+- **Apps and tokens no longer see your colleagues' email addresses.** Assigning by email, full name or `me` still works in the CLI and MCP, through `GET /orgs/{orgId}/members/resolve`. Older CLI and MCP versions can no longer assign by the part of an email before the @.
+- **Approving an app (OAuth consent) or a CLI login (device approval)** is now tied to the browser session that showed the request; a page left open across a sign-out or account switch must be reloaded.
+- **Regenerating the push keys** pauses push instead of turning it off: each device renews itself the next time rooster is opened there. Push keeps at most 20 devices per person.
+- **No app or token can delete a task permanently**; emptying the Trash needs the browser.
+- **Uploads:** at most 3 at a time per person.
+- **Signing in as another account in one tab** now reloads rooster's other open tabs (ADR 0051).
+- **Performance:** the list stays fast with 2,000 tasks (keypress to screen under 30 ms at p95), and the server idles under 150 MB.
+- **The Docker image** is smaller (about 249 MB): rooster's files are owned by root, and boot refuses database files it can't make private.
+- The initial-bundle budget is 500 KB.
+
+### Security
+- A full security audit of every trust boundary, with each finding fixed or recorded (`docs/security/security-review.md`, ADR 0056).
+- CI checks dependencies (`pnpm audit`) and scans for secrets (gitleaks).
+- API responses are `Cache-Control: no-store` by default.
+
+### Fixed
+- **Uploads in the Docker image** (also in 1.4.1).
+- On phones, the swipe reveal sits behind the row it belongs to, and rows with many icons keep a readable title.
+- Inbox, email and push previews of comments show plain text instead of Markdown.
+- Accessibility: the list's rows and groups have full screen-reader names, focus and target sizes meet WCAG 2.2 AA, and the phone task sheet hides the list behind it from assistive technology.
+
+### Removed
+- `ROOSTER_METRICS_TOKEN` (there was no metrics endpoint).
+
+### Migrations
+- `0012_p11_attachment_uploader`: an index for the storage quota.
+- `0013_p11_avatar_storage_push_rotation`: where an avatar is stored, and which push subscriptions wait for renewal after a key rotation.
+- `0014_unlinked_identity`: removed sign-ins.
+- `0015_p11_avatar_id`: one key per avatar upload.
+
+### Upgrade notes
+- **Litestream:** put `LITESTREAM_ACCESS_KEY_ID` and `LITESTREAM_SECRET_ACCESS_KEY` in `litestream.env`, not `.env`.
+- **The data directory must be owned by the container user** (65532). Rooster now refuses to start if it can't make its database files private.
+
 ## [1.4.1] - 2026-10-10
 
 ### Fixed
