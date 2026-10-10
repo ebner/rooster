@@ -1,3 +1,4 @@
+import { canRead } from '@rooster/core/grants';
 import type { Group, Task } from '@rooster/core/schemas';
 import { and, asc, eq, inArray, isNotNull, isNull, min, notInArray, sql } from 'drizzle-orm';
 import {
@@ -12,7 +13,7 @@ import {
 } from '../db/schema/index.ts';
 import { AppError } from '../lib/errors.ts';
 import { attachmentCounts } from './attachment-queries.ts';
-import type { Tx } from './context.ts';
+import type { Actor, Tx } from './context.ts';
 import type { OrderDomain } from './ordering-service.ts';
 import { indexTasks } from './search-index.ts';
 
@@ -227,8 +228,11 @@ export interface TaskExtras {
 export function loadTaskExtras(
   tx: Tx,
   taskIds: readonly string[],
-  viewerId: string | null,
+  viewer: TaskViewer | null,
 ): TaskExtras {
+  const viewerId = viewer === null ? null : viewerIdOf(viewer);
+  // A grant counts only the subtasks it may read (their number and done state are no hint).
+  const visible = viewer === null ? null : taskVisibility(tx, viewer);
   const extras: TaskExtras = {
     tagIds: new Map(),
     counts: new Map(),
@@ -248,19 +252,38 @@ export function loadTaskExtras(
       if (list === undefined) extras.tagIds.set(t.taskId, [t.tagId]);
       else list.push(t.tagId);
     }
-    const counts = tx
-      .select({
-        parentId: task.parentId,
-        subtasks: sql<number>`count(*)`,
-        subtasksDone: sql<number>`coalesce(sum(${task.completedAt} IS NOT NULL), 0)`,
-      })
-      .from(task)
-      .where(and(inArray(task.parentId, ids), isNull(task.deletedAt)))
-      .groupBy(task.parentId)
-      .all();
-    for (const c of counts) {
-      if (c.parentId !== null) {
-        extras.counts.set(c.parentId, { subtasks: c.subtasks, subtasksDone: c.subtasksDone });
+    if (visible === null) {
+      const counts = tx
+        .select({
+          parentId: task.parentId,
+          subtasks: sql<number>`count(*)`,
+          subtasksDone: sql<number>`coalesce(sum(${task.completedAt} IS NOT NULL), 0)`,
+        })
+        .from(task)
+        .where(and(inArray(task.parentId, ids), isNull(task.deletedAt)))
+        .groupBy(task.parentId)
+        .all();
+      for (const c of counts) {
+        if (c.parentId !== null) {
+          extras.counts.set(c.parentId, { subtasks: c.subtasks, subtasksDone: c.subtasksDone });
+        }
+      }
+    } else {
+      for (const child of tx
+        .select({
+          id: task.id,
+          parentId: task.parentId,
+          orgId: task.orgId,
+          completedAt: task.completedAt,
+        })
+        .from(task)
+        .where(and(inArray(task.parentId, ids), isNull(task.deletedAt)))
+        .all()) {
+        if (child.parentId === null || !visible(child)) continue;
+        const c = extras.counts.get(child.parentId) ?? { subtasks: 0, subtasksDone: 0 };
+        c.subtasks++;
+        if (child.completedAt !== null) c.subtasksDone++;
+        extras.counts.set(child.parentId, c);
       }
     }
     for (const c of tx
@@ -295,7 +318,7 @@ export function loadTaskExtras(
 export function toTaskDto(
   row: TaskRow,
   place: Pick<PlacementRow, 'groupId' | 'position'> | null,
-  options: { description?: boolean; trash?: boolean } = {},
+  options: { description?: boolean; trash?: boolean; parentHidden?: boolean } = {},
   extras?: TaskExtras,
 ): Task {
   const counts = extras?.counts.get(row.id);
@@ -303,7 +326,8 @@ export function toTaskDto(
     id: row.id,
     orgId: row.orgId,
     seq: row.seq,
-    parentId: row.parentId,
+    // A parent the viewer's grant cannot read is not named (its existence would leak).
+    parentId: options.parentHidden === true ? null : row.parentId,
     subtaskPosition: row.subtaskPosition,
     title: row.title,
     ...(options.description === true ? { description: row.description } : {}),
@@ -360,28 +384,66 @@ export function placementsFor(
 }
 
 /** Task DTO with the actor's placement, as returned by single-task mutations. */
-export function taskDtoFor(tx: Tx, userId: string, row: TaskRow): Task {
+export function taskDtoFor(tx: Tx, viewer: TaskViewer, row: TaskRow): Task {
+  const userId = viewerIdOf(viewer);
   const place = placementOf(tx, row.id);
   return toTaskDto(
     row,
     place !== undefined && place.userId === userId ? place : null,
-    { description: true },
-    loadTaskExtras(tx, [row.id], userId),
+    { description: true, parentHidden: hiddenParents(tx, viewer, [row]).has(row.id) },
+    loadTaskExtras(tx, [row.id], viewer),
   );
+}
+
+/** IDs of `rows` whose parent the viewer's grant cannot read. */
+export function hiddenParents(
+  tx: Tx,
+  viewer: TaskViewer,
+  rows: readonly Pick<TaskRow, 'id' | 'parentId'>[],
+): Set<string> {
+  const hidden = new Set<string>();
+  const visible = taskVisibility(tx, viewer);
+  if (visible === null) return hidden;
+  const parentIds = [...new Set(rows.map((r) => r.parentId).filter((p) => p !== null))];
+  const parents = new Map<string, VisibilityRow>();
+  for (const chunk of chunked(parentIds)) {
+    for (const p of tx
+      .select({ id: task.id, parentId: task.parentId, orgId: task.orgId })
+      .from(task)
+      .where(inArray(task.id, chunk))
+      .all()) {
+      parents.set(p.id, p);
+    }
+  }
+  for (const r of rows) {
+    if (r.parentId === null) continue;
+    const parent = parents.get(r.parentId);
+    if (parent === undefined || !visible(parent)) hidden.add(r.id);
+  }
+  return hidden;
 }
 
 /** DTOs for many rows with `userId`'s placements (or the given ones) and the extras. */
 export function taskDtos(
   tx: Tx,
-  userId: string,
+  viewer: TaskViewer,
   rows: readonly TaskRow[],
   options: { trash?: boolean; places?: ReadonlyMap<string, PlacementRow | null> } = {},
 ): Task[] {
   const ids = rows.map((r) => r.id);
-  const places = options.places ?? placementsFor(tx, userId, ids);
-  const extras = loadTaskExtras(tx, ids, userId);
+  const places = options.places ?? placementsFor(tx, viewerIdOf(viewer), ids);
+  const extras = loadTaskExtras(tx, ids, viewer);
+  const hidden = hiddenParents(tx, viewer, rows);
   return rows.map((r) =>
-    toTaskDto(r, places.get(r.id) ?? null, options.trash === true ? { trash: true } : {}, extras),
+    toTaskDto(
+      r,
+      places.get(r.id) ?? null,
+      {
+        ...(options.trash === true ? { trash: true } : {}),
+        ...(hidden.has(r.id) ? { parentHidden: true } : {}),
+      },
+      extras,
+    ),
   );
 }
 
@@ -615,4 +677,98 @@ export function insertTaskRow(tx: Tx, input: NewTaskRow): TaskRow {
   tx.insert(task).values(row).run();
   indexTasks(tx, [row.id]);
   return row;
+}
+
+/**
+ * Where a task sits for the grant (11 §2.2): the user's own placement of the task, else of its
+ * nearest ancestor (a subtask counts as part of the row it shows under; an orphan subtask has
+ * its own placement). Null when neither the task nor any ancestor is in the user's list.
+ */
+export class GrantGroups {
+  private readonly placed = new Map<string, string | null>();
+  private readonly parents = new Map<string, string | null>();
+
+  constructor(
+    private readonly tx: Tx,
+    private readonly userId: string,
+  ) {}
+
+  /** Preloads the placements and parents of `rows` (list reads), one query per chunk. */
+  prime(rows: readonly Pick<TaskRow, 'id' | 'parentId'>[]): this {
+    for (const r of rows) this.parents.set(r.id, r.parentId);
+    const ids = rows.map((r) => r.id).filter((id) => !this.placed.has(id));
+    for (const chunk of chunked(ids)) {
+      for (const id of chunk) this.placed.set(id, null);
+      for (const p of this.tx
+        .select({ taskId: placement.taskId, groupId: placement.groupId })
+        .from(placement)
+        .where(and(eq(placement.userId, this.userId), inArray(placement.taskId, chunk)))
+        .all()) {
+        this.placed.set(p.taskId, p.groupId);
+      }
+    }
+    return this;
+  }
+
+  groupOf(row: Pick<TaskRow, 'id' | 'parentId'>): string | null {
+    const seen = new Set<string>();
+    let id: string | null = row.id;
+    this.parents.set(row.id, row.parentId);
+    while (id !== null && !seen.has(id)) {
+      seen.add(id);
+      if (!this.placed.has(id)) this.loadPlacement(id);
+      const group = this.placed.get(id) ?? null;
+      if (group !== null) return group;
+      id = this.parentOf(id);
+    }
+    return null;
+  }
+
+  private loadPlacement(taskId: string): void {
+    const p = this.tx
+      .select({ groupId: placement.groupId })
+      .from(placement)
+      .where(and(eq(placement.taskId, taskId), eq(placement.userId, this.userId)))
+      .get();
+    this.placed.set(taskId, p?.groupId ?? null);
+  }
+
+  private parentOf(taskId: string): string | null {
+    if (!this.parents.has(taskId)) {
+      const r = this.tx
+        .select({ parentId: task.parentId })
+        .from(task)
+        .where(eq(task.id, taskId))
+        .get();
+      this.parents.set(taskId, r?.parentId ?? null);
+    }
+    return this.parents.get(taskId) ?? null;
+  }
+}
+
+/**
+ * Who a task DTO is for: a user ID (the browser session, full access) or the actor, whose grant
+ * then decides which related tasks the DTO may reveal (subtask counts, the parent reference).
+ */
+export type TaskViewer = string | Pick<Actor, 'userId' | 'grant'>;
+
+export function viewerIdOf(viewer: TaskViewer): string {
+  return typeof viewer === 'string' ? viewer : viewer.userId;
+}
+
+type VisibilityRow = Pick<TaskRow, 'id' | 'parentId' | 'orgId'>;
+
+/**
+ * Whether a grant may read a task (the `canReadTask` rule; 11 §2.2), or null when the viewer
+ * reads everything (the browser session).
+ */
+export function taskVisibility(
+  tx: Tx,
+  viewer: TaskViewer,
+): ((row: VisibilityRow) => boolean) | null {
+  if (typeof viewer === 'string' || viewer.grant === null) return null;
+  const constraints = viewer.grant.constraints;
+  const groups = new GrantGroups(tx, viewer.userId);
+  return (row) =>
+    canRead(constraints, row.orgId, null) || canRead(constraints, row.orgId, groups.groupOf(row));
 }

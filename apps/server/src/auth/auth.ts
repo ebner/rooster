@@ -42,7 +42,7 @@ import type { Services } from '../services/index.ts';
 import type { SignInRejection } from '../services/sign-in-policy.ts';
 import { AUTH_BASE_PATH } from './auth-paths.ts';
 import { createCimdFetch } from './cimd-fetch.ts';
-import { authCookieName, readInviteToken, sessionCookieName } from './cookies.ts';
+import { authCookieName, isSecureBaseUrl, readInviteToken, sessionCookieName } from './cookies.ts';
 import { consentReferenceId } from './oauth-handoff.ts';
 
 export { AUTH_BASE_PATH };
@@ -240,7 +240,7 @@ export function providerOrigins(config: Config): string[] {
  */
 export function createAuth(deps: AuthDeps) {
   const { config, db, logger, services, clock } = deps;
-  const secure = config.baseUrl.startsWith('https://');
+  const secure = isSecureBaseUrl(config.baseUrl);
   const authLogger = logger.child({ component: 'better-auth' });
   const linkableProviders = emailAuthorities(config);
   const inviteTokenOf = (headers: Headers | null) =>

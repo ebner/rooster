@@ -14,6 +14,7 @@ import { AppError } from '../lib/errors.ts';
 import type { Actor, ActorGrant, Tx } from './context.ts';
 import {
   chunked,
+  GrantGroups,
   groupNotFound,
   subtreeOf,
   subtreePlacements,
@@ -21,6 +22,8 @@ import {
   taskNotFound,
 } from './list-access.ts';
 import { notFound } from './org-access.ts';
+
+export { GrantGroups };
 
 /**
  * Grant enforcement (11 §2.3, `authorizeGrant`): runs in services after the membership check.
@@ -95,73 +98,6 @@ export function authorizeOrgWide(tx: Tx, actor: Actor, orgId: string, scope: Gra
       orgId,
       'This needs write access to the whole organisation.',
     );
-  }
-}
-
-/**
- * Where a task sits for the grant (11 §2.2): the user's own placement of the task, else of its
- * nearest ancestor (a subtask counts as part of the row it shows under; an orphan subtask has
- * its own placement). Null when neither the task nor any ancestor is in the user's list.
- */
-export class GrantGroups {
-  private readonly placed = new Map<string, string | null>();
-  private readonly parents = new Map<string, string | null>();
-
-  constructor(
-    private readonly tx: Tx,
-    private readonly userId: string,
-  ) {}
-
-  /** Preloads the placements and parents of `rows` (list reads), one query per chunk. */
-  prime(rows: readonly Pick<TaskRow, 'id' | 'parentId'>[]): this {
-    for (const r of rows) this.parents.set(r.id, r.parentId);
-    const ids = rows.map((r) => r.id).filter((id) => !this.placed.has(id));
-    for (const chunk of chunked(ids)) {
-      for (const id of chunk) this.placed.set(id, null);
-      for (const p of this.tx
-        .select({ taskId: placement.taskId, groupId: placement.groupId })
-        .from(placement)
-        .where(and(eq(placement.userId, this.userId), inArray(placement.taskId, chunk)))
-        .all()) {
-        this.placed.set(p.taskId, p.groupId);
-      }
-    }
-    return this;
-  }
-
-  groupOf(row: Pick<TaskRow, 'id' | 'parentId'>): string | null {
-    const seen = new Set<string>();
-    let id: string | null = row.id;
-    this.parents.set(row.id, row.parentId);
-    while (id !== null && !seen.has(id)) {
-      seen.add(id);
-      if (!this.placed.has(id)) this.loadPlacement(id);
-      const group = this.placed.get(id) ?? null;
-      if (group !== null) return group;
-      id = this.parentOf(id);
-    }
-    return null;
-  }
-
-  private loadPlacement(taskId: string): void {
-    const p = this.tx
-      .select({ groupId: placement.groupId })
-      .from(placement)
-      .where(and(eq(placement.taskId, taskId), eq(placement.userId, this.userId)))
-      .get();
-    this.placed.set(taskId, p?.groupId ?? null);
-  }
-
-  private parentOf(taskId: string): string | null {
-    if (!this.parents.has(taskId)) {
-      const r = this.tx
-        .select({ parentId: task.parentId })
-        .from(task)
-        .where(eq(task.id, taskId))
-        .get();
-      this.parents.set(taskId, r?.parentId ?? null);
-    }
-    return this.parents.get(taskId) ?? null;
   }
 }
 
@@ -672,8 +608,15 @@ function outsideGrant(
       .where(and(eq(taskGroup.userId, userId), inArray(taskGroup.id, [...org.write.groups])))
       .all();
     const byId = new Map(names.map((g) => [g.id, g.name]));
-    const listed = org.write.groups.map((id) => `"${byId.get(id) ?? id}"`).join(', ');
-    allowed = `This token or app may write only in ${listed}.`;
+    // Write and read lists may differ: a group the grant cannot read is never named.
+    const readable = org.write.groups.filter((id) => canRead(grant.constraints, orgId, id));
+    const others = org.write.groups.length - readable.length;
+    const listed = readable.map((id) => `"${byId.get(id) ?? id}"`);
+    if (others > 0) listed.push(others === 1 ? 'one other group' : `${others} other groups`);
+    allowed =
+      listed.length === 0
+        ? 'This token or app may write only in groups it cannot read here.'
+        : `This token or app may write only in ${listed.join(', ')}.`;
   }
   return new AppError(
     'outside_grant',

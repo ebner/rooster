@@ -396,3 +396,121 @@ describe('boundary 3, round 3', () => {
     expect((await api.call('POST', `/api/v1/groups/${unknown}/restore`)).status).toBe(404);
   });
 });
+
+describe('boundary 3, round 5', () => {
+  /**
+   * The owner's T sits in `tGroup`; Bob's subtask S shows under it; the owner's G under S has its
+   * own placement in `gGroup`. A grant reading only Prio sees whichever sits in Prio.
+   */
+  async function family(tIn: 'Prio' | 'Today', gIn: 'Prio' | 'Today') {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const bob = ctx.user('bob@example.com');
+    const org = await sharedOrg(owner, [bob]);
+    const prio = await groupNamed(owner, 'Prio', org.id);
+    const today = await groupNamed(owner, 'Today', org.id);
+    const groupOf = (name: 'Prio' | 'Today') => (name === 'Prio' ? prio : today);
+    const t = await owner.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'T', groupId: groupOf(tIn).id },
+      201,
+    );
+    const s = await bob.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'S', parentId: t.id, assigneeId: bob.userId },
+      201,
+    );
+    const g = await owner.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'G', parentId: s.id, assigneeId: owner.userId },
+      201,
+    );
+    await owner.ok('POST', `/api/v1/tasks/${g.id}/move`, { groupId: groupOf(gIn).id });
+    const readPrio = (write: 'none' | 'all') => ({
+      orgs: [{ orgId: org.id, read: { groups: [prio.id] }, write }],
+    });
+    return { ctx, owner, bob, org, prio, today, t, s, g, readPrio };
+  }
+
+  it('P2 a group delete or restore must reach every task it cascades to', async () => {
+    const { ctx, owner, org, prio, t, g, readPrio } = await family('Prio', 'Today');
+    const api = bearer(ctx, (await pat(owner, ALL, readPrio('all'))).token);
+    const del = await api.call('DELETE', `/api/v1/groups/${prio.id}`, { deleteTasks: true });
+    expect(del.status).toBe(404);
+    expect((await owner.ok<Task>('GET', `/api/v1/tasks/${g.id}`)).deletedAt).toBeUndefined();
+    expect((await owner.ok<Task>('GET', `/api/v1/tasks/${t.id}`)).deletedAt).toBeUndefined();
+    // The browser deletes it with everything; the grant cannot restore what it cannot see.
+    await owner.ok('DELETE', `/api/v1/groups/${prio.id}`, { deleteTasks: true }, 204);
+    const restore = await api.call('POST', `/api/v1/groups/${prio.id}/restore`);
+    expect(restore.status).toBe(404);
+    const trash = await owner.ok<{ items: Task[] }>('GET', `/api/v1/orgs/${org.id}/trash`);
+    expect(trash.items.map((i) => i.id)).toContain(t.id);
+  });
+
+  it('P3 a create naming a hidden group’s ID is 404, whatever the name', async () => {
+    const { ctx, owner, org, today, readPrio } = await family('Prio', 'Today');
+    const api = bearer(ctx, (await pat(owner, ['groups:write'], readPrio('all'))).token);
+    for (const name of ['Today', 'Wrong']) {
+      const res = await api.call('POST', `/api/v1/orgs/${org.id}/groups`, { id: today.id, name });
+      expect(res.status, name).toBe(404);
+      expect(await res.text()).not.toContain('Today');
+    }
+  });
+
+  it('P3 subtask counts include only subtasks the grant can read', async () => {
+    const { ctx, owner, s, g, readPrio } = await family('Prio', 'Today');
+    const api = bearer(ctx, (await pat(owner, ['tasks:read'], readPrio('none'))).token);
+    const seen = await api.ok<Task & { subtasks: Task[] }>('GET', `/api/v1/tasks/${s.id}`);
+    expect(seen.subtasks).toEqual([]);
+    expect(seen.counts.subtasks).toBe(0);
+    await owner.ok('POST', `/api/v1/tasks/${g.id}/complete`, { completed: true });
+    const again = await api.ok<Task>('GET', `/api/v1/tasks/${s.id}`);
+    expect(again.counts).toMatchObject({ subtasks: 0, subtasksDone: 0 });
+    const browser = await owner.ok<Task>('GET', `/api/v1/tasks/${s.id}`);
+    expect(browser.counts).toMatchObject({ subtasks: 1, subtasksDone: 1 });
+  });
+
+  it('P3 a parent the grant cannot read is not named in parentId', async () => {
+    const { ctx, owner, org, s, g, readPrio } = await family('Today', 'Prio');
+    const api = bearer(ctx, (await pat(owner, ['tasks:read'], readPrio('none'))).token);
+    expect((await api.call('GET', `/api/v1/tasks/${s.id}`)).status).toBe(404);
+    const detail = await api.ok<Task>('GET', `/api/v1/tasks/${g.id}`);
+    expect(detail.parentId).toBeNull();
+    const list = await api.ok<{ items: Task[] }>('GET', `/api/v1/orgs/${org.id}/tasks?view=my`);
+    expect(JSON.stringify(list)).not.toContain(s.id);
+    expect((await owner.ok<Task>('GET', `/api/v1/tasks/${g.id}`)).parentId).toBe(s.id);
+  });
+
+  it('P3 an outside_grant explanation never names a group the grant cannot read', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const prio = await groupNamed(owner, 'Prio');
+    const secret = await owner.ok<{ group: Group }>(
+      'POST',
+      '/api/v1/orgs/personal/groups',
+      { name: 'ConfidentialAcquisition' },
+      201,
+    );
+    const t = await owner.ok<Task>(
+      'POST',
+      '/api/v1/orgs/personal/tasks',
+      { title: 'In Prio', groupId: prio.id },
+      201,
+    );
+    const constraints = {
+      orgs: [
+        { orgId: prio.orgId, read: { groups: [prio.id] }, write: { groups: [secret.group.id] } },
+      ],
+    };
+    const api = bearer(ctx, (await pat(owner, ['tasks:write'], constraints)).token);
+    const res = await api.call('PATCH', `/api/v1/tasks/${t.id}`, { title: 'X' });
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { code: string; detail: string };
+    expect(body.code).toBe('outside_grant');
+    expect(body.detail).not.toContain('ConfidentialAcquisition');
+    expect(body.detail).toContain('one other group');
+  });
+});

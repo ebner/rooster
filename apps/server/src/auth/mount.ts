@@ -8,7 +8,7 @@ import type { Services } from '../services/index.ts';
 import { hashOAuthToken } from '../services/oauth-grants.ts';
 import type { SignInRejection } from '../services/sign-in-policy.ts';
 import { AUTH_BASE_PATH, type Auth, CLIENT_IP_HEADER, IDENTITY_UNLINKED } from './auth.ts';
-import { clearInviteCookie } from './cookies.ts';
+import { clearInviteCookie, isSecureBaseUrl } from './cookies.ts';
 import { KeyedLock } from './keyed-lock.ts';
 import { resourceOf } from './oauth-metadata.ts';
 
@@ -39,7 +39,7 @@ function rewriteCallback(res: Response, config: Config): Response {
   } else if (error === IDENTITY_UNLINKED) {
     headers.set('location', `${config.baseUrl}/login?error=${IDENTITY_UNLINKED}`);
   } else if (error === null) {
-    headers.append('set-cookie', clearInviteCookie(config.baseUrl.startsWith('https://')));
+    headers.append('set-cookie', clearInviteCookie(isSecureBaseUrl(config.baseUrl)));
   }
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }

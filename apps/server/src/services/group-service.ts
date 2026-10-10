@@ -21,7 +21,12 @@ import {
   type Tx,
 } from './context.ts';
 import { qk, selfAudience, taskAudiences, taskReach } from './event-audience.ts';
-import { authorizeOrgWide, requireReadableGroup, requireScope } from './grant-access.ts';
+import {
+  authorizeOrgWide,
+  authorizeTaskWrite,
+  requireReadableGroup,
+  requireScope,
+} from './grant-access.ts';
 import {
   chunked,
   clockAllows,
@@ -118,6 +123,10 @@ export class GroupService {
       if (input.id !== undefined) {
         const existing = tx.select().from(taskGroup).where(eq(taskGroup.id, input.id)).get();
         if (existing !== undefined) {
+          // The user's own group the grant cannot read is 404, never a name oracle or its DTO.
+          if (existing.userId === actor.userId && existing.orgId === org.id) {
+            requireReadableGroup(actor, org.id, existing.id);
+          }
           const same =
             existing.userId === actor.userId &&
             existing.orgId === org.id &&
@@ -304,6 +313,12 @@ export class GroupService {
         });
       } else if (input.deleteTasks === true) {
         deletedTaskIds = live.map((p) => p.id);
+        this.authorizeCascade(
+          tx,
+          actor,
+          [...deletedTaskIds, ...descendantsOf(tx, deletedTaskIds, { deletedAt: null })],
+          'tasks:delete',
+        );
         softDeleteTasks(tx, deletedTaskIds, { userId: actor.userId, now });
       } else {
         if (live.some((p) => p.completedAt === null)) {
@@ -326,6 +341,25 @@ export class GroupService {
         .run();
       this.emit(tx, actor, 'group.deleted', group, deletedTaskIds);
     });
+  }
+
+  /**
+   * A grant's group delete or restore must reach every task it cascades to, as a task delete or
+   * restore must (TaskService `authorizeSubtree`): a subtask placed in a group the grant cannot
+   * read, or cannot write, rejects the whole operation (the transaction rolls back).
+   */
+  private authorizeCascade(
+    tx: Tx,
+    actor: Actor,
+    ids: readonly string[],
+    scope: 'tasks:write' | 'tasks:delete',
+  ): void {
+    if (actor.grant === null || ids.length === 0) return;
+    for (const chunk of chunked([...ids])) {
+      for (const row of tx.select().from(task).where(inArray(task.id, chunk)).all()) {
+        authorizeTaskWrite(tx, actor, row, scope);
+      }
+    }
   }
 
   /**
@@ -360,6 +394,7 @@ export class GroupService {
         .all()
         .map((r) => r.id);
       const all = [...ids, ...descendantsOf(tx, ids, { deletedAt })];
+      this.authorizeCascade(tx, actor, all, 'tasks:write');
       if (all.length > 0) {
         // Chunked: a group may hold more tasks than SQLite takes bound parameters.
         for (const chunk of chunked(all)) {

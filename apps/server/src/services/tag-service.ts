@@ -376,7 +376,7 @@ export class TagService {
         ...(meta === undefined ? {} : { addedAt: meta.editTime }),
       });
       if (changed) emitTaskTagged(this.deps, tx, actor, row);
-      return taskDtoFor(tx, actor.userId, row);
+      return taskDtoFor(tx, actor, row);
     });
   }
 }

@@ -1,5 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi';
-import { inviteCookie } from '../auth/cookies.ts';
+import { inviteCookie, isSecureBaseUrl } from '../auth/cookies.ts';
 import type { Config } from '../config.ts';
 import type { AppEnv } from '../lib/context.ts';
 import type { Services } from '../services/index.ts';
@@ -56,7 +56,7 @@ export function registerInviteRoutes(
   { orgs }: Services,
   deps: { config: Config; clock: () => number },
 ): void {
-  const secure = deps.config.baseUrl.startsWith('https://');
+  const secure = isSecureBaseUrl(deps.config.baseUrl);
   app.openapi(previewInvite, (c) => c.json(orgs.previewInvite(c.req.valid('param').token), 200));
   app.openapi(claimInvite, (c) => {
     const { token } = c.req.valid('param');

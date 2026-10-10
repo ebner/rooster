@@ -1,7 +1,7 @@
 // Security audit of Phase 11 (AC-11.1), boundary 1: sign-in, sessions and account linking.
 // Each `it` names the finding it covers.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { SESSION_COOKIE } from '../src/auth/cookies.ts';
+import { isSecureBaseUrl, SESSION_COOKIE } from '../src/auth/cookies.ts';
 import { user } from '../src/db/schema/index.ts';
 import { deviceLogin } from './grant-helpers.ts';
 import { asJar, BASE_URL, CookieJar, createTestApp, idpEnv, signInAs } from './helpers.ts';
@@ -165,5 +165,27 @@ describe('boundary 1, round 3: session lists', () => {
       headers: { authorization: `Bearer ${device.token}` },
     });
     expect(me.status).toBe(200);
+  });
+});
+
+describe('boundary 1, round 5: https detection', () => {
+  it('P2 an uppercase HTTPS scheme still gets __Host- cookies (one parsed check for auth and invite cookies)', async () => {
+    expect(isSecureBaseUrl('HTTPS://rooster.example.com')).toBe(true);
+    expect(isSecureBaseUrl('https://rooster.example.com')).toBe(true);
+    expect(isSecureBaseUrl('http://localhost:3000')).toBe(false);
+    const { app } = createTestApp({
+      env: { ...idpEnv(idp), ROOSTER_BASE_URL: 'HTTPS://rooster.example.com' },
+    });
+    const start = await app.request('/api/auth/sign-in/social', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: HTTPS },
+      body: JSON.stringify({ provider: 'dev', callbackURL: '/', loginHint: 'admin@example.com' }),
+    });
+    const cookies = start.headers.getSetCookie();
+    expect(cookies.length, `${start.status} ${await start.clone().text()}`).toBeGreaterThan(0);
+    for (const cookie of cookies) {
+      expect(cookie).toMatch(/^__Host-rooster\./);
+      expect(cookie).toContain('Secure');
+    }
   });
 });

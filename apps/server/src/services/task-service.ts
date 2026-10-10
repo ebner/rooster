@@ -122,6 +122,7 @@ import {
   clockAllows,
   descendantsOf,
   type GroupRow,
+  hiddenParents,
   inboxOf,
   insertTaskRow,
   isMember,
@@ -443,7 +444,7 @@ export class TaskService {
             existing.recurrence === rule.recurrence;
           if (!same) throw new AppError('id_conflict', 409, 'That ID is already in use.');
           authorizeTaskRead(tx, actor, existing);
-          return taskDtoFor(tx, actor.userId, existing);
+          return taskDtoFor(tx, actor, existing);
         }
       }
 
@@ -528,7 +529,7 @@ export class TaskService {
         tags: (fields.tagNames?.length ?? 0) > 0,
         activity,
       });
-      return taskDtoFor(tx, actor.userId, row);
+      return taskDtoFor(tx, actor, row);
     });
   }
 
@@ -947,7 +948,7 @@ export class TaskService {
         activity,
       });
     }
-    return { task: taskDtoFor(tx, actor.userId, row), ignoredFields };
+    return { task: taskDtoFor(tx, actor, row), ignoredFields };
   }
 
   private orgOf(tx: Tx, orgId: string): { id: string; isPersonal: boolean } {
@@ -1030,8 +1031,8 @@ export class TaskService {
       const row = this.requireLive(tx, actor, taskId);
       const series = this.applyComplete(tx, actor, row, completed, meta, nextId);
       return {
-        task: taskDtoFor(tx, actor.userId, row),
-        ...(series === null ? {} : { next: taskDtoFor(tx, actor.userId, series.next) }),
+        task: taskDtoFor(tx, actor, row),
+        ...(series === null ? {} : { next: taskDtoFor(tx, actor, series.next) }),
       };
     });
   }
@@ -1141,7 +1142,7 @@ export class TaskService {
       }
       const series = this.continueSeries(tx, actor, row, meta, nextId);
       this.applyDelete(tx, actor, row, meta);
-      return { next: series === null ? null : taskDtoFor(tx, actor.userId, series.next) };
+      return { next: series === null ? null : taskDtoFor(tx, actor, series.next) };
     });
   }
 
@@ -1186,7 +1187,7 @@ export class TaskService {
       const row = requireTask(tx, actor.userId, taskId);
       authorizeTaskWrite(tx, actor, row);
       this.applyRestore(tx, actor, row, meta);
-      return taskDtoFor(tx, actor.userId, { ...row, ...this.reload(tx, row.id) });
+      return taskDtoFor(tx, actor, { ...row, ...this.reload(tx, row.id) });
     });
   }
 
@@ -1535,7 +1536,7 @@ export class TaskService {
             existing.title === source.title;
           if (!same) throw new AppError('id_conflict', 409, 'That ID is already in use.');
           authorizeTaskWrite(tx, actor, existing);
-          return taskDtoFor(tx, actor.userId, existing);
+          return taskDtoFor(tx, actor, existing);
         }
       }
       const now = this.now();
@@ -1620,7 +1621,7 @@ export class TaskService {
         }),
       );
       this.emit(tx, actor, 'task.created', top.orgId, [top.id], { activity: feeds });
-      return taskDtoFor(tx, actor.userId, top);
+      return taskDtoFor(tx, actor, top);
     });
   }
 
@@ -1675,15 +1676,19 @@ export class TaskService {
       const dto = toTaskDto(
         row,
         place !== undefined && place.userId === actor.userId ? place : null,
-        { description: true, trash: true },
-        loadTaskExtras(tx, [row.id], actor.userId),
+        {
+          description: true,
+          trash: true,
+          parentHidden: hiddenParents(tx, actor, [row]).has(row.id),
+        },
+        loadTaskExtras(tx, [row.id], actor),
       );
       return {
         ...dto,
         attachments: attachmentsForTask(tx, row.id),
         reminders: this.collab.reminders.forViewer(tx, actor.userId, row.id),
         description: row.description,
-        subtasks: taskDtos(tx, actor.userId, subtasks),
+        subtasks: taskDtos(tx, actor, subtasks),
         parentChain: ancestorsOf(tx, row)
           .reverse()
           .filter((a) => canReadTask(tx, actor, a))
@@ -1780,8 +1785,8 @@ export class TaskService {
       return toTaskDto(
         only,
         place !== undefined && place.userId === actor.userId ? place : null,
-        { trash: true },
-        loadTaskExtras(tx, [only.id], actor.userId),
+        { trash: true, parentHidden: hiddenParents(tx, actor, [only]).has(only.id) },
+        loadTaskExtras(tx, [only.id], actor),
       );
     });
   }
@@ -1862,7 +1867,7 @@ export class TaskService {
         .filter((id) => readable === null || shown.has(id));
       return {
         groups: groups.map(toGroupDto),
-        tasks: taskDtos(tx, actor.userId, rows, { places }),
+        tasks: taskDtos(tx, actor, rows, { places }),
         expandedTaskIds,
         serverTime: now,
       };
@@ -1912,7 +1917,7 @@ export class TaskService {
       // Defence in depth: the same rule in code.
       const readable = readFilter(tx, actor, org.id, page);
       return {
-        items: taskDtos(tx, actor.userId, readable === null ? page : page.filter(readable), {
+        items: taskDtos(tx, actor, readable === null ? page : page.filter(readable), {
           trash: true,
         }),
         nextCursor:
@@ -1996,7 +2001,7 @@ export class TaskService {
           actor.userId,
           mine.map((t) => t.id),
         );
-        const dtos = taskDtos(tx, actor.userId, mine, { places });
+        const dtos = taskDtos(tx, actor, mine, { places });
         const byId = new Map(mine.map((t) => [t.id, t]));
         const sections = selectView(
           {
@@ -2052,7 +2057,7 @@ export class TaskService {
       return {
         items: taskDtos(
           tx,
-          actor.userId,
+          actor,
           page.map((r) => r.task),
           { places: new Map(page.map((r) => [r.task.id, r.place])) },
         ),
@@ -2144,7 +2149,7 @@ export class TaskService {
     if (!matcher.hasFilters) return hits;
     const dtos = taskDtos(
       tx,
-      actor.userId,
+      actor,
       hits.map((r) => r.task),
       { places: new Map(hits.map((r) => [r.task.id, r.place])) },
     );

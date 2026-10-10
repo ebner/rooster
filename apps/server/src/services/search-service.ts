@@ -121,7 +121,7 @@ export class SearchService {
           // Defence in depth: the same rule in code.
           .filter((r) => filters.get(r.orgId)?.(r) ?? true)
           .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
-        for (const dto of taskDtos(tx, actor.userId, rows)) {
+        for (const dto of taskDtos(tx, actor, rows)) {
           if (matcher.accepts(dto)) hits.push(dto);
           if (hits.length === limit) break;
         }

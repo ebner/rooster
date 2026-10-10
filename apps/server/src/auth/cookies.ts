@@ -17,6 +17,14 @@ export const SESSION_COOKIE = 'rooster.session';
 export const INVITE_COOKIE = 'rooster.invite';
 export const INVITE_COOKIE_TTL_MS = 15 * 60 * 1000;
 
+/**
+ * Whether the base URL is https, so the cookies get `__Host-` and `Secure`. Parsed, not
+ * string-matched: URL schemes are case-insensitive, and `HTTPS://…` is a valid base URL.
+ */
+export function isSecureBaseUrl(baseUrl: string): boolean {
+  return URL.canParse(baseUrl) && new URL(baseUrl).protocol === 'https:';
+}
+
 /** better-auth's `rooster.<name>` cookie, or `__Host-rooster.<name>` when the base URL is https. */
 export function authCookieName(name: string, secure: boolean): string {
   return `${secure ? HOST_PREFIX : ''}rooster.${name}`;
