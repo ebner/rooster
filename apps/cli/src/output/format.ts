@@ -76,6 +76,14 @@ export function localDue(
   return { date: todayIn(timezone, instant), time: hhmmIn(timezone, instant) };
 }
 
+/** An instant as the viewer reads a due label ("Fri 13:00", "Tomorrow 09:00"). */
+export function instantLabel(ms: number, ctx: DateContext): string {
+  return formatRelative(
+    { dueDate: todayIn(ctx.timezone, ms), dueTime: hhmmIn(ctx.timezone, ms) },
+    ctx,
+  );
+}
+
 /** The relative due label and its 03 §2.3 state, or null without a due date. */
 export function dueLabel(
   task: Pick<Task, 'dueDate' | 'dueTime' | 'dueTz' | 'startDate' | 'completedAt'>,
@@ -123,8 +131,15 @@ export interface Row {
   tags: { name: string; color: string }[];
   subtasks: string | null;
   extra: string | null;
+  /** P10: the task repeats (`↻`) / has a pending reminder of the viewer's (`🔔`). */
+  repeat: boolean;
+  bell: boolean;
   due: { text: string; state: ReturnType<typeof dueState> } | null;
 }
+
+/** The row indicators (P10, the web's repeat and bell icons). */
+export const REPEAT_MARK = '↻';
+export const BELL_MARK = '🔔';
 
 export function taskRef(task: Pick<Task, 'seq' | 'id'>, orgSlug?: string): string {
   const seq = task.seq === null ? task.id.slice(0, 8) : String(task.seq);
@@ -146,8 +161,14 @@ export function toRow(task: Task, options: RowOptions): Row {
     subtasks:
       task.counts.subtasks > 0 ? `▸ ${task.counts.subtasksDone}/${task.counts.subtasks}` : null,
     extra: options.extra === undefined ? null : clean(options.extra),
+    repeat: typeof task.recurrence === 'string',
+    bell: typeof task.nextReminderAt === 'number',
     due: dueLabel(task, options.dates),
   };
+}
+
+function marks(row: Row): string[] {
+  return [...(row.repeat ? [REPEAT_MARK] : []), ...(row.bell ? [BELL_MARK] : [])];
 }
 
 function metaText(row: Row): string {
@@ -155,6 +176,7 @@ function metaText(row: Row): string {
     ...row.tags.map((tag) => `#${tag.name}`),
     ...(row.subtasks ? [row.subtasks] : []),
     ...(row.extra ? [row.extra] : []),
+    ...marks(row),
   ].join(' ');
 }
 
@@ -204,6 +226,7 @@ export function renderRows(
       ...row.tags.map((tag) => paint(`#${tag.name}`, tagStyle(tag.color), level)),
       ...(row.subtasks ? [paint(row.subtasks, styles.muted, level)] : []),
       ...(row.extra ? [paint(row.extra, styles.muted, level)] : []),
+      ...marks(row).map((mark) => paint(mark, styles.muted, level)),
     ].join(' ');
     const metaCell = metaW > 0 ? `  ${meta}${' '.repeat(metaW - displayWidth(metaText(row)))}` : '';
     const due =

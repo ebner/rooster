@@ -10,17 +10,32 @@ export interface DueUnit {
   startDate: string | null;
 }
 
+export type RecurrenceBasis = 'due' | 'completion';
+
+/**
+ * A due unit plus, when a phrase named one, the recurrence rule (P10, ADR 0049 §1.8). Absent
+ * recurrence fields mean "keep the task's rule", as the PATCH contract reads them.
+ */
+export interface DueChange extends DueUnit {
+  recurrence?: string | null;
+  recurrenceBasis?: RecurrenceBasis | null;
+}
+
+type DateMe = Pick<Me, 'timezone' | 'locale' | 'weekStart' | 'dateFormat'>;
+
+export interface ParsedDate {
+  date: string;
+  time: string | null;
+  /** P10: the phrase was a recurrence ("every mon"); `date` is its first occurrence. */
+  recurrence?: { rule: string; basis: RecurrenceBasis };
+}
+
 /**
  * `--due`/`--start`: an ISO date or a date phrase in either language ("fri", "tomorrow 14:00",
  * "nästa vecka"), read in the user's timezone and week start like the web's picker (ADR 0004).
  * Floating dates stay `YYYY-MM-DD` strings (hard rule 5).
  */
-export function parseDateFlag(
-  input: string,
-  me: Pick<Me, 'timezone' | 'locale' | 'weekStart' | 'dateFormat'>,
-  nowMs: number,
-  flag: string,
-): { date: string; time: string | null } {
+export function parseDateFlag(input: string, me: DateMe, nowMs: number, flag: string): ParsedDate {
   const text = input.trim();
   if (isValidIsoDate(text)) return { date: text, time: null };
   const parsed = parseDatePhrase(text, {
@@ -53,18 +68,19 @@ export interface DueFlags {
 /**
  * The due unit after applying `--due`, `--time` and `--start` to `current` (05 §4.4: date,
  * time, timezone and start date change together). Null when no flag was given. New times
- * carry the user's timezone. `--time` without a due date means today.
+ * carry the user's timezone. `--time` without a due date means today. A recurrence phrase in
+ * `--due` ("every mon") also sets the rule (P10); any other date keeps the task's rule.
  */
 export function applyDueFlags(
   current: DueUnit,
   flags: DueFlags,
-  me: Pick<Me, 'timezone' | 'locale' | 'weekStart' | 'dateFormat'>,
+  me: DateMe,
   nowMs: number,
-): DueUnit | null {
+): DueChange | null {
   if (flags.due === undefined && flags.time === undefined && flags.start === undefined) return null;
   // Only the four fields of the due unit: `current` may be a whole task, whose other fields
   // (title, description) must never ride along into a patch.
-  const next: DueUnit = {
+  const next: DueChange = {
     dueDate: current.dueDate,
     dueTime: current.dueTime,
     dueTz: current.dueTz,
@@ -77,6 +93,10 @@ export function applyDueFlags(
     if (parsed.time !== null) {
       next.dueTime = parsed.time;
       next.dueTz = me.timezone;
+    }
+    if (parsed.recurrence !== undefined) {
+      next.recurrence = parsed.recurrence.rule;
+      next.recurrenceBasis = parsed.recurrence.basis;
     }
   }
   if (flags.time !== undefined) {
@@ -103,4 +123,34 @@ export function applyDueFlags(
   }
   if (next.dueTime === null) next.dueTz = null;
   return next;
+}
+
+/**
+ * `--repeat <phrase|none>` (P10, FR-REC-2): the rule of a recurrence phrase ("every mon",
+ * "every 3 days after done", "varje månad"), read like `--due`, or `none` to stop repeating.
+ * It never moves a due date the task will have anyway (`hasDueDate`: its own, `--due`'s or
+ * one in the title); without one the phrase's first occurrence becomes the due date, since a
+ * rule needs one.
+ */
+export function applyRepeatFlag(
+  hasDueDate: boolean,
+  input: string,
+  me: DateMe,
+  nowMs: number,
+): Partial<DueChange> {
+  if (isNone(input)) return { recurrence: null, recurrenceBasis: null };
+  const text = input.trim();
+  const parsed = isValidIsoDate(text) ? null : parseDateFlag(text, me, nowMs, '--repeat');
+  if (parsed?.recurrence === undefined) {
+    throw new CliError(EXIT.conflict, t('repeat.invalid', { value: input }));
+  }
+  const rule = { recurrence: parsed.recurrence.rule, recurrenceBasis: parsed.recurrence.basis };
+  if (hasDueDate) return rule;
+  return {
+    dueDate: parsed.date,
+    dueTime: parsed.time,
+    dueTz: parsed.time === null ? null : me.timezone,
+    startDate: null,
+    ...rule,
+  };
 }

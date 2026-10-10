@@ -20,6 +20,12 @@ export function multi(rawArgs: readonly string[], ...names: string[]): string[] 
   return out;
 }
 
+/** Whether `--name` was given (before any `--`), e.g. a `--no-x` that citty folds into `x`. */
+export function flagGiven(rawArgs: readonly string[], name: string): boolean {
+  const end = rawArgs.indexOf('--');
+  return (end === -1 ? rawArgs : rawArgs.slice(0, end)).includes(`--${name}`);
+}
+
 /** Positional arguments as citty parsed them (everything after `--` included). */
 export function positionals(args: { _: string[] }): string[] {
   return args._.map(String);

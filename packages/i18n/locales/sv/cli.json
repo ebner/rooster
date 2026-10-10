@@ -86,7 +86,9 @@
       "top": "Överst i gruppen (standard)",
       "bottom": "Underst i gruppen",
       "parent": "Gör den till deluppgift till den här uppgiften",
-      "parse": "Tolka datum, #taggar, >Grupp och @person i titeln (standard)"
+      "parse": "Tolka datum, #taggar, >Grupp och @person i titeln (standard)",
+      "remind": "Påminn mig: 15m, 1h, 1d eller due före förfallotiden, eller en tid som \"fre 14:00\" (kan upprepas)",
+      "repeat": "Upprepa: en fras som \"varje måndag\", \"varje månad\" eller \"var 3:e dag efter klar\""
     }
   },
   "sub": {
@@ -108,14 +110,19 @@
     "tags": "Taggar",
     "id": "Id",
     "subtasks": "Deluppgifter",
-    "comments": "{count, plural, one {# kommentar} other {# kommentarer}}"
+    "comments": "{count, plural, one {# kommentar} other {# kommentarer}}",
+    "repeat": "Upprepas",
+    "reminders": "Påminnelser",
+    "attachments": "Bilagor"
   },
   "edit": {
     "arg": {
       "title": "Ny titel",
       "due": "Förfallodatum (ett datum, en fras eller none)",
       "editor": "Redigera beskrivningen i $EDITOR",
-      "parent": "Överordnad uppgift, eller none för att göra den fristående"
+      "parent": "Överordnad uppgift, eller none för att göra den fristående",
+      "remind": "Lägg till en påminnelse: 15m, 1h, 1d, due eller en tid som \"fre 14:00\" (kan upprepas); --no-remind tar först bort dina påminnelser",
+      "repeat": "Upprepa: en fras som \"varje måndag\", eller none för att sluta upprepa"
     },
     "nothing": "Inget att ändra. Ange --title, --due, --desc, --editor eller en annan flagga.",
     "unchanged": "Beskrivningen är oförändrad.",
@@ -137,7 +144,11 @@
   },
   "rm": {
     "confirm": "Ta bort {count, plural, one {# uppgift} other {# uppgifter}}?",
-    "done": "{count, plural, one {Tog bort # uppgift (återställ den med rooster restore).} other {Tog bort # uppgifter (återställ dem med rooster restore).}}"
+    "done": "{count, plural, one {Tog bort # uppgift (återställ den med rooster restore).} other {Tog bort # uppgifter (återställ dem med rooster restore).}}",
+    "arg": {
+      "occurrence": "Upprepade uppgifter: ta bara bort det här tillfället och skapa nästa (standard: uppgiften, vilket avslutar serien)"
+    },
+    "occurrence": "{count, plural, one {Tog bort # tillfälle (återställ det med rooster restore).} other {Tog bort # tillfällen (återställ dem med rooster restore).}}"
   },
   "comment": {
     "arg": {
@@ -447,5 +458,11 @@
     },
     "needsAdmin": "Det här kräver administratörsbehörighet, som bara instansens administratörer kan ge. Logga in med rooster login --admin (eller skapa en token med --scope admin i webbläsaren).",
     "reindexed": "Sökindexet är ombyggt: {count, plural, one {# uppgift} other {# uppgifter}} på {ms} ms."
+  },
+  "remind": {
+    "invalid": "--remind: kan inte tolka ”{value}” som en påminnelse. Använd 15m, 1h, 1d eller due (före förfallotiden), eller en tid som \"fre 14:00\"."
+  },
+  "repeat": {
+    "invalid": "--repeat: ”{value}” är ingen upprepning. Prova \"varje måndag\", \"varje månad\", \"var 3:e dag efter klar\" eller none."
   }
 }

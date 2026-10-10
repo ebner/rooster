@@ -19,6 +19,23 @@ export function translator(locale: Locale): Translate {
   return t;
 }
 
+const shared = new Map<string, Translate>();
+
+/**
+ * A translator for another app's namespace whose sentences the CLI shows as they are, so a
+ * rule or a reminder reads the same in the terminal as on the web (`dates:repeat.rule.*`).
+ */
+export function namespaceTranslator(locale: Locale, ns: 'dates'): Translate {
+  const id = `${locale}:${ns}`;
+  let t = shared.get(id);
+  if (t === undefined) {
+    const fixed = createI18n(locale).getFixedT(locale, ns);
+    t = (key, values) => fixed(key, values ?? {}) as string;
+    shared.set(id, t);
+  }
+  return t;
+}
+
 /** `$LC_ALL`, `$LC_MESSAGES`, then `$LANG` (`sv_SE.UTF-8` → `sv`); null when none is set. */
 export function localeFromEnv(env: Readonly<Record<string, string | undefined>>): Locale | null {
   for (const name of ['LC_ALL', 'LC_MESSAGES', 'LANG'] as const) {

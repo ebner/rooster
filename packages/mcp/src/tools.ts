@@ -96,7 +96,9 @@ function assigneeArg(args: unknown): string | null | undefined {
 
 /**
  * The scopes a call needs (11 §5.2). `update_task`/`create_task` naming another assignee also
- * need `tasks:assign`. The remote endpoint uses this to answer `403 insufficient_scope` before
+ * need `tasks:assign`. Their P10 arguments need nothing beyond `tasks:write`: `remind` and
+ * `clearReminders` act on the grant user's own reminders (ADR 0049 §2.6), and `repeat` is part
+ * of the due unit. The remote endpoint uses this to answer `403 insufficient_scope` before
  * the call runs, listing every scope it needs in one challenge.
  *
  * The base scope comes first, then `tasks:assign` when it applies; implied scopes are listed

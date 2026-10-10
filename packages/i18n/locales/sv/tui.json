@@ -39,11 +39,14 @@
     "unassigned": "Ingen ansvarig",
     "noDescription": "Ingen beskrivning. Tryck e för att skriva en.",
     "subtasks": "Deluppgifter",
-    "activity": "Aktivitet"
+    "activity": "Aktivitet",
+    "repeat": "Upprepas",
+    "reminders": "Påminnelser",
+    "attachments": "Bilagor"
   },
   "picker": {
     "date": "Datum",
-    "dateHint": "skriv ett datum eller välj ett nedan",
+    "dateHint": "skriv ett datum, en upprepning (varje måndag) eller en påminnelse (!1h), eller välj nedan",
     "tag": "Tagg",
     "group": "Flytta till",
     "createTag": "Skapa #{name}",
@@ -57,7 +60,8 @@
     "nextMonth": "nästa månad",
     "none": "ingen",
     "noneLabel": "Inget datum",
-    "invalid": "Kan inte tolka ”{phrase}” som ett datum"
+    "invalid": "Kan inte tolka ”{phrase}” som ett datum",
+    "reminderNeedsDue": "En påminnelse som !1h kräver ett förfallodatum; lägg till ett, t.ex. ”fre !1h”"
   },
   "msg": {
     "descriptionUnchanged": "Beskrivningen är oförändrad",
@@ -78,7 +82,8 @@
     "moved": "Flyttades till {group}",
     "description": "Beskrivningen sparades",
     "undone": "Ångrat",
-    "redone": "Gjort om"
+    "redone": "Gjort om",
+    "completedNext": "”{title}” är klar; nästa: {due}"
   },
   "error": {
     "save": "Kunde inte spara: {message}",
@@ -127,7 +132,7 @@
     "newBelow": "Ny uppgift nedanför",
     "newAbove": "Ny uppgift ovanför",
     "complete": "Markera som klar eller inte klar",
-    "date": "Datum: en fras som ”fre 14:00”, eller ingen",
+    "date": "Datum, upprepning eller påminnelse: ”fre 14:00”, ”varje måndag”, ”!1h” eller ingen",
     "tag": "Lägg till eller ta bort taggar",
     "move": "Flytta till en grupp",
     "subtask": "Lägg till en deluppgift",

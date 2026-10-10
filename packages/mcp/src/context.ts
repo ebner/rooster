@@ -1,5 +1,7 @@
 import { type RoosterClient, type Schemas, unwrap } from '@rooster/api-client';
 import {
+  dueInstant,
+  findDateInTitle,
   isValidIsoDate,
   isValidTime,
   matchMembers,
@@ -7,6 +9,7 @@ import {
   todayIn,
 } from '@rooster/core/dates';
 import { compareKeys } from '@rooster/core/ordering';
+import { parseReminderOffset, type ReminderSpec } from '@rooster/core/reminders';
 import { ASSIGNEE_ME, ASSIGNEE_NONE } from './tools.ts';
 
 export type Task = Schemas['Task'];
@@ -39,6 +42,18 @@ export interface DueUnit {
   dueTime: string | null;
   dueTz: string | null;
   startDate: string | null;
+  /**
+   * P10: set when the phrase was a recurrence ("every mon"); absent means the task keeps its
+   * rule (ADR 0049 §1.8).
+   */
+  recurrence?: string | null;
+  recurrenceBasis?: 'due' | 'completion' | null;
+}
+
+/** The recurrence fields of a task create or PATCH (P10). */
+export interface RepeatFields extends Partial<DueUnit> {
+  recurrence: string | null;
+  recurrenceBasis: 'due' | 'completion' | null;
 }
 
 /** The words that clear a due date, in both UI languages. */
@@ -244,7 +259,103 @@ export class CallContext {
       dueTime: parsed.time,
       dueTz: parsed.time === null ? null : me.timezone,
       startDate: null,
+      ...(parsed.recurrence === undefined
+        ? {}
+        : { recurrence: parsed.recurrence.rule, recurrenceBasis: parsed.recurrence.basis }),
     };
+  }
+
+  /** The phrase in the user's language settings, or null (no exceptions: tools explain). */
+  private async phrase(text: string) {
+    const me = await this.me();
+    return parseDatePhrase(text, {
+      today: todayIn(me.timezone, this.now()),
+      locale: me.locale,
+      weekStart: me.weekStart,
+      dateFormat: me.dateFormat,
+    });
+  }
+
+  /** Whether the server will find a due date in this title (`parse: true`). */
+  async titleHasDate(title: string): Promise<boolean> {
+    const me = await this.me();
+    return (
+      findDateInTitle(title, {
+        today: todayIn(me.timezone, this.now()),
+        locale: me.locale,
+        weekStart: me.weekStart,
+        dateFormat: me.dateFormat,
+      }) !== null
+    );
+  }
+
+  /**
+   * `repeat` (P10, FR-REC-2): a recurrence phrase ("every mon", "every 3 days after done",
+   * "varje månad") as a rule, or a clearing word to stop repeating. It keeps a due date the
+   * task will have anyway (`hasDueDate`); otherwise the phrase's first occurrence becomes the
+   * due date, since a rule needs one.
+   */
+  async parseRepeat(input: string, hasDueDate: boolean): Promise<RepeatFields> {
+    const text = input.trim();
+    if (CLEAR_WORDS.includes(text.toLowerCase()))
+      return { recurrence: null, recurrenceBasis: null };
+    const parsed = await this.phrase(text);
+    if (parsed?.recurrence === undefined || (parsed.time !== null && !isValidTime(parsed.time))) {
+      throw new ToolError(
+        'The repeat was not understood. Use a phrase like "every mon", "every weekday", "every month", "every 2 weeks" or "every 3 days after done"; "none" stops repeating.',
+        { repeat: text },
+      );
+    }
+    const rule = { recurrence: parsed.recurrence.rule, recurrenceBasis: parsed.recurrence.basis };
+    if (hasDueDate) return rule;
+    const me = await this.me();
+    return {
+      dueDate: parsed.date,
+      dueTime: parsed.time,
+      dueTz: parsed.time === null ? null : me.timezone,
+      startDate: null,
+      ...rule,
+    };
+  }
+
+  /**
+   * `remind` (P10, FR-REM): `15m`, `1h`, `1d` or `due` (optionally with the title token's `!`)
+   * are minutes before the due moment; anything else is a date and time phrase ("fri 14:00",
+   * "2026-11-02 08:30") in the user's timezone, an absolute reminder. A date without a time
+   * means the user's all-day reminder time. Duplicates collapse.
+   */
+  async parseRemind(inputs: string | readonly string[]): Promise<ReminderSpec[]> {
+    const me = await this.me();
+    const out: ReminderSpec[] = [];
+    const seen = new Set<string>();
+    for (const input of typeof inputs === 'string' ? [inputs] : inputs) {
+      const text = input.trim().replace(/^!/, '');
+      let spec: ReminderSpec;
+      const offset = parseReminderOffset(text);
+      if (offset !== null) spec = { offsetMinutes: offset };
+      else {
+        const iso = isValidIsoDate(text) ? { date: text, time: null } : null;
+        const parsed = iso ?? (text === '' ? null : await this.phrase(text));
+        if (
+          parsed === null ||
+          ('recurrence' in parsed && parsed.recurrence !== undefined) ||
+          (parsed.time !== null && !isValidTime(parsed.time))
+        ) {
+          throw new ToolError(
+            'The reminder was not understood. Use 15m, 1h, 1d or due (before the due time), or a time like "fri 14:00" or "2026-11-02 08:30".',
+            { remind: input },
+          );
+        }
+        const fallback = me.prefs.allDayReminderTime;
+        const time = parsed.time ?? (isValidTime(fallback) ? fallback : '09:00');
+        spec = { at: dueInstant(parsed.date, time, me.timezone) };
+      }
+      const key = 'at' in spec ? `at:${spec.at}` : `off:${spec.offsetMinutes}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(spec);
+    }
+    return out;
   }
 
   /** The user's today, for the summaries of date views. */

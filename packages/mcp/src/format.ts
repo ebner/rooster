@@ -95,7 +95,10 @@ export interface RowContext {
   nowMs: number;
 }
 
-/** A compact row (07 §6: seq, title, due, group, tags), omitting empty fields. */
+/**
+ * A compact row (07 §6: seq, title, due, group, tags; P10: the repeat rule and the user's next
+ * reminder), omitting empty fields.
+ */
 export function taskRow(task: Task, ctx: RowContext): Record<string, unknown> {
   const row: Record<string, unknown> = { ref: taskRef(task, ctx.org), title: task.title };
   if (task.dueDate !== null) {
@@ -125,6 +128,14 @@ export function taskRow(task: Task, ctx: RowContext): Record<string, unknown> {
       task.assigneeId === null
         ? null
         : (ctx.members?.get(task.assigneeId)?.name ?? task.assigneeId);
+  }
+  if (typeof task.recurrence === 'string') {
+    // RFC 5545 RRULE (05 §6); "completion" counts the interval from when it is done.
+    row.repeat = task.recurrence;
+    if (task.recurrenceBasis === 'completion') row.repeatFrom = 'completion';
+  }
+  if (typeof task.nextReminderAt === 'number') {
+    row.nextReminder = new Date(task.nextReminderAt).toISOString();
   }
   if (task.completedAt !== null) row.completed = true;
   if (task.counts.subtasks > 0)

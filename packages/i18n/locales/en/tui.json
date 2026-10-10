@@ -39,11 +39,14 @@
     "unassigned": "Unassigned",
     "noDescription": "No description. Press e to write one.",
     "subtasks": "Subtasks",
-    "activity": "Activity"
+    "activity": "Activity",
+    "repeat": "Repeats",
+    "reminders": "Reminders",
+    "attachments": "Attachments"
   },
   "picker": {
     "date": "Date",
-    "dateHint": "type a date, or choose one below",
+    "dateHint": "type a date, a repeat (every mon) or a reminder (!1h), or choose below",
     "tag": "Tag",
     "group": "Move to",
     "createTag": "Create #{name}",
@@ -57,7 +60,8 @@
     "nextMonth": "next month",
     "none": "none",
     "noneLabel": "No date",
-    "invalid": "Can’t read “{phrase}” as a date"
+    "invalid": "Can’t read “{phrase}” as a date",
+    "reminderNeedsDue": "A reminder like !1h needs a due date; add one, e.g. “fri !1h”"
   },
   "msg": {
     "descriptionUnchanged": "Description unchanged",
@@ -78,7 +82,8 @@
     "moved": "Moved to {group}",
     "description": "Description saved",
     "undone": "Undone",
-    "redone": "Redone"
+    "redone": "Redone",
+    "completedNext": "Completed “{title}”; next: {due}"
   },
   "error": {
     "save": "Couldn’t save: {message}",
@@ -127,7 +132,7 @@
     "newBelow": "New task below",
     "newAbove": "New task above",
     "complete": "Complete or reopen",
-    "date": "Date: a phrase like “fri 14:00”, or none",
+    "date": "Date, repeat or reminder: “fri 14:00”, “every mon”, “!1h”, or none",
     "tag": "Add or remove tags",
     "move": "Move to a group",
     "subtask": "Add a subtask",

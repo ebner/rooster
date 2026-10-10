@@ -215,3 +215,21 @@ added below as an amendment.
   - Once an IP is over the miss limit, all its feed requests are 429.
   - DTSTAMP is the task's `updatedAt`, so the ETag is stable. All-day events are TRANSP:TRANSPARENT.
 - **S3:** checksum calculation `WHEN_REQUIRED` for compatible stores; presigned redirects carry `private, max-age=60`; the endpoint must be http(s).
+
+## Amendments: CLI and MCP (07)
+- **`--remind`:**
+  - `15m`/`1h`/`1d`/`due` (an optional leading `!`) are relative. Anything else is parsed as a date phrase into an absolute instant in the user's timezone; a date without a time uses `allDayReminderTime`.
+  - Recurrence phrases are rejected (exit 5), and duplicates collapse.
+  - MCP `remind` takes one string or up to 5.
+- **`edit --no-remind`** sends `clearReminders`; together with `--remind` it clears first, then adds, in one PATCH.
+- **Recurrence:**
+  - A recurrence phrase in `--due` or MCP `due` sets both the date and the rule.
+  - `--repeat <phrase|none>` (MCP `repeat`) never moves an existing due date, and gives a task without one the phrase's first occurrence.
+  - `rm --occurrence` uses skip; a plain `rm` and the TUI Delete end the series.
+- **TUI `d`:**
+  - Accepts recurrence phrases and `!` tokens.
+  - Undo restores the old date and rule, and removes only the reminders this change created (201, never 200).
+- **TUI `x`** on a recurring task shows the next date. Undo reopens the task and moves the next instance to Trash (amends ADR 0047 §3).
+- **Display and MCP data:**
+  - `↻` and `🔔` mark recurring rows and rows with a pending reminder in `ls`, task lines and the TUI. `show` and the TUI details list the rule, reminders and attachments, all through `clean()`.
+  - MCP rows carry `repeat`, `repeatFrom` and `nextReminder`; `get_task` carries reminders and attachments inside the framed data block. `remind`, `clearReminders` and `repeat` need only `tasks:write`.

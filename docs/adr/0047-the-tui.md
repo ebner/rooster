@@ -50,3 +50,6 @@
 - **The details follow the selection:** when the selection moves by itself, the details switch to the new task or close. Editing modes draw over the narrow details view.
 - **Org switches drop stale work:** searches, mutation callbacks, undo entries and pending retries are bound to a request generation and an org, and an org switch discards them.
 - **Drafts in collapsed groups:** adding from the header of a collapsed group opens the group first.
+
+## Amendment (Phase 10, ADR 0049)
+- Undoing a completion of a recurring task now reopens it and moves its next instance to Trash, so §3's "doesn't remove a repeating task's next instance" no longer holds.

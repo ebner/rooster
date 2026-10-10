@@ -25,6 +25,12 @@ export const GLOBAL_FLAGS = [
   '--help',
 ] as const;
 
+/**
+ * String flags whose `--no-` form also means something, per command path (citty reads
+ * `--no-remind` as `remind: false`; `edit` takes it as "clear my reminders").
+ */
+const NEGATABLE: Readonly<Record<string, readonly string[]>> = { edit: ['remind'] };
+
 const resolve = async <T>(value: T | Promise<T> | (() => T | Promise<T>) | undefined) =>
   typeof value === 'function' ? await (value as () => T | Promise<T>)() : await value;
 
@@ -47,6 +53,7 @@ export async function completionEntries(root: CommandDef<ArgsDef>): Promise<Comp
       if (def.type === 'positional') continue;
       flags.push(`--${name}`);
       if (def.type === 'boolean' && def.default === true) flags.push(`--no-${name}`);
+      else if (NEGATABLE[path]?.includes(name)) flags.push(`--no-${name}`);
     }
     out.push({ path, subcommands: visible, flags });
   };
@@ -63,6 +70,7 @@ export const VALUE_SOURCES: readonly { when: string; words: string }[] = [
   { when: 'flag:--move-to', words: 'dyn:groups' },
   { when: 'flag:--write-group', words: 'none' },
   { when: 'flag:--tag', words: 'dyn:tags' },
+  { when: 'flag:--remind', words: 'list:15m 1h 1d due' },
   { when: 'flag:--org', words: 'dyn:orgs' },
   { when: 'flag:--color', words: 'list:gray red orange amber green teal blue indigo purple pink' },
   {
@@ -114,6 +122,8 @@ const VALUE_FLAGS = [
   '--expires',
   '--client',
   '--target',
+  '--remind',
+  '--repeat',
 ] as const;
 
 /**

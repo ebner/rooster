@@ -1,20 +1,31 @@
 import { readFileSync } from 'node:fs';
-import { findGroupToken, matchMembers } from '@rooster/core/dates';
+import { findDateInTitle, findGroupToken, matchMembers, todayIn } from '@rooster/core/dates';
 import { defineCommand } from 'citty';
 import { type Org, type RoosterClient, type Task, type TaskDetail, unwrap } from '../api.ts';
-import { applyDueFlags, type DueFlags, isNone } from '../dates.ts';
+import { applyDueFlags, applyRepeatFlag, type DueFlags, isNone } from '../dates.ts';
 import { editText } from '../editor.ts';
 import { CliError, EXIT } from '../errors.ts';
 import { findGroup } from '../grant-info.ts';
 import { t } from '../i18n.ts';
 import { clean, paint } from '../output/color.ts';
-import { renderRows, toRow } from '../output/format.ts';
+import { REPEAT_MARK, renderRows, toRow } from '../output/format.ts';
 import { renderMarkdown } from '../output/markdown.ts';
+import { reminderText, ruleText, sizeText } from '../output/schedule.ts';
 import { styles } from '../output/theme.ts';
 import { rememberLast, resolveRef, resolveRefs } from '../refs.ts';
+import { parseRemindFlags } from '../reminders.ts';
 import { type Runtime, rt } from '../runtime.ts';
 import { openInBrowser } from './browser.ts';
-import { confirmOrAbort, dates, multi, needs, positionals, printTasks, tagMap } from './util.ts';
+import {
+  confirmOrAbort,
+  dates,
+  flagGiven,
+  multi,
+  needs,
+  positionals,
+  printTasks,
+  tagMap,
+} from './util.ts';
 
 const str = (value: unknown): string | undefined =>
   typeof value === 'string' && value !== '' ? value : undefined;
@@ -93,12 +104,30 @@ async function createTask(runtime: Runtime, options: CreateOptions): Promise<voi
     assign === undefined ? undefined : await resolveAssignee(runtime, org.id, assign);
   needs(assigneeId !== undefined && assigneeId !== me.id ? 'tasks:assign' : 'tasks:write');
 
+  const now = runtime.io.now();
   const due = applyDueFlags(
     { dueDate: null, dueTime: null, dueTz: null, startDate: null },
     { due: str(args.due), time: str(args.time), start: str(args.start) },
     me,
-    runtime.io.now(),
+    now,
   );
+  const reminders = parseRemindFlags(multi(rawArgs, 'remind'), me, now);
+  const repeat = str(args.repeat);
+  // `--repeat` keeps a date the title names ("Pay rent 1 nov --repeat monthly"): the server
+  // reads it when the body carries no date, and applies the body's rule to it.
+  const titleDated =
+    due === null &&
+    args.parse !== false &&
+    findDateInTitle(title, {
+      today: todayIn(me.timezone, now),
+      locale: me.locale,
+      weekStart: me.weekStart,
+      dateFormat: me.dateFormat,
+    }) !== null;
+  const repeatFields =
+    repeat === undefined
+      ? {}
+      : applyRepeatFlag((due?.dueDate ?? null) !== null || titleDated, repeat, me, now);
   const description = await readDescription(runtime, args.desc, args['desc-file']);
   const tagNames = multi(rawArgs, 'tag').map((tag) => tag.replace(/^#/, ''));
   const bottom = args.bottom === true;
@@ -119,6 +148,8 @@ async function createTask(runtime: Runtime, options: CreateOptions): Promise<voi
         title,
         parse: args.parse !== false,
         ...(due === null ? {} : due),
+        ...repeatFields,
+        ...(reminders.length === 0 ? {} : { reminders }),
         ...(description === undefined ? {} : { description }),
         ...(group === undefined ? {} : { groupId: group.id }),
         ...(parent === undefined ? {} : { parentId: parent.id }),
@@ -168,6 +199,8 @@ const createArgs = () =>
     assign: { type: 'string', valueHint: 'email|name|me', description: t('add.arg.assign') },
     desc: { type: 'string', valueHint: 'text', description: t('add.arg.desc') },
     'desc-file': { type: 'string', valueHint: 'path|-', description: t('add.arg.descFile') },
+    remind: { type: 'string', valueHint: '15m|1h|1d|due|time', description: t('add.arg.remind') },
+    repeat: { type: 'string', valueHint: 'phrase', description: t('add.arg.repeat') },
     parse: {
       type: 'boolean',
       default: true,
@@ -306,6 +339,23 @@ export const showCommand = defineCommand({
         task.tagIds.map((id) => `#${clean(tags.get(id)?.name ?? id)}`).join(' '),
       ]);
     }
+    if (typeof task.recurrence === 'string') {
+      fields.push([
+        t('show.repeat'),
+        `${REPEAT_MARK} ${clean(ruleText(task.recurrence, task.recurrenceBasis, ctx))}`,
+      ]);
+    }
+    (task.reminders ?? []).forEach((reminder, i) => {
+      const view = reminderText(reminder, task, ctx);
+      const style = view.dormant || view.fired ? styles.muted : {};
+      fields.push([i === 0 ? t('show.reminders') : '', paint(view.text, style, out.level)]);
+    });
+    (task.attachments ?? []).forEach((file, i) => {
+      fields.push([
+        i === 0 ? t('show.attachments') : '',
+        `${clean(file.filename)} ${paint(`(${sizeText(file.size, ctx.locale)})`, styles.muted, out.level)}`,
+      ]);
+    });
     fields.push([t('show.id'), task.id]);
     const width = Math.max(...fields.map(([name]) => name.length));
     for (const [name, value] of fields) {
@@ -358,8 +408,10 @@ export const editCommand = defineCommand({
     editor: { type: 'boolean', description: t('edit.arg.editor') },
     assign: { type: 'string', valueHint: 'email|name|me|none', description: t('add.arg.assign') },
     parent: { type: 'string', valueHint: 'ref|none', description: t('edit.arg.parent') },
+    remind: { type: 'string', valueHint: '15m|1h|1d|due|time', description: t('edit.arg.remind') },
+    repeat: { type: 'string', valueHint: 'phrase|none', description: t('edit.arg.repeat') },
   }),
-  async run({ args }) {
+  async run({ args, rawArgs }) {
     const runtime = needs('tasks:write');
     const found = await resolveRef(runtime, positionals(args)[0] ?? '');
     const api = await runtime.api();
@@ -370,9 +422,18 @@ export const editCommand = defineCommand({
     const patch: Record<string, unknown> = {};
     const title = str(args.title);
     if (title !== undefined) patch.title = title;
+    const now = runtime.io.now();
     const flags: DueFlags = { due: str(args.due), time: str(args.time), start: str(args.start) };
-    const due = applyDueFlags(task, flags, me, runtime.io.now());
+    const due = applyDueFlags(task, flags, me, now);
     if (due !== null) Object.assign(patch, due);
+    const repeat = str(args.repeat);
+    if (repeat !== undefined) {
+      Object.assign(patch, applyRepeatFlag((due ?? task).dueDate !== null, repeat, me, now));
+    }
+    // Reminders are the caller's own (FR-REM): `--no-remind` clears them, then `--remind` adds.
+    const reminders = parseRemindFlags(multi(rawArgs, 'remind'), me, now);
+    if (flagGiven(rawArgs, 'no-remind')) patch.clearReminders = true;
+    if (reminders.length > 0) patch.reminders = reminders;
     const description =
       args.editor === true
         ? await editText(runtime.io, task.description)
@@ -509,12 +570,19 @@ export const mvCommand = defineCommand({
 
 export const rmCommand = defineCommand({
   meta: () => ({ name: 'rm', description: t('cmd.rm') }),
-  args: () => ({ refs: { type: 'positional', required: true, description: t('arg.refs') } }),
+  args: () => ({
+    refs: { type: 'positional', required: true, description: t('arg.refs') },
+    occurrence: { type: 'boolean', description: t('rm.arg.occurrence') },
+  }),
   async run({ args }) {
     const runtime = needs('tasks:delete');
     const tasks = await resolveRefs(runtime, positionals(args));
     if (tasks.length > 3) await confirmOrAbort(runtime, t('rm.confirm', { count: tasks.length }));
     const api = await runtime.api();
+    if (args.occurrence === true) {
+      await skipOccurrences(runtime, api, tasks);
+      return;
+    }
     for (const task of tasks) {
       await unwrap(api.DELETE('/api/v1/tasks/{id}', { params: { path: { id: task.id } } }));
     }
@@ -526,6 +594,33 @@ export const rmCommand = defineCommand({
     await printTasks(runtime, tasks);
   },
 });
+
+/**
+ * `rm --occurrence` (FR-REC-4 "this occurrence", ADR 0049 §1.7): each task goes to Trash and
+ * its series continues with the next instance; a plain `rm` ends the series instead.
+ */
+async function skipOccurrences(runtime: Runtime, api: RoosterClient, tasks: readonly Task[]) {
+  const results: { task: Task; next: Task | null }[] = [];
+  for (const task of tasks) {
+    const result = await unwrap(
+      api.POST('/api/v1/tasks/{id}/skip', { params: { path: { id: task.id } }, body: {} }),
+    );
+    results.push({ task, next: (result.next as Task | null) ?? null });
+  }
+  if (runtime.out.json) {
+    runtime.out.data(
+      results.map(({ task, next }) => ({ id: task.id, seq: task.seq, deleted: true, next })),
+    );
+    return;
+  }
+  runtime.out.notice(t('rm.occurrence', { count: results.length }));
+  await printTasks(runtime, tasks);
+  const nexts = results.flatMap(({ next }) => (next === null ? [] : [next]));
+  if (nexts.length > 0) {
+    runtime.out.notice(t('done.next'));
+    await printTasks(runtime, nexts);
+  }
+}
 
 export const restoreCommand = defineCommand({
   meta: () => ({ name: 'restore', description: t('cmd.restore') }),

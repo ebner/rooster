@@ -10,12 +10,14 @@ import { type GrantScope, hasScope, isGrantScope } from '@rooster/core/grants';
 import {
   COMMENT_BODY_MAX,
   GROUP_NAME_MAX,
+  REMINDERS_MAX,
   SNIPPET_MARK_END,
   SNIPPET_MARK_START,
   TAG_NAME_MAX,
   TASK_TITLE_MAX,
 } from '@rooster/core/limits';
 import { compareKeys } from '@rooster/core/ordering';
+import { formatReminderOffset } from '@rooster/core/reminders';
 import { z } from 'zod';
 import { CallContext, type Org, type Task, ToolError } from './context.ts';
 import {
@@ -96,7 +98,19 @@ const dueArg = z
   .string()
   .max(80)
   .describe(
-    'Due date: YYYY-MM-DD or a phrase in English or Swedish ("today", "tomorrow 14:00", "fri", "next week", "in 3 days"). "none" clears it.',
+    'Due date: YYYY-MM-DD or a phrase in English or Swedish ("today", "tomorrow 14:00", "fri", "next week", "in 3 days"). A recurrence phrase ("every mon", "every month", "every 3 days after done") also makes the task repeat. "none" clears the date (and stops a repeat).',
+  );
+const remindValue = z.string().min(1).max(80);
+const remindArg = z
+  .union([remindValue, z.array(remindValue).min(1).max(REMINDERS_MAX)])
+  .describe(
+    'Reminders for the user (only they are reminded): "15m", "1h", "1d" or "due" before the due time (needs a due date), or an absolute time like "fri 14:00" or "2026-11-02 08:30". One value or a list.',
+  );
+const repeatArg = z
+  .string()
+  .max(80)
+  .describe(
+    'Make the task repeat: "every mon", "every weekday", "every 2 weeks", "every month", "every year", or "every 3 days after done" (counted from completion). Keeps the due date; a task without one gets the first occurrence. "none" stops repeating.',
   );
 const assigneeArg = z
   .string()
@@ -257,7 +271,7 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
     {
       title: 'Get a task',
       description:
-        'One task with its description (Markdown), dates, tags, assignee, subtasks, parent chain and recent comments.',
+        "One task with its description (Markdown), dates, repeat rule, the user's reminders, tags, assignee, subtasks, attachments, parent chain and recent comments.",
       inputSchema: z.object({ ref: refArg, org: orgArg }),
       annotations: READ,
     },
@@ -272,6 +286,21 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
       };
       if (task.parentChain.length > 0) detail.parents = task.parentChain.map((p) => p.title);
       if (task.subtasks.length > 0) detail.subtaskList = task.subtasks.map((s) => taskRow(s, rows));
+      if (task.reminders !== undefined && task.reminders.length > 0) {
+        detail.reminders = task.reminders.map((r) => ({
+          ...(r.offsetMinutes === null ? {} : { before: formatReminderOffset(r.offsetMinutes) }),
+          // Null while the task has no due date: it fires again once one is set (ADR 0049 §2.2).
+          at: r.fireAt === null ? null : new Date(r.fireAt).toISOString(),
+          ...(r.firedAt === null ? {} : { sent: true }),
+        }));
+      }
+      if (task.attachments !== undefined && task.attachments.length > 0) {
+        detail.attachments = task.attachments.map((a) => ({
+          name: a.filename,
+          type: a.mime,
+          bytes: a.size,
+        }));
+      }
       if (task.counts.comments > 0) {
         const comments = await recentComments(ctx.client, task.id, 10);
         detail.comments = comments.map((c) => ({
@@ -399,7 +428,7 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
     {
       title: 'Create a task',
       description:
-        'Creates a task at the top of a group (default: the Inbox). The title is parsed like the web app: a date phrase ("fri", "tomorrow 14:00"), #tags and a trailing >Group are taken out of it. Set parent to create a subtask.',
+        'Creates a task at the top of a group (default: the Inbox). The title is parsed like the web app: a date or recurrence phrase ("fri", "tomorrow 14:00", "every mon"), #tags, a trailing >Group and reminder tokens ("!1h") are taken out of it. Set parent to create a subtask.',
       inputSchema: z.object({
         title: z
           .string()
@@ -421,6 +450,8 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
         description: z.string().max(100_000).optional().describe('Markdown.'),
         parent: refArg.optional().describe('Ref of the parent task, to create a subtask.'),
         assignee: assigneeArg.optional(),
+        remind: remindArg.optional(),
+        repeat: repeatArg.optional(),
       }),
       annotations: WRITE,
     },
@@ -432,6 +463,15 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
           ? await ctx.org(args.org)
           : ((await ctx.orgById(parent.orgId)) ?? (await ctx.org(args.org)));
       const due = args.due === undefined ? undefined : await ctx.parseDue(args.due);
+      const reminders = args.remind === undefined ? [] : await ctx.parseRemind(args.remind);
+      // A date in the title stays the date: the server reads it when the body names none.
+      const repeat =
+        args.repeat === undefined
+          ? undefined
+          : await ctx.parseRepeat(
+              args.repeat,
+              due === undefined ? await ctx.titleHasDate(args.title) : due.dueDate !== null,
+            );
       const assigneeId =
         args.assignee === undefined ? undefined : await ctx.resolveAssignee(org.id, args.assignee);
       const group =
@@ -451,6 +491,8 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
             title: args.title,
             parse: true,
             ...(due === undefined ? {} : due),
+            ...(repeat === undefined ? {} : repeat),
+            ...(reminders.length === 0 ? {} : { reminders }),
             ...(args.description === undefined ? {} : { description: args.description }),
             ...(group === undefined ? {} : { groupId: group.id }),
             ...(parent === undefined ? {} : { parentId: parent.id }),
@@ -492,7 +534,7 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
     {
       title: 'Update a task',
       description:
-        'Changes the title, due date, description or assignee of a task. Only the fields given change. A new assignee other than the user gets the task at the top of their Inbox.',
+        "Changes the title, due date, repeat, description or assignee of a task, or the user's own reminders on it. Only the fields given change. A new assignee other than the user gets the task at the top of their Inbox.",
       inputSchema: z.object({
         ref: refArg,
         org: orgArg,
@@ -504,6 +546,16 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
           .optional()
           .describe('Markdown; replaces the description.'),
         assignee: assigneeArg.optional(),
+        repeat: repeatArg.optional(),
+        remind: remindArg
+          .optional()
+          .describe(
+            'Reminders to add for the user (kept alongside existing ones): "15m", "1h", "1d" or "due" before the due time, or an absolute time like "fri 14:00". One value or a list.',
+          ),
+        clearReminders: z
+          .boolean()
+          .optional()
+          .describe("true removes the user's reminders on this task (before adding `remind`)."),
       }),
       annotations: WRITE,
     },
@@ -525,11 +577,20 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
         }
         Object.assign(patch, due);
       }
+      if (args.repeat !== undefined) {
+        const dueDate = 'dueDate' in patch ? patch.dueDate : found.dueDate;
+        Object.assign(patch, await ctx.parseRepeat(args.repeat, dueDate !== null));
+      }
       if (args.assignee !== undefined) {
         patch.assigneeId = await ctx.resolveAssignee(found.orgId, args.assignee);
       }
+      // Reminders are the caller's own (FR-REM): cleared first, then added (06 §2.4).
+      if (args.clearReminders === true) patch.clearReminders = true;
+      if (args.remind !== undefined) patch.reminders = await ctx.parseRemind(args.remind);
       if (Object.keys(patch).length === 0) {
-        throw new ToolError('Nothing to change: give title, due, description or assignee.');
+        throw new ToolError(
+          'Nothing to change: give title, due, repeat, description, assignee, remind or clearReminders.',
+        );
       }
       const result = await unwrap(
         ctx.client.PATCH('/api/v1/tasks/{id}', { params: { path: { id: found.id } }, body: patch }),
@@ -571,7 +632,9 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
       const rows = await rowContext(ctx, org, false);
       const verb = args.completed ? 'Completed' : 'Reopened';
       const next =
-        result.next === undefined ? '' : ` Next occurrence: ${taskRef(result.next, org)}.`;
+        result.next === undefined
+          ? ''
+          : ` Next occurrence: ${taskRef(result.next, org)}${result.next.dueDate === null ? '' : `, due ${result.next.dueDate}`}.`;
       return toolResult(`${verb} ${taskRef(result.task, org)}.${next}`, {
         task: taskRow(result.task, rows),
         ...(result.next === undefined ? {} : { next: taskRow(result.next, rows) }),

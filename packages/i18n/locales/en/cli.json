@@ -86,7 +86,9 @@
       "top": "At the top of the group (default)",
       "bottom": "At the bottom of the group",
       "parent": "Make it a subtask of this task",
-      "parse": "Read dates, #tags, >Group and @person from the title (default)"
+      "parse": "Read dates, #tags, >Group and @person from the title (default)",
+      "remind": "Remind me: 15m, 1h, 1d or due before the due time, or a time such as \"fri 14:00\" (repeatable)",
+      "repeat": "Repeat: a phrase such as \"every mon\", \"every month\" or \"every 3 days after done\""
     }
   },
   "sub": {
@@ -108,14 +110,19 @@
     "tags": "Tags",
     "id": "ID",
     "subtasks": "Subtasks",
-    "comments": "{count, plural, one {# comment} other {# comments}}"
+    "comments": "{count, plural, one {# comment} other {# comments}}",
+    "repeat": "Repeats",
+    "reminders": "Reminders",
+    "attachments": "Attachments"
   },
   "edit": {
     "arg": {
       "title": "New title",
       "due": "Due date (a date, a phrase, or none)",
       "editor": "Edit the description in $EDITOR",
-      "parent": "Parent task, or none to make it top-level"
+      "parent": "Parent task, or none to make it top-level",
+      "remind": "Add a reminder: 15m, 1h, 1d, due or a time such as \"fri 14:00\" (repeatable); --no-remind removes your reminders first",
+      "repeat": "Repeat: a phrase such as \"every mon\", or none to stop repeating"
     },
     "nothing": "Nothing to change. Pass --title, --due, --desc, --editor or another option.",
     "unchanged": "Description unchanged.",
@@ -137,7 +144,11 @@
   },
   "rm": {
     "confirm": "Delete {count, plural, one {# task} other {# tasks}}?",
-    "done": "{count, plural, one {Deleted # task (restore it with rooster restore).} other {Deleted # tasks (restore them with rooster restore).}}"
+    "done": "{count, plural, one {Deleted # task (restore it with rooster restore).} other {Deleted # tasks (restore them with rooster restore).}}",
+    "arg": {
+      "occurrence": "Repeating tasks: delete only this occurrence and create the next one (default: the task, which ends the series)"
+    },
+    "occurrence": "{count, plural, one {Deleted # occurrence (restore it with rooster restore).} other {Deleted # occurrences (restore them with rooster restore).}}"
   },
   "comment": {
     "arg": {
@@ -447,5 +458,11 @@
     },
     "needsAdmin": "This needs the admin capability, which only instance admins can grant. Sign in with rooster login --admin (or create a token with --scope admin in the browser).",
     "reindexed": "Search index rebuilt: {count, plural, one {# task} other {# tasks}} in {ms} ms."
+  },
+  "remind": {
+    "invalid": "--remind: can’t read “{value}” as a reminder. Use 15m, 1h, 1d or due (before the due time), or a time such as \"fri 14:00\"."
+  },
+  "repeat": {
+    "invalid": "--repeat: “{value}” isn’t a repeat. Try \"every mon\", \"every month\", \"every 3 days after done\" or none."
   }
 }

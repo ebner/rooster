@@ -13,12 +13,13 @@ import {
   type TaskDetail,
   unwrap,
 } from '../api.ts';
-import { applyDueFlags, type DueUnit, isNone } from '../dates.ts';
+import { applyDueFlags, type DueChange, isNone } from '../dates.ts';
 import { CliError, EXIT } from '../errors.ts';
 import { describeApiError } from '../grant-info.ts';
 import { type Locale, withLocale } from '../i18n.ts';
 import { clean } from '../output/color.ts';
-import { type DateContext, dateContext } from '../output/format.ts';
+import { type DateContext, dateContext, dueLabel } from '../output/format.ts';
+import { splitReminderTokens } from '../reminders.ts';
 import { type Runtime, withRuntime } from '../runtime.ts';
 import type { TuiTranslate } from './i18n.ts';
 import { type MutationIdentity, mutationIdentity, withMutationIdentity } from './idempotency.ts';
@@ -141,6 +142,18 @@ type Listener = () => void;
 
 const DATE_SUGGESTIONS = ['today', 'tomorrow', 'weekend', 'nextWeek', 'nextMonth', 'none'] as const;
 export type DateSuggestion = (typeof DATE_SUGGESTIONS)[number];
+
+/**
+ * What the date picker would do (P10): the new due unit (with the rule when the phrase was a
+ * recurrence, "every mon"), or null when the phrase only held reminder tokens; and the
+ * `!15m`-style reminders to add, as minutes before the due moment.
+ */
+export interface DatePreview {
+  due: DueChange | null;
+  offsets: number[];
+}
+
+const NO_DUE: DueChange = { dueDate: null, dueTime: null, dueTz: null, startDate: null };
 
 /** Orgs in the user's sidebar order (1–9 switch to them). */
 export function orgsInOrder(me: Me): Org[] {
@@ -695,7 +708,8 @@ export class TuiController {
   private async mutate(
     exec: () => Promise<void>,
     options: {
-      done?: string;
+      /** The success message; a function when it depends on the response (a next instance). */
+      done?: string | (() => string);
       undoable?: boolean;
       onSuccess?: () => void;
       /** Shown at once and taken back if the server refuses (or can't be reached). */
@@ -720,7 +734,7 @@ export class TuiController {
       if (options.done !== undefined) {
         this.set({
           message: {
-            text: options.done,
+            text: typeof options.done === 'function' ? options.done() : options.done,
             tone: 'info',
             retry: false,
             undo: options.undoable ?? true,
@@ -757,7 +771,8 @@ export class TuiController {
     return result.task;
   }
 
-  private async complete(taskId: string, completed: boolean): Promise<void> {
+  /** Completes or reopens; a repeating task's completion returns its next instance. */
+  private async complete(taskId: string, completed: boolean): Promise<Task | null> {
     const result = await unwrap(
       this.api.POST('/api/v1/tasks/{id}/complete', {
         params: { path: { id: taskId } },
@@ -765,7 +780,36 @@ export class TuiController {
       }),
     );
     this.touchTask(result.task);
-    if (result.next !== undefined) this.touchTask(result.next);
+    if (result.next === undefined) return null;
+    this.touchTask(result.next);
+    return result.next;
+  }
+
+  /**
+   * Adds the user's reminders (`offsetMinutes` before the due moment). Returns the ids of the
+   * ones this created (`201`); an identical existing one (`200`) is not ours to undo.
+   */
+  private async addReminders(taskId: string, offsets: readonly number[]): Promise<string[]> {
+    const created: string[] = [];
+    for (const offsetMinutes of offsets) {
+      const request = this.api.POST('/api/v1/tasks/{id}/reminders', {
+        params: { path: { id: taskId } },
+        body: { offsetMinutes },
+      });
+      const reminder = await unwrap(request);
+      if ((await request).response.status === 201) created.push(reminder.id);
+    }
+    return created;
+  }
+
+  private async removeReminders(taskId: string, ids: readonly string[]): Promise<void> {
+    for (const reminderId of ids) {
+      await unwrap(
+        this.api.DELETE('/api/v1/tasks/{id}/reminders/{reminderId}', {
+          params: { path: { id: taskId, reminderId } },
+        }),
+      );
+    }
   }
 
   private async sendMove(taskId: string, plan: MovePlan): Promise<void> {
@@ -1284,7 +1328,13 @@ export class TuiController {
     const task = line.task;
     const completed = task.completedAt === null;
     const title = clean(task.title);
-    void this.mutate(() => this.complete(task.id, completed), {
+    // A repeating task's next instance (ADR 0049 §1.4); undoing the completion reopens the task
+    // and moves that instance to Trash (§1.6), so undo and redo never leave two open instances.
+    let next: Task | null = null;
+    const send = async () => {
+      next = await this.complete(task.id, completed);
+    };
+    void this.mutate(send, {
       local: {
         apply: () => {
           if (completed) this.holdCompleted(task.id);
@@ -1295,13 +1345,31 @@ export class TuiController {
           this.touchTask(task);
         },
       },
-      done: this.t(completed ? 'toast.completed' : 'toast.reopened', { title }),
+      done: () => {
+        const shown: Task | null = next;
+        if (shown === null || shown.dueDate === null) {
+          return this.t(completed ? 'toast.completed' : 'toast.reopened', { title });
+        }
+        return this.t('toast.completedNext', { title, due: this.dueText(shown) });
+      },
       onSuccess: () =>
         this.pushUndo({
-          undo: () => this.complete(task.id, !completed),
-          redo: () => this.complete(task.id, completed),
+          undo: async () => {
+            await this.complete(task.id, !completed);
+            const created: Task | null = next;
+            if (created !== null) {
+              await this.deleteTask(created.id);
+              next = null;
+            }
+          },
+          redo: send,
         }),
     });
+  }
+
+  /** A due date as the rows show it ("Fri", "Tomorrow 09:00"). */
+  private dueText(task: Pick<Task, 'dueDate' | 'dueTime' | 'dueTz' | 'startDate'>): string {
+    return dueLabel({ ...task, completedAt: null }, this.state.dates)?.text ?? '';
   }
 
   /** The web keeps a completed row in place for `completeHideMs` (D-09); 0 keeps it for the session. */
@@ -1415,23 +1483,38 @@ export class TuiController {
     return DATE_SUGGESTIONS.map((id) => ({ id, phrase: this.t(`date.${id}`) }));
   }
 
-  /** The due unit `phrase` gives the task, or an error message. */
-  previewDate(taskId: string, phrase: string): { due: DueUnit } | { error: string } {
+  /**
+   * What `phrase` does to the task, or an error message: a date or recurrence phrase ("fri
+   * 14:00", "every mon", "none") and any reminder tokens ("!1h", "!due"; 02 §8.1).
+   */
+  previewDate(taskId: string, phrase: string): DatePreview | { error: string } {
     const task = this.findTask(taskId);
     if (task === undefined) return { error: this.t('msg.taskGone') };
-    try {
-      const due = withLocale(this.deps.locale, () =>
-        applyDueFlags(task, { due: phrase }, this.state.me, this.deps.now()),
-      );
-      if (due === null) return { error: this.t('date.invalid', { phrase }) };
-      return { due };
-    } catch (error) {
-      // The CLI's own message names the `--due` flag; here it is the picker's.
-      if (error instanceof CliError && error.exitCode === EXIT.conflict && !isNone(phrase)) {
-        return { error: this.t('date.invalid', { phrase: clean(phrase) }) };
+    const { phrase: rest, offsets } = splitReminderTokens(phrase);
+    let due: DueChange | null = null;
+    if (isNone(rest)) due = { ...NO_DUE };
+    else if (rest !== '') {
+      try {
+        due = withLocale(this.deps.locale, () =>
+          applyDueFlags(task, { due: rest }, this.state.me, this.deps.now()),
+        );
+      } catch (error) {
+        // The CLI's own message names the `--due` flag; here it is the picker's.
+        if (error instanceof CliError && error.exitCode === EXIT.conflict) {
+          return { error: this.t('date.invalid', { phrase: clean(rest) }) };
+        }
+        return { error: error instanceof Error ? clean(error.message) : String(error) };
       }
-      return { error: error instanceof Error ? clean(error.message) : String(error) };
+      if (due === null) return { error: this.t('date.invalid', { phrase: clean(rest) }) };
     }
+    if (due === null && offsets.length === 0) {
+      return { error: this.t('date.invalid', { phrase: clean(phrase) }) };
+    }
+    // A relative reminder needs a due date to count back from (`422 reminder_needs_due`).
+    if (offsets.length > 0 && (due ?? task).dueDate === null) {
+      return { error: this.t('date.reminderNeedsDue') };
+    }
+    return { due, offsets };
   }
 
   private keyDate(mode: Extract<Mode, { kind: 'date' }>, input: string, key: KeyInfo): void {
@@ -1454,9 +1537,7 @@ export class TuiController {
     if (result.kind !== 'submit') return;
     const typed = mode.input.value.trim();
     const phrase = typed !== '' ? typed : (suggestions[mode.choice]?.phrase ?? '');
-    const preview = isNone(phrase)
-      ? { due: { dueDate: null, dueTime: null, dueTz: null, startDate: null } }
-      : this.previewDate(mode.taskId, phrase);
+    const preview = this.previewDate(mode.taskId, phrase);
     if ('error' in preview) {
       this.set({ mode: { ...mode, error: preview.error } });
       return;
@@ -1464,20 +1545,47 @@ export class TuiController {
     this.set({ mode: { kind: 'navigate' } });
     const task = this.findTask(mode.taskId);
     if (task === undefined) return;
-    const before: DueUnit = {
+    this.applyDate(task, preview);
+  }
+
+  /**
+   * Sends a date picker change: the due unit (and rule), then the reminders. Undo restores the
+   * due unit and rule as they were and removes the reminders this change created.
+   */
+  private applyDate(task: Task, preview: DatePreview): void {
+    const before: DueChange = {
       dueDate: task.dueDate,
       dueTime: task.dueTime,
       dueTz: task.dueTz,
       startDate: task.startDate,
+      recurrence: task.recurrence ?? null,
+      recurrenceBasis: task.recurrence ? (task.recurrenceBasis ?? 'due') : null,
     };
     const after = preview.due;
+    const { offsets } = preview;
     const id = task.id;
-    void this.mutate(() => this.patchTask(id, { ...after }).then(() => {}), {
-      local: this.localTask(task, after),
+    // Clearing the date clears the rule on the server (ADR 0049 §1.8); show that at once.
+    const shown: Partial<Task> | null =
+      after === null
+        ? null
+        : after.dueDate === null
+          ? { ...after, recurrence: null, recurrenceBasis: null }
+          : after;
+    let created: string[] = [];
+    const send = async () => {
+      if (after !== null) await this.patchTask(id, { ...after });
+      created = await this.addReminders(id, offsets);
+    };
+    void this.mutate(send, {
+      ...(shown === null ? {} : { local: this.localTask(task, shown) }),
       onSuccess: () =>
         this.pushUndo({
-          undo: () => this.patchTask(id, { ...before }).then(() => {}),
-          redo: () => this.patchTask(id, { ...after }).then(() => {}),
+          undo: async () => {
+            await this.removeReminders(id, created);
+            created = [];
+            if (after !== null) await this.patchTask(id, { ...before });
+          },
+          redo: send,
         }),
     });
   }

@@ -96,4 +96,58 @@ describe('[P2] untrusted text in errors goes through clean()', () => {
     expect(result.code).toBe(0);
     expectClean(result.stdout);
   });
+
+  it('P10: an attachment file name in show', async () => {
+    const id = '0192f3a0-0000-7000-8000-000000000001';
+    const base = {
+      id,
+      orgId: ORG.id,
+      seq: 1,
+      parentId: null,
+      subtaskPosition: null,
+      title: 'Report',
+      hasDescription: false,
+      assigneeId: ME.id,
+      createdBy: ME.id,
+      dueDate: null,
+      dueTime: null,
+      dueTz: null,
+      startDate: null,
+      completedAt: null,
+      tagIds: [],
+      counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 1 },
+      placement: null,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    const result = await run(
+      {
+        'GET /api/v1/tasks/resolve': base,
+        'GET /api/v1/tasks/*': {
+          ...base,
+          description: '',
+          parentChain: [],
+          subtasks: [],
+          reminders: [],
+          attachments: [
+            {
+              id: '0192f3a0-0000-7000-8000-0000000000a1',
+              taskId: id,
+              filename: `${HOSTILE}.pdf`,
+              mime: 'application/pdf',
+              size: 2048,
+              uploaderId: ME.id,
+              image: null,
+              createdAt: 0,
+            },
+          ],
+        },
+        'GET /api/v1/orgs/*/tags': [],
+      },
+      ['show', '1'],
+    );
+    expect(result.code).toBe(0);
+    expect(result.stdout).toMatch(/Attachments\s+Eve.*\.pdf \(2 kB\)/);
+    expectClean(result.stdout);
+  });
 });

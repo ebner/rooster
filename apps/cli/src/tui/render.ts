@@ -3,11 +3,13 @@ import { mentionsToPlain } from '@rooster/core/mentions';
 import type { Task } from '@rooster/core/schemas';
 import type { TaskDetail } from '../api.ts';
 import { type ColorLevel, clean, displayWidth, type Style } from '../output/color.ts';
-import { dueLabel, localDue, taskRef } from '../output/format.ts';
+import { BELL_MARK, dueLabel, localDue, REPEAT_MARK, taskRef } from '../output/format.ts';
 import { renderMarkdown } from '../output/markdown.ts';
+import { offsetText, reminderText, ruleText, sizeText } from '../output/schedule.ts';
 import { dueStyle, styles, tagStyle, token } from '../output/theme.ts';
 import type {
   ActivityItem,
+  DatePreview,
   DetailState,
   Mode,
   PickerOption,
@@ -247,6 +249,8 @@ function metaSegs(line: TaskLine, ctx: Ctx): Seg[] {
   if (subtasks > 0) add(seg(`${line.expanded ? '▾' : '▸'} ${subtasksDone}/${subtasks}`, muted));
   if (line.task.hasDescription) add(seg('≡', muted));
   if (comments > 0) add(seg(`✎${comments}`, muted));
+  if (typeof line.task.recurrence === 'string') add(seg(REPEAT_MARK, muted));
+  if (typeof line.task.nextReminderAt === 'number') add(seg(BELL_MARK, muted));
   return out;
 }
 
@@ -338,14 +342,14 @@ function pickerRows(ctx: Ctx, width: number, depth: number): string[] {
           ? [seg(`  ${t('picker.dateHint')}`, muted)]
           : 'error' in preview
             ? [seg('  ?', styles.danger)]
-            : [seg(`  → ${describeDue(preview.due, ctx)}`, styles.success)];
+            : [seg(`  → ${describePreview(preview, mode.taskId, ctx)}`, styles.success)];
     rows.push([seg(`${t('picker.date')} `, styles.heading), ...caret(mode.input), ...hint]);
     controller.dateSuggestions().forEach((option, i) => {
       const chosen = typed === '' && i === mode.choice;
       const result =
         option.id === 'none' ? null : controller.previewDate(mode.taskId, option.phrase);
       const when =
-        result === null ? '' : 'error' in result ? '' : `  ${describeDue(result.due, ctx)}`;
+        result === null ? '' : 'error' in result ? '' : `  ${describePreview(result, null, ctx)}`;
       rows.push([
         seg(chosen ? '› ' : '  ', accent),
         seg(option.phrase, chosen ? { bold: true } : {}),
@@ -391,6 +395,31 @@ function describeDue(
     { dueDate: due.dueDate, dueTime: due.dueTime, startDate: due.startDate },
     ctx.state.dates,
   );
+}
+
+/** "Mon · ↻ Weekly on Monday · 🔔 1 h before": what the picker's phrase would set. */
+function describePreview(preview: DatePreview, taskId: string | null, ctx: Ctx): string {
+  const dates = ctx.state.dates;
+  const parts: string[] = [];
+  const task =
+    taskId === null
+      ? undefined
+      : ctx.state.lines.find(
+          (line): line is TaskLine => line.kind === 'task' && line.task.id === taskId,
+        )?.task;
+  if (preview.due !== null) {
+    parts.push(describeDue(preview.due, ctx));
+    if (typeof preview.due.recurrence === 'string') {
+      parts.push(
+        `${REPEAT_MARK} ${ruleText(preview.due.recurrence, preview.due.recurrenceBasis, dates)}`,
+      );
+    }
+  }
+  const dueTime = preview.due?.dueTime ?? task?.dueTime ?? null;
+  for (const offset of preview.offsets) {
+    parts.push(`${BELL_MARK} ${offsetText(offset, dueTime === null, dates)}`);
+  }
+  return parts.join(' · ');
 }
 
 function listBody(ctx: Ctx, width: number, height: number): { lines: string[]; top: number } {
@@ -563,6 +592,29 @@ function detailLines(ctx: Ctx, detail: DetailState, width: number): string[] {
     }
     rows.push([t('detail.tags'), segs]);
   }
+  if (typeof task.recurrence === 'string') {
+    rows.push([
+      t('detail.repeat'),
+      [
+        seg(
+          `${REPEAT_MARK} ${clean(ruleText(task.recurrence, task.recurrenceBasis, state.dates))}`,
+        ),
+      ],
+    ]);
+  }
+  (detail.task?.reminders ?? []).forEach((reminder, i) => {
+    const view = reminderText(reminder, task, state.dates);
+    rows.push([
+      i === 0 ? t('detail.reminders') : '',
+      [seg(`${BELL_MARK} ${view.text}`, view.dormant || view.fired ? muted : {})],
+    ]);
+  });
+  (detail.task?.attachments ?? []).forEach((file, i) => {
+    rows.push([
+      i === 0 ? t('detail.attachments') : '',
+      [seg(clean(file.filename)), seg(`  ${sizeText(file.size, state.dates.locale)}`, muted)],
+    ]);
+  });
   if (!state.org.isPersonal) {
     rows.push([
       t('detail.assignee'),
