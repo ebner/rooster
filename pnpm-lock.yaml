@@ -365,6 +365,9 @@ catalogs:
     lucide-react:
       specifier: 1.52.0
       version: 1.52.0
+    marked:
+      specifier: 17.0.6
+      version: 17.0.6
     nodemailer:
       specifier: 10.0.16
       version: 10.0.16
@@ -823,6 +826,9 @@ importers:
       jsdom:
         specifier: 'catalog:'
         version: 30.1.2(@noble/hashes@2.4.0)
+      marked:
+        specifier: 'catalog:'
+        version: 17.0.6
       oauth2-mock-server:
         specifier: 'catalog:'
         version: 9.2.0

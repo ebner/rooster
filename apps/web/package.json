@@ -61,6 +61,7 @@
     "@vitejs/plugin-react": "catalog:",
     "fake-indexeddb": "catalog:",
     "jsdom": "catalog:",
+    "marked": "catalog:",
     "oauth2-mock-server": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",

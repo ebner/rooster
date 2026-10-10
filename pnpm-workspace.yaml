@@ -86,6 +86,7 @@ catalog:
   '@tiptap/pm': 3.31.4
   '@tiptap/starter-kit': 3.31.4
   '@tiptap/markdown': 3.31.4
+  marked: 17.0.6
   '@tiptap/extension-list': 3.31.4
   '@tiptap/extensions': 3.31.4
   '@dnd-kit/core': 6.3.1
