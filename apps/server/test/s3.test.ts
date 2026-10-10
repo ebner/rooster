@@ -329,14 +329,11 @@ describe('S3 request deadlines', () => {
 
 /**
  * A loopback S3 (path style, bucket `rooster-files`) whose answers a test chooses: objects are
- * kept in memory; `put` and `get` can misbehave as real backends do.
+ * kept in memory; `put` can refuse as a real backend does.
  */
 async function loopbackS3() {
   const objects = new Map<string, Buffer>();
-  const behaviour: {
-    put: 'ok' | 'forbid' | 'store-then-hang';
-    get: 'ok' | 'stall-body';
-  } = { put: 'ok', get: 'ok' };
+  const behaviour: { put: 'ok' | 'forbid' } = { put: 'ok' };
   const sockets = new Set<Socket>();
   const stored = { count: 0 };
   const keyOf = (url: string | undefined) =>
@@ -354,8 +351,6 @@ async function loopbackS3() {
       req.on('end', () => {
         objects.set(key, Buffer.concat(chunks));
         stored.count += 1;
-        // Stored, but the answer never comes (lost on the way, a stalled proxy).
-        if (behaviour.put === 'store-then-hang') return;
         res.writeHead(200, { etag: '"x"' });
         res.end();
       });
@@ -369,8 +364,7 @@ async function loopbackS3() {
         return;
       }
       res.writeHead(200, { 'content-length': String(object.length) });
-      if (behaviour.get === 'stall-body') res.write(object.subarray(0, 4));
-      else res.end(object);
+      res.end(object);
       return;
     }
     if (req.method === 'DELETE') {
