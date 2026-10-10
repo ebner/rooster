@@ -37,7 +37,14 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - `src/mail/` (P7): the nodemailer transport (only with `ROOSTER_SMTP_URL`), React email templates rendered with `@react-email/render` (`templates/`, tables and inline styles from `@rooster/tokens`, text in the `mail` i18n namespace), `mail-service.ts` (invites, immediate and batched notification emails, the digest) and HMAC unsubscribe tokens. `routes/unsubscribe.ts` serves `/unsubscribe/:token` outside `/api/v1`: GET only confirms, POST unsubscribes.
   - `src/mcp/` (P9, ADRs 0042, 0043): the remote `/mcp` endpoint (Streamable HTTP, stateless). Checks run origin → method → token → headers → bounded body → scope pre-check (`requiredScopes`) → per-grant rate limit → SDK. Tools run against the REST API **in-process** (`in-process-client.ts`, `IN_PROCESS_ACTOR` from `lib/in-process.ts`), so service authorisation applies unchanged and the token is never forwarded. `routes/discovery.ts` serves the Server Card (`/mcp/server-card`), `/.well-known/ai-catalog.json`, the agent-skills index and `SKILL.md`, and `/llms.txt` (off with `ROOSTER_AGENT_DISCOVERY=off`).
   - `src/events/`: the after-commit `EventBus` and the SSE `hub` behind `GET /api/v1/events`. Services publish through the per-transaction queue, and audiences are computed in `services/event-audience.ts`. `DomainEvent.direct` carries per-user messages other than invalidations (the SSE `notification` event). ADR 0009.
+  - **P11** (ADRs 0052, 0054):
+    - **Storage quota:** `ROOSTER_USER_STORAGE_MB` (per uploader; `userStorageUsed()` in `services/attachment-queries.ts`). It is checked after streaming and again in the transaction that inserts the attachment row.
+    - **Admin → System:** `SystemService` behind `GET /admin/system`. Job runs live in memory in `jobs/job-board.ts`; the scheduler records into it.
+    - **Defaults:** `/api/v1` responses without their own cache policy are `no-store`, and the DB files are made 0600 at boot.
+    - **Never use `fileTypeFromFile`:** its runtime import can't be resolved in the bundled `dist/main.js`, which broke uploads in the 1.4.0 image. Sniff through `fileTypeFromBlob(await openAsBlob(path))`. Anything imported at runtime by a computed specifier must be checked in the built image (the backup drill uploads a file).
   - Tests live in `test/`. Helpers: `createTestDb`, `createTestApp`, `mock-idp.ts`, `signInAs(email)`.
+    - `test/perf.server.test.ts` holds the AC-11.4 server budgets (`ROOSTER_PERF_SLACK` loosens them on slow machines).
+    - `test/migration-fixture.test.ts` migrates the previous release's dump, `test/fixtures/release-<version>.sql`. **Refresh it at each release** with `make-release-fixture.ts`; its header says how.
   - `test/authz.matrix.test.ts` enumerates **every** OpenAPI route; a new route without a matrix row fails it.
   - The build bundles **all** JS deps into `dist/main.js`, except native modules (`NATIVE_DEPS` in `tsdown.config.ts`). Add a native dependency there **and** in `docker/Dockerfile`.
 - `apps/web`: React SPA (+ PWA from P4).
@@ -62,7 +69,13 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - `src/data/pipeline/`: the **mutation pipeline**. Every list op goes `enqueue → core reducer on the cache → send (Idempotency-Key, edit time, client id) → merge`. Undo pushes inverse ops through it. Ops are written to the IndexedDB outbox before they are sent; only the leader tab sends. Comment and follow ops go through it too (ADR 0028). Caches without a confirmed base (Everyone, activity) replay the queue in their query functions via `pipeline.withPendingTasks` / `withPendingActivity`; `usePendingEntity` (`pending.ts`) tells whether an entity still has queued ops (ADR 0030).
   - `src/data/sync/`: offline and realtime (04 §6, P4). `engine.ts` (`startSync`, awaited in `main.tsx` before the first render) restores the persisted query cache (`persist.ts`, idb-keyval key `rooster-cache-v1`; `my-list` is stored as the confirmed base, never the optimistic view) and the outbox (`outbox.ts`), elects the flushing tab (`leader.ts`, Web Locks `rooster-outbox`), mirrors queue/confirmations across tabs (`channel.ts`, `BroadcastChannel('rooster')`) and runs the SSE client (`events.ts`). Sign-out calls `clearLocalData()`. Persisted query roots need `gcTime: Infinity` (a 30-day timer overflows). Outbox records carry their `userId`; the persisted cache is dropped when its last confirmed `/me` is older than 30 days; every fresh `/me` prunes orgs the user left (ADR 0017). A page that ran as one account reloads when `/me` names another (ADR 0051). **Per-user state outside the query cache subscribes to `onSessionDataCleared` (`data/session-events.ts`), and a request that can outlive its session takes a `sessionScope()`.** A visible follower steals the outbox lock from a silent (frozen) leader, list requests time out after 20 s, and every tab reconciles with the IndexedDB outbox (ADR 0019; test helper `fake-locks.ts`, e2e `sync-recovery.mobile.spec.ts`).
   - `src/sw.ts`: the service worker (vite-plugin-pwa `injectManifest`, own `tsconfig.sw.json`). Off in `vite` dev unless `VITE_PWA_DEV=1`. It shows push messages, routes notification clicks, re-subscribes on `pushsubscriptionchange`, and leaves server paths (`/api`, `/ical`, `/unsubscribe`, health) to the network. `src/data/push.ts` (a lazy chunk) turns push on per device from a user gesture (ADR 0034). `src/features/pwa/`: registration, the update gate and `update-controller.ts` (FR-PWA-6: toast plus a persistent header "Update" chip, `update-chip.tsx`; foreground checks; reload fallback without a service worker; ADR 0021), install prompts, the iOS tip sheet, and `SyncStatus` (the header sync pill and update chip; every header uses it).
-  - `src/state/`: Zustand stores for list, undo and sync.
+  - `src/state/`: Zustand stores for list, undo and sync. **Per-row UI state goes through `useRowUi`, with its fields listed in `changedRowIds`** (`list-store.ts`), so a change re-renders only the rows it touches (ADR 0055).
+  - **List rendering (ADR 0055):** task rows are rendered in sticky chunks (`features/list/row-chunks.tsx`), and `content-visibility` applies to whole chunks on screen only. The list root is block layout. There is no virtualisation: the DOM stays complete for keyboard, drag and drop, screen readers and print.
+  - **P11 web:**
+    - **The guide:** `features/help/` (ADR 0053). `guide-build.ts` is a Vite plugin that turns `docs/guide/**` into `virtual:rooster-guide/<locale>` at build time, with GitHub-style heading ids; it is registered in `vite.config.ts` and `vitest.config.ts`. `guide-view.tsx` renders `/help` and `/help/<slug>`. `keyboard-doc.ts` generates the keyboard page.
+    - **Admin:** `features/admin/system-section.tsx` (Admin → System, with search reindex) over `data/system.ts`.
+    - **The list header:** `features/list/header-actions.tsx` holds the ⋯ menu. `styles/print.css` prints only the list (`<html data-print="list">`). `hide-delay.ts` holds the until-reload value, 10000.
+    - **Accessible names:** `features/list/row-name.ts`.
   - `src/keymap.ts`: **the single keymap registry** (02 §6). `useKeymap()` is mounted once at the root. The `?` cheat sheet is generated from it.
     - Focus zones `list` / `pane` / `paneList`; handlers return `false` to fall through.
     - `[data-no-chords]` disables Tab chords (the editor).
@@ -104,9 +117,16 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
 - `packages/i18n`: `locales/{en,sv}/<namespace>.json` (ICU messages). `.` bundles every catalog (`createI18n`/`initI18n`; server, CLI, tests), `./core` has the catalog-free helpers (`detectLocale`, `isLocale`, namespaces), `./lazy` loads one locale per chunk (`initLazyI18n`, `ensureLocale`; the web). A new namespace goes in `core.ts` and both `catalog-*.ts`.
 - `packages/tokens`: Coop tokens. `src/tokens.css` and `src/index.ts` must agree. A contrast test guards every allowed pair.
 - `docker/`: `Dockerfile` (distroless, nonroot) and `proxy/` snippets. `compose.yaml` sits at the root.
-- `scripts/`: `ci.sh` (the whole pipeline), `docker-smoke.sh`, `i18n-check.mjs`, `bundle-budget.mjs`, and `dev-idp.mjs` (a mock OIDC provider for local dev and tests).
+- `scripts/`:
+  - `ci.sh` (the whole pipeline), `docker-smoke.sh`, `i18n-check.mjs`, `bundle-budget.mjs`, and `dev-idp.mjs` (a mock OIDC provider for local dev and tests).
+  - P11:
+    - `secret-scan.sh`: gitleaks over the history. Reviewed fixtures are pinned in `.gitleaksignore`.
+    - `backup-drill.sh <image>`: backup, restore and verify, including an upload.
+    - `perf/server-rss.mjs`: idle RSS against the 150 MB budget.
+    - `docs/keyboard.mjs` and `docs/screenshots.sh`, which seeds the Kestrel Lane demo team and captures `docs/screenshots/`.
+- `compose.litestream.yaml`: the optional Litestream sidecar (`docs/operator.md`).
 - `.github/workflows/`: `ci.yml`, and `release.yml` (a pushed `vX.Y.Z` tag builds, smoke-tests and publishes the image to GHCR as `x.y.z`, `x.y`, `x` and `latest`; the tag must equal the root `package.json` version).
-- `CHANGELOG.md` (Keep a Changelog; list every migration), `README.md` (quick start), `docs/oidc-setup.md` (sign-in provider guide).
+- `CHANGELOG.md` (Keep a Changelog; list every migration), `README.md` (the front page with screenshots), `CONTRIBUTING.md`, `docs/oidc-setup.md` (sign-in provider guide), `docs/operator.md` (the operator guide), `docs/guide/{en,sv}/` (the user guide, also in the app at `/help`; `pages.json` orders it; **`keyboard.md` is generated, never edit it by hand**), `docs/security/asvs.md` (the ASVS L2 map), `docs/accessibility-checklist.md` (the manual screen reader pass per release).
 - `docs/spec/` (the spec; `09-phases.md` §Backlog holds specified but unscheduled work), `docs/adr/` (decisions made during implementation).
 
 ## Commands
@@ -130,6 +150,10 @@ apps/cli/scripts/build-binaries.sh  # single-file binaries for 5 targets (needs 
 pnpm db:generate               # drizzle-kit generate + STRICT post-processing
 pnpm run ci                    # full pipeline (scripts/ci.sh; plain `pnpm ci` is pnpm's own command); `pnpm run ci --with-docker` adds image build + smoke
 node apps/web/scripts/render-icons.mjs   # regenerate favicon, logo SVGs and app icons from src/ui/brand.ts
+pnpm docs:keyboard [--check]   # regenerate (or check) docs/guide/{en,sv}/keyboard.md from keymap.ts
+pnpm docs:screenshots          # seed the demo team and capture docs/screenshots (uses the e2e ports and lock; DOCS_SHOTS=a,b limits the shots)
+bash scripts/backup-drill.sh <image>      # backup/restore drill against a built image (Docker + Node; also in CI)
+node scripts/perf/server-rss.mjs [--image <tag>]   # idle RSS with 5 users (≤ 150 MB)
 ```
 **Local dev:**
 1. Copy `apps/server/.env.example` to `apps/server/.env`, set `ROOSTER_AUTH_SECRET` (`openssl rand -base64 48`; weak secrets exit 78) and uncomment the "Local development with the mock IdP" block.
