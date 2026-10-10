@@ -183,6 +183,16 @@ At least one sign-in provider must be configured, or the server exits with code 
 11. **Do not add dependencies** whose purpose overlaps an existing one (see the stack table in 04 §2). Justify each new dependency in the PR.
 12. **Tests are part of the work.** Name AC tests `AC-x.y …`. Keep `packages/core` coverage at or above 95 %.
 
+## Reviews
+- **Security-relevant code gets an independent review** before it counts as done. That covers auth, sessions, grants, tokens, OAuth/MCP, input handling, uploads, outbound requests (SSRF), shell or process launching, file writes, crypto, email and push, and anything public or unauthenticated. Run both the structured `codex review --commit <sha>` and a focused `codex review "<brief>"` that names the files, the assets and the attacks to try. Re-check after the fixes.
+- **Judge every finding, from any reviewer, before acting on it.** Verify that it reproduces in a realistic sequence, then weigh the actual harm:
+  - **Fix:** cross-account or credential exposure, privilege escalation, integrity loss.
+  - **Weigh against the cost of the fix:** local data loss, degraded UX, a resource limit that can be reached in practice.
+  - **Accept:** a finding that needs a trusted component (the operator's S3, IdP or proxy) to misbehave, unless the fix is trivial.
+- **Only real problems with meaningful impact get fixed**, each with a regression test that fails without it. Record everything else as "refuted" or "accepted" with the reason, in the ADR or `docs/security/security-review.md`.
+- **A reviewer repeating a point is not a reason to reverse an acceptance**; only a new, concrete argument is.
+- **When one class of finding keeps recurring, prefer one structural fix**, or an accepted-risk entry, over round after round of patches.
+
 ## Conventions
 - TypeScript strict and ESM everywhere. Named exports. No default exports, except where a framework requires them (route files).
 - Zod schemas live in `packages/core/src/schemas`. Infer types from them (`z.infer`) rather than duplicating them. The server registers them for OpenAPI with `.openapi('Name')`.
