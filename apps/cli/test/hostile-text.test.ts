@@ -151,3 +151,116 @@ describe('[P2] untrusted text in errors goes through clean()', () => {
     expectClean(result.stdout);
   });
 });
+
+describe('[P2] server metadata is validated before it is printed', () => {
+  const hostileTask = {
+    id: `0192f3a0${OSC52}-0000-7000-8000-000000000001`,
+    orgId: ORG.id,
+    seq: `42${OSC52}`,
+    parentId: null,
+    subtaskPosition: null,
+    title: 'Report',
+    hasDescription: false,
+    assigneeId: ME.id,
+    createdBy: ME.id,
+    dueDate: null,
+    dueTime: null,
+    dueTz: null,
+    startDate: null,
+    completedAt: null,
+    tagIds: [],
+    counts: { subtasks: `2${OSC52}`, subtasksDone: 1, comments: 0, attachments: 0 },
+    placement: { groupId: '01a00000-0000-7000-8000-00000000000a', position: 'a0' },
+    createdAt: 0,
+    updatedAt: 0,
+  };
+  const myList = {
+    groups: [
+      {
+        id: '01a00000-0000-7000-8000-00000000000a',
+        orgId: ORG.id,
+        kind: 'inbox',
+        name: 'Inbox',
+        position: 'a0',
+        collapsed: false,
+      },
+    ],
+    tasks: [hostileTask],
+    expandedTaskIds: [],
+    serverTime: 0,
+  };
+
+  it('a seq, id and subtask counts in ls and ls --quiet', async () => {
+    for (const argv of [['ls'], ['ls', '--quiet']]) {
+      const result = await run(
+        { 'GET /api/v1/orgs/*/my-list': myList, 'GET /api/v1/orgs/*/tags': [] },
+        argv,
+      );
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain('0192f3a0');
+      expect(result.stdout).not.toContain('42');
+      expect(result.stdout).not.toMatch(/\d\/2/);
+      expectClean(result.stdout);
+    }
+  });
+
+  it('the device flow user code (login --no-browser) is refused, never printed', async () => {
+    const api = fakeApi({
+      'GET /api/v1/meta': { version: '1.3.0' },
+      'POST /api/auth/device/code': {
+        device_code: 'd',
+        user_code: `ABCD${OSC52}`,
+        verification_uri: 'https://rooster.test/device',
+        expires_in: 600,
+        interval: 5,
+      },
+    });
+    const cli = cliHarness({}, { fetch: api.fetch });
+    try {
+      const result = await cli.run(['login', '--no-browser', '--server', 'https://rooster.test']);
+      expect(result.code).toBe(3);
+      expect(result.stdout).not.toContain('ABCD');
+      expectClean(result.stdout);
+      expectClean(result.stderr);
+      expect(api.calls.some((c) => c.path === '/api/auth/device/token')).toBe(false);
+    } finally {
+      cli.cleanup();
+    }
+  });
+
+  it('the server version in --version', async () => {
+    const result = await run({ 'GET /api/v1/meta': { version: `1.3.0${OSC52}` } }, ['--version']);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toMatch(/^rooster \S+\n$/);
+    expectClean(result.stdout);
+    expectClean(result.stderr);
+  });
+});
+
+describe('[P2] an explicit --scope must name at least one capability', () => {
+  it('login --scope=, and an empty --scope are usage errors, before any device code', async () => {
+    for (const scope of [['--scope=,'], ['--scope', ''], ['--scope', ' , ']]) {
+      const api = fakeApi({ 'GET /api/v1/meta': { version: '1.3.0' } });
+      const cli = cliHarness({}, { fetch: api.fetch });
+      try {
+        const result = await cli.run([
+          'login',
+          '--no-browser',
+          '--server',
+          'https://rooster.test',
+          ...scope,
+        ]);
+        expect(result.code).toBe(2);
+        expect(api.calls.some((c) => c.path === '/api/auth/device/code')).toBe(false);
+      } finally {
+        cli.cleanup();
+      }
+    }
+  });
+
+  it('token create --scope= is a usage error, before any token is created', async () => {
+    const result = await run({}, ['token', 'create', 'ci', '--scope=']);
+    expect(result.code).toBe(2);
+    expect(result.calls.some((c) => c.method === 'POST')).toBe(false);
+  });
+});

@@ -13,7 +13,11 @@ import { currentLocale, t } from './i18n.ts';
 import { clean } from './output/color.ts';
 import type { Runtime } from './runtime.ts';
 
-/** `--scope a,b --scope c` → scopes; unknown names are a usage error (exit 2). */
+/**
+ * `--scope a,b --scope c` → scopes; unknown names are a usage error (exit 2), and so is a
+ * `--scope` that names none (`--scope=,`, an empty `$SCOPES`): asking for nothing must not
+ * become the server's default of everything.
+ */
 export function parseScopes(values: readonly string[]): GrantScope[] {
   const out: GrantScope[] = [];
   for (const value of values.flatMap((v) => v.split(/[\s,]+/)).filter((v) => v !== '')) {
@@ -24,6 +28,12 @@ export function parseScopes(values: readonly string[]): GrantScope[] {
       );
     }
     if (!out.includes(value)) out.push(value);
+  }
+  if (out.length === 0) {
+    throw new CliError(
+      EXIT.usage,
+      t('grant.unknownScope', { scope: values.join(','), scopes: ALL_GRANT_SCOPES.join(', ') }),
+    );
   }
   return out;
 }

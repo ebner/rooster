@@ -1,4 +1,4 @@
-import { type ColorLevel, displayWidth, paint, type Style } from '../output/color.ts';
+import { type ColorLevel, clean, displayWidth, paint, type Style } from '../output/color.ts';
 
 /**
  * Terminal text for the TUI: a line is a list of styled segments of plain (already `clean`ed)
@@ -10,7 +10,8 @@ export interface Seg {
   style?: Style | undefined;
 }
 
-export const seg = (text: string, style?: Style): Seg => ({ text, style });
+/** A segment; `clean` again here, so a server field that missed its own still carries no escape. */
+export const seg = (text: string, style?: Style): Seg => ({ text: clean(text), style });
 
 export function segsWidth(segs: readonly Seg[]): number {
   let width = 0;

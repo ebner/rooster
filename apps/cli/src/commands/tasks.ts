@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { findDateInTitle, findGroupToken, matchMembers, todayIn } from '@rooster/core/dates';
+import { mentionsToPlain } from '@rooster/core/mentions';
 import { defineCommand } from 'citty';
 import { type Org, type RoosterClient, type Task, type TaskDetail, unwrap } from '../api.ts';
 import { applyDueFlags, applyRepeatFlag, type DueFlags, isNone } from '../dates.ts';
@@ -8,7 +9,7 @@ import { CliError, EXIT } from '../errors.ts';
 import { findGroup } from '../grant-info.ts';
 import { t } from '../i18n.ts';
 import { clean, paint } from '../output/color.ts';
-import { REPEAT_MARK, renderRows, toRow } from '../output/format.ts';
+import { count, REPEAT_MARK, renderRows, seqOrId, toRow } from '../output/format.ts';
 import { renderMarkdown } from '../output/markdown.ts';
 import { listOf, reminderText, ruleText, sizeText } from '../output/schedule.ts';
 import { styles } from '../output/theme.ts';
@@ -300,7 +301,7 @@ export const showCommand = defineCommand({
       return;
     }
     if (out.quiet) {
-      out.line(String(task.seq ?? task.id));
+      out.line(seqOrId(task));
       return;
     }
     const ctx = await dates(runtime);
@@ -329,7 +330,8 @@ export const showCommand = defineCommand({
       ]
         .join('')
         .trim();
-      fields.push([t('show.due'), `${label.text} (${iso})`]);
+      // Dates are server strings like any other field.
+      fields.push([t('show.due'), `${label.text} (${clean(iso)})`]);
     }
     if (task.assigneeId !== null) {
       const me = await runtime.me();
@@ -364,7 +366,7 @@ export const showCommand = defineCommand({
         `${clean(String(file.filename))} ${paint(`(${sizeText(file.size, ctx.locale)})`, styles.muted, out.level)}`,
       ]);
     });
-    fields.push([t('show.id'), task.id]);
+    fields.push([t('show.id'), clean(String(task.id))]);
     const width = Math.max(...fields.map(([name]) => name.length));
     for (const [name, value] of fields) {
       out.line(`       ${paint(name.padEnd(width), styles.muted, out.level)}  ${value}`);
@@ -379,22 +381,20 @@ export const showCommand = defineCommand({
       const rows = task.subtasks.map((sub) => toRow(sub, { tags, dates: ctx, depth: 0 }));
       for (const line of renderRows(rows, out.level, out.columns)) out.line(`     ${line}`);
     }
-    if (task.counts.comments > 0) {
-      const comments = await recentComments(api, task.id, 5).catch(() => []);
-      if (comments.length > 0) {
+    const comments = count(task.counts?.comments) ?? 0;
+    if (comments > 0) {
+      const recent = await recentComments(api, task.id, 5).catch(() => []);
+      if (recent.length > 0) {
         const members = await runtime.members(task.orgId).catch(() => []);
         out.line();
         out.line(
-          `       ${paint(t('show.comments', { count: task.counts.comments }), styles.heading, out.level)}`,
+          `       ${paint(t('show.comments', { count: comments }), styles.heading, out.level)}`,
         );
-        for (const comment of comments) {
+        for (const comment of recent) {
           const author = members.find((m) => m.userId === comment.authorId)?.name ?? '?';
           const when = new Date(comment.createdAt).toISOString().slice(0, 16).replace('T', ' ');
           out.line(`       ${paint(`${clean(author)} · ${when}`, styles.muted, out.level)}`);
-          for (const line of renderMarkdown(
-            comment.body.replace(/@\[([^\]]+)\]\(user:[^)]+\)/g, '@$1'),
-            out.level,
-          )) {
+          for (const line of renderMarkdown(mentionsToPlain(comment.body), out.level)) {
             out.line(`         ${line}`);
           }
         }
@@ -675,7 +675,7 @@ export const commentCommand = defineCommand({
     );
     if (runtime.out.json) runtime.out.data(comment);
     else if (runtime.out.quiet) runtime.out.line(comment.id);
-    else runtime.out.notice(t('comment.done', { ref: String(task.seq ?? task.id) }));
+    else runtime.out.notice(t('comment.done', { ref: seqOrId(task) }));
   },
 });
 

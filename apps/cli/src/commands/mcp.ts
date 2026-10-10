@@ -197,16 +197,26 @@ function reportSetup(runtime: Runtime, result: SetupResult): void {
     return;
   }
   const platform = runtime.io.platform;
+  // Null when the command path cannot be pasted safely into the platform's shells: the JSON
+  // config, which no shell reads, is offered instead.
+  const command = claudeCodeCommand(result.key, result.entry, platform);
   switch (result.client) {
     case 'claude-code':
-      out.notice(t('mcp.setup.claudeCode'));
-      out.line(claudeCodeCommand(result.key, result.entry, platform));
+      if (command === null) {
+        out.notice(t('mcp.setup.printJson'));
+        out.line(configSnippet(result.key, result.entry));
+      } else {
+        out.notice(t('mcp.setup.claudeCode'));
+        out.line(command);
+      }
       break;
     case 'print':
       out.notice(t('mcp.setup.printJson'));
       out.line(configSnippet(result.key, result.entry));
-      out.notice(t('mcp.setup.claudeCode'));
-      out.line(claudeCodeCommand(result.key, result.entry, platform));
+      if (command !== null) {
+        out.notice(t('mcp.setup.claudeCode'));
+        out.line(command);
+      }
       break;
     default: {
       const app = t(`mcp.setup.app.${result.client}`);

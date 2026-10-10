@@ -26,6 +26,20 @@ export const DEFAULT_LOGIN_SCOPES: readonly GrantScope[] = GRANT_SCOPES;
 const str = (value: unknown): string | undefined =>
   typeof value === 'string' && value !== '' ? value : undefined;
 
+/**
+ * A device flow user code as the CLI prints it (RFC 8628 §6.1: short, typed by hand). Anything
+ * else from the server is refused before it reaches the terminal.
+ */
+const USER_CODE_RE = /^[A-Za-z0-9-]{4,32}$/;
+
+/** A server version as printed: semver-like and short, else unknown (never raw text). */
+const VERSION_RE = /^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$/;
+
+function serverVersionOf(meta: Pick<Meta, 'version'>): string | null {
+  const version: unknown = meta.version;
+  return typeof version === 'string' && VERSION_RE.test(version) ? version : null;
+}
+
 async function fetchMeta(runtime: Runtime, server: string): Promise<Meta> {
   try {
     return await unwrap(runtime.clientFor(server, undefined).GET('/api/v1/meta'));
@@ -187,7 +201,8 @@ export async function deviceLogin(runtime: Runtime, options: DeviceLoginOptions)
   const { out } = runtime;
   const { server } = options;
   const meta = await fetchMeta(runtime, server);
-  warnOnVersion(runtime, meta.version);
+  const serverVersion = serverVersionOf(meta);
+  if (serverVersion !== null) warnOnVersion(runtime, serverVersion);
   const { status, data } = await authPost(runtime, server, '/device/code', {
     client_id: CLI_CLIENT_ID,
     scope: options.scopes.join(' '),
@@ -201,6 +216,9 @@ export async function deviceLogin(runtime: Runtime, options: DeviceLoginOptions)
       EXIT.auth,
       t('login.failed', { error: String(data.error_description ?? data.error ?? status) }),
     );
+  }
+  if (!USER_CODE_RE.test(data.user_code)) {
+    throw new CliError(EXIT.auth, t('login.failed', { error: 'invalid_user_code' }));
   }
   const code = data as unknown as DeviceCode;
   const url = code.verification_uri_complete ?? code.verification_uri;
@@ -427,7 +445,7 @@ export async function printVersion(runtime: Runtime): Promise<void> {
   const token = server === null ? undefined : await runtime.token(server).catch(() => undefined);
   if (server !== null && token !== undefined) {
     serverVersion = await fetchMeta(runtime, server)
-      .then((meta) => meta.version)
+      .then(serverVersionOf)
       .catch(() => null);
   }
   if (out.json) {

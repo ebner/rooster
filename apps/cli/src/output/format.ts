@@ -141,9 +141,32 @@ export interface Row {
 export const REPEAT_MARK = '↻';
 export const BELL_MARK = '🔔';
 
+/**
+ * A count or seq from the server: API responses are only type-cast, so a value that is not a
+ * non-negative safe integer is treated as absent rather than interpolated into a line.
+ */
+export function count(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+/** The task's seq, or its full id when it has none (`--quiet` output, notices). */
+export function seqOrId(task: Pick<Task, 'seq' | 'id'>): string {
+  const seq = count(task.seq);
+  return seq === null ? clean(String(task.id)) : String(seq);
+}
+
 export function taskRef(task: Pick<Task, 'seq' | 'id'>, orgSlug?: string): string {
-  const seq = task.seq === null ? task.id.slice(0, 8) : String(task.seq);
-  return orgSlug === undefined ? seq : `${orgSlug}#${seq}`;
+  const seq = count(task.seq);
+  const ref = seq === null ? clean(String(task.id)).slice(0, 8) : String(seq);
+  return orgSlug === undefined ? ref : `${clean(orgSlug)}#${ref}`;
+}
+
+/** `▸ 2/5` for a task with subtasks, from validated counts; null without any. */
+export function subtaskProgress(counts: Task['counts'] | undefined, expanded = false) {
+  const total = count(counts?.subtasks);
+  const done = count(counts?.subtasksDone);
+  if (total === null || total === 0 || done === null) return null;
+  return `${expanded ? '▾' : '▸'} ${done}/${total}`;
 }
 
 export function toRow(task: Task, options: RowOptions): Row {
@@ -158,8 +181,7 @@ export function toRow(task: Task, options: RowOptions): Row {
     title: clean(task.title).replace(/\s+/g, ' '),
     breadcrumb: options.breadcrumb === undefined ? null : clean(options.breadcrumb),
     tags,
-    subtasks:
-      task.counts.subtasks > 0 ? `▸ ${task.counts.subtasksDone}/${task.counts.subtasks}` : null,
+    subtasks: subtaskProgress(task.counts),
     extra: options.extra === undefined ? null : clean(options.extra),
     repeat: typeof task.recurrence === 'string',
     bell: typeof task.nextReminderAt === 'number',

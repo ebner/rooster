@@ -1,6 +1,47 @@
 import { type ColorLevel, clean, paint } from './color.ts';
 import { styles } from './theme.ts';
 
+/**
+ * Replaces Markdown images (`![alt](url title)`, `image`) or links (`[label](url title)`) left
+ * to right. The next `]` and `)` are found with cursors that only move forward, so hostile text
+ * such as `[[[[…](aaaa…` costs linear time (ADR 0040 §7), where regexes backtracked cubically.
+ */
+function replaceLinks(
+  text: string,
+  image: boolean,
+  render: (label: string, url: string) => string,
+): string {
+  const end = text.length;
+  const find = (ch: string, at: number) => {
+    const index = text.indexOf(ch, at);
+    return index === -1 ? end : index;
+  };
+  const open = image ? '![' : '[';
+  let out = '';
+  let copied = 0;
+  // The first `]` after the current `[`, and the first `)` after that `](`; `end` = none.
+  let close = -1;
+  let paren = -1;
+  for (let i = text.indexOf(open); i !== -1; i = text.indexOf(open, i + 1)) {
+    const labelStart = i + open.length;
+    if (close < labelStart) close = find(']', labelStart);
+    if (close === end) break;
+    if (text[close + 1] !== '(') continue;
+    const urlStart = close + 2;
+    if (paren < urlStart) paren = find(')', urlStart);
+    if (paren === end) break;
+    if (paren === urlStart || /\s/.test(text[urlStart] ?? '')) continue;
+    const label = text.slice(labelStart, close);
+    if (!image && label === '') continue;
+    let urlEnd = urlStart;
+    while (urlEnd < paren && !/\s/.test(text[urlEnd] ?? '')) urlEnd += 1;
+    out += text.slice(copied, i) + render(label, text.slice(urlStart, urlEnd));
+    copied = paren + 1;
+    i = paren;
+  }
+  return out + text.slice(copied);
+}
+
 /** Inline Markdown: code, bold, italics, strikethrough and links (`text <url>`). */
 function inline(text: string, level: ColorLevel): string {
   const codes: string[] = [];
@@ -9,15 +50,12 @@ function inline(text: string, level: ColorLevel): string {
     codes.push(paint(code, styles.secondary, level));
     return `\u0000${codes.length - 1}\u0000`;
   });
-  out = out
-    .replace(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g, (_, alt: string, url: string) =>
-      paint(`[${alt || url}]`, styles.muted, level),
-    )
-    .replace(/\[([^\]]+)\]\(([^)\s]+)[^)]*\)/g, (_, label: string, url: string) =>
-      label === url
-        ? paint(url, styles.link, level)
-        : `${label} ${paint(`<${url}>`, styles.link, level)}`,
-    )
+  out = replaceLinks(out, true, (alt, url) => paint(`[${alt || url}]`, styles.muted, level));
+  out = replaceLinks(out, false, (label, url) =>
+    label === url
+      ? paint(url, styles.link, level)
+      : `${label} ${paint(`<${url}>`, styles.link, level)}`,
+  )
     .replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, (_, a?: string, b?: string) =>
       paint(a ?? b ?? '', { bold: true }, level),
     )

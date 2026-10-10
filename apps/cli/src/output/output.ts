@@ -1,6 +1,6 @@
 import type { Io } from '../io.ts';
 import type { Globals } from '../runtime.ts';
-import { type ColorLevel, clean, colorLevel, paint, type Style } from './color.ts';
+import { type ColorLevel, clean, cleanPainted, colorLevel, paint, type Style } from './color.ts';
 import { styles } from './theme.ts';
 
 /** Where commands print: stdout for results, stderr for notices and errors. */
@@ -34,8 +34,9 @@ export class Output {
     return paint(text, style, this.level);
   }
 
+  /** A result line on stdout; control characters other than our own colours never pass. */
   line(text = ''): void {
-    this.io.stdout.write(`${text}\n`);
+    this.io.stdout.write(`${cleanPainted(text)}\n`);
   }
 
   /** `--json`: pretty JSON on stdout. */

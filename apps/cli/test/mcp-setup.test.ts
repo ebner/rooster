@@ -180,6 +180,40 @@ describe('client config helpers', () => {
     ).toBe("claude mcp add --scope user rooster -- '/a b/node' /x.mjs mcp");
   });
 
+  it('[P2] Windows: one line that is literal in PowerShell and in cmd, or none', () => {
+    expect(shellQuote('C:\\Tools\\rooster.exe', 'win32')).toBe('C:\\Tools\\rooster.exe');
+    expect(shellQuote("C:\\Users\\O'Neil (x) & y;z\\rooster.exe", 'win32')).toBe(
+      `"C:\\Users\\O'Neil (x) & y;z\\rooster.exe"`,
+    );
+    for (const path of [
+      'C:\\Tools\\$(Start-Process calc)\\rooster.exe',
+      'C:\\Tools\\`$x\\rooster.exe',
+      'C:\\Tools\\%PATH%\\rooster.exe',
+      'C:\\Tools\\!x!\\rooster.exe',
+      'C:\\Tools\\a\u201d; calc; \u201c\\rooster.exe',
+      'C:\\Tools\\a\nb\\rooster.exe',
+      'C:\\Tools\\a b\\',
+    ]) {
+      expect(shellQuote(path, 'win32')).toBeNull();
+      expect(claudeCodeCommand('rooster', { command: path, args: ['mcp'] }, 'win32')).toBeNull();
+    }
+    // Bare words that PowerShell or cmd would read specially are quoted on Windows.
+    expect(shellQuote('a,b', 'win32')).toBe('"a,b"');
+    expect(shellQuote('@a', 'win32')).toBe('"@a"');
+    expect(
+      claudeCodeCommand(
+        'rooster-agent2',
+        {
+          command: 'C:\\Program Files\\rooster\\rooster.exe',
+          args: ['mcp', '--profile', 'agent2'],
+        },
+        'win32',
+      ),
+    ).toBe(
+      'claude mcp add --scope user rooster-agent2 -- "C:\\Program Files\\rooster\\rooster.exe" mcp --profile agent2',
+    );
+  });
+
   it('merges without touching other keys, keeping the indentation', () => {
     const existing =
       '{\n    "theme": "dark",\n    "mcpServers": {\n        "other": { "command": "x" }\n    }\n}\n';

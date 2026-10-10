@@ -1,5 +1,6 @@
 import { accessSync, constants, realpathSync } from 'node:fs';
 import { delimiter, isAbsolute, join } from 'node:path';
+import { clean } from './output/color.ts';
 
 /** The MCP clients `rooster mcp setup --client` knows (07 §4). */
 export const MCP_CLIENTS = ['claude-code', 'claude-desktop', 'cursor', 'print'] as const;
@@ -197,18 +198,57 @@ export function mergeMcpEntry(
   };
 }
 
-/** One argument for a POSIX shell (single quotes) or PowerShell/cmd (double quotes). */
-export function shellQuote(word: string, platform: NodeJS.Platform): string {
+/** A Windows word that needs no quotes in PowerShell or in cmd. */
+const WIN_BARE_RE = /^[A-Za-z0-9_.:\\/-]+$/;
+/**
+ * What double quotes do not make literal in both Windows shells: `$` and the backtick expand in
+ * PowerShell (which also ends a string at “ ” „), `%` and `!` expand in cmd, and a trailing
+ * backslash escapes the closing quote for the program's own argument parsing. Control and bidi
+ * characters are refused too (`clean`).
+ */
+const WIN_UNSAFE_RE = /[$`%!"“”„\n\t]|\\$/;
+
+/**
+ * One argument for a POSIX shell (single quotes), or for Windows, where the same line must be
+ * literal whether it is pasted into PowerShell or cmd: double quotes, and null for a word no
+ * quoting makes literal in both (the caller then offers the JSON config instead).
+ */
+export function shellQuote(word: string, platform: NodeJS.Platform): string | null {
+  if (platform === 'win32') {
+    if (WIN_BARE_RE.test(word)) return word;
+    return WIN_UNSAFE_RE.test(word) || clean(word) !== word ? null : `"${word}"`;
+  }
   if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(word)) return word;
-  if (platform === 'win32') return `"${word.replace(/"/g, '\\"')}"`;
   return `'${word.replace(/'/g, `'\\''`)}'`;
 }
 
-/** Claude Code's official way to add a server (user scope, so it works in every project). */
-export function claudeCodeCommand(key: string, entry: McpServerEntry, platform: NodeJS.Platform) {
-  return ['claude', 'mcp', 'add', '--scope', 'user', key, '--', entry.command, ...entry.args]
-    .map((word) => shellQuote(word, platform))
-    .join(' ');
+/**
+ * Claude Code's official way to add a server (user scope, so it works in every project), or
+ * null when a word cannot be quoted safely for the platform's shells.
+ */
+export function claudeCodeCommand(
+  key: string,
+  entry: McpServerEntry,
+  platform: NodeJS.Platform,
+): string | null {
+  const words = [
+    'claude',
+    'mcp',
+    'add',
+    '--scope',
+    'user',
+    key,
+    '--',
+    entry.command,
+    ...entry.args,
+  ];
+  const quoted: string[] = [];
+  for (const word of words) {
+    const q = shellQuote(word, platform);
+    if (q === null) return null;
+    quoted.push(q);
+  }
+  return quoted.join(' ');
 }
 
 /** The JSON snippet for clients configured by hand. */

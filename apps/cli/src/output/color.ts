@@ -207,3 +207,18 @@ const CONTROL_RE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩
 export function clean(text: string): string {
   return text.replace(CONTROL_RE, '');
 }
+
+// biome-ignore lint/suspicious/noControlCharactersInRegex: keeping `paint`'s SGR codes is the point.
+const SGR_SPLIT = /(\u001b\[[0-9;]*m)/;
+
+/**
+ * Painted text with every control character removed except the SGR colour codes `paint`
+ * writes: the last line of defence for stdout, so a server field that missed its own `clean`
+ * (a version, a code, a ref) still cannot set the clipboard or move the cursor.
+ */
+export function cleanPainted(text: string): string {
+  return text
+    .split(SGR_SPLIT)
+    .map((part, i) => (i % 2 === 1 ? part : clean(part)))
+    .join('');
+}

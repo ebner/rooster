@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Tag, Task } from '../src/api.ts';
 import {
   clean,
+  cleanPainted,
   colorLevel,
   displayWidth,
   hexToRgb,
@@ -18,9 +19,13 @@ import {
   header,
   localDue,
   renderRows,
+  seqOrId,
+  subtaskProgress,
+  taskRef,
   toRow,
 } from '../src/output/format.ts';
 import { renderMarkdown } from '../src/output/markdown.ts';
+import { seg } from '../src/tui/text.ts';
 
 const ctx: DateContext = {
   today: '2026-10-09',
@@ -236,5 +241,57 @@ describe('Markdown descriptions', () => {
           const a = 1;
       ────────────────────────"
     `);
+  });
+});
+
+describe('[P2] Markdown links and images parse in linear time', () => {
+  it('renders images, links, titles and the cases that stay text as before', () => {
+    const md =
+      '![logo](https://x.example/l.png "Logo") ![](https://x.example/i.png) [x](https://x.example "T") [https://y.example](https://y.example) [![badge](b.svg)](https://ci.example) [](empty) [a] (b) [c]( d)';
+    expect(renderMarkdown(md, 0)).toEqual([
+      '[logo] [https://x.example/i.png] x <https://x.example> https://y.example [[badge]](https://ci.example) [](empty) [a] (b) [c]( d)',
+    ]);
+  });
+
+  it('20,000-character hostile descriptions render in well under a second', () => {
+    for (const hostile of [
+      `${'['.repeat(10_000)}](${'a'.repeat(10_000)}`,
+      `${'!['.repeat(5_000)}](${'a '.repeat(5_000)}`,
+      `${'[a]('.repeat(5_000)}`,
+      `${'[a](b '.repeat(4_000)}`,
+    ]) {
+      const started = performance.now();
+      renderMarkdown(hostile, 2);
+      expect(performance.now() - started).toBeLessThan(200);
+    }
+  });
+});
+
+describe('[P2] task metadata from the server is validated before it is shown', () => {
+  const OSC52 = '\u001b]52;c;QUJD\u0007';
+  const id = '0192f3a0-0000-7000-8000-000000000001';
+
+  it('a seq that is not a positive integer falls back to the id; ids and slugs are cleaned', () => {
+    const hostile = { id, seq: `42${OSC52}` as unknown as number };
+    expect(taskRef(hostile)).toBe('0192f3a0');
+    expect(seqOrId(hostile)).toBe(id);
+    expect(taskRef({ id, seq: 1.5 })).toBe('0192f3a0');
+    expect(taskRef({ id, seq: 7 }, `ac${OSC52}me`)).toBe('ac]52;c;QUJDme#7');
+    expect(seqOrId({ id: `${id}${OSC52}`, seq: null })).toBe(`${id}]52;c;QUJD`);
+  });
+
+  it('subtask counts must be non-negative integers', () => {
+    expect(subtaskProgress({ subtasks: 3, subtasksDone: 1, comments: 0, attachments: 0 })).toBe(
+      '▸ 1/3',
+    );
+    const bad = { subtasks: `3${OSC52}`, subtasksDone: 1 } as unknown as Task['counts'];
+    expect(subtaskProgress(bad)).toBeNull();
+    expect(subtaskProgress({ subtasks: 3, subtasksDone: -1 } as Task['counts'])).toBeNull();
+  });
+
+  it('TUI segments and stdout lines keep only SGR colour codes', () => {
+    expect(seg(`a${OSC52}b`).text).toBe('a]52;c;QUJDb');
+    const painted = paint('x', { bold: true }, 1);
+    expect(cleanPainted(`${painted}${OSC52}\u001b[2J`)).toBe(`${painted}]52;c;QUJD[2J`);
   });
 });

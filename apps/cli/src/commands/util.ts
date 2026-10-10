@@ -3,7 +3,7 @@ import type { GrantScope } from '@rooster/core/grants';
 import type { Tag, Task } from '../api.ts';
 import { CliError, EXIT } from '../errors.ts';
 import { currentLocale, t } from '../i18n.ts';
-import { type DateContext, dateContext, renderRows, toRow } from '../output/format.ts';
+import { type DateContext, dateContext, renderRows, seqOrId, toRow } from '../output/format.ts';
 import { type Runtime, rt } from '../runtime.ts';
 
 /** A command's long options as given (07 §4), read with real option boundaries. */
@@ -108,7 +108,7 @@ export async function printTasks(
     return;
   }
   if (out.quiet) {
-    for (const task of tasks) out.line(String(task.seq ?? task.id));
+    for (const task of tasks) out.line(seqOrId(task));
     return;
   }
   const ctx = await dates(runtime);

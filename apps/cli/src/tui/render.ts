@@ -3,7 +3,15 @@ import { mentionsToPlain } from '@rooster/core/mentions';
 import type { Task } from '@rooster/core/schemas';
 import type { TaskDetail } from '../api.ts';
 import { type ColorLevel, clean, displayWidth, type Style } from '../output/color.ts';
-import { BELL_MARK, dueLabel, localDue, REPEAT_MARK, taskRef } from '../output/format.ts';
+import {
+  BELL_MARK,
+  count,
+  dueLabel,
+  localDue,
+  REPEAT_MARK,
+  subtaskProgress,
+  taskRef,
+} from '../output/format.ts';
 import { renderMarkdown } from '../output/markdown.ts';
 import { listOf, offsetText, reminderText, ruleText, sizeText } from '../output/schedule.ts';
 import { dueStyle, styles, tagStyle, token } from '../output/theme.ts';
@@ -245,8 +253,9 @@ function metaSegs(line: TaskLine, ctx: Ctx): Seg[] {
     const tag = tags.get(id);
     if (tag !== undefined) add(seg(`#${clean(tag.name)}`, tagStyle(tag.color)));
   }
-  const { subtasks, subtasksDone, comments } = line.task.counts;
-  if (subtasks > 0) add(seg(`${line.expanded ? '▾' : '▸'} ${subtasksDone}/${subtasks}`, muted));
+  const progress = subtaskProgress(line.task.counts, line.expanded);
+  if (progress !== null) add(seg(progress, muted));
+  const comments = count(line.task.counts?.comments) ?? 0;
   if (line.task.hasDescription) add(seg('≡', muted));
   if (comments > 0) add(seg(`✎${comments}`, muted));
   if (typeof line.task.recurrence === 'string') add(seg(REPEAT_MARK, muted));
