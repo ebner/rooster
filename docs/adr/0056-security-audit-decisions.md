@@ -57,6 +57,7 @@
     - the transactional quota check stays.
 13. **Avatars are stored once per upload,** under `avatars/<userId>.<avatar_id>`, where `avatar_id` is a UUIDv7 (migrations 0013 and 0015). They are read only from the recorded backend, and replaced or removed avatars go to `blob_gc`. **The old "avatars reuse their key" exception is gone for new avatars.**
     - **Accepted:** avatars uploaded with 1.4.x keep the shared-key fallback until they are replaced.
+    - Avatar removals share the 3 per-user slots, and S3 requests have deadlines (30 s, plus 1 s per 64 KiB for uploads) and socket timeouts.
 14. **Memory bounds:**
     - request bodies are read into one buffer bounded by the limit (`readBodyBounded`), which the MCP route uses too;
     - SSE writes are bounded at 64 KB of backlog or 30 s without progress, and an evicted socket is destroyed after 2 s;
@@ -74,6 +75,14 @@
     - on session expiry, pipeline reads and confirmations still in flight are dropped, while the user's outbox is kept;
     - sign-out closes the page's session before wiping, and the `cleared` message names the account, so other tabs delete that account's durable records;
     - a push registration that doesn't complete unsubscribes itself.
+17a. **Persisted per-user state is keyed by account**, so timing between tabs can never cross accounts:
+    - the cache snapshot is `rooster-cache-v1:<userId>`, and a save goes under the account its own `/me` names;
+    - a start reads only the browser owner's key, migrates or drops the old unscoped key, and deletes every other account's snapshot;
+    - cleanup only ever deletes by the ending account's key;
+    - receiving tabs sweep that account's `rooster.user.<id>.` localStorage prefix;
+    - the outbox stays userId-scoped.
+
+    The secrets shown once (a new PAT, a calendar feed URL, an invite link) go through `inSession()`. The mutation cache is cleared when a session ends.
 18. **CLI:**
     - every diagnostic goes through `safeDiagnostic`, which redacts credentials and strips control characters;
     - bearer tokens are validated before a header is built;

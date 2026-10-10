@@ -26,18 +26,40 @@ export function sweepUserStorage(
   storage: Storage | undefined = globalThis.localStorage,
   unsubscribe: () => Promise<unknown> = unsubscribeThisBrowser,
 ): void {
+  const keep = keepUserId === undefined ? null : userStorageKey(keepUserId, '');
+  sweep(
+    (key) =>
+      (key.startsWith(userStoragePrefix) && (keep === null || !key.startsWith(keep))) ||
+      legacyUserPrefixes.some((prefix) => key.startsWith(prefix)),
+    storage,
+    unsubscribe,
+  );
+}
+
+/**
+ * Removes one account's keys only (its session ended in another tab): a tab may have written
+ * them after that tab's sweep. Every other account's keys stay.
+ */
+export function sweepUserStorageOf(
+  userId: string,
+  storage: Storage | undefined = globalThis.localStorage,
+  unsubscribe: () => Promise<unknown> = unsubscribeThisBrowser,
+): void {
+  const prefix = userStorageKey(userId, '');
+  sweep((key) => key.startsWith(prefix), storage, unsubscribe);
+}
+
+function sweep(
+  doomedKey: (key: string) => boolean,
+  storage: Storage | undefined,
+  unsubscribe: () => Promise<unknown>,
+): void {
   try {
     if (!storage) return;
-    const keep = keepUserId === undefined ? null : userStorageKey(keepUserId, '');
     const doomed: string[] = [];
     for (let i = 0; i < storage.length; i += 1) {
       const key = storage.key(i);
-      if (key === null) continue;
-      if (key.startsWith(userStoragePrefix) && (keep === null || !key.startsWith(keep))) {
-        doomed.push(key);
-      } else if (legacyUserPrefixes.some((prefix) => key.startsWith(prefix))) {
-        doomed.push(key);
-      }
+      if (key !== null && doomedKey(key)) doomed.push(key);
     }
     for (const key of doomed) storage.removeItem(key);
     if (doomed.some((key) => pushMarkerPattern.test(key))) void unsubscribe();

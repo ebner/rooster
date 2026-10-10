@@ -284,7 +284,7 @@ Query keys (all scoped by org):
 ## 6. Offline & sync (D-32)
 
 ### 6.1 Reads
-- `persistQueryClient` uses an IndexedDB persister (`idb-keyval`, key `rooster-cache-v1`), max age 30 days, throttled to 1 s. Persisted queries: `me`, `my-list`, `tags`, `task` (the 200 most recently used), and `notifications` (first page).
+- `persistQueryClient` uses an IndexedDB persister (`idb-keyval`, key `rooster-cache-v1:<userId>`, one per account, ADR 0056), max age 30 days, throttled to 1 s. Persisted queries: `me`, `my-list`, `tags`, `task` (the 200 most recently used), and `notifications` (first page).
 - `navigator.storage.persist()` is requested after login.
 - On app start the cache renders immediately (stale-while-revalidate) and then refetches when online.
 

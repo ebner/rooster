@@ -1,10 +1,41 @@
 import type { ListState } from '@rooster/core/reducers';
 import type { DehydrateOptions, Query, QueryClient } from '@tanstack/react-query';
 import type { PersistedClient, Persister } from '@tanstack/react-query-persist-client';
-import { del, get, set } from 'idb-keyval';
+import { del, get, keys, set } from 'idb-keyval';
 
-/** 04 §6.1: the IndexedDB key of the persisted query cache. */
-export const cacheStorageKey = 'rooster-cache-v1';
+/** The single, account-less snapshot key of releases up to 1.3; migrated or dropped at boot. */
+export const legacyCacheStorageKey = 'rooster-cache-v1';
+const cacheKeyPrefix = `${legacyCacheStorageKey}:`;
+/**
+ * 04 §6.1: the IndexedDB key of an account's persisted query cache (ADR 0051/0056). Snapshots
+ * are keyed by account, so no cross-tab timing can restore one account's cache for another:
+ * a start reads only the browser owner's key, and cleanup deletes other accounts' keys, never
+ * the one an account taking over writes.
+ */
+export const cacheStorageKey = (userId: string): string => `${cacheKeyPrefix}${userId}`;
+
+const isSnapshotKey = (key: string) =>
+  key === legacyCacheStorageKey || key.startsWith(cacheKeyPrefix);
+
+/** The signed-in account the persisted cache and the outbox belong to (localStorage). */
+const ownerKey = 'rooster.cacheOwner';
+
+export function readCacheOwner(): string | null {
+  try {
+    return globalThis.localStorage?.getItem(ownerKey) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeCacheOwner(userId: string | null): void {
+  try {
+    if (userId) globalThis.localStorage?.setItem(ownerKey, userId);
+    else globalThis.localStorage?.removeItem(ownerKey);
+  } catch {
+    // Storage blocked: the next start compares against nothing and restores nothing.
+  }
+}
 /** 04 §6.1: older caches are discarded. */
 export const cacheMaxAgeMs = 30 * 24 * 60 * 60 * 1000;
 /**
@@ -105,12 +136,15 @@ export interface CachePersister extends Persister {
   suspend(): Promise<void>;
   /** A fresh `/me` succeeded at `at` (ms epoch): stored with the next save. */
   confirmed(at: number): void;
+  /** Deletes one account's snapshot (its session ended). Also once suspended. */
+  removeFor(userId: string): Promise<void>;
+  /** Deletes every snapshot but `userId`'s (an account took over; null: all of them). */
+  removeExcept(userId: string | null): Promise<void>;
   /**
-   * Deletes the stored snapshot when it is `userId`'s, or names no one: another tab may have
-   * saved it after that account's sign-out wiped storage. Another account's snapshot stays.
-   * Runs after the writes queued before it, also once suspended.
+   * At start: moves a snapshot of the old account-less key to the owner's key when it is the
+   * owner's, then deletes every snapshot but the owner's.
    */
-  removeOwnedBy(userId: string): Promise<void>;
+  tidy(owner: string | null): Promise<void>;
 }
 
 /** The stored shape: each query's data apart from its metadata (see `serialize`). */
@@ -131,23 +165,27 @@ export interface KeyValueStorage {
   get(key: string): Promise<string | undefined>;
   set(key: string, value: string): Promise<void>;
   del(key: string): Promise<void>;
+  keys(): Promise<string[]>;
 }
 
 const idbStorage: KeyValueStorage = {
   get: (key) => get<string>(key),
   set: (key, value) => set(key, value),
   del: (key) => del(key),
+  keys: async () => (await keys()).filter((key): key is string => typeof key === 'string'),
 };
 
 /**
- * The IndexedDB persister (idb-keyval, key `rooster-cache-v1`). Writes are serialised; the
- * sync engine throttles them (1 s) with a timer it can cancel, so no delayed save writes the
- * previous user's data back after a sign-out.
+ * The IndexedDB persister (idb-keyval, one key per account: `cacheStorageKey`). Writes are
+ * serialised; the sync engine throttles them with a timer it can cancel, so no delayed save
+ * writes the previous user's data back after a sign-out. A snapshot is stored under the account
+ * its `/me` names (none: not stored), and restored only for `owner`.
  */
 export function createCachePersister(
   baseOf: (orgId: string) => ListState | undefined,
   storage: KeyValueStorage = idbStorage,
   now: () => number = Date.now,
+  owner: () => string | null = readCacheOwner,
 ): CachePersister {
   let suspended = false;
   let confirmedAt: number | null = null;
@@ -189,17 +227,23 @@ export function createCachePersister(
   return {
     persistClient: (client) => {
       if (suspended) return writing;
+      const account = accountOf(client.clientState.queries.find((q) => q.queryKey[0] === 'me'));
+      if (account === undefined) return writing;
       const value = serialize(prepareForPersist(client, baseOf));
-      return chain(() => (suspended ? Promise.resolve() : storage.set(cacheStorageKey, value)));
+      const key = cacheStorageKey(account);
+      return chain(() => (suspended ? Promise.resolve() : storage.set(key, value)));
     },
     restoreClient: async () => {
-      const raw = await storage.get(cacheStorageKey);
+      const account = owner();
+      if (account === null) return undefined;
+      const key = cacheStorageKey(account);
+      const raw = await storage.get(key);
       if (!raw) return undefined;
       const stored = JSON.parse(raw) as StoredClient;
       if (!Array.isArray(stored.queries)) return undefined;
       const at = lastConfirmed(stored);
       if (at === null || now() - at > cacheConfirmMaxAgeMs) {
-        await chain(() => storage.del(cacheStorageKey));
+        await chain(() => storage.del(key));
         return undefined;
       }
       confirmedAt = Math.max(confirmedAt ?? 0, at);
@@ -212,7 +256,7 @@ export function createCachePersister(
     },
     removeClient: () => {
       confirmedAt = null;
-      return chain(() => storage.del(cacheStorageKey));
+      return removeWhere(() => true);
     },
     suspend: () => {
       suspended = true;
@@ -221,25 +265,46 @@ export function createCachePersister(
     confirmed: (at) => {
       confirmedAt = Math.max(confirmedAt ?? 0, at);
     },
-    removeOwnedBy: (userId) =>
+    removeFor: (userId) => chain(() => storage.del(cacheStorageKey(userId))),
+    removeExcept: (userId) => {
+      const keep = userId === null ? null : cacheStorageKey(userId);
+      return removeWhere((key) => key !== keep);
+    },
+    tidy: (account) =>
       chain(async () => {
-        const raw = await storage.get(cacheStorageKey);
-        if (!raw) return;
-        if (snapshotOwner(raw) === userId || snapshotOwner(raw) === undefined) {
-          await storage.del(cacheStorageKey);
+        const raw = await storage.get(legacyCacheStorageKey);
+        if (raw !== undefined && account !== null && legacyOwner(raw) === account) {
+          const key = cacheStorageKey(account);
+          if ((await storage.get(key)) === undefined) await storage.set(key, raw);
         }
-      }),
+      }).then(() => removeWhere((key) => account === null || key !== cacheStorageKey(account))),
   };
+
+  /** Deletes the snapshot keys `doomed` picks (the legacy key included), after earlier writes. */
+  function removeWhere(doomed: (key: string) => boolean): Promise<void> {
+    return chain(async () => {
+      for (const key of await storage.keys()) {
+        if (isSnapshotKey(key) && doomed(key)) await storage.del(key);
+      }
+    });
+  }
 }
 
-/** The user of a stored snapshot's `/me` (undefined: none, or unreadable). */
-function snapshotOwner(raw: string): string | undefined {
+/** The account a dehydrated `/me` query names. */
+function accountOf(query: { state: { data?: unknown } } | undefined): string | undefined {
+  const id = (query?.state.data as { user?: { id?: unknown } } | undefined)?.user?.id;
+  return typeof id === 'string' ? id : undefined;
+}
+
+/** The account of a snapshot stored under the old account-less key (undefined: unreadable). */
+function legacyOwner(raw: string): string | undefined {
   try {
     const stored = JSON.parse(raw) as StoredClient;
-    const me = stored.queries?.find(({ q }) => q.queryKey[0] === 'me')?.d as
-      | { user?: { id?: unknown } }
-      | undefined;
-    return typeof me?.user?.id === 'string' ? me.user.id : undefined;
+    return accountOf(
+      stored.queries
+        ?.filter(({ q }) => q.queryKey[0] === 'me')
+        .map(({ d }) => ({ state: { data: d } }))[0],
+    );
   } catch {
     return undefined;
   }

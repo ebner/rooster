@@ -50,7 +50,13 @@ export async function waitForPersistedLists(page: Page, orgIds: string[]) {
             open.onsuccess = () => {
               const db = open.result;
               if (!db.objectStoreNames.contains('keyval')) return resolve(undefined);
-              const get = db.transaction('keyval').objectStore('keyval').get('rooster-cache-v1');
+              // One snapshot per account (`cacheStorageKey`): the browser owner's.
+              const owner = localStorage.getItem('rooster.cacheOwner');
+              if (!owner) return resolve(undefined);
+              const get = db
+                .transaction('keyval')
+                .objectStore('keyval')
+                .get(`rooster-cache-v1:${owner}`);
               get.onsuccess = () => resolve(get.result as string | undefined);
               get.onerror = () => resolve(undefined);
             };

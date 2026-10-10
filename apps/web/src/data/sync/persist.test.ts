@@ -6,6 +6,7 @@ import {
   createCachePersister,
   isPersistedQuery,
   type KeyValueStorage,
+  legacyCacheStorageKey,
   maxPersistedTaskDetails,
   prepareForPersist,
 } from './persist';
@@ -67,42 +68,124 @@ describe('persisted query cache (04 §6.1)', () => {
       get: async (k) => data.get(k),
       set: async (k, v) => void data.set(k, v),
       del: async (k) => void data.delete(k),
+      keys: async () => [...data.keys()],
     };
-    const persister = createCachePersister(() => undefined, storage);
+    const persister = createCachePersister(
+      () => undefined,
+      storage,
+      Date.now,
+      () => 'u1',
+    );
     persister.confirmed(Date.now());
     await persister.persistClient(client([query(['me'], { user: { id: 'u1' } })]));
-    expect(data.has(cacheStorageKey)).toBe(true);
+    expect(data.has(cacheStorageKey('u1'))).toBe(true);
     expect((await persister.restoreClient())?.clientState.queries[0]?.state.data).toEqual({
       user: { id: 'u1' },
     });
     await persister.removeClient();
     await persister.suspend();
     await persister.persistClient(client([query(['me'], { user: { id: 'u2' } })]));
-    expect(data.has(cacheStorageKey)).toBe(false);
+    expect(data.has(cacheStorageKey('u1'))).toBe(false);
     expect(await persister.restoreClient()).toBeUndefined();
   });
 
-  test("a sign-out elsewhere deletes the ending account's snapshot, never another's", async () => {
-    const data = new Map<string, string>();
-    const storage: KeyValueStorage = {
-      get: async (k) => data.get(k),
-      set: async (k, v) => void data.set(k, v),
-      del: async (k) => void data.delete(k),
-    };
-    const persister = createCachePersister(() => undefined, storage);
-    await persister.persistClient(client([query(['me'], { user: { id: 'u2' } })]));
-    await persister.suspend();
-    await persister.removeOwnedBy('u1');
-    expect(data.has(cacheStorageKey)).toBe(true);
-    await persister.removeOwnedBy('u2');
-    expect(data.has(cacheStorageKey)).toBe(false);
-    // A snapshot that names no one could be anyone's.
-    data.set(cacheStorageKey, '{"timestamp":0,"buster":"","queries":[]}');
-    await persister.removeOwnedBy('u1');
-    expect(data.has(cacheStorageKey)).toBe(false);
-    data.set(cacheStorageKey, 'not json');
-    await persister.removeOwnedBy('u1');
-    expect(data.has(cacheStorageKey)).toBe(false);
+  describe('one snapshot per account (ADR 0051/0056)', () => {
+    function memory() {
+      const data = new Map<string, string>();
+      const storage: KeyValueStorage = {
+        get: async (k) => data.get(k),
+        set: async (k, v) => void data.set(k, v),
+        del: async (k) => void data.delete(k),
+        keys: async () => [...data.keys()],
+      };
+      return { data, storage };
+    }
+    const snapshot = (id: string) => client([query(['me'], { user: { id } }, Date.now())]);
+
+    test('a snapshot is stored under the account its /me names; without /me, not at all', async () => {
+      const { data, storage } = memory();
+      const persister = createCachePersister(
+        () => undefined,
+        storage,
+        Date.now,
+        () => 'u1',
+      );
+      await persister.persistClient(snapshot('u2'));
+      expect([...data.keys()]).toEqual([cacheStorageKey('u2')]);
+      await persister.persistClient(client([query(['tags', 'o'], [])]));
+      expect([...data.keys()]).toEqual([cacheStorageKey('u2')]);
+    });
+
+    test("a foreign account's snapshot is never restored, whatever is stored", async () => {
+      const { storage } = memory();
+      let owner: string | null = 'u2';
+      const persister = createCachePersister(
+        () => undefined,
+        storage,
+        Date.now,
+        () => owner,
+      );
+      persister.confirmed(Date.now());
+      await persister.persistClient(snapshot('u2'));
+      owner = 'u1';
+      expect(await persister.restoreClient()).toBeUndefined();
+      owner = null;
+      expect(await persister.restoreClient()).toBeUndefined();
+      owner = 'u2';
+      expect(await persister.restoreClient()).toBeDefined();
+    });
+
+    test('cleanup by key never touches the account taking over, even mid-save', async () => {
+      const { data, storage } = memory();
+      const tabA = createCachePersister(
+        () => undefined,
+        storage,
+        Date.now,
+        () => 'u1',
+      );
+      const tabB = createCachePersister(
+        () => undefined,
+        storage,
+        Date.now,
+        () => 'u2',
+      );
+      await tabA.persistClient(snapshot('u1'));
+      // Tab A removes the ending account while tab B saves the new one: no read-then-delete.
+      await Promise.all([tabA.removeFor('u1'), tabB.persistClient(snapshot('u2'))]);
+      expect([...data.keys()]).toEqual([cacheStorageKey('u2')]);
+      await tabA.persistClient(snapshot('u1'));
+      await Promise.all([tabA.removeExcept('u2'), tabB.persistClient(snapshot('u2'))]);
+      expect([...data.keys()]).toEqual([cacheStorageKey('u2')]);
+      await tabA.removeClient();
+      expect(data.size).toBe(0);
+    });
+
+    test('a start keeps only the owner: the old account-less snapshot moves to it, or goes', async () => {
+      const { data, storage } = memory();
+      const persister = createCachePersister(
+        () => undefined,
+        storage,
+        Date.now,
+        () => 'u1',
+      );
+      persister.confirmed(Date.now());
+      await persister.persistClient(snapshot('u1'));
+      const own = data.get(cacheStorageKey('u1')) as string;
+      data.delete(cacheStorageKey('u1'));
+      data.set(legacyCacheStorageKey, own);
+      await persister.persistClient(snapshot('u3'));
+      data.set('unrelated', 'kept');
+      await persister.tidy('u1');
+      expect([...data.keys()].sort()).toEqual([cacheStorageKey('u1'), 'unrelated'].sort());
+      expect(await persister.restoreClient()).toBeDefined();
+      // Someone else's old snapshot is not migrated; with no owner every snapshot goes.
+      data.set(legacyCacheStorageKey, own);
+      await persister.tidy('u2');
+      expect(data.has(legacyCacheStorageKey)).toBe(false);
+      expect(data.has(cacheStorageKey('u2'))).toBe(false);
+      await persister.tidy(null);
+      expect([...data.keys()]).toEqual(['unrelated']);
+    });
   });
 
   describe('AC-1.0.1 a cache is restored only while its last confirmed /me is recent', () => {
@@ -114,6 +197,7 @@ describe('persisted query cache (04 §6.1)', () => {
         get: async (k) => data.get(k),
         set: async (k, v) => void data.set(k, v),
         del: async (k) => void data.delete(k),
+        keys: async () => [...data.keys()],
       };
       return { data, storage };
     }
@@ -124,19 +208,21 @@ describe('persisted query cache (04 §6.1)', () => {
         () => undefined,
         storage,
         () => now,
+        () => 'u1',
       );
       writer.confirmed(now - 29 * day);
       await writer.persistClient(client([query(['me'], { user: { id: 'u1' } })]));
-      expect(JSON.parse(data.get(cacheStorageKey) ?? '{}').confirmedAt).toBe(now - 29 * day);
+      expect(JSON.parse(data.get(cacheStorageKey('u1')) ?? '{}').confirmedAt).toBe(now - 29 * day);
       const reader = createCachePersister(
         () => undefined,
         storage,
         () => now,
+        () => 'u1',
       );
       expect(await reader.restoreClient()).toBeDefined();
       // The restored confirmation carries over into the next save.
       await reader.persistClient(client([query(['me'], { user: { id: 'u1' } })]));
-      expect(JSON.parse(data.get(cacheStorageKey) ?? '{}').confirmedAt).toBe(now - 29 * day);
+      expect(JSON.parse(data.get(cacheStorageKey('u1')) ?? '{}').confirmedAt).toBe(now - 29 * day);
     });
 
     test('deletes instead of restoring a cache confirmed more than 30 days ago', async () => {
@@ -145,6 +231,7 @@ describe('persisted query cache (04 §6.1)', () => {
         () => undefined,
         storage,
         () => now,
+        () => 'u1',
       );
       writer.confirmed(now - 31 * day);
       await writer.persistClient(client([query(['me'], { user: { id: 'u1' } })]));
@@ -152,9 +239,10 @@ describe('persisted query cache (04 §6.1)', () => {
         () => undefined,
         storage,
         () => now,
+        () => 'u1',
       );
       expect(await reader.restoreClient()).toBeUndefined();
-      expect(data.has(cacheStorageKey)).toBe(false);
+      expect(data.has(cacheStorageKey('u1'))).toBe(false);
     });
 
     test('deletes a cache that was never confirmed', async () => {
@@ -163,10 +251,11 @@ describe('persisted query cache (04 §6.1)', () => {
         () => undefined,
         storage,
         () => now,
+        () => 'u1',
       );
       await writer.persistClient(client([query(['me'], { user: { id: 'u1' } })]));
       expect(await writer.restoreClient()).toBeUndefined();
-      expect(data.has(cacheStorageKey)).toBe(false);
+      expect(data.has(cacheStorageKey('u1'))).toBe(false);
     });
 
     test('a cache from before 1.0.1 counts from its stored /me fetch time', async () => {
@@ -186,12 +275,13 @@ describe('persisted query cache (04 §6.1)', () => {
         () => undefined,
         storage,
         () => now,
+        () => 'u1',
       );
-      data.set(cacheStorageKey, legacy(now - day));
+      data.set(cacheStorageKey('u1'), legacy(now - day));
       expect(await reader.restoreClient()).toBeDefined();
-      data.set(cacheStorageKey, legacy(now - 31 * day));
+      data.set(cacheStorageKey('u1'), legacy(now - 31 * day));
       expect(await reader.restoreClient()).toBeUndefined();
-      expect(data.has(cacheStorageKey)).toBe(false);
+      expect(data.has(cacheStorageKey('u1'))).toBe(false);
     });
   });
 });

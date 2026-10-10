@@ -4,7 +4,7 @@ import {
   persistQueryClientSave,
 } from '@tanstack/react-query-persist-client';
 import { unsubscribeThisBrowser } from '../../features/pwa/push-local';
-import { sweepUserStorage } from '../../lib/user-storage';
+import { sweepUserStorage, sweepUserStorageOf } from '../../lib/user-storage';
 import { useSyncStore } from '../../state/sync-store';
 import { ApiError } from '../errors';
 import { getClientId, registerListPipeline } from '../list';
@@ -37,7 +37,9 @@ import {
   createCachePersister,
   keepPersistedQueries,
   persistDehydrateOptions,
+  readCacheOwner as readOwner,
   restoredBases,
+  writeCacheOwner as writeOwner,
 } from './persist';
 
 /** 04 §6.2: the outbox is retried at least this often while ops are queued. */
@@ -53,8 +55,6 @@ export const leaderAnswerMs = 2_000;
 const leaderRecheckMs = 15_000;
 /** Cold start waits at most this long for IndexedDB before rendering without the cache. */
 const restoreTimeoutMs = 3_000;
-/** The signed-in user the persisted cache and outbox belong to. */
-const ownerKey = 'rooster.cacheOwner';
 
 export interface SyncEngineOptions {
   queryClient: QueryClient;
@@ -132,23 +132,6 @@ function markReloadedAs(userId: string): void {
     globalThis.sessionStorage?.setItem(reloadedKey, userId);
   } catch {
     // Without session storage a second switch to the same account just wipes in place.
-  }
-}
-
-function readOwner(): string | null {
-  try {
-    return globalThis.localStorage?.getItem(ownerKey) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function writeOwner(userId: string | null): void {
-  try {
-    if (userId) globalThis.localStorage?.setItem(ownerKey, userId);
-    else globalThis.localStorage?.removeItem(ownerKey);
-  } catch {
-    // Storage blocked: the next start compares against nothing and keeps the cache.
   }
 }
 
@@ -265,6 +248,9 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     persister: {
       ...persister,
       restoreClient: async () => {
+        // Only the owner's snapshot is ever read; other accounts' (and the account-less one of
+        // older releases) go first.
+        await persister.tidy(readOwner());
         const client = await persister.restoreClient();
         return restoreAbandoned || restoreScope.stale() ? undefined : client;
       },
@@ -474,7 +460,8 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   let started = false;
   function onUser(me: Me) {
     const owner = readOwner();
-    if (ranAs !== null && ranAs !== me.user.id && !reloadedAs(me.user.id)) {
+    const previous = ranAs;
+    if (previous !== null && previous !== me.user.id && !reloadedAs(me.user.id)) {
       // This page ran as another account (signed in elsewhere in this browser, or restored
       // from its cache). Its continuations (pending requests, revealed secrets, undo, drafts,
       // consent) belong to that account: close the session at once, then start over as the
@@ -495,6 +482,10 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
           }
         }
         await persister.suspend();
+        // What this page itself wrote for the old account until now (a last cache save,
+        // palette recents) goes too: by key, so nothing of the new account is touched.
+        await persister.removeExcept(me.user.id);
+        sweepUserStorageOf(previous);
       };
       void takeOver()
         .catch(() => {})
@@ -542,6 +533,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
    * wiped if someone else does.
    */
   function onSessionEnded() {
+    const ended = userId ?? ranAs;
     userId = null;
     saving = false;
     if (saveTimer) clearTimeout(saveTimer);
@@ -559,7 +551,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     // The cached profile must not count as signed in either (the /login guard reads it); its
     // refetch answers 401 again, which the route guard turns into /login?redirect=….
     void queryClient.resetQueries({ queryKey: ['me'] }).catch(() => {});
-    void persister.removeClient();
+    void (ended === null ? persister.removeClient() : persister.removeFor(ended));
   }
 
   function onMeEvent(event: QueryCacheNotifyEvent) {
@@ -654,7 +646,9 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
             .then((records) =>
               outbox.remove(records.filter((r) => r.userId !== keepUser).map((r) => r.op.opId)),
             );
-    await Promise.all([clearOutbox.catch(() => {}), persister.removeClient()]);
+    const clearCache =
+      keepUser === undefined ? persister.removeClient() : persister.removeExcept(keepUser);
+    await Promise.all([clearOutbox.catch(() => {}), clearCache]);
     // The new account's records stayed in the outbox but left the queue with the reset: queue
     // them again (a closing page sends nothing more, so it leaves them to the next one).
     if (keepUser !== undefined && !isSessionClosed()) {
@@ -680,8 +674,12 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
         .catch(() => {});
     }
     await persister.suspend();
-    // Likewise a cache snapshot this tab saved after the wipe (its last save has landed).
-    if (ending !== undefined) await persister.removeOwnedBy(ending).catch(() => {});
+    if (ending !== undefined) {
+      // Likewise a cache snapshot this tab saved after the wipe (its last save has landed) and
+      // its per-user localStorage: by that account's key, so the next account's stay.
+      await persister.removeFor(ending).catch(() => {});
+      sweepUserStorageOf(ending);
+    }
     queryClient.clear();
     // Signed out, or someone else signed in, in another tab: start over as whoever it is now.
     globalThis.location?.reload();

@@ -31,6 +31,7 @@ function memoryStorage() {
     get: async (k) => data.get(k),
     set: async (k, v) => void data.set(k, v),
     del: async (k) => void data.delete(k),
+    keys: async () => [...data.keys()],
   };
   return { data, storage };
 }
@@ -102,6 +103,8 @@ describe('sync engine (04 §6)', () => {
     // only a confirmed cache is restored.
     localStorage.setItem('rooster.cacheOwner', userId);
     first.persister.confirmed(Date.now());
+    // Its profile, restored (not fresh): the snapshot is stored under that account.
+    first.queryClient.setQueryData(['me'], me(userId), { updatedAt: 1 });
     const state = await first.queryClient.fetchQuery({
       queryKey: myListKey(orgId),
       queryFn: () => first.engine.pipeline.fetch(orgId),
@@ -114,9 +117,9 @@ describe('sync engine (04 §6)', () => {
       { userId },
     );
     await vi.waitFor(() => expect(outbox.records.size).toBe(1));
-    await vi.waitFor(() => expect(data.has(cacheStorageKey)).toBe(true), { timeout: 6000 });
+    await vi.waitFor(() => expect(data.has(cacheStorageKey(userId))).toBe(true), { timeout: 6000 });
     // The stored my-list is the confirmed base, without the pending op.
-    expect(data.get(cacheStorageKey)).not.toContain('Offline');
+    expect(data.get(cacheStorageKey(userId))).not.toContain('Offline');
     first.engine.stop();
 
     const second = await boot({ storage, outbox, transport });
@@ -182,7 +185,7 @@ describe('sync engine (04 §6)', () => {
         ctx: { userId },
       },
     ]);
-    data.set(cacheStorageKey, '{}');
+    data.set(cacheStorageKey(userId), '{}');
     const cleared = vi.fn();
     const stop = onSessionDataCleared(cleared);
     await queryClient
@@ -194,7 +197,7 @@ describe('sync engine (04 §6)', () => {
       })
       .catch(() => {});
     expect(queryClient.getQueryData(myListKey(orgId))).toBeUndefined();
-    await vi.waitFor(() => expect(data.has(cacheStorageKey)).toBe(false));
+    await vi.waitFor(() => expect(data.has(cacheStorageKey(userId))).toBe(false));
     expect(outbox.records.size).toBe(1);
     expect(localStorage.getItem('rooster.cacheOwner')).toBe(userId);
     expect(cleared).toHaveBeenCalled();
@@ -273,14 +276,14 @@ describe('sync engine (04 §6)', () => {
     const transport = createFixtureTransport({ userId });
     const posted: SyncMessage[] = [];
     const channel: SyncChannel = { ...nullChannel(), post: (m) => posted.push(m) };
-    data.set(cacheStorageKey, '{"timestamp":0,"buster":"x","clientState":{"queries":[]}}');
+    data.set(cacheStorageKey(userId), '{"timestamp":0,"buster":"x","clientState":{"queries":[]}}');
     const { engine } = await boot({ storage, outbox, transport, channel });
     const cleared = vi.fn();
     const stop = onSessionDataCleared(cleared);
     await engine.clear({ final: true });
     stop();
     expect(cleared).toHaveBeenCalled();
-    expect(data.has(cacheStorageKey)).toBe(false);
+    expect(data.has(cacheStorageKey(userId))).toBe(false);
     expect(posted).toContainEqual({ type: 'cleared' });
     expect(localStorage.getItem('rooster.cacheOwner')).toBeNull();
   });
@@ -545,7 +548,7 @@ describe('sync engine (04 §6)', () => {
       const other = '01900000-0000-7000-8000-000000000002';
       sessionStorage.setItem('rooster.reloadedAs', other);
       localStorage.setItem('rooster.cacheOwner', other);
-      data.set(cacheStorageKey, '{}');
+      data.set(cacheStorageKey(userId), '{}');
       const queryClient = new QueryClient();
       // Restored from storage: confirmed long ago.
       queryClient.setQueryData(['me'], me(userId), { updatedAt: 1 });
@@ -563,7 +566,7 @@ describe('sync engine (04 §6)', () => {
       const send = vi.spyOn(transport, 'send');
       await boot({ storage, outbox, transport }, queryClient);
       await fetchMe(queryClient, me(other));
-      await vi.waitFor(() => expect(data.has(cacheStorageKey)).toBe(false));
+      await vi.waitFor(() => expect(data.has(cacheStorageKey(userId))).toBe(false));
       // The new account's queued op stays, goes back into the queue and is sent.
       await vi.waitFor(() =>
         expect(send).toHaveBeenCalledWith(
@@ -709,8 +712,10 @@ describe('sync engine (04 §6)', () => {
     expect(engine.pipeline.baseOf(otherOrgId)).toBeUndefined();
     expect(engine.pipeline.baseOf(orgId)).toBeDefined();
     // The next save leaves the revoked org out of IndexedDB too.
-    await vi.waitFor(() => expect(data.get(cacheStorageKey)).toContain(orgId), { timeout: 6000 });
-    expect(data.get(cacheStorageKey)).not.toContain(otherOrgId);
+    await vi.waitFor(() => expect(data.get(cacheStorageKey(userId))).toContain(orgId), {
+      timeout: 6000,
+    });
+    expect(data.get(cacheStorageKey(userId))).not.toContain(otherOrgId);
   });
 
   test('AC-1.0.1 queued ops of an org missing from the first fresh /me are discarded unsent', async () => {
@@ -764,19 +769,20 @@ describe('sync engine (04 §6)', () => {
     const transport = createFixtureTransport({ userId, tasks: { 1: ['Secret'] } });
     localStorage.setItem('rooster.cacheOwner', userId);
     const first = await boot({ storage, outbox: createMemoryOutbox(), transport });
+    first.queryClient.setQueryData(['me'], me(userId), { updatedAt: 1 });
     first.persister.confirmed(Date.now() - 31 * 24 * 60 * 60 * 1000);
     await first.queryClient.fetchQuery({
       queryKey: myListKey(orgId),
       queryFn: () => first.engine.pipeline.fetch(orgId),
     });
-    await vi.waitFor(() => expect(data.get(cacheStorageKey)).toContain('Secret'), {
+    await vi.waitFor(() => expect(data.get(cacheStorageKey(userId))).toContain('Secret'), {
       timeout: 6000,
     });
     first.engine.stop();
 
     const second = await boot({ storage, outbox: createMemoryOutbox(), transport });
     expect(second.queryClient.getQueryData(myListKey(orgId))).toBeUndefined();
-    expect(data.has(cacheStorageKey)).toBe(false);
+    expect(data.has(cacheStorageKey(userId))).toBe(false);
   });
 
   test('a clear posted by another tab while this one restores still clears and reloads', async () => {
@@ -826,12 +832,13 @@ describe('sync engine (04 §6)', () => {
     const transport = createFixtureTransport({ userId, tasks: { 1: ['Secret'] } });
     localStorage.setItem('rooster.cacheOwner', userId);
     const first = await boot({ storage, outbox: createMemoryOutbox(), transport });
+    first.queryClient.setQueryData(['me'], me(userId), { updatedAt: 1 });
     first.persister.confirmed(Date.now());
     await first.queryClient.fetchQuery({
       queryKey: myListKey(orgId),
       queryFn: () => first.engine.pipeline.fetch(orgId),
     });
-    await vi.waitFor(() => expect(data.get(cacheStorageKey)).toContain('Secret'), {
+    await vi.waitFor(() => expect(data.get(cacheStorageKey(userId))).toContain('Secret'), {
       timeout: 6000,
     });
     first.engine.stop();
@@ -842,6 +849,7 @@ describe('sync engine (04 §6)', () => {
       ...storage,
       get: (key) => {
         const value = data.get(key);
+        if (key !== cacheStorageKey(userId)) return Promise.resolve(value);
         return new Promise((resolve) => (answer = () => resolve(value)));
       },
     };
@@ -1167,19 +1175,124 @@ describe('sign-out across tabs: cache snapshots (ADR 0051)', () => {
       engines.push(tabA, tabB);
       await fetchMe(queriesA, me(userId));
       await fetchMe(queriesB, me(userId));
-      const del = storage.del;
-      let wiped = false;
-      storage.del = async (key) => {
-        await del(key);
-        if (wiped) return;
-        wiped = true;
-        // Tab B saves its cache (the user's profile) after tab A deleted the stored one.
-        await persistQueryClientSave({ queryClient: queriesB, persister: persisterB });
-        expect(data.has(cacheStorageKey)).toBe(true);
+      const listKeys = storage.keys;
+      let signingOut = false;
+      storage.keys = async () => {
+        const found = await listKeys();
+        if (signingOut) {
+          signingOut = false;
+          // Tab B saves its cache (the user's profile) right after tab A listed what to delete.
+          await persistQueryClientSave({ queryClient: queriesB, persister: persisterB });
+          expect(data.has(cacheStorageKey(userId))).toBe(true);
+        }
+        return found;
       };
+      signingOut = true;
       await tabA.clear({ final: true });
       await vi.waitFor(() => expect(reload).toHaveBeenCalled());
-      expect(data.has(cacheStorageKey)).toBe(false);
+      expect(data.has(cacheStorageKey(userId))).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('per-account storage across tabs (ADR 0051/0056)', () => {
+  const other = '01900000-0000-7000-8000-000000000002';
+
+  test('a page that learns of another account from /me deletes its own late snapshot', async () => {
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...globalThis.location, reload });
+    try {
+      localStorage.setItem('rooster.cacheOwner', userId);
+      const { data, storage } = memoryStorage();
+      const { engine, queryClient, persister } = await boot({
+        storage,
+        outbox: createMemoryOutbox(),
+        transport: createFixtureTransport({ userId }),
+      });
+      void engine;
+      await fetchMe(queryClient, me(userId));
+      // Another tab signed in as someone else; this one saves late, then sees the new /me.
+      localStorage.setItem('rooster.cacheOwner', other);
+      queryClient.setQueryData(['notifications', 'all'], { pages: [{ secret: true }] });
+      await persistQueryClientSave({ queryClient, persister });
+      expect(data.has(cacheStorageKey(userId))).toBe(true);
+      data.set(cacheStorageKey(other), 'the new account');
+      await fetchMe(queryClient, me(other));
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+      expect(data.has(cacheStorageKey(userId))).toBe(false);
+      expect(data.get(cacheStorageKey(other))).toBe('the new account');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test("a start never hydrates another account's snapshot, and deletes it", async () => {
+    const { data, storage } = memoryStorage();
+    localStorage.setItem('rooster.cacheOwner', userId);
+    const first = await boot({
+      storage,
+      outbox: createMemoryOutbox(),
+      transport: createFixtureTransport({ userId, tasks: { 1: ['Secret'] } }),
+    });
+    first.queryClient.setQueryData(['me'], me(userId), { updatedAt: 1 });
+    first.persister.confirmed(Date.now());
+    await first.queryClient.fetchQuery({
+      queryKey: myListKey(orgId),
+      queryFn: () => first.engine.pipeline.fetch(orgId),
+    });
+    await persistQueryClientSave({ queryClient: first.queryClient, persister: first.persister });
+    first.engine.stop();
+    // The browser belongs to someone else now, whatever is still stored.
+    localStorage.setItem('rooster.cacheOwner', other);
+    const second = await boot({
+      storage,
+      outbox: createMemoryOutbox(),
+      transport: createFixtureTransport({ userId: other }),
+    });
+    expect(second.queryClient.getQueryData(myListKey(orgId))).toBeUndefined();
+    expect(second.queryClient.getQueryData(['me'])).toBeUndefined();
+    expect(data.has(cacheStorageKey(userId))).toBe(false);
+  });
+
+  test("a tab told of a sign-out sweeps that account's late localStorage, not another's", async () => {
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...globalThis.location, reload });
+    try {
+      localStorage.setItem('rooster.cacheOwner', userId);
+      const outbox = createMemoryOutbox();
+      const net = bus();
+      const transport = createFixtureTransport({ userId });
+      const start = (channel: SyncChannel, queryClient: QueryClient) =>
+        startSync({
+          queryClient,
+          transport,
+          outbox,
+          channel,
+          persister: createCachePersister(() => undefined, memoryStorage().storage),
+          eventSource: quietSource,
+          locks: null,
+          listen: false,
+        });
+      const queriesA = new QueryClient();
+      const queriesB = new QueryClient();
+      const tabA = await start(net.join().channel, queriesA);
+      const tabB = await start(net.join().channel, queriesB);
+      engines.push(tabA, tabB);
+      await fetchMe(queriesA, me(userId));
+      await fetchMe(queriesB, me(userId));
+      const clear = outbox.clear.bind(outbox);
+      outbox.clear = async () => {
+        await clear();
+        // The other tab records a palette recent after the sweep, before it hears `cleared`.
+        localStorage.setItem(recentsKey(userId), '[{"title":"Private"}]');
+        localStorage.setItem(recentsKey(other), '[{"title":"Theirs"}]');
+      };
+      await clearLocalData();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+      expect(localStorage.getItem(recentsKey(userId))).toBeNull();
+      expect(localStorage.getItem(recentsKey(other))).not.toBeNull();
     } finally {
       vi.unstubAllGlobals();
     }
