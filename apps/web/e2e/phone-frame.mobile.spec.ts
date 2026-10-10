@@ -133,13 +133,16 @@ test('pull to refresh, past and short of the threshold, leaves the chrome in pla
   const startY = Math.round((row?.y ?? 200) + 10);
 
   // Every state the indicator passes through (a local refresh settles within a frame or two).
+  // One callback can carry several changes (armed → refreshing → idle): each record's old value
+  // keeps the states in between, the current one adds the last.
   await page.evaluate(() => {
     const el = document.querySelector('[data-testid="pull-to-refresh"]') as HTMLElement;
     const w = window as unknown as { __pullStates: string[] };
     w.__pullStates = [];
-    new MutationObserver(() => w.__pullStates.push(el.dataset.state ?? '')).observe(el, {
-      attributeFilter: ['data-state'],
-    });
+    new MutationObserver((records) => {
+      for (const record of records) w.__pullStates.push(record.oldValue ?? '');
+      w.__pullStates.push(el.dataset.state ?? '');
+    }).observe(el, { attributeFilter: ['data-state'], attributeOldValue: true });
   });
   const states = () =>
     page.evaluate(() => (window as unknown as { __pullStates: string[] }).__pullStates);
