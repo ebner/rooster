@@ -6,6 +6,11 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-10
+
+### Fixed
+- **Uploads in the Docker image:** attachments and avatars failed with a 500 in the 1.4.0 image. The bundled server could not load a module that file type detection imports at runtime. Detection now reads the file through a Blob, which works in the bundle (ADR 0054).
+
 ## [1.4.0] - 2026-10-10
 
 Recurring tasks, task reminders, attachments and the calendar feed (Phase 10), plus isolation between accounts on a shared browser.
