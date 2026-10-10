@@ -263,10 +263,30 @@ An import from other task managers is on the [Backlog](#backlog); v1.0 ships wit
 ## Phase 11: Hardening → v2.0
 
 - Security review (OWASP ASVS L2 checklist subset), with the dependency audit clean.
+- **Full security audit** of the whole codebase, not only the diffs reviewed phase by phase, by an independent reviewer with read-only access.
+  - **One focused review per trust boundary.** Each brief names the files, the assets and the attacks to try. The boundaries are:
+    1. sign-in, sessions and account linking;
+    2. the OAuth 2.1 AS, CIMD and token audiences;
+    3. grants and service authorisation, including the authz matrix;
+    4. `/mcp` and discovery;
+    5. uploads, blobs, avatars and calendar feeds;
+    6. push, mail and the outbound SSRF guards;
+    7. realtime (SSE) and the request middleware (idempotency, rate limits, body limits, client IP);
+    8. the web client: XSS, redirects, and local data across sign-out and user switch;
+    9. the CLI: the credential store, `safe-write`, `launch` and terminal output;
+    10. backups, admin, config, and the Docker image.
+  - **One structured pass** over everything since 1.0.0.
+  - **Findings:** each is either fixed with a test, or accepted as a risk in an ADR. Each one is mapped to the ASVS checklist item it falls under.
+  - **Re-checks:** every boundary is re-reviewed until the review reports it clean.
 - Full accessibility audit (keyboard and screen reader passes with VoiceOver iOS and NVDA), with fixes.
 - Performance pass: 2,000-task org; bundle budget (10 §4).
 - Backup and restore drill automated in CI. The Admin → System page. The Litestream overlay documented.
 - Documentation: a user guide (keyboard cheat sheet, NL dates, CLI), an operator guide, and a contributing guide.
+
+**Acceptance criteria**
+- AC-11.1 The security audit is complete when both of these hold:
+  - every trust boundary above has a final re-check reporting it clean;
+  - `docs/security/security-review.md` lists each finding with its boundary, ASVS item, severity, and the fixing commit or the ADR that accepts it.
 
 ---
 

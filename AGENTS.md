@@ -185,7 +185,7 @@ This file is the entry point for every agent and must describe the repository **
 Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to them. A PR that changes any of the above without updating `AGENTS.md` is not done.
 
 ## Status
-- **Current phase:** Phase 11 (hardening → v2.0) is next (09). Phase 10 is done but not yet released; it sits under `[Unreleased]` in the CHANGELOG.
+- **Current phase:** Phase 11 (hardening → v2.0) is next (09). It includes a full security audit of every trust boundary (AC-11.1), on top of the per-phase reviews. Phase 10 is done but not yet released; it sits under `[Unreleased]` in the CHANGELOG.
 - **Latest release:** 1.3.0 (Phase 9: OAuth 2.1 AS, remote and stdio MCP, discovery and the skill, the TUI, linked identities, the admin capability; phone settings index; ADRs 0041–0047).
 - **Last completed phase:** Phase 10, recurrence, task reminders, attachments and iCal (2026-10-10; unreleased):
   - recurring tasks: the RRULE subset in core; the next instance is created on complete or skip, directly below; "this / this and following" on delete;
