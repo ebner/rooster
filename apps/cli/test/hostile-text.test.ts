@@ -48,10 +48,10 @@ describe('[P2] untrusted text in errors goes through clean()', () => {
   });
 
   it('ambiguous --assign lists member names cleaned', async () => {
+    // As a grant sees members: names, never emails (11 §2.1).
     const member = (n: number) => ({
       userId: `01a00000-0000-7000-8000-00000000000${n}`,
       name: `Eve ${n}${OSC52}`,
-      email: `eve${n}@example.com`,
       image: null,
       role: 'member',
       joinedAt: 0,
@@ -65,6 +65,25 @@ describe('[P2] untrusted text in errors goes through clean()', () => {
     expect(result.code).toBe(4);
     expect(result.stderr).toContain('Eve 1');
     expectClean(result.stderr);
+    expect(result.calls.some((c) => c.method === 'POST')).toBe(false);
+  });
+
+  it('ambiguous_member from the server lists the names cleaned', async () => {
+    const result = await run(
+      {
+        'GET /api/v1/orgs/*/members/resolve': problem(409, 'ambiguous_member', 'Two.', {
+          members: [
+            { userId: '01a00000-0000-7000-8000-000000000001', name: HOSTILE },
+            { userId: '01a00000-0000-7000-8000-000000000002', name: HOSTILE },
+          ],
+        }),
+      },
+      ['add', 'x', '--assign', 'Eve'],
+    );
+    expect(result.code).toBe(4);
+    expect(result.stderr).toContain('Eve]52;c;');
+    expectClean(result.stderr);
+    expect(result.calls.some((c) => c.path.endsWith('/members'))).toBe(false);
     expect(result.calls.some((c) => c.method === 'POST')).toBe(false);
   });
 

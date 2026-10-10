@@ -22,9 +22,10 @@ export function toMe(me: Schemas['Me']): Me {
   return { user, orgs: orgs.map(toOrg), prefs, ...(storage ? { storage } : {}) };
 }
 
+/** The browser session always gets `email`; only grants go without (11 §2.1). */
 export function toMember(member: Schemas['Member']): OrgMember {
-  const { joinedAt: _joinedAt, ...rest } = member;
-  return rest;
+  const { joinedAt: _joinedAt, email, ...rest } = member;
+  return { ...rest, email: email ?? '' };
 }
 
 export function toInvite(invite: Schemas['Invite']): OrgInvite {

@@ -317,6 +317,7 @@ export const COMPONENT_EXAMPLES: Record<string, unknown> = {
   OrgPrefPatch: { collapsed: true },
   Member: memberExample,
   MemberPatch: { role: 'owner' },
+  ResolvedMember: { userId: EX.otherUser, name: 'Bo Ek' },
   Invite: inviteExample,
   InviteCreate: { email: 'cleo@example.com', role: 'member', expiresInDays: 7 },
   InviteCreated: inviteCreatedExample,

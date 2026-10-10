@@ -1,4 +1,4 @@
-import { type RoosterClient, type Schemas, unwrap } from '@rooster/api-client';
+import { RoosterApiError, type RoosterClient, type Schemas, unwrap } from '@rooster/api-client';
 import {
   dueInstant,
   findDateInTitle,
@@ -55,6 +55,9 @@ export interface RepeatFields extends Partial<DueUnit> {
   recurrence: string | null;
   recurrenceBasis: 'due' | 'completion' | null;
 }
+
+const AMBIGUOUS_ASSIGNEE =
+  'Several members match that assignee; use their full name or ask the user for their email address.';
 
 /** The words that clear a due date, in both UI languages. */
 const CLEAR_WORDS = ['none', 'null', 'no date', 'clear', '-', 'ingen', 'inget'];
@@ -200,8 +203,9 @@ export class CallContext {
 
   /**
    * `assignee` → a member's id, or null for nobody. "Me" as `isAssigneeMe` defines it, then
-   * an email, then a name (whole name first, then a unique partial match), as the CLI's
-   * `--assign` does.
+   * a member's id; the server resolves an email or a whole name, since apps never see
+   * colleagues' emails (11 §2.1); a part of a name is then matched against the members' names,
+   * as the CLI's `--assign` does.
    */
   async resolveAssignee(orgId: string, input: string): Promise<string | null> {
     const me = await this.me();
@@ -210,19 +214,35 @@ export class CallContext {
     if ((ASSIGNEE_NONE as readonly string[]).includes(folded)) return null;
     if ((ASSIGNEE_ME as readonly string[]).includes(folded) || query === me.id) return me.id;
     if (folded === me.email.toLowerCase()) return me.id;
-    const members = await this.members(orgId);
+    const members = (await this.members(orgId)).map(({ userId, name }) => ({ userId, name }));
     const byId = members.find((m) => m.userId === query);
     if (byId !== undefined) return byId.userId;
-    if (query.includes('@')) {
-      const byEmail = members.find((m) => m.email.toLowerCase() === folded);
-      if (byEmail !== undefined) return byEmail.userId;
+    if (query !== '') {
+      try {
+        const found = await unwrap(
+          this.client.GET('/api/v1/orgs/{orgId}/members/resolve', {
+            params: { path: { orgId }, query: { q: query } },
+          }),
+        );
+        return found.userId;
+      } catch (error) {
+        if (!(error instanceof RoosterApiError)) throw error;
+        if (error.code === 'ambiguous_member') {
+          throw new ToolError(AMBIGUOUS_ASSIGNEE, {
+            query,
+            members: (error.problem?.members ?? []).map((m) => m.name),
+          });
+        }
+        // 404: no email or whole name matches; try part of a name below.
+        if (error.status !== 404) throw error;
+      }
     }
     const matches = matchMembers(query, members, me.id);
     const exact = matches.filter((m) => m.exact);
     const pick = exact.length === 1 ? exact[0] : matches.length === 1 ? matches[0] : undefined;
     if (pick !== undefined) return pick.userId;
     if (matches.length > 1) {
-      throw new ToolError('Several members match that assignee; use their email.', {
+      throw new ToolError(AMBIGUOUS_ASSIGNEE, {
         query,
         members: matches.map((m) => members.find((x) => x.userId === m.userId)?.name ?? m.userId),
       });

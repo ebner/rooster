@@ -18,6 +18,7 @@ export const ProblemSchema = named(
           }),
         )
         .optional(),
+      members: z.array(z.object({ userId: z.string(), name: z.string() })).optional(),
       usedBytes: z.int().nonnegative().optional(),
     }),
     {
@@ -27,6 +28,8 @@ export const ProblemSchema = named(
         '`409 tag_name_taken`: the ID of the entity that already has the name, so an offline client can remap its own.',
       candidates:
         '`409 ambiguous_ref` (`GET /tasks/resolve`): the tasks the ref could mean, at most 10.',
+      members:
+        '`409 ambiguous_member` (`GET /orgs/{orgId}/members/resolve`): the members the query could mean, at most 10, by name (never with emails).',
       limitBytes:
         '`413 payload_too_large` on an upload: the size limit in bytes; `413 storage_quota_exceeded`: the user’s storage quota in bytes.',
       usedBytes:

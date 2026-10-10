@@ -21,10 +21,10 @@ afterEach(async () => {
   open = undefined;
 });
 
+/** As a grant sees members: names, never emails (11 §2.1). */
 const BOB = {
   userId: '01a00000-0000-7000-8000-0000000000bb',
   name: 'Bob Builder',
-  email: 'bob@example.com',
   image: null,
   role: 'member',
   joinedAt: 0,
@@ -49,7 +49,7 @@ function baseRoutes(tasks: unknown[] = []) {
     },
     'GET /api/v1/orgs/*/tags': [TAG],
     'GET /api/v1/orgs/*/members': [
-      { userId: ME.id, name: ME.name, email: ME.email, image: null, role: 'owner', joinedAt: 0 },
+      { userId: ME.id, name: ME.name, image: null, role: 'owner', joinedAt: 0 },
       BOB,
     ],
   };
@@ -415,9 +415,13 @@ describe('writes', () => {
     expect(api.calls.some((c) => c.method === 'POST')).toBe(false);
   });
 
-  it('update_task: assignee by email, due cleared', async () => {
+  it('update_task: assignee by email, resolved by the server, due cleared', async () => {
     const { mcp, api } = await start({
       ...baseRoutes(),
+      'GET /api/v1/orgs/*/members/resolve': (call: { query: URLSearchParams }) =>
+        call.query.get('q') === 'BOB@example.com'
+          ? { userId: BOB.userId, name: BOB.name }
+          : problem(404, 'not_found', 'No member of this organisation matches that.'),
       'GET /api/v1/tasks/resolve': task({ dueDate: '2026-10-12' }),
       'PATCH /api/v1/tasks/*': (call: { body: unknown }) => ({
         task: task({ ...(call.body as Record<string, unknown>), assigneeId: BOB.userId }),
@@ -475,10 +479,7 @@ describe('writes', () => {
   it('update_task: an ambiguous name is a tool error listing the candidates as data', async () => {
     const { mcp } = await start({
       ...baseRoutes(),
-      'GET /api/v1/orgs/*/members': [
-        BOB,
-        { ...BOB, userId: 'x', name: 'Bob Other', email: 'other@example.com' },
-      ],
+      'GET /api/v1/orgs/*/members': [BOB, { ...BOB, userId: 'x', name: 'Bob Other' }],
       'GET /api/v1/tasks/resolve': task(),
     });
     const result = await mcp.callTool({
@@ -487,6 +488,41 @@ describe('writes', () => {
     });
     expect(result.isError).toBe(true);
     expect(dataOf(result).members).toEqual(['Bob Builder', 'Bob Other']);
+  });
+
+  it('update_task: a full name several members share is a tool error naming them', async () => {
+    const { mcp, api } = await start({
+      ...baseRoutes(),
+      'GET /api/v1/orgs/*/members/resolve': problem(409, 'ambiguous_member', 'Two.', {
+        members: [
+          { userId: BOB.userId, name: 'Bob Builder' },
+          { userId: 'x', name: 'Bob Builder' },
+        ],
+      }),
+      'GET /api/v1/tasks/resolve': task(),
+    });
+    const result = await mcp.callTool({
+      name: 'update_task',
+      arguments: { ref: '41', assignee: 'Bob Builder' },
+    });
+    expect(result.isError).toBe(true);
+    expect(dataOf(result).members).toEqual(['Bob Builder', 'Bob Builder']);
+    expect(api.calls.some((c) => c.method === 'PATCH')).toBe(false);
+  });
+
+  it('update_task: an unknown email is not matched against names', async () => {
+    const { mcp, api } = await start({
+      ...baseRoutes(),
+      'GET /api/v1/tasks/resolve': task(),
+    });
+    const result = await mcp.callTool({
+      name: 'update_task',
+      arguments: { ref: '41', assignee: 'nobody@example.com' },
+    });
+    expect(result.isError).toBe(true);
+    expect(texts(result)[0]?.text).toContain('No member of this organisation matches');
+    expect(api.calls.some((c) => c.path.endsWith('/members/resolve'))).toBe(true);
+    expect(api.calls.some((c) => c.method === 'PATCH')).toBe(false);
   });
 
   it('complete_task reports the next occurrence', async () => {

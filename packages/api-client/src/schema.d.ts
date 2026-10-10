@@ -185,9 +185,29 @@ export interface paths {
         };
         /**
          * Members of an org
-         * @description Every member with their role, for assignee pickers and mentions.
+         * @description Every member with their role, for assignee pickers and mentions. `email` is there for the signed-in browser only: apps and tokens with a grant see names, never colleagues’ emails, and assign by email through `GET /orgs/{orgId}/members/resolve`.
          */
         get: operations["listMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{orgId}/members/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find the member an email, a full name or "me" names
+         * @description For assigning by email or name without seeing anyone’s email (`--assign`, MCP’s `assignee`). `me` is the caller; an email matches exactly, ignoring case; a name matches the whole name. The answer never carries an email. No match is `404 not_found`, the same for an unknown email and an unknown name. A name several members share is `409 ambiguous_member`, listing them by name (at most 10).
+         */
+        get: operations["resolveMember"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1549,6 +1569,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/identities/removed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My removed sign-in identities
+         * @description Browser session only. Identities this user unlinked, newest first. Each stays blocked from signing in until it is allowed again.
+         */
+        get: operations["listRemovedIdentities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/identities/removed/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Allow a removed sign-in identity again
+         * @description Browser session only. Lifts the block on a removed identity: the next sign-in through it links it to the account again (by email, as when it was first linked).
+         */
+        delete: operations["allowRemovedIdentity"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/identities/{id}": {
         parameters: {
             query?: never;
@@ -1561,7 +1621,7 @@ export interface paths {
         post?: never;
         /**
          * Unlink a sign-in identity
-         * @description Browser session only. The identity can no longer be used to sign in; signed-in browsers stay signed in. The last identity cannot be removed (`409 last_identity`).
+         * @description Browser session only. The identity is removed and blocked: signing in through it is refused, and it does not link again by email, until it is allowed again (`DELETE /api/v1/me/identities/removed/{id}`). Signed-in browsers stay signed in. The last identity cannot be removed (`409 last_identity`).
          */
         delete: operations["unlinkIdentity"];
         options?: never;
@@ -2144,6 +2204,22 @@ export interface components {
         };
         /**
          * @example {
+         *       "id": "0199a1b2-0000-7000-8000-0000000000c2",
+         *       "providerId": "google",
+         *       "providerName": "Google",
+         *       "email": "ada@gmail.example",
+         *       "removedAt": 1767312000000
+         *     }
+         */
+        RemovedIdentity: {
+            id: string;
+            providerId: string;
+            providerName: string;
+            email: string | null;
+            removedAt: number;
+        };
+        /**
+         * @example {
          *       "type": "about:blank",
          *       "title": "Unprocessable Content",
          *       "status": 422,
@@ -2180,6 +2256,11 @@ export interface components {
                 orgId: string;
                 seq: number | null;
                 title: string;
+            }[];
+            /** @description `409 ambiguous_member` (`GET /orgs/{orgId}/members/resolve`): the members the query could mean, at most 10, by name (never with emails). */
+            members?: {
+                userId: string;
+                name: string;
             }[];
             /** @description `413 storage_quota_exceeded`: the bytes the user’s attachments already take (`limitBytes - usedBytes` is what is left). */
             usedBytes?: number;
@@ -2483,11 +2564,22 @@ export interface components {
         Member: {
             userId: string;
             name: string;
-            email: string;
+            /** @description Only for the signed-in browser. Apps and tokens with a grant never see colleagues’ emails (11 §2.1). */
+            email?: string;
             image: string | null;
             /** @enum {string} */
             role: "owner" | "member";
             joinedAt: number;
+        };
+        /**
+         * @example {
+         *       "userId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e02",
+         *       "name": "Bo Ek"
+         *     }
+         */
+        ResolvedMember: {
+            userId: string;
+            name: string;
         };
         /**
          * @example {
@@ -5585,6 +5677,87 @@ export interface operations {
             };
             /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    resolveMember: {
+        parameters: {
+            query: {
+                /** @description `me` (or `mig`), a member’s email address (any case), or a member’s full name (case and accents ignored). */
+                q: string;
+            };
+            header?: never;
+            path: {
+                /** @description Org ID, slug, or `personal` for your personal org. */
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The member */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolvedMember"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicts with the current state. Codes: `ambiguous_member`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13542,6 +13715,161 @@ export interface operations {
             };
             /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listRemovedIdentities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed identities, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovedIdentity"][];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    allowRemovedIdentity: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
+            path: {
+                /** @description Removed identity ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Allowed again */
+            204: {
+                headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

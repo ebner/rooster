@@ -1,3 +1,4 @@
+import { matchMembers } from '@rooster/core/dates';
 import { uuidv7 } from '@rooster/core/ids';
 import { keyBetween } from '@rooster/core/ordering';
 import {
@@ -12,6 +13,7 @@ import {
   type OrgCreate,
   type OrgPatch,
   type OrgRole,
+  type ResolvedMember,
   slugCandidate,
   slugify,
   type TagColor,
@@ -31,7 +33,14 @@ import type { Audience, DomainEventType } from '../events/bus.ts';
 import { AppError } from '../lib/errors.ts';
 import { serverText } from '../lib/i18n.ts';
 import { hashToken, randomToken } from '../lib/tokens.ts';
-import { type Actor, emitAfterCommit, immediate, type ServiceDeps, type Tx } from './context.ts';
+import {
+  type Actor,
+  emitAfterCommit,
+  immediate,
+  readOnly,
+  type ServiceDeps,
+  type Tx,
+} from './context.ts';
 import {
   memberIds,
   ownerIds,
@@ -64,6 +73,12 @@ import { reminderRemovalStep } from './reminder-service.ts';
 
 const DAY_MS = 86_400_000;
 const MAX_SLUG_ATTEMPTS = 1000;
+/** `409 ambiguous_member`: at most this many members are named. */
+const AMBIGUOUS_MEMBERS = 10;
+
+/** The same answer for an unknown email and an unknown name. */
+const memberNotFound = () =>
+  new AppError('not_found', 404, 'No member of this organisation matches that.');
 
 /**
  * Runs inside the member-removal transaction (05 §4.2) before the member's groups, prefs
@@ -390,11 +405,15 @@ export class OrgService {
 
   // --- members --------------------------------------------------------------------------
 
+  /**
+   * Every member of the org. Apps and tokens with a grant get names only (11 §2.1): no app
+   * ever sees a colleague's email; they assign by email through `resolveMember`.
+   */
   listMembers(actor: Actor, ref: string): Member[] {
-    return immediate(this.deps.db, (tx) => {
+    return readOnly(this.deps.db, (tx) => {
       const { org } = requireMembership(tx, actor.userId, ref);
       authorizeOrg(actor, org.id, 'tasks:read');
-      return tx
+      const rows = tx
         .select({
           userId: member.userId,
           role: member.role,
@@ -408,6 +427,59 @@ export class OrgService {
         .where(eq(member.organizationId, org.id))
         .orderBy(asc(member.createdAt), asc(member.id))
         .all();
+      if (actor.grant === null) return rows;
+      return rows.map(({ email: _email, ...rest }) => rest);
+    });
+  }
+
+  /**
+   * The one member of the org that `query` names, for `--assign` and MCP's `assignee`
+   * (11 §2.1): `me`/`mig` is the actor, then an exact email (any case), then an exact full
+   * name (accents and case folded, as the `@name` token compares). Neither the answer nor an
+   * error carries an email, and an unknown email fails exactly like an unknown name, so the
+   * endpoint confirms an address only to someone who already knows it.
+   */
+  resolveMember(actor: Actor, ref: string, query: string): ResolvedMember {
+    return readOnly(this.deps.db, (tx) => {
+      const { org } = requireMembership(tx, actor.userId, ref);
+      authorizeOrg(actor, org.id, 'tasks:read');
+      const text = query.trim();
+      const rows = tx
+        .select({ userId: member.userId, name: user.name, email: user.email })
+        .from(member)
+        .innerJoin(user, eq(user.id, member.userId))
+        .where(eq(member.organizationId, org.id))
+        .orderBy(asc(member.createdAt), asc(member.id))
+        .all();
+      const pick = (row: { userId: string; name: string }): ResolvedMember => ({
+        userId: row.userId,
+        name: row.name,
+      });
+      const folded = text.toLowerCase();
+      if (folded === 'me' || folded === 'mig') {
+        const self = rows.find((r) => r.userId === actor.userId);
+        if (self !== undefined) return pick(self);
+      }
+      if (text.includes('@')) {
+        const byEmail = rows.find((r) => r.email.toLowerCase() === folded);
+        if (byEmail !== undefined) return pick(byEmail);
+      }
+      // Names only: an email's local part must not match, or it would leak through probing.
+      const named = rows.map(({ userId, name }) => ({ userId, name }));
+      const exact = matchMembers(text, named).filter((m) => m.exact);
+      const matches = named.filter((r) => exact.some((m) => m.userId === r.userId));
+      const [only] = matches;
+      if (only === undefined || text === '') throw memberNotFound();
+      if (matches.length > 1) {
+        throw new AppError(
+          'ambiguous_member',
+          409,
+          `${matches.length} members are called that; use their email address.`,
+          undefined,
+          { members: matches.slice(0, AMBIGUOUS_MEMBERS).map(pick) },
+        );
+      }
+      return pick(only);
     });
   }
 

@@ -16,6 +16,7 @@ import {
   oauthAccessToken,
   oauthClient,
   session,
+  unlinkedIdentity,
   user,
 } from '../src/db/schema/index.ts';
 import { randomToken } from '../src/lib/tokens.ts';
@@ -147,6 +148,8 @@ interface Fixture {
   oauthQuery: string;
   /** One of the owner's two linked sign-in identities. */
   identityId: string;
+  /** An identity the owner removed (blocked until allowed again). */
+  removedIdentityId: string;
   // P10 fixtures (tasks): reminders.
   /** The owner's weekly task in group A, and the owner's reminder on `taskId`. */
   recurringTaskId: string;
@@ -295,6 +298,11 @@ const ROWS: Record<string, Row> = {
   },
   'GET /api/v1/orgs/{orgId}/members': {
     request: (f) => ({ path: `/api/v1/orgs/${f.orgId}/members` }),
+    expect: { ...orgScoped(200, 200), ...grants(200, 200, 404, 200) },
+  },
+  // Only the org's members resolve, and only orgs the grant reaches (11 §2.1).
+  'GET /api/v1/orgs/{orgId}/members/resolve': {
+    request: (f) => ({ path: `/api/v1/orgs/${f.orgId}/members/resolve?q=me` }),
     expect: { ...orgScoped(200, 200), ...grants(200, 200, 404, 200) },
   },
   'PATCH /api/v1/orgs/{orgId}/members/{userId}': {
@@ -638,6 +646,15 @@ const ROWS: Record<string, Row> = {
     // The owner's own identity (one of two); anyone else's is 404.
     expect: { ...owned(204), ...SESSION_ONLY },
   },
+  'GET /api/v1/me/identities/removed': {
+    request: () => ({ path: '/api/v1/me/identities/removed' }),
+    expect: { ...signedIn(200), ...SESSION_ONLY },
+  },
+  'DELETE /api/v1/me/identities/removed/{id}': {
+    request: (f) => ({ path: `/api/v1/me/identities/removed/${f.removedIdentityId}` }),
+    // Allowing again the owner's own removed identity; anyone else's is 404.
+    expect: { ...owned(204), ...SESSION_ONLY },
+  },
   'GET /api/v1/tasks/resolve': {
     request: (f) => ({ path: `/api/v1/tasks/resolve?ref=${f.taskId}` }),
     expect: { ...orgScoped(200, 200), ...grants(200, 200, 404, 200) },
@@ -951,6 +968,18 @@ async function fixture(): Promise<Fixture> {
   };
   identity('google');
   const identityId = identity('dev');
+  const removedIdentityId = uuidv7();
+  db.orm
+    .insert(unlinkedIdentity)
+    .values({
+      id: removedIdentityId,
+      userId: owner.userId,
+      providerId: 'dev',
+      accountId: `dev-removed-${owner.userId}`,
+      email: null,
+      unlinkedAt: now,
+    })
+    .run();
 
   // P10 setup (tasks): reminders.
   const recurring = tasks.create(ownerActor, org.id, {
@@ -1026,6 +1055,7 @@ async function fixture(): Promise<Fixture> {
     userCode,
     oauthQuery: consentPage.search.slice(1),
     identityId,
+    removedIdentityId,
     // P10 fixtures (tasks).
     recurringTaskId: recurring.id,
     reminderId: reminder.id,

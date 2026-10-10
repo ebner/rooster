@@ -49,6 +49,7 @@ import {
   pushSubscriptionCreateSchema,
   pushSubscriptionSchema,
   reindexResultSchema,
+  resolvedMemberSchema,
   searchHitSchema,
   sessionSchema,
   subtaskReorderResultSchema,
@@ -100,7 +101,14 @@ export const OrgOrderSchema = named(
 );
 export const OrgOrderResultSchema = named(orgOrderResultSchema, 'OrgOrderResult');
 export const OrgPrefPatchSchema = named(orgPrefPatchSchema, 'OrgPrefPatch');
-export const MemberSchema = named(memberSchema, 'Member');
+export const MemberSchema = named(
+  describe(memberSchema, {
+    email:
+      'Only for the signed-in browser. Apps and tokens with a grant never see colleagues’ emails (11 §2.1).',
+  }),
+  'Member',
+);
+export const ResolvedMemberSchema = named(resolvedMemberSchema, 'ResolvedMember');
 export const MemberPatchSchema = named(memberPatchSchema, 'MemberPatch');
 export const InviteSchema = named(inviteSchema, 'Invite');
 export const InviteCreateSchema = named(

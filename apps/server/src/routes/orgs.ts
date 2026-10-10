@@ -21,6 +21,7 @@ import {
   OrgDeleteSchema,
   OrgPatchSchema,
   OrgSchema,
+  ResolvedMemberSchema,
 } from './schemas.ts';
 
 const tags = ['orgs'];
@@ -87,9 +88,33 @@ const listMembers = createRoute({
   tags,
   operationId: 'listMembers',
   summary: 'Members of an org',
-  description: 'Every member with their role, for assignee pickers and mentions.',
+  description:
+    'Every member with their role, for assignee pickers and mentions. `email` is there for the signed-in browser only: apps and tokens with a grant see names, never colleagues’ emails, and assign by email through `GET /orgs/{orgId}/members/resolve`.',
   request: { params: orgParams },
   responses: { 200: json(z.array(MemberSchema), 'Members'), ...problems(401, 404) },
+});
+
+const resolveMemberQuery = z.object({
+  q: z.string().trim().min(1).max(254).openapi({
+    description:
+      '`me` (or `mig`), a member’s email address (any case), or a member’s full name (case and accents ignored).',
+    example: 'bo@example.com',
+  }),
+});
+
+const resolveMember = createRoute({
+  method: 'get',
+  path: '/api/v1/orgs/{orgId}/members/resolve',
+  tags,
+  operationId: 'resolveMember',
+  summary: 'Find the member an email, a full name or "me" names',
+  description:
+    'For assigning by email or name without seeing anyone’s email (`--assign`, MCP’s `assignee`). `me` is the caller; an email matches exactly, ignoring case; a name matches the whole name. The answer never carries an email. No match is `404 not_found`, the same for an unknown email and an unknown name. A name several members share is `409 ambiguous_member`, listing them by name (at most 10).',
+  request: { params: orgParams, query: resolveMemberQuery },
+  responses: {
+    200: json(ResolvedMemberSchema, 'The member'),
+    ...problems(401, 404, 422, 'ambiguous_member'),
+  },
 });
 
 const patchMember = createRoute({
@@ -176,6 +201,9 @@ export function registerOrgRoutes(app: OpenAPIHono<AppEnv>, { orgs }: Services):
   });
   app.openapi(listMembers, (c) =>
     c.json(orgs.listMembers(actorOf(c), c.req.valid('param').orgId), 200),
+  );
+  app.openapi(resolveMember, (c) =>
+    c.json(orgs.resolveMember(actorOf(c), c.req.valid('param').orgId, c.req.valid('query').q), 200),
   );
   app.openapi(patchMember, (c) => {
     const { orgId, userId } = c.req.valid('param');

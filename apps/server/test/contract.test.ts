@@ -9,11 +9,12 @@ import type {
   GrantScopeValue as GrantScope,
   TokenCreated,
 } from '@rooster/core/schemas';
+import { eq } from 'drizzle-orm';
 import sharp from 'sharp';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { App } from '../src/app.ts';
 import type { AppDb } from '../src/db/client.ts';
-import { account, attachment, oauthClient } from '../src/db/schema/index.ts';
+import { account, attachment, oauthClient, user } from '../src/db/schema/index.ts';
 import { NAMED_SCHEMAS } from '../src/lib/openapi.ts';
 import { checkResponse, type RouteContract, routeContracts } from '../src/lib/response-contract.ts';
 import type { Actor } from '../src/services/index.ts';
@@ -642,6 +643,30 @@ const SPECS: Record<string, Spec> = {
   },
   'GET /api/v1/orgs/{orgId}/members': {
     ok: (f) => ({ path: `/api/v1/orgs/${f.orgId}/members` }),
+  },
+  'GET /api/v1/orgs/{orgId}/members/resolve': {
+    ok: (f) => ({ path: `/api/v1/orgs/${f.orgId}/members/resolve?q=OTHER@example.com` }),
+    cases: [
+      {
+        status: 200,
+        name: 'by full name',
+        request: (f) => ({ path: `/api/v1/orgs/${f.orgId}/members/resolve?q=member` }),
+      },
+      {
+        status: 404,
+        code: 'not_found',
+        request: (f) => ({ path: `/api/v1/orgs/${f.orgId}/members/resolve?q=nobody@example.com` }),
+      },
+      {
+        status: 409,
+        code: 'ambiguous_member',
+        setup: (f) => {
+          f.db.orm.update(user).set({ name: 'member' }).where(eq(user.id, f.otherMemberId)).run();
+        },
+        request: (f) => ({ path: `/api/v1/orgs/${f.orgId}/members/resolve?q=member` }),
+      },
+      { status: 422, request: (f) => ({ path: `/api/v1/orgs/${f.orgId}/members/resolve` }) },
+    ],
   },
   'PATCH /api/v1/orgs/{orgId}/members/{userId}': {
     ok: (f) => ({
@@ -1478,6 +1503,27 @@ const SPECS: Record<string, Spec> = {
           f.app.services.identities.unlink(f.actors.owner, f.identityId);
           f.identityId = f.app.services.identities.list(f.actors.owner)[0]?.id ?? f.identityId;
         },
+      },
+    ],
+  },
+  'GET /api/v1/me/identities/removed': {
+    ok: () => ({ path: '/api/v1/me/identities/removed' }),
+    setup: (f) => {
+      addIdentity(f, 'google');
+      f.app.services.identities.unlink(f.actors.owner, addIdentity(f, 'dev'));
+    },
+  },
+  'DELETE /api/v1/me/identities/removed/{id}': {
+    ok: (f) => ({ path: `/api/v1/me/identities/removed/${f.identityId}` }),
+    setup: (f) => {
+      addIdentity(f, 'google');
+      f.app.services.identities.unlink(f.actors.owner, addIdentity(f, 'dev'));
+    },
+    cases: [
+      {
+        status: 404,
+        code: 'not_found',
+        request: () => ({ path: `/api/v1/me/identities/removed/${uuidv7()}` }),
       },
     ],
   },

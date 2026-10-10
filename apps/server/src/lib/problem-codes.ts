@@ -54,6 +54,10 @@ export const PROBLEM_CODES = {
     status: 409,
     detail: 'The ref 0192f3a0 matches more than one task; use more characters.',
   },
+  ambiguous_member: {
+    status: 409,
+    detail: '2 members are called that; use their email address.',
+  },
   tag_name_taken: {
     status: 409,
     detail: 'A tag with that name already exists in this organisation.',

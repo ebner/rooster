@@ -74,7 +74,7 @@ export function skillMarkdown(context: SkillContext): string {
     '',
     'Titles are parsed by the server: `create_task` with `"Book dentist fri #health >Errands"` sets the due date to Friday, tags it `health` and puts it in the group Errands. `due` accepts the same phrases ("today", "tomorrow 14:00", "fri", "next week", "in 3 days", "2026-11-02") in English or Swedish. Without `group` a new task lands at the top of the Inbox.',
     '',
-    "`assignee` takes `me`, a member's email or a member's name; `none` unassigns.",
+    "`assignee` takes `me`, a member's name or an email address the user gave you; `none` unassigns. Rooster never shows apps other members' emails.",
     '',
     '## Workflows',
     '',

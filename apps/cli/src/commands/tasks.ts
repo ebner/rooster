@@ -2,7 +2,14 @@ import { readFileSync } from 'node:fs';
 import { findDateInTitle, findGroupToken, matchMembers, todayIn } from '@rooster/core/dates';
 import { mentionsToPlain } from '@rooster/core/mentions';
 import { defineCommand } from 'citty';
-import { type Org, type RoosterClient, type Task, type TaskDetail, unwrap } from '../api.ts';
+import {
+  type Org,
+  RoosterApiError,
+  type RoosterClient,
+  type Task,
+  type TaskDetail,
+  unwrap,
+} from '../api.ts';
 import { applyDueFlags, applyRepeatFlag, type DueFlags, isNone } from '../dates.ts';
 import { editText } from '../editor.ts';
 import { CliError, EXIT } from '../errors.ts';
@@ -32,21 +39,38 @@ import {
 const str = (value: unknown): string | undefined =>
   typeof value === 'string' && value !== '' ? value : undefined;
 
-/** `--assign me|none|<email>|<name>` → a member of the org (null = unassigned). */
+/**
+ * `--assign me|none|<email>|<name>` → a member of the org (null = unassigned). The server
+ * resolves an email or a full name, since apps never see colleagues' emails (11 §2.1); a part
+ * of a name ("ann") is then matched here against the members' names.
+ */
 export async function resolveAssignee(
   runtime: Runtime,
   orgId: string,
   input: string,
 ): Promise<string | null> {
-  const me = await runtime.me();
   const query = input.trim();
   if (isNone(query)) return null;
+  const me = await runtime.me();
   if (query === 'me' || query === 'mig') return me.id;
-  const members = await runtime.members(orgId);
-  if (query.includes('@')) {
-    const byEmail = members.find((m) => m.email.toLowerCase() === query.toLowerCase());
-    if (byEmail) return byEmail.userId;
+  const api = await runtime.api();
+  try {
+    const found = await unwrap(
+      api.GET('/api/v1/orgs/{orgId}/members/resolve', {
+        params: { path: { orgId }, query: { q: query } },
+      }),
+    );
+    return found.userId;
+  } catch (error) {
+    if (!(error instanceof RoosterApiError)) throw error;
+    if (error.code === 'ambiguous_member') {
+      const names = (error.problem?.members ?? []).map((m) => m.name).join(', ');
+      throw new CliError(EXIT.notFound, t('member.ambiguous', { query, names }), error.code);
+    }
+    // 404: no email or whole name matches; try part of a name below.
+    if (error.status !== 404) throw error;
   }
+  const members = (await runtime.members(orgId)).map(({ userId, name }) => ({ userId, name }));
   const matches = matchMembers(query, members, me.id);
   const exact = matches.filter((m) => m.exact);
   const pick = exact.length === 1 ? exact[0] : matches.length === 1 ? matches[0] : undefined;

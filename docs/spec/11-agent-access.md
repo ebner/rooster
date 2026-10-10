@@ -36,7 +36,7 @@ Capabilities are coarse **actions**. They are what a client requests, what `scop
 
 | Scope | Allows | Implies |
 |---|---|---|
-| `tasks:read` | Lists, views, search, task details, comments and activity, tags, groups, org members (names only) | — |
+| `tasks:read` | Lists, views, search, task details, comments and activity, tags, groups, org members (names only: never colleagues' emails; assigning by email is resolved by the server, `GET /orgs/:orgId/members/resolve`) | — |
 | `tasks:write` | Create, edit, complete and reopen tasks; move them within and between groups; reorder; subtasks; tag and untag; restore | `tasks:read` |
 | `comments:write` | Post, edit and delete **own** comments; follow and unfollow | `tasks:read` |
 | `tasks:assign` | Assign tasks to **other** members, or unassign them. Assigning to oneself needs only `tasks:write`. | `tasks:write` |

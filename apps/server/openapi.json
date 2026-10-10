@@ -1110,6 +1110,44 @@
           "createdAt": 1767225600000
         }
       },
+      "RemovedIdentity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "providerName": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "removedAt": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "providerId",
+          "providerName",
+          "email",
+          "removedAt"
+        ],
+        "example": {
+          "id": "0199a1b2-0000-7000-8000-0000000000c2",
+          "providerId": "google",
+          "providerName": "Google",
+          "email": "ada@gmail.example",
+          "removedAt": 1767312000000
+        }
+      },
       "Problem": {
         "type": "object",
         "properties": {
@@ -1192,6 +1230,25 @@
               ]
             },
             "description": "`409 ambiguous_ref` (`GET /tasks/resolve`): the tasks the ref could mean, at most 10."
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "userId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "userId",
+                "name"
+              ]
+            },
+            "description": "`409 ambiguous_member` (`GET /orgs/{orgId}/members/resolve`): the members the query could mean, at most 10, by name (never with emails)."
           },
           "usedBytes": {
             "type": "integer",
@@ -1945,7 +2002,8 @@
             "type": "string"
           },
           "email": {
-            "type": "string"
+            "type": "string",
+            "description": "Only for the signed-in browser. Apps and tokens with a grant never see colleagues’ emails (11 §2.1)."
           },
           "image": {
             "type": [
@@ -1968,7 +2026,6 @@
         "required": [
           "userId",
           "name",
-          "email",
           "image",
           "role",
           "joinedAt"
@@ -1980,6 +2037,25 @@
           "image": null,
           "role": "member",
           "joinedAt": 1788940800000
+        }
+      },
+      "ResolvedMember": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "name"
+        ],
+        "example": {
+          "userId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e02",
+          "name": "Bo Ek"
         }
       },
       "MemberPatch": {
@@ -9517,7 +9593,7 @@
         ],
         "operationId": "listMembers",
         "summary": "Members of an org",
-        "description": "Every member with their role, for assignee pickers and mentions.",
+        "description": "Every member with their role, for assignee pickers and mentions. `email` is there for the signed-in browser only: apps and tokens with a grant see names, never colleagues’ emails, and assign by email through `GET /orgs/{orgId}/members/resolve`.",
         "parameters": [
           {
             "schema": {
@@ -9613,6 +9689,218 @@
                       "status": 404,
                       "detail": "Task not found.",
                       "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/orgs/{orgId}/members/resolve": {
+      "get": {
+        "tags": [
+          "orgs"
+        ],
+        "operationId": "resolveMember",
+        "summary": "Find the member an email, a full name or \"me\" names",
+        "description": "For assigning by email or name without seeing anyone’s email (`--assign`, MCP’s `assignee`). `me` is the caller; an email matches exactly, ignoring case; a name matches the whole name. The answer never carries an email. No match is `404 not_found`, the same for an unknown email and an unknown name. A name several members share is `409 ambiguous_member`, listing them by name (at most 10).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Org ID, slug, or `personal` for your personal org.",
+              "example": "personal"
+            },
+            "required": true,
+            "description": "Org ID, slug, or `personal` for your personal org.",
+            "name": "orgId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 254,
+              "description": "`me` (or `mig`), a member’s email address (any case), or a member’s full name (case and accents ignored).",
+              "example": "bo@example.com"
+            },
+            "required": true,
+            "description": "`me` (or `mig`), a member’s email address (any case), or a member’s full name (case and accents ignored).",
+            "name": "q",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolvedMember"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current state. Codes: `ambiguous_member`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "ambiguous_member": {
+                    "summary": "2 members are called that; use their email address.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Conflict",
+                      "status": 409,
+                      "detail": "2 members are called that; use their email address.",
+                      "code": "ambiguous_member",
+                      "members": [
+                        {
+                          "userId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+                          "name": "Bo Ek"
+                        },
+                        {
+                          "userId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e02",
+                          "name": "Bo Ek"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
                     }
                   }
                 },
@@ -28513,6 +28801,352 @@
         }
       }
     },
+    "/api/v1/me/identities/removed": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "operationId": "listRemovedIdentities",
+        "summary": "My removed sign-in identities",
+        "description": "Browser session only. Identities this user unlinked, newest first. Each stays blocked from signing in until it is allowed again.",
+        "responses": {
+          "200": {
+            "description": "Removed identities, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RemovedIdentity"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/identities/removed/{id}": {
+      "delete": {
+        "tags": [
+          "me"
+        ],
+        "operationId": "allowRemovedIdentity",
+        "summary": "Allow a removed sign-in identity again",
+        "description": "Browser session only. Lifts the block on a removed identity: the next sign-in through it links it to the account again (by email, as when it was first linked).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Removed identity ID"
+            },
+            "required": true,
+            "description": "Removed identity ID",
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/EditTime"
+          },
+          {
+            "$ref": "#/components/parameters/ClientId"
+          },
+          {
+            "$ref": "#/components/parameters/Client"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Allowed again",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  },
+                  "csrf_origin": {
+                    "summary": "Cross-origin request rejected.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Cross-origin request rejected.",
+                      "code": "csrf_origin"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body is too large (1 MB). Codes: `payload_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "payload_too_large": {
+                    "summary": "The request body exceeds the limit of 1024 KB.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Content Too Large",
+                      "status": 413,
+                      "detail": "The request body exceeds the limit of 1024 KB.",
+                      "code": "payload_too_large"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not JSON. Codes: `unsupported_media_type`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unsupported_media_type": {
+                    "summary": "Send JSON (application/json).",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unsupported Media Type",
+                      "status": 415,
+                      "detail": "Send JSON (application/json).",
+                      "code": "unsupported_media_type"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "idempotency_key_reuse": {
+                    "summary": "This Idempotency-Key was already used for a different request.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "This Idempotency-Key was already used for a different request.",
+                      "code": "idempotency_key_reuse"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me/identities/{id}": {
       "delete": {
         "tags": [
@@ -28520,7 +29154,7 @@
         ],
         "operationId": "unlinkIdentity",
         "summary": "Unlink a sign-in identity",
-        "description": "Browser session only. The identity can no longer be used to sign in; signed-in browsers stay signed in. The last identity cannot be removed (`409 last_identity`).",
+        "description": "Browser session only. The identity is removed and blocked: signing in through it is refused, and it does not link again by email, until it is allowed again (`DELETE /api/v1/me/identities/removed/{id}`). Signed-in browsers stay signed in. The last identity cannot be removed (`409 last_identity`).",
         "parameters": [
           {
             "schema": {

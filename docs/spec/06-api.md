@@ -49,7 +49,8 @@
 | POST `/orgs` | `{name, slug?, avatarEmoji?, color?}`. Creates the org, the owner membership, the actor's Inbox and the default groups. | 1 |
 | PATCH `/orgs/:orgId` | Owner only. Personal org: only `avatarEmoji` and `color` can change. | 1 |
 | DELETE `/orgs/:orgId` | Owner only. Body `{confirmName}`. Not allowed for the personal org. | 1 |
-| GET `/orgs/:orgId/members` | `[{userId, name, email, image, role}]`. | 1 |
+| GET `/orgs/:orgId/members` | `[{userId, name, email, image, role}]`. `email` only for the browser session: apps and tokens with a grant get names, never colleagues' emails (11 §2.1). | 1 |
+| GET `/orgs/:orgId/members/resolve?q=` | Phase 11. The member `q` names, for `--assign` and MCP's `assignee`: `me`/`mig` is the caller, then an exact email (case-insensitive), then an exact full name (case and accents folded). → `{userId, name}`, never an email. `404 not_found` for no match, the same for an unknown email and an unknown name; `409 ambiguous_member` with `members: [{userId, name}]` (≤ 10) when several members share the name. Clients match part of a name themselves, against the names. | 11 |
 | PATCH `/orgs/:orgId/members/:userId` | `{role}`, owner only. The last-owner rule applies. | 1 |
 | DELETE `/orgs/:orgId/members/:userId` | Owner, or self (leave). Runs the member-removal invariant. | 1 |
 | GET/POST `/orgs/:orgId/invites` | With `{email, role, expiresInDays?}`: an email invite (better-auth `invitation`). From P7 it also sends an email when SMTP is configured; until then, and whenever SMTP is absent, the response's `url` is shown for copying. With `{role, multiUse?, expiresInDays?}` and no email: a **link invite** (`invite_link`). Both return `{id, kind, url}`, where the URL is `${BASE_URL}/invite/<token>`. | 1 |

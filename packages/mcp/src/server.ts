@@ -119,7 +119,7 @@ const assigneeArg = z
   .string()
   .max(320)
   .describe(
-    '"me", a member\'s email or name, or "none" for unassigned. Anyone but yourself needs the tasks:assign capability.',
+    '"me", a member\'s full name (or a unique part of it) or email address, or "none" for unassigned. Member emails are never listed; use one only when the user gives it. Anyone but yourself needs the tasks:assign capability.',
   );
 
 const READ: ToolAnnotations = { readOnlyHint: true, openWorldHint: false };

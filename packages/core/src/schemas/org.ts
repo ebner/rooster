@@ -135,10 +135,20 @@ export const orgPrefPatchSchema = z.object({
 export const memberSchema = z.object({
   userId: z.string(),
   name: z.string(),
-  email: z.string(),
+  /**
+   * Browser sessions only: apps and tokens with a grant see names, never colleagues' emails
+   * (11 §2.1). They assign by email through `GET /orgs/:orgId/members/resolve`.
+   */
+  email: z.string().optional(),
   image: z.string().nullable(),
   role: orgRoleSchema,
   joinedAt: timestampSchema,
+});
+
+/** `GET /orgs/:orgId/members/resolve`: the one member a query names. Never carries an email. */
+export const resolvedMemberSchema = z.object({
+  userId: z.string(),
+  name: z.string(),
 });
 
 export const memberPatchSchema = z.object({
@@ -214,6 +224,7 @@ export type OrgOrder = z.infer<typeof orgOrderSchema>;
 export type OrgOrderResult = z.infer<typeof orgOrderResultSchema>;
 export type OrgPrefPatch = z.infer<typeof orgPrefPatchSchema>;
 export type Member = z.infer<typeof memberSchema>;
+export type ResolvedMember = z.infer<typeof resolvedMemberSchema>;
 export type InviteKind = z.infer<typeof inviteKindSchema>;
 export type InviteCreate = z.infer<typeof inviteCreateSchema>;
 export type InviteCreated = z.infer<typeof inviteCreatedSchema>;

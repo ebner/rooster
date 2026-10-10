@@ -67,6 +67,14 @@ export function problemExample(code: ProblemCode): Problem {
           ],
         }
       : {}),
+    ...(code === 'ambiguous_member'
+      ? {
+          members: [
+            { userId: EX.user, name: 'Bo Ek' },
+            { userId: EX.otherUser, name: 'Bo Ek' },
+          ],
+        }
+      : {}),
     ...(code === 'storage_quota_exceeded'
       ? { limitBytes: 1_073_741_824, usedBytes: 1_060_000_000 }
       : {}),

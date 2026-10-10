@@ -770,7 +770,8 @@ export class TaskService {
    * `parse: true`: an `@member` token assigns the task (06 §2.4), read by the same core
    * parser the web uses (`findAssigneeToken`: the last token, followed by nothing but a date
    * phrase; a whole name or email local part, else a unique prefix; `@me` is the actor). An
-   * ambiguous or unknown token stays in the title.
+   * ambiguous or unknown token stays in the title. For a grant, names only: matching email
+   * local parts would let an app probe colleagues' addresses (11 §2.1).
    */
   private findAssigneeToken(
     tx: Tx,
@@ -784,7 +785,8 @@ export class TaskService {
       .from(member)
       .innerJoin(user, eq(user.id, member.userId))
       .where(eq(member.organizationId, orgId))
-      .all();
+      .all()
+      .map((m) => (actor.grant === null ? m : { userId: m.userId, name: m.name }));
     const token = findAssigneeToken(title, members, actor.userId);
     if (token === null || token.userId === null) return null;
     return { userId: token.userId, start: token.start, end: token.end };
