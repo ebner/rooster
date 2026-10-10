@@ -142,7 +142,9 @@ export interface Decision {
   sessionOnly?: boolean;
 }
 
+/** Allow, as the consent page does it: load the request in this session, then decide. */
 export async function allow(user: Caller, consentPage: URL, decision: Decision = {}): Promise<URL> {
+  await consentRequest(user, consentPage);
   const { redirectTo } = await user.ok<{ redirectTo: string }>('POST', '/api/v1/oauth/consent', {
     accept: true,
     oauthQuery: oauthQueryOf(consentPage),

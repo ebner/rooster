@@ -11,7 +11,7 @@ import {
   PAGE_LIMIT_DEFAULT,
   type SseNotification,
 } from '@rooster/core/schemas';
-import { and, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, lt, or, type SQL, sql } from 'drizzle-orm';
 import { notification, organization, task, user } from '../db/schema/index.ts';
 import type { DirectMessage } from '../events/bus.ts';
 import {
@@ -28,6 +28,7 @@ import { qk, selfAudience } from './event-audience.ts';
 import {
   canReadNotification,
   reachedOrgIds,
+  readableTaskCondition,
   requireBrowserSession,
   requireScope,
 } from './grant-access.ts';
@@ -160,6 +161,28 @@ const MARK_CHUNK = 500;
 
 /** Rows that exist only for push or email delivery are not in the inbox. */
 const inInbox = sql`json_extract(${notification.data}, '$.hidden') IS NULL`;
+
+/**
+ * `canReadNotification` as SQL: the grant reaches the org, and the task, if any, is readable or
+ * gone. Paging filters with it, so a page and its cursor are built from readable rows only
+ * (a cursor naming a hidden notification would leak its ID and time). Undefined for the browser.
+ */
+function readableNotificationSql(actor: Actor): SQL | undefined {
+  if (actor.grant === null) return undefined;
+  const orgIds = reachedOrgIds(actor);
+  if (orgIds === undefined) return undefined;
+  if (orgIds.length === 0) return sql`0`;
+  const readable = readableTaskCondition(actor, orgIds);
+  const taskReadable =
+    readable === undefined
+      ? undefined
+      : or(
+          isNull(notification.taskId),
+          sql`NOT EXISTS (SELECT 1 FROM ${task} WHERE ${task.id} = ${notification.taskId})`,
+          readable(sql`${notification.taskId}`, sql`${notification.orgId}`),
+        );
+  return and(inArray(notification.orgId, [...orgIds]), taskReadable);
+}
 
 /** Notifications, their fan-out to every channel, and the preference matrix (FR-NOT-1–4). */
 export class NotificationService {
@@ -376,6 +399,7 @@ export class NotificationService {
             eq(notification.userId, actor.userId),
             liveOrg,
             inInbox,
+            readableNotificationSql(actor),
             query.unread === 'true' ? isNull(notification.readAt) : undefined,
             after === null
               ? undefined
@@ -391,7 +415,8 @@ export class NotificationService {
       const page = rows.slice(0, limit);
       const last = page[page.length - 1]?.row;
       return {
-        // A grant sees only what it may read: its orgs, and tasks its constraints show.
+        // A grant sees only what it may read: its orgs, and tasks its constraints show. The
+        // query already filters; this is the same rule in code (defence in depth).
         items: page
           .filter((r) => canReadNotification(tx, actor, r.row))
           .map((r) => toNotificationDto(r.row, r.slug)),

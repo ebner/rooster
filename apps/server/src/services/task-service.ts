@@ -109,7 +109,10 @@ import {
   grantReachesOrg,
   groupReadFilter,
   groupSnapshot,
+  readableTaskCondition,
   readFilter,
+  requireBrowserSession,
+  requireReadableGroup,
   requireScope,
 } from './grant-access.ts';
 import { listGroups } from './group-service.ts';
@@ -467,13 +470,16 @@ export class TaskService {
           : fields.groupId === undefined
             ? inboxOf(tx, actor.userId, org.id)
             : requireOwnGroup(tx, actor.userId, fields.groupId, { orgId: org.id });
+      if (fields.groupId !== undefined && group !== null) {
+        requireReadableGroup(actor, org.id, group.id);
+      }
       // 11 §2.1: choosing someone else (or nobody) needs `tasks:assign`; a subtask that
       // inherits its parent's assignee does not choose.
       if (fields.assigneeId !== undefined && fields.assigneeId !== actor.userId) {
         requireScope(actor, 'tasks:assign');
       }
       if (parent === null) authorizeGroupTarget(tx, actor, org.id, group?.id ?? null);
-      const tagIds = resolveTagsForCreate(tx, {
+      const tagIds = resolveTagsForCreate(tx, actor, {
         orgId: org.id,
         ...(input.tagIds === undefined ? {} : { tagIds: input.tagIds }),
         ...(fields.tagNames === undefined ? {} : { tagNames: fields.tagNames }),
@@ -706,7 +712,9 @@ export class TaskService {
     const token = findGroupToken(title);
     if (token !== null) {
       const wanted = token.name.toLowerCase();
-      const groups = listGroups(tx, actor.userId, orgId);
+      // A grant's `>group` token matches only groups it can read (11 §2.3: 404, not a hint).
+      const readable = groupReadFilter(actor, orgId);
+      const groups = listGroups(tx, actor.userId, orgId).filter((g) => readable?.(g.id) ?? true);
       const match =
         groups.find((g) => g.name.toLowerCase() === wanted) ??
         groups.find((g) => g.name.toLowerCase().startsWith(wanted));
@@ -1242,7 +1250,7 @@ export class TaskService {
   }
 
   /**
-   * A grant actor's cascade (delete, restore, purge) must reach every task it touches; one
+   * A grant actor's cascade (delete, restore) must reach every task it touches; one
    * out of reach rejects the whole operation (the transaction rolls back).
    */
   private authorizeSubtree(
@@ -1259,18 +1267,21 @@ export class TaskService {
     }
   }
 
-  /** Hard delete, only from Trash. Placements and subtasks go with it (FK cascade). */
+  /**
+   * Hard delete, only from Trash. Placements and subtasks go with it (FK cascade). Browser
+   * session only: `tasks:delete` is soft deletion, which the consent screen promises can be
+   * undone for 30 days (11 §2.1), so no grant may make it irreversible.
+   */
   removePermanently(actor: Actor, taskId: string, _meta?: OpMeta): void {
+    requireBrowserSession(actor);
     immediate(this.deps.db, (tx) => {
       const row = requireTask(tx, actor.userId, taskId);
-      authorizeTaskWrite(tx, actor, row, 'tasks:delete');
       if (row.deletedAt === null) {
         throw new AppError('not_in_trash', 409, 'Only deleted tasks can be deleted permanently.');
       }
       const before = taskReach(tx, [row.id]);
       const priors = this.priorsFor(tx, row.orgId, [row.id]);
       const gone = [row.id, ...descendantsOf(tx, [row.id])];
-      this.authorizeSubtree(tx, actor, gone.slice(1), 'tasks:delete');
       // Their notifications cascade away: the recipients' inboxes must refresh.
       const recipients = this.collab.notifications.recipientsOf(tx, gone);
       tx.delete(task).where(eq(task.id, row.id)).run();
@@ -1288,6 +1299,7 @@ export class TaskService {
       const row = this.requireLive(tx, actor, taskId);
       const current = this.requirePlacement(tx, actor, row);
       const group = requireOwnGroup(tx, actor.userId, input.groupId, { orgId: row.orgId });
+      requireReadableGroup(actor, row.orgId, group.id);
       authorizeGroupTarget(tx, actor, row.orgId, group.id);
       const [result] = this.movePlacements(tx, actor, group, [row], input, meta);
       return { placement: result ?? { groupId: current.groupId, position: current.position } };
@@ -1445,6 +1457,7 @@ export class TaskService {
           this.requirePlacement(tx, actor, row);
           group ??= requireOwnGroup(tx, actor.userId, args.groupId, { orgId: row.orgId });
           if (group.orgId !== row.orgId) throw taskNotFound();
+          requireReadableGroup(actor, row.orgId, group.id);
           authorizeGroupTarget(tx, actor, row.orgId, group.id);
           rows.push(row);
         } catch (err) {
@@ -1862,6 +1875,9 @@ export class TaskService {
       const limit = query.limit ?? PAGE_LIMIT_DEFAULT;
       const after = decodeCursor(query.cursor, isTrashCursor);
       const parent = alias(task, 'parent');
+      // The read constraint is part of the query, so the page and its cursor are built from
+      // readable rows only (a cursor naming a hidden task would leak its ID and deletion time).
+      const readableSql = readableTaskCondition(actor, [org.id]);
       const rows = tx
         .select({ task })
         .from(task)
@@ -1876,6 +1892,7 @@ export class TaskService {
               isNull(parent.deletedAt),
               sql`${parent.deletedAt} <> ${task.deletedAt}`,
             ),
+            readableSql?.(sql`${task.id}`, sql`${task.orgId}`),
             after === null
               ? undefined
               : or(
@@ -1890,7 +1907,7 @@ export class TaskService {
         .map((r) => r.task);
       const page = rows.slice(0, limit);
       const last = page[page.length - 1];
-      // The read constraint filters the page; the cursor still follows the unfiltered rows.
+      // Defence in depth: the same rule in code.
       const readable = readFilter(tx, actor, org.id, page);
       return {
         items: taskDtos(tx, actor.userId, readable === null ? page : page.filter(readable), {

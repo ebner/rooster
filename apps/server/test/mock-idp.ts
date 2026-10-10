@@ -29,6 +29,8 @@ export interface MockIdp {
     clientId: string;
     clientSecret: string;
   };
+  /** A signed ID token for `identity`, as the provider would issue to rooster's client. */
+  idToken(identity: MockIdentity, extra?: Record<string, unknown>): Promise<string>;
   stop(): Promise<void>;
 }
 
@@ -131,6 +133,12 @@ export async function startMockIdp(
         clientSecret: 'rooster-dev-secret',
       };
     },
+    idToken: (identity, extra = {}) =>
+      server.issuer.buildToken({
+        scopesOrTransform: (_header, payload) => {
+          Object.assign(payload, claimsFor(identity), { aud: 'rooster-dev' }, extra);
+        },
+      }),
     stop: () => server.stop(),
   };
 }

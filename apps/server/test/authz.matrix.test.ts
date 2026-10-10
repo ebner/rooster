@@ -420,7 +420,8 @@ const ROWS: Record<string, Row> = {
   },
   'DELETE /api/v1/tasks/{id}/permanent': {
     request: (f) => ({ path: `/api/v1/tasks/${f.trashedTaskId}/permanent` }),
-    expect: { ...orgScoped(204, 204), ...grants(403, 403, 404, 204) },
+    // `tasks:delete` is soft deletion only (11 §2.1): no grant purges.
+    expect: { ...orgScoped(204, 204), ...SESSION_ONLY },
   },
   'POST /api/v1/tasks/bulk': {
     request: (f) => ({ path: '/api/v1/tasks/bulk', body: { op: 'complete', ids: [f.taskId] } }),
@@ -992,6 +993,14 @@ async function fixture(): Promise<Fixture> {
     disabledJar,
     TEST_ENV.ROOSTER_AUTH_SECRET,
   );
+  // A consent decision is taken only by a session that loaded the request (as the page does).
+  for (const jar of [owner.jar, member.jar, nonMember.jar, admin.jar]) {
+    const shown = await app.request(
+      `/api/v1/oauth/consent?oauth_query=${encodeURIComponent(consentPage.search.slice(1))}`,
+      { headers: { cookie: jar.header() } },
+    );
+    expect(shown.status).toBe(200);
+  }
 
   return {
     app,

@@ -33,7 +33,7 @@ const listGrants = createRoute({
   operationId: 'listGrants',
   summary: 'Connected apps: every PAT, CLI device and app grant',
   description:
-    'Unrevoked grants, newest first (expired ones too, until revoked). `current` marks the grant behind this request. Allowed for the browser session and for a CLI device or PAT (`rooster token ls`, `rooster apps ls`).',
+    'Unrevoked grants, newest first (expired ones too, until revoked). `current` marks the grant behind this request. Allowed for the browser session and for a CLI device or PAT (`rooster token ls`, `rooster apps ls`); an OAuth app sees only its own grant.',
   responses: {
     200: json(z.array(GrantSchema), 'Grants, newest first'),
     ...problems(401, ANY_CREDENTIAL),

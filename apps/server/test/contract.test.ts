@@ -225,6 +225,12 @@ async function startConsent(f: Fixture): Promise<void> {
   const page = new URL(res.headers.get('location') ?? '', BASE_URL);
   if (page.pathname !== '/oauth/consent') throw new Error(`authorize: ${page.href}`);
   f.oauthQuery = page.search.slice(1);
+  // A consent decision is taken only by a session that loaded the request (as the page does).
+  for (const jar of Object.values(f.jars)) {
+    await f.app.request(`/api/v1/oauth/consent?oauth_query=${encodeURIComponent(f.oauthQuery)}`, {
+      headers: { cookie: jar.header() },
+    });
+  }
 }
 
 /** P9: a linked sign-in identity of the owner (stored in `f.identityId`). */

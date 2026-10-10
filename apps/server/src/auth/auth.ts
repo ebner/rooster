@@ -6,7 +6,7 @@ import { uuidv7 } from '@rooster/core/ids';
 import { isLocale } from '@rooster/i18n';
 import { type BetterAuthPlugin, betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { APIError } from 'better-auth/api';
+import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { bearer } from 'better-auth/plugins/bearer';
 import {
   type DeviceAuthorizationGrant,
@@ -42,7 +42,7 @@ import type { Services } from '../services/index.ts';
 import type { SignInRejection } from '../services/sign-in-policy.ts';
 import { AUTH_BASE_PATH } from './auth-paths.ts';
 import { createCimdFetch } from './cimd-fetch.ts';
-import { readInviteToken, sessionCookieName } from './cookies.ts';
+import { authCookieName, readInviteToken, sessionCookieName } from './cookies.ts';
 import { consentReferenceId } from './oauth-handoff.ts';
 
 export { AUTH_BASE_PATH };
@@ -79,6 +79,17 @@ const DISABLED_PATHS = [
   '/api-key/delete',
   '/api-key/list',
   '/api-key/delete-all-expired-api-keys',
+  // Linked identities are listed and removed through `/api/v1/me/identities` (IdentityService);
+  // an identity joins only by signing in (FR-AUTH-5). better-auth's own account endpoints would
+  // link without the email-authority check (`/link-social` with an ID token never calls
+  // `validateUserInfo`), unlink without rooster's rules, or hand stored provider tokens to
+  // scripts (`/get-access-token` returns a replayable ID token).
+  '/list-accounts',
+  '/link-social',
+  '/unlink-account',
+  '/get-access-token',
+  '/refresh-token',
+  '/account-info',
   // The OAuth provider (ADR 0041): rooster answers consent through `/api/v1/oauth/consent`
   // (server-side `auth.api.oauth2Consent`); introspection, UserInfo, client and consent CRUD,
   // resource admin, prelogin, continue and end-session are not offered. The mount allows only
@@ -157,16 +168,33 @@ function headersOf(ctx: { headers?: Headers | undefined; request?: Request | und
 }
 
 /**
- * Providers whose verified email is proof of owning the address: Google, plus every OIDC
- * provider configured with `trustEmail` (FR-AUTH-5). Only these may join an existing
- * account by email.
+ * Providers whose verified email is proof of owning the address: the built-in Google provider
+ * when it is configured, plus every OIDC provider configured with `trustEmail` (FR-AUTH-5).
+ * Only these may join an existing account by email. A generic OIDC provider that happens to be
+ * called `google` is trusted only through its own `trustEmail`.
  */
 export function emailAuthorities(config: Config): ReadonlySet<string> {
   return new Set([
-    GOOGLE_PROVIDER_ID,
+    ...(config.google === null ? [] : [GOOGLE_PROVIDER_ID]),
     ...config.oidcProviders.filter((p) => p.trustEmail).map((p) => p.id),
   ]);
 }
+
+/**
+ * Sign-in sends the browser to the provider (a code flow with PKCE and a nonce). An ID token
+ * posted by the client (`/sign-in/social` with `idToken`) is refused: rooster never uses it,
+ * and it would turn any provider ID token a script obtained into a session.
+ */
+const refuseClientIdTokens = createAuthMiddleware(async (ctx) => {
+  if (ctx.path !== '/sign-in/social') return;
+  const body = ctx.body as { idToken?: unknown } | undefined;
+  if (body?.idToken !== undefined) {
+    throw new APIError('BAD_REQUEST', {
+      code: 'ID_TOKEN_NOT_SUPPORTED',
+      message: 'Sign in through the provider instead.',
+    });
+  }
+});
 
 /** Sign-in providers as advertised by `/api/v1/meta` and the login page. */
 export function configuredProviders(config: Config): { id: string; name: string }[] {
@@ -484,14 +512,24 @@ export function createAuth(deps: AuthDeps) {
         },
       },
     },
+    hooks: { before: refuseClientIdTokens },
     onAPIError: { errorURL: `${config.baseUrl}/login` },
     rateLimit: { enabled: deps.rateLimit ?? true, window: 60, max: 30, storage: 'memory' },
     advanced: {
       cookiePrefix: 'rooster',
-      // better-auth's own `__Secure-` prefix stays off: the session cookie is named
-      // `__Host-rooster.session` on https and `rooster.session` on http (auth/cookies.ts).
+      // better-auth's own `__Secure-` prefix stays off: on https every cookie it sets is
+      // `__Host-` prefixed instead (auth/cookies.ts), so a sibling subdomain can neither plant
+      // nor shadow it. That matters beyond the session: a planted `state` cookie of the
+      // attacker's own pending sign-in would complete it in the victim's browser (login CSRF).
       useSecureCookies: false,
-      cookies: { session_token: { name: sessionCookieName(secure) } },
+      cookies: {
+        session_token: { name: sessionCookieName(secure) },
+        state: { name: authCookieName('state', secure) },
+        oauth_state: { name: authCookieName('oauth_state', secure) },
+        session_data: { name: authCookieName('session_data', secure) },
+        account_data: { name: authCookieName('account_data', secure) },
+        dont_remember: { name: authCookieName('dont_remember', secure) },
+      },
       defaultCookieAttributes: { secure, sameSite: 'lax', httpOnly: true, path: '/' },
       database: { generateId: () => uuidv7() },
       ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] },

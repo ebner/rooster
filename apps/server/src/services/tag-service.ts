@@ -105,10 +105,13 @@ export function insertTag(
 /**
  * Tag IDs for a task create (06 §2.4): `tagIds` must be tags of the org (else 422), and
  * `tagNames` are matched case-insensitively or created with the next palette colour.
- * Duplicates are dropped; the order is `tagIds`, then `tagNames`.
+ * Duplicates are dropped; the order is `tagIds`, then `tagNames`. Creating a tag is an
+ * org-wide write, so a grant needs the same access as `POST /orgs/:orgId/tags`; attaching an
+ * existing tag needs nothing more than the task write.
  */
 export function resolveTagsForCreate(
   tx: Tx,
+  actor: Actor,
   input: { orgId: string; tagIds?: readonly string[]; tagNames?: readonly string[]; now: number },
 ): string[] {
   const out: string[] = [];
@@ -123,9 +126,11 @@ export function resolveTagsForCreate(
   }
   for (const raw of input.tagNames ?? []) {
     const name = normaliseName(raw);
-    const row =
-      findTagByName(tx, input.orgId, name) ??
-      insertTag(tx, { orgId: input.orgId, name, now: input.now });
+    let row = findTagByName(tx, input.orgId, name);
+    if (row === undefined) {
+      authorizeOrgWide(tx, actor, input.orgId, 'tasks:write');
+      row = insertTag(tx, { orgId: input.orgId, name, now: input.now });
+    }
     if (!out.includes(row.id)) out.push(row.id);
   }
   return out;

@@ -3,6 +3,7 @@ import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi';
 import { OAUTH_QUERY_MAX } from '@rooster/core/limits';
 import type { Context } from 'hono';
 import { OAUTH_SCOPES, oauthProviderApi } from '../auth/auth.ts';
+import { KeyedLock } from '../auth/keyed-lock.ts';
 import { consentHandoff } from '../auth/oauth-handoff.ts';
 import { protectedResourceMetadata } from '../auth/oauth-metadata.ts';
 import type { AppEnv } from '../lib/context.ts';
@@ -70,11 +71,11 @@ const postConsent = createRoute({
   operationId: 'decideOAuthConsent',
   summary: 'Allow or deny an app',
   description:
-    'Browser session only. Allow creates or updates my grant for the app (scopes no wider than requested; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Approving nothing at all is `422 nothing_approved`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.',
+    'Browser session only, and only the session that loaded the request with `GET /oauth/consent` (another session, e.g. after switching accounts, gets `404`: load it again). Allow creates or updates my grant for the app (scopes no wider than requested; constraints no wider than the app’s `authorization_details`, else `422 widening_not_allowed`; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Approving nothing at all is `422 nothing_approved`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.',
   request: { body: body(OAuthConsentDecisionSchema) },
   responses: {
     200: json(OAuthConsentResultSchema, 'Where to send the browser'),
-    ...problems(...AUTHED, 404, 'nothing_approved'),
+    ...problems(...AUTHED, 404, 'nothing_approved', 'widening_not_allowed'),
   },
 });
 
@@ -123,6 +124,12 @@ async function authorizationServerMetadata(deps: P9RouteDeps): Promise<Record<st
   };
 }
 
+/**
+ * One consent decision per user at a time: a decision stages its change around the provider's
+ * answer, and an overlapping one must see the grant as the previous one left it.
+ */
+const consentLocks = new KeyedLock();
+
 export function registerOAuthRoutes(app: OpenAPIHono<AppEnv>, deps: P9RouteDeps): void {
   const { config, services, logger } = deps;
   const provider = oauthProviderApi(deps.auth);
@@ -150,7 +157,7 @@ export function registerOAuthRoutes(app: OpenAPIHono<AppEnv>, deps: P9RouteDeps)
     const headers = () => new Headers(c.req.raw.headers);
     const request = () => new Request(c.req.url, { method: 'POST', headers: headers() });
     if (!decision.accept) {
-      services.grants.checkOAuthDeny(actor, query);
+      services.grants.checkOAuthDeny(actor, query, decision.oauthQuery);
       const url = await redirectUrl(
         await provider.oauth2Consent({
           headers: headers(),
@@ -161,36 +168,42 @@ export function registerOAuthRoutes(app: OpenAPIHono<AppEnv>, deps: P9RouteDeps)
       if (url === null) throw consentNotFound();
       return c.json({ redirectTo: url }, 200);
     }
-    const prepared = services.grants.applyOAuthConsent(actor, query, decision);
-    let url: string | null = null;
-    try {
-      url = await redirectUrl(
-        await consentHandoff.run(
-          { userId: actor.userId, clientId: prepared.clientId, grantId: prepared.grantId },
-          () =>
-            provider.oauth2Consent({
-              headers: headers(),
-              request: request(),
-              body: {
-                accept: true,
-                ...(prepared.pluginScope === '' ? {} : { scope: prepared.pluginScope }),
-                oauth_query: decision.oauthQuery,
-              },
-            }),
-        ),
-      );
-    } catch (error) {
-      logger.warn({ err: logSafeError(error) }, 'OAuth consent: the provider refused the decision');
-    }
-    const answered = url === null || !URL.canParse(url) ? null : new URL(url).searchParams;
-    if (answered?.has('code') !== true) {
-      services.grants.undoOAuthConsent(actor, prepared);
-      // The provider's own error redirect (e.g. `invalid_scope`) still goes to the app.
-      if (url !== null && answered?.has('error') === true) return c.json({ redirectTo: url }, 200);
-      throw consentNotFound();
-    }
-    services.grants.finishOAuthConsent(prepared);
-    return c.json({ redirectTo: url as string }, 200);
+    return consentLocks.run(actor.userId, async () => {
+      const prepared = services.grants.applyOAuthConsent(actor, query, decision);
+      let url: string | null = null;
+      try {
+        url = await redirectUrl(
+          await consentHandoff.run(
+            { userId: actor.userId, clientId: prepared.clientId, grantId: prepared.grantId },
+            () =>
+              provider.oauth2Consent({
+                headers: headers(),
+                request: request(),
+                body: {
+                  accept: true,
+                  ...(prepared.pluginScope === '' ? {} : { scope: prepared.pluginScope }),
+                  oauth_query: decision.oauthQuery,
+                },
+              }),
+          ),
+        );
+      } catch (error) {
+        logger.warn(
+          { err: logSafeError(error) },
+          'OAuth consent: the provider refused the decision',
+        );
+      }
+      const answered = url === null || !URL.canParse(url) ? null : new URL(url).searchParams;
+      if (answered?.has('code') !== true) {
+        services.grants.undoOAuthConsent(actor, prepared);
+        // The provider's own error redirect (e.g. `invalid_scope`) still goes to the app.
+        if (url !== null && answered?.has('error') === true)
+          return c.json({ redirectTo: url }, 200);
+        throw consentNotFound();
+      }
+      services.grants.finishOAuthConsent(prepared);
+      return c.json({ redirectTo: url as string }, 200);
+    });
   });
 
   // RFC 9728 for the REST API (`mcp/route.ts` serves `/mcp`'s).

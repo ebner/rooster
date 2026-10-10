@@ -28,7 +28,11 @@ function rewriteCallback(res: Response, config: Config): Response {
   const location = res.headers.get('location');
   if (location === null) return res;
   const headers = new Headers(res.headers);
-  const error = new URL(location, config.baseUrl).searchParams.get('error');
+  const raw = new URL(location, config.baseUrl).searchParams.get('error');
+  // better-auth refuses an unverified email that matches an existing account before the
+  // allowlist gate runs (`account_not_linked`); an unknown one reaches the gate
+  // (`unverified_email`). Answered alike, the reply does not tell whether an account exists.
+  const error = raw === 'account_not_linked' ? 'unverified_email' : raw;
   if (error !== null && REJECTIONS.has(error)) {
     headers.set('location', `${config.baseUrl}/not-invited?reason=${error}`);
   } else if (error === null) {

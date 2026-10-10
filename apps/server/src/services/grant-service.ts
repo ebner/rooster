@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { defaultKeyHasher } from '@better-auth/api-key';
 import {
   ADMIN_SCOPE,
@@ -117,12 +117,28 @@ function isBound(confirmation: string | null): boolean {
   return confirmation !== null && confirmation !== '' && confirmation !== 'null';
 }
 
-/** What `applyOAuthConsent` changed, to finish or undo it around the provider's answer. */
+/**
+ * What `applyOAuthConsent` decided, to finish or undo it around the provider's answer. A new
+ * grant exists from the start (the provider stamps its ID on the code); a step-up of a live
+ * grant is staged here and written only once the provider has issued the code, so a failed or
+ * overlapping decision never leaves a widened grant behind.
+ */
 export interface PreparedConsent {
   grantId: string;
   clientId: string;
-  /** The grant row before the decision; null when the decision created the grant. */
-  previous: GrantRow | null;
+  userId: string;
+  /** True when the decision created the grant (undo deletes it). */
+  created: boolean;
+  /** Step-up only: what `finishOAuthConsent` writes, merged with the grant as it is then. */
+  stepUp: {
+    approved: GrantScope[];
+    fields: {
+      label: string;
+      constraints: string;
+      expiresAt: number | null;
+      idleTimeoutMs: number | null;
+    };
+  } | null;
   /**
    * The `scope` to hand the provider: the requested scopes the grant covers; empty when it
    * covers none literally (the provider then keeps the request's own scopes).
@@ -131,6 +147,11 @@ export interface PreparedConsent {
   /** Every resource consented for this grant, the new one included. */
   resources: string[];
 }
+
+/** How long a displayed consent request may be decided (the provider's signed query: 10 min). */
+const CONSENT_VIEW_TTL_MS = 10 * 60 * 1000;
+/** Displayed consent requests remembered at once; the oldest are forgotten first. */
+const CONSENT_VIEWS_MAX = 10_000;
 
 /** The capabilities an OAuth client may get, in contract order. */
 const ALL_OAUTH_SCOPES = GRANT_SCOPES.filter((s) => !OAUTH_EXCLUDED_SCOPES.includes(s));
@@ -225,6 +246,37 @@ export class GrantService {
     /** The bell badge as the actor may see it (NotificationService.unreadCountFor). */
     private readonly unreadCount: (actor: Actor) => number,
   ) {}
+
+  /**
+   * Consent requests the browser displayed, by session and signed query (expiry, ms). A decision
+   * is accepted only from the session the request was shown to: if the browser's cookie changes
+   * to another account between GET and POST, the decision is refused rather than granting that
+   * account (ASVS 4.1.2). In memory: rooster runs one process, and after a restart the page
+   * simply has to be loaded again.
+   */
+  private readonly consentViews = new Map<string, number>();
+
+  private consentViewKey(actor: Actor, oauthQuery: string): string {
+    const digest = createHash('sha256').update(oauthQuery).digest('base64url');
+    return `${actor.sessionId}:${digest}`;
+  }
+
+  private rememberConsentView(actor: Actor, oauthQuery: string): void {
+    const now = this.now();
+    const key = this.consentViewKey(actor, oauthQuery);
+    this.consentViews.delete(key);
+    this.consentViews.set(key, now + CONSENT_VIEW_TTL_MS);
+    // Insertion order is expiry order: drop the expired, then the oldest beyond the cap.
+    for (const [k, expiresAt] of this.consentViews) {
+      if (expiresAt > now && this.consentViews.size <= CONSENT_VIEWS_MAX) break;
+      this.consentViews.delete(k);
+    }
+  }
+
+  private requireConsentView(actor: Actor, oauthQuery: string): void {
+    const expiresAt = this.consentViews.get(this.consentViewKey(actor, oauthQuery));
+    if (expiresAt === undefined || expiresAt <= this.now()) throw consentNotFound();
+  }
 
   private now(): number {
     return this.deps.clock();
@@ -726,14 +778,22 @@ export class GrantService {
   /**
    * Every live (unrevoked) grant of the user, newest first; expired ones are listed until
    * revoked. The browser session sees all; a CLI device or PAT may list too (`rooster token
-   * ls`, `apps ls`).
+   * ls`, `apps ls`). An OAuth app sees only its own grant: the user's other tokens and apps
+   * are none of its business (06 §2.1 lists the exception for PATs and devices only).
    */
   list(actor: Actor): Grant[] {
+    const onlyOwn = actor.grant?.kind === 'oauth' ? actor.grant.id : undefined;
     return readOnly(this.deps.db, (tx) =>
       tx
         .select()
         .from(accessGrant)
-        .where(and(eq(accessGrant.userId, actor.userId), isNull(accessGrant.revokedAt)))
+        .where(
+          and(
+            eq(accessGrant.userId, actor.userId),
+            isNull(accessGrant.revokedAt),
+            onlyOwn === undefined ? undefined : eq(accessGrant.id, onlyOwn),
+          ),
+        )
         .orderBy(desc(accessGrant.createdAt), desc(accessGrant.id))
         .all()
         .map((row) => this.toDto(tx, actor, row)),
@@ -1316,6 +1376,7 @@ export class GrantService {
     requireBrowserSession(actor);
     return readOnly(this.deps.db, (tx) => {
       const req = this.consentQuery(tx, query);
+      this.rememberConsentView(actor, oauthQuery);
       const row = this.oauthRow(tx, actor.userId, req.clientId);
       const existing = this.liveOAuth(row, this.now()) ? row : undefined;
       const have = expandScopes(existing === undefined ? [] : parseScopes(existing.scopes));
@@ -1344,7 +1405,9 @@ export class GrantService {
    * requested (implied ones count), minus `OAUTH_EXCLUDED_SCOPES`; `tasks:delete` needs both the
    * request and the user's tick. "This session only" is an idle timeout instead of an expiry.
    * The caller then answers the provider within the grant handoff, and calls
-   * `finishOAuthConsent` (or `undoOAuthConsent` if the provider failed).
+   * `finishOAuthConsent` (or `undoOAuthConsent` if the provider failed), one decision of the
+   * user at a time. Only the session the request was displayed to may decide it, and never
+   * wider than the client's `authorization_details` (11 §2.2).
    */
   applyOAuthConsent(
     actor: Actor,
@@ -1354,6 +1417,7 @@ export class GrantService {
     requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => {
       const req = this.consentQuery(tx, query);
+      this.requireConsentView(actor, decision.oauthQuery);
       const requested = expandScopes(req.scopes);
       // What the user approved, implied scopes included (the web sends a minimal set, e.g.
       // `tasks:delete` standing for writing and reading too), kept where the app asked for it
@@ -1374,6 +1438,16 @@ export class GrantService {
         );
       }
       this.validateConstraints(tx, actor.userId, decision.constraints);
+      // The client's `authorization_details` are a ceiling the user may narrow, never widen
+      // (11 §2.2, ADR 0046): the screen pre-fills them; the service enforces them.
+      const ceiling = this.consentPrefill(tx, actor.userId, req.authorizationDetails);
+      if (ceiling !== null && !isNarrowing(ceiling, decision.constraints)) {
+        throw new AppError(
+          'widening_not_allowed',
+          422,
+          'The app asked for less access than that; choose within what it asked for.',
+        );
+      }
       const now = this.now();
       const current = this.oauthRow(tx, actor.userId, req.clientId);
       const live = this.liveOAuth(current, now) ? current : undefined;
@@ -1389,18 +1463,16 @@ export class GrantService {
       const sessionOnly = decision.sessionOnly === true;
       const fields = {
         label: clientInfo(req.client).name.slice(0, 100) || req.clientId.slice(0, 100),
-        scopes: scopes.join(' '),
         constraints: JSON.stringify(decision.constraints),
         expiresAt:
           sessionOnly || decision.expiresInDays === undefined
             ? null
             : now + decision.expiresInDays * DAY_MS,
         idleTimeoutMs: sessionOnly ? SESSION_ONLY_IDLE_MS : null,
-        updatedAt: now,
       };
       let grantId: string;
       if (live !== undefined) {
-        tx.update(accessGrant).set(fields).where(eq(accessGrant.id, live.id)).run();
+        // Staged: written by `finishOAuthConsent` once the provider has issued the code.
         grantId = live.id;
       } else {
         if (current !== undefined) {
@@ -1430,21 +1502,27 @@ export class GrantService {
         .where(eq(oauthConsent.referenceId, grantId))
         .all()
         .flatMap((r) => jsonList(r.resources));
-      this.emitGrants(tx, actor.userId, grantId, live === undefined ? [] : [grantId]);
+      if (live === undefined) this.emitGrants(tx, actor.userId, grantId, []);
       return {
         grantId,
         clientId: req.clientId,
-        previous: live ?? null,
+        userId: actor.userId,
+        created: live === undefined,
+        stepUp: live === undefined ? null : { approved, fields },
         pluginScope: pluginScopes.join(' '),
         resources: [...new Set([...consented, req.resource])],
       };
     });
   }
 
-  /** POST /oauth/consent, Deny: only checks the request is the user's to answer. */
-  checkOAuthDeny(actor: Actor, query: URLSearchParams | null): void {
+  /**
+   * POST /oauth/consent, Deny: only checks the request is the user's to answer (displayed to
+   * this session).
+   */
+  checkOAuthDeny(actor: Actor, query: URLSearchParams | null, oauthQuery: string): void {
     requireBrowserSession(actor);
     readOnly(this.deps.db, (tx) => this.consentQuery(tx, query));
+    this.requireConsentView(actor, oauthQuery);
   }
 
   /**
@@ -1454,8 +1532,23 @@ export class GrantService {
    */
   finishOAuthConsent(prepared: PreparedConsent): void {
     immediate(this.deps.db, (tx) => {
-      const row = tx.select().from(accessGrant).where(eq(accessGrant.id, prepared.grantId)).get();
-      if (row === undefined) return;
+      let row = tx.select().from(accessGrant).where(eq(accessGrant.id, prepared.grantId)).get();
+      // Revoked meanwhile (by the user, or refresh-token reuse): it stays revoked, and the code
+      // just issued cannot be redeemed (`checkOAuthCode`).
+      if (row === undefined || row.revokedAt !== null) return;
+      if (prepared.stepUp !== null) {
+        // Step-up keeps what the grant has now (a concurrent narrowing included) and adds what
+        // was approved.
+        const scopes = minimalScopes([...prepared.stepUp.approved, ...parseScopes(row.scopes)]);
+        const update = {
+          ...prepared.stepUp.fields,
+          scopes: scopes.join(' '),
+          updatedAt: this.now(),
+        };
+        tx.update(accessGrant).set(update).where(eq(accessGrant.id, row.id)).run();
+        row = { ...row, ...update };
+        this.emitGrants(tx, prepared.userId, row.id, [row.id]);
+      }
       this.syncConsentScopes(tx, row.id, parseScopes(row.scopes));
       tx.update(oauthConsent)
         .set({ resources: JSON.stringify(prepared.resources) })
@@ -1464,16 +1557,15 @@ export class GrantService {
     });
   }
 
-  /** The provider failed after `applyOAuthConsent`: restore the grant as it was. */
+  /**
+   * The provider failed after `applyOAuthConsent`: a grant the decision created goes; a step-up
+   * was never written, so the grant is untouched.
+   */
   undoOAuthConsent(actor: Actor, prepared: PreparedConsent): void {
+    if (!prepared.created) return;
     immediate(this.deps.db, (tx) => {
-      if (prepared.previous === null) {
-        deleteGrantArtifacts(tx, [prepared.grantId]);
-        tx.delete(accessGrant).where(eq(accessGrant.id, prepared.grantId)).run();
-      } else {
-        const { id: _id, ...previous } = prepared.previous;
-        tx.update(accessGrant).set(previous).where(eq(accessGrant.id, prepared.grantId)).run();
-      }
+      deleteGrantArtifacts(tx, [prepared.grantId]);
+      tx.delete(accessGrant).where(eq(accessGrant.id, prepared.grantId)).run();
       this.emitGrants(tx, actor.userId, prepared.grantId, [prepared.grantId]);
     });
   }

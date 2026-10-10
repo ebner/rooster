@@ -278,6 +278,7 @@ describe('review round 1: consent narrowing (8, 9)', () => {
     const ctx = oauthCtx();
     const user = ctx.user('ada@example.com');
     const page = await authorize(ctx, user, { scope: 'tasks:read' });
+    await consentRequest(user, page);
     const res = await user.call('POST', '/api/v1/oauth/consent', {
       accept: true,
       oauthQuery: oauthQueryOf(page),

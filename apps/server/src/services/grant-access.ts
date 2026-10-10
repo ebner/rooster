@@ -208,7 +208,8 @@ export function authorizeTaskWrite(
 
 /**
  * A destination (create into, move into, a task's new place): `groupId` is the user's group the
- * task ends up in, null for "not in the user's list".
+ * task ends up in, null for "not in the user's list". The explanation names the group only
+ * when the grant can read it.
  */
 export function authorizeGroupTarget(
   tx: Tx,
@@ -221,7 +222,9 @@ export function authorizeGroupTarget(
   const where =
     groupId === null
       ? 'That task would not be in your list.'
-      : `${groupName(tx, groupId)} is not one of them.`;
+      : canRead(grant.constraints, orgId, groupId)
+        ? `${groupName(tx, groupId)} is not one of them.`
+        : 'That group is not one of them.';
   throw outsideGrant(tx, actor.userId, grant, orgId, where);
 }
 
@@ -551,6 +554,15 @@ export function authorizeGroupMoves(
     authorizeGroupTarget(tx, actor, orgId, from);
     authorizeGroupTarget(tx, actor, orgId, to);
   }
+}
+
+/**
+ * A group the request names as a destination (create into, move to): `404` when the grant
+ * cannot read it, like someone else's group, before any `403` could describe it (11 §2.3).
+ */
+export function requireReadableGroup(actor: Actor, orgId: string, groupId: string): void {
+  const grant = actor.grant;
+  if (grant !== null && !canRead(grant.constraints, orgId, groupId)) throw groupNotFound();
 }
 
 /** A group the grant may read (`404` otherwise, like someone else's group). */

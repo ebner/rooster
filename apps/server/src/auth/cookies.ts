@@ -17,6 +17,11 @@ export const SESSION_COOKIE = 'rooster.session';
 export const INVITE_COOKIE = 'rooster.invite';
 export const INVITE_COOKIE_TTL_MS = 15 * 60 * 1000;
 
+/** better-auth's `rooster.<name>` cookie, or `__Host-rooster.<name>` when the base URL is https. */
+export function authCookieName(name: string, secure: boolean): string {
+  return `${secure ? HOST_PREFIX : ''}rooster.${name}`;
+}
+
 /** `rooster.session`, or `__Host-rooster.session` when the base URL is https. */
 export function sessionCookieName(secure: boolean): string {
   return secure ? `${HOST_PREFIX}${SESSION_COOKIE}` : SESSION_COOKIE;

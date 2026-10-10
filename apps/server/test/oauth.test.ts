@@ -291,6 +291,7 @@ describe('AC-9.3 the authorization code flow', () => {
     const ctx = oauthCtx();
     const user = ctx.user('ada@example.com');
     const page = await authorize(ctx, user);
+    await consentRequest(user, page);
     const { redirectTo } = await user.ok<{ redirectTo: string }>('POST', '/api/v1/oauth/consent', {
       accept: false,
       oauthQuery: oauthQueryOf(page),
@@ -408,6 +409,7 @@ describe('OAuth conformance (11 §7)', () => {
     const back = await authorize(ctx, user, { scope: 'admin tasks:read' });
     expect(back.searchParams.get('error')).toBe('invalid_scope');
     const page = await authorize(ctx, user, { scope: 'tasks:read' });
+    await consentRequest(user, page);
     const res = await user.call('POST', '/api/v1/oauth/consent', {
       accept: true,
       oauthQuery: oauthQueryOf(page),
@@ -715,8 +717,11 @@ describe('tasks:delete only by explicit consent (ADR 0041 §2, ADR 0042 §4)', (
     expect(request.prefill).toEqual({
       orgs: [{ orgId: inbox.orgId, read: 'all', write: { groups: [inbox.id] } }],
     });
-    // Unticked: no delete.
-    const back = await allow(user, page, { scopes: ['tasks:write'] });
+    // Unticked: no delete. The pre-fill is also the ceiling of the constraints.
+    const back = await allow(user, page, {
+      scopes: ['tasks:write'],
+      constraints: request.prefill ?? { orgs: 'all' },
+    });
     expect(back.searchParams.get('code')).not.toBeNull();
     expect(grantsOf(ctx, user.userId)[0]?.scopes).toBe('tasks:write');
 

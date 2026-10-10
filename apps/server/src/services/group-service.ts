@@ -131,6 +131,8 @@ export class GroupService {
       let target: OrderTarget = intentOf(input);
       let movedIds: string[] = [];
       if (input.splitAfterTaskId !== undefined) {
+        // The split moves tasks into the new group: a task move, beyond `groups:write`.
+        requireScope(actor, 'tasks:write');
         const split = this.splitSource(tx, actor.userId, org.id, input.splitAfterTaskId, now);
         target = split.source.kind === 'inbox' ? 'top' : { afterId: split.source.id };
         movedIds = split.below;
