@@ -277,6 +277,39 @@ describe('sync engine (04 §6)', () => {
     expect(localStorage.getItem('rooster.cacheOwner')).toBeNull();
   });
 
+  test('an edit flushed while sign-out wipes is refused, not left in the outbox', async () => {
+    const outbox = createMemoryOutbox();
+    const transport = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const { engine, queryClient } = await boot({
+      storage: memoryStorage().storage,
+      outbox,
+      transport,
+    });
+    await fetchMe(queryClient, me(userId));
+    await queryClient.fetchQuery({
+      queryKey: myListKey(orgId),
+      queryFn: () => engine.pipeline.fetch(orgId),
+    });
+    const taskId = Object.keys(transport.state(orgId).tasks)[0] as string;
+    const sent = vi.fn();
+    transport.send = async () => sent();
+    const clear = outbox.clear.bind(outbox);
+    outbox.clear = async () => {
+      await clear();
+      // The description editor unmounts while the wipe is under way and flushes its edit.
+      engine.pipeline.enqueue(
+        orgId,
+        [listOps.patchTask(taskId, { description: 'Private notes' })],
+        { userId },
+      );
+    };
+    await clearLocalData();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(outbox.records.size).toBe(0);
+    expect(engine.pipeline.pending).toBe(0);
+    expect(sent).not.toHaveBeenCalled();
+  });
+
   test('a document that ran as one account stops everything and reloads when /me is another', async () => {
     const { storage } = memoryStorage();
     const transport = createFixtureTransport({ userId });

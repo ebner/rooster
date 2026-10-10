@@ -140,6 +140,24 @@ describe('a session that ends while push is being turned on (ADR 0051)', () => {
     expect(localStorage.getItem('rooster.user.u1.pushEndpoint')).toBeNull();
   });
 
+  test('a registration whose answer never comes drops its subscription when the session clears', async () => {
+    http.POST.mockImplementationOnce(() => new Promise(() => {}));
+    void enablePush(new QueryClient(), 'u1', key);
+    await vi.waitFor(() => expect(http.POST).toHaveBeenCalled());
+    const made = current;
+    expect(made?.unsubscribe).not.toHaveBeenCalled();
+    endSession();
+    // At once: the tab may close before any answer.
+    expect(made?.unsubscribe).toHaveBeenCalled();
+  });
+
+  test('a finished registration is left to the marker and the sweep', async () => {
+    await enablePush(new QueryClient(), 'u1', key);
+    const made = current;
+    sessionDataCleared();
+    expect(made?.unsubscribe).not.toHaveBeenCalled();
+  });
+
   test('a session that ended during the prompt registers nothing', async () => {
     vi.stubGlobal('Notification', {
       permission: 'default',

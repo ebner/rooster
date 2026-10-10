@@ -708,9 +708,12 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     },
     clear: async ({ final = false } = {}) => {
       if (final) {
-        saving = false;
-        events.stop();
         writeOwner(null);
+        // Sign-out erases the outbox: before the wipe awaits anything, the session closes, so
+        // an edit flushed meanwhile (an editor's unmount) is refused instead of stored after
+        // the wipe, and no save, SSE or channel reconciliation runs again. The caller loads
+        // /login afresh.
+        closeSession();
       }
       await wipe({ keepMe: !final });
       if (final) await persister.suspend();

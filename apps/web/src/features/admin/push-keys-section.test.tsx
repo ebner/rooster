@@ -8,7 +8,7 @@ describe('Admin → Push keys', () => {
     render(<PushKeysSection onRegenerate={onRegenerate} />);
     fireEvent.click(screen.getByRole('button', { name: 'Regenerate push keys' }));
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(screen.getByText(/remove every push subscription/)).toBeTruthy();
+    expect(screen.getByText(/pause push on every device/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByTestId('push-keys-confirm')).toBeNull();
     expect(onRegenerate).not.toHaveBeenCalled();

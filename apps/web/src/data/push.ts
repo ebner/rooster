@@ -198,7 +198,31 @@ export function useThisDevice(
   });
 }
 
-type Session = ReturnType<typeof sessionScope>;
+/** A push operation tied to the session it started in (ADR 0051). */
+interface PushOperation {
+  /** The session ended since the operation started. */
+  stale(): boolean;
+  /** The subscription the operation holds: dropped the moment the session's data clears. */
+  hold(subscription: Pick<PushSubscription, 'unsubscribe'>): void;
+  /** Settled: from here on the device marker (and the sweep) cover the subscription. */
+  done(): void;
+}
+
+function pushOperation(): PushOperation {
+  let held: Pick<PushSubscription, 'unsubscribe'> | null = null;
+  // At once, not when the request settles: the response may never arrive (the tab closes),
+  // and the sweep finds no marker for a registration still under way.
+  const scope = sessionScope(() => {
+    void held?.unsubscribe().catch(() => false);
+  });
+  return {
+    stale: scope.stale,
+    hold: (subscription) => {
+      held = subscription;
+    },
+    done: scope.done,
+  };
+}
 
 /**
  * Subscribes this browser with the current key and registers it with the server. A
@@ -211,7 +235,7 @@ async function subscribeAndRegister(
   userId: string,
   publicKey: string,
   renewsEndpoint: string | undefined,
-  session: Session,
+  session: PushOperation,
 ): Promise<string> {
   const reg = await registration();
   let subscription = await reg.pushManager.getSubscription();
@@ -227,6 +251,7 @@ async function subscribeAndRegister(
     applicationServerKey: base64UrlToBytes(publicKey),
   });
   const held = subscription;
+  session.hold(held);
   const abandon = async () => {
     await held.unsubscribe().catch(() => false);
     throw new ApiError('aborted', 0);
@@ -264,16 +289,20 @@ export async function enablePush(
   userId: string,
   publicKey: string,
 ): Promise<EnablePushResult> {
-  const session = sessionScope();
-  const permission = await Notification.requestPermission();
-  if (permission === 'denied') return 'denied';
-  if (permission !== 'granted') return 'dismissed';
+  const session = pushOperation();
   try {
-    await subscribeAndRegister(userId, publicKey, undefined, session);
+    const permission = await Notification.requestPermission();
+    if (permission === 'denied') return 'denied';
+    if (permission !== 'granted') return 'dismissed';
+    try {
+      await subscribeAndRegister(userId, publicKey, undefined, session);
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: ['push'] });
+    }
+    return 'on';
   } finally {
-    await queryClient.invalidateQueries({ queryKey: ['push'] });
+    session.done();
   }
-  return 'on';
 }
 
 /** Turns push off here: removes the server's record and drops the browser subscription. */
@@ -351,7 +380,15 @@ export function useRemovePushDevice(userId: string | undefined): MutationResult<
 export async function resyncPush(): Promise<void> {
   const [userId] = markedUsers();
   if (!userId || Notification.permission !== 'granted') return;
-  const session = sessionScope();
+  const session = pushOperation();
+  try {
+    await renewOnOpen(userId, session);
+  } finally {
+    session.done();
+  }
+}
+
+async function renewOnOpen(userId: string, session: PushOperation): Promise<void> {
   const { publicKey } = await unwrap(api.GET('/api/v1/push/vapid-public-key'));
   const subscription = await (await registration()).pushManager.getSubscription();
   const held = subscription?.endpoint ? canonicalEndpoint(subscription.endpoint) : null;
