@@ -1,7 +1,10 @@
 // Phase 10 (04 §4.8, ADR 0049 §3.4–3.5): the S3 blob store, with an injected client whose
 // `send` is a fake (presigning is local: no network anywhere).
 
+import { readdirSync, readlinkSync, writeFileSync } from 'node:fs';
+import { createServer as createHttpServer, type ServerResponse } from 'node:http';
 import { type AddressInfo, createServer as createNetServer, type Socket } from 'node:net';
+import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import {
   DeleteObjectCommand,
@@ -322,4 +325,131 @@ describe('S3 request deadlines', () => {
       server.close();
     }
   }, 15_000);
+});
+
+/**
+ * A loopback S3 (path style, bucket `rooster-files`) whose answers a test chooses: objects are
+ * kept in memory; `put` and `get` can misbehave as real backends do.
+ */
+async function loopbackS3() {
+  const objects = new Map<string, Buffer>();
+  const behaviour: {
+    put: 'ok' | 'forbid' | 'store-then-hang';
+    get: 'ok' | 'stall-body';
+  } = { put: 'ok', get: 'ok' };
+  const sockets = new Set<Socket>();
+  const stored = { count: 0 };
+  const keyOf = (url: string | undefined) =>
+    decodeURIComponent((url ?? '').split('?')[0]?.replace(/^\/rooster-files\//, '') ?? '');
+  const forbid = (res: ServerResponse) => {
+    res.writeHead(403, { 'content-type': 'application/xml' });
+    res.end('<Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>');
+  };
+  const server = createHttpServer((req, res) => {
+    const key = keyOf(req.url);
+    if (req.method === 'PUT') {
+      if (behaviour.put === 'forbid') return forbid(res);
+      const chunks: Buffer[] = [];
+      req.on('data', (c: Buffer) => chunks.push(c));
+      req.on('end', () => {
+        objects.set(key, Buffer.concat(chunks));
+        stored.count += 1;
+        // Stored, but the answer never comes (lost on the way, a stalled proxy).
+        if (behaviour.put === 'store-then-hang') return;
+        res.writeHead(200, { etag: '"x"' });
+        res.end();
+      });
+      return;
+    }
+    if (req.method === 'GET') {
+      const object = objects.get(key);
+      if (object === undefined) {
+        res.writeHead(404, { 'content-type': 'application/xml' });
+        res.end('<Error><Code>NoSuchKey</Code><Message>none</Message></Error>');
+        return;
+      }
+      res.writeHead(200, { 'content-length': String(object.length) });
+      if (behaviour.get === 'stall-body') res.write(object.subarray(0, 4));
+      else res.end(object);
+      return;
+    }
+    if (req.method === 'DELETE') {
+      objects.delete(key);
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    res.writeHead(400);
+    res.end();
+  });
+  // Expect: 100-continue: refuse before the body is sent, as S3 does.
+  server.on('checkContinue', (req, res) => {
+    if (behaviour.put === 'forbid') return forbid(res);
+    res.writeContinue();
+    server.emit('request', req, res);
+  });
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+  const { port } = server.address() as AddressInfo;
+  const store = new S3BlobStore({
+    bucket: 'rooster-files',
+    endpoint: `http://127.0.0.1:${port}`,
+    region: 'eu-north-1',
+    accessKeyId: 'AKIDTEST',
+    secretAccessKey: 'secret-test-key',
+    forcePathStyle: true,
+    timeoutMs: 300,
+  });
+  return {
+    store,
+    objects,
+    stored,
+    behaviour,
+    sockets,
+    close: () => {
+      server.closeAllConnections();
+      server.close();
+    },
+  };
+}
+
+/** Descriptors of this process open on `path` (Linux). */
+function openDescriptors(path: string): number {
+  return readdirSync('/proc/self/fd').filter((fd) => {
+    try {
+      return readlinkSync(`/proc/self/fd/${fd}`) === path;
+    } catch {
+      return false;
+    }
+  }).length;
+}
+
+describe('S3 lifecycle (loopback)', () => {
+  const key = 'avatars/0199c5a2-d7e8-76f9-8a0b-7b8c9d0e1f01';
+
+  it.skipIf(process.platform !== 'linux')(
+    'a refused PUT closes its source file',
+    async () => {
+      const s3 = await loopbackS3();
+      const dir = tempDir();
+      dirs.push(dir.cleanup);
+      const file = join(dir.path, 'upload.bin');
+      writeFileSync(file, Buffer.alloc(3 * 1024 * 1024, 1));
+      s3.behaviour.put = 'forbid';
+      try {
+        for (let i = 0; i < 3; i++) {
+          await expect(
+            s3.store.put(key, { file, size: 3 * 1024 * 1024 }, 'application/octet-stream'),
+          ).rejects.toThrow();
+        }
+        await until(() => openDescriptors(file) === 0, 2_000, 'descriptors closed');
+      } finally {
+        s3.close();
+      }
+    },
+    15_000,
+  );
 });

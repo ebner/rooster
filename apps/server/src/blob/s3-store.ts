@@ -94,18 +94,27 @@ export class S3BlobStore implements BlobStore {
     const { client, mod } = await this.load();
     const isBuffer = Buffer.isBuffer(body);
     const size = isBuffer ? body.length : body.size;
-    await this.withDeadline(this.timeoutMs + Math.ceil(size * UPLOAD_MS_PER_BYTE), (abortSignal) =>
-      client.send(
-        new mod.PutObjectCommand({
-          Bucket: this.settings.bucket,
-          Key: assertBlobKey(key),
-          Body: isBuffer ? body : createReadStream(body.file),
-          ContentLength: size,
-          ContentType: contentType,
-        }),
-        { abortSignal },
-      ),
-    );
+    // Closed here whatever happens: a PUT refused before `100 Continue` never reads it, and
+    // the SDK leaves it (and its descriptor) open.
+    const source = Buffer.isBuffer(body) ? null : createReadStream(body.file);
+    try {
+      await this.withDeadline(
+        this.timeoutMs + Math.ceil(size * UPLOAD_MS_PER_BYTE),
+        (abortSignal) =>
+          client.send(
+            new mod.PutObjectCommand({
+              Bucket: this.settings.bucket,
+              Key: assertBlobKey(key),
+              Body: source ?? (body as Buffer),
+              ContentLength: size,
+              ContentType: contentType,
+            }),
+            { abortSignal },
+          ),
+      );
+    } finally {
+      source?.destroy();
+    }
   }
 
   async get(key: string): Promise<BlobObject | null> {
