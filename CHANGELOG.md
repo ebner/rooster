@@ -36,7 +36,7 @@ Hardening (Phase 11): a full security audit, accessibility, performance with 2,0
 - API responses are `Cache-Control: no-store` by default.
 
 ### Fixed
-- **Uploads in the Docker image** (also in 1.4.1).
+- **Uploads in the Docker image:** attachments and avatars failed with a 500 in the 1.4.0 image, because the bundled server couldn't load a module that file-type detection imports at runtime (ADR 0054).
 - On phones, the swipe reveal sits behind the row it belongs to, and rows with many icons keep a readable title.
 - Inbox, email and push previews of comments show plain text instead of Markdown.
 - Accessibility: the list's rows and groups have full screen-reader names, focus and target sizes meet WCAG 2.2 AA, and the phone task sheet hides the list behind it from assistive technology.
@@ -53,11 +53,6 @@ Hardening (Phase 11): a full security audit, accessibility, performance with 2,0
 ### Upgrade notes
 - **Litestream:** put `LITESTREAM_ACCESS_KEY_ID` and `LITESTREAM_SECRET_ACCESS_KEY` in `litestream.env`, not `.env`.
 - **The data directory must be owned by the container user** (65532). Rooster now refuses to start if it can't make its database files private.
-
-## [1.4.1] - 2026-10-10
-
-### Fixed
-- **Uploads in the Docker image:** attachments and avatars failed with a 500 in the 1.4.0 image. The bundled server could not load a module that file type detection imports at runtime. Detection now reads the file through a Blob, which works in the bundle (ADR 0054).
 
 ## [1.4.0] - 2026-10-10
 
