@@ -110,7 +110,7 @@ pnpm dev:idp                                   # mock OIDC provider on :9400
 pnpm dev                                       # server :3000 + web :5173
 ```
 
-Open http://localhost:5173 and use *Dev login*. `pnpm ci` runs the whole pipeline. [`AGENTS.md`](AGENTS.md) has the repository map, commands and rules.
+Open http://localhost:5173 and use *Dev login*. `pnpm run ci` runs the whole pipeline. [`AGENTS.md`](AGENTS.md) has the repository map, commands and rules.
 
 ## Documentation
 

@@ -128,7 +128,7 @@ pnpm --filter @rooster/cli smoke  # build output against an in-memory server: --
 pnpm --filter @rooster/cli dev    # with no arguments on a terminal: the TUI; `-- mcp --profile agent` serves MCP on stdio
 apps/cli/scripts/build-binaries.sh  # single-file binaries for 5 targets (needs Bun; run by the release workflow)
 pnpm db:generate               # drizzle-kit generate + STRICT post-processing
-pnpm ci                        # full pipeline (scripts/ci.sh); add --with-docker for image build + smoke
+pnpm run ci                    # full pipeline (scripts/ci.sh; plain `pnpm ci` is pnpm's own command); `pnpm run ci --with-docker` adds image build + smoke
 node apps/web/scripts/render-icons.mjs   # regenerate favicon, logo SVGs and app icons from src/ui/brand.ts
 ```
 **Local dev:**
