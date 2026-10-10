@@ -356,6 +356,10 @@ export function createAuth(deps: AuthDeps) {
                 scopes: p.scopes ?? ['openid', 'email', 'profile'],
                 pkce: true,
                 requireIdTokenVerification: true,
+                // Signing out of rooster leaves the provider's session alone (the web's choice),
+                // and RP-initiated logout would put the stored ID token in the sign-out answer
+                // (`id_token_hint`), readable by scripts even with `disableRedirect`.
+                disableProviderLogout: true,
               })),
             }),
           ]),

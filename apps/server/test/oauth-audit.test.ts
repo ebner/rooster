@@ -1,7 +1,8 @@
 // Security audit of Phase 11 (AC-11.1), boundary 2: the OAuth consent decision (two review
 // rounds). Each `it` names the finding it covers.
 import { eq } from 'drizzle-orm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { consentHandoff } from '../src/auth/oauth-handoff.ts';
 import { accessGrant, oauthConsent, verification } from '../src/db/schema/index.ts';
 import { hashOAuthToken } from '../src/services/oauth-grants.ts';
 import { BASE_URL } from './helpers.ts';
@@ -433,6 +434,94 @@ describe('boundary 2, round 5: the code and consent of one decision', () => {
     ).toBe(false);
     expect(consentsOf()).toEqual(prior);
     // So asking for writing again shows the consent screen instead of a read-only token.
+    const again = await authorize(ctx, user, { resource: API_RESOURCE, scope: 'tasks:write' });
+    expect(again.pathname).toBe('/oauth/consent');
+  });
+});
+
+describe('boundary 2, round 6: provider consent after a decision that is not committed', () => {
+  function consentScopes(ctx: OAuthCtx, grantId: string): string[] {
+    return ctx.db.orm
+      .select()
+      .from(oauthConsent)
+      .where(eq(oauthConsent.referenceId, grantId))
+      .all()
+      .flatMap((c) => JSON.parse(c.scopes) as string[]);
+  }
+
+  it('P2 consent is reconciled with a narrowing made while the provider answered', async () => {
+    const ctx = oauthCtx();
+    const user = ctx.user('ada@example.com');
+    const app = await connect(
+      ctx,
+      user,
+      { resource: API_RESOURCE, scope: 'tasks:write' },
+      { scopes: ['tasks:write'] },
+    );
+    const page = await authorize(ctx, user, {
+      resource: API_RESOURCE,
+      scope: 'tasks:write notifications:read',
+    });
+    const oauthQuery = oauthQueryOf(page);
+    const { decisionNonce } = await consentRequest(user, page);
+    const signed = new URLSearchParams(oauthQuery);
+    for (const name of ['sig', 'exp', 'ba_iat', 'ba_pl', 'ba_param']) signed.delete(name);
+    const grants = ctx.app.services.grants;
+    const prepared = grants.applyOAuthConsent(user.actor, signed, {
+      accept: true,
+      oauthQuery,
+      decisionNonce,
+      scopes: ['tasks:write', 'notifications:read'],
+      constraints: { orgs: 'all' },
+    });
+    // The provider records the wider consent and issues a code; meanwhile the user narrows the
+    // app to reading.
+    ctx.db.orm
+      .update(oauthConsent)
+      .set({ scopes: JSON.stringify(['tasks:write', 'tasks:read', 'notifications:read']) })
+      .where(eq(oauthConsent.referenceId, app.grantId))
+      .run();
+    storeCode(ctx, 'narrowed-code', user.userId, app.grantId);
+    await user.ok('PATCH', `/api/v1/me/grants/${app.grantId}`, { scopes: ['tasks:read'] });
+    expect(grants.finishOAuthConsent(prepared, `${REDIRECT_URI}?code=narrowed-code`)).toBe(false);
+    grants.undoOAuthConsent(user.actor, prepared);
+    const scopes = consentScopes(ctx, app.grantId);
+    expect(scopes).toContain('tasks:read');
+    expect(scopes).not.toContain('tasks:write');
+    expect(scopes).not.toContain('notifications:read');
+    const again = await authorize(ctx, user, { resource: API_RESOURCE, scope: 'tasks:write' });
+    expect(again.pathname).toBe('/oauth/consent');
+  });
+
+  it('P2 consent the provider recorded before failing (throwing, no URL) is put back', async () => {
+    const ctx = oauthCtx();
+    const { user, before } = await narrowApp(ctx);
+    const prior = consentScopes(ctx, before.id);
+    const page = await authorize(ctx, user, { resource: API_RESOURCE, scope: 'tasks:write' });
+    const { decisionNonce } = await consentRequest(user, page);
+    const spy = vi.spyOn(consentHandoff, 'run').mockImplementationOnce(() => {
+      // As the provider would: the wider consent first, then a failure (CIMD revalidation 503).
+      ctx.db.orm
+        .update(oauthConsent)
+        .set({ scopes: JSON.stringify(['tasks:write', 'tasks:read']) })
+        .where(eq(oauthConsent.referenceId, before.id))
+        .run();
+      throw new Error('client metadata unavailable (503)');
+    });
+    try {
+      const res = await user.call('POST', '/api/v1/oauth/consent', {
+        accept: true,
+        oauthQuery: oauthQueryOf(page),
+        decisionNonce,
+        scopes: ['tasks:write'],
+        constraints: { orgs: 'all' },
+      });
+      expect(res.status).toBe(404);
+    } finally {
+      spy.mockRestore();
+    }
+    expectUnchanged(ctx, user.userId, before);
+    expect(consentScopes(ctx, before.id)).toEqual(prior);
     const again = await authorize(ctx, user, { resource: API_RESOURCE, scope: 'tasks:write' });
     expect(again.pathname).toBe('/oauth/consent');
   });

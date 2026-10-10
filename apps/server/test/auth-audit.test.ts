@@ -2,7 +2,7 @@
 // Each `it` names the finding it covers.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { isSecureBaseUrl, SESSION_COOKIE } from '../src/auth/cookies.ts';
-import { user } from '../src/db/schema/index.ts';
+import { account, user } from '../src/db/schema/index.ts';
 import { deviceLogin } from './grant-helpers.ts';
 import { asJar, BASE_URL, CookieJar, createTestApp, idpEnv, signInAs } from './helpers.ts';
 import { listCtx } from './list-helpers.ts';
@@ -187,5 +187,30 @@ describe('boundary 1, round 5: https detection', () => {
       expect(cookie).toMatch(/^__Host-rooster\./);
       expect(cookie).toContain('Secure');
     }
+  });
+});
+
+describe('boundary 1, round 6: sign-out', () => {
+  it('P2 sign-out ends the session and hands out no provider logout URL or ID token', async () => {
+    const discovery = (await (await fetch(idp.discoveryUrl)).json()) as Record<string, unknown>;
+    expect(typeof discovery.end_session_endpoint).toBe('string');
+    const { app, db } = createTestApp({ env: idpEnv(idp) });
+    const { jar } = await signInAs(app, 'admin@example.com');
+    const idToken = db.orm.select().from(account).all()[0]?.idToken ?? '';
+    expect(idToken).not.toBe('');
+    for (const body of [{ disableRedirect: true }, {}]) {
+      const { jar: again } = await signInAs(app, 'admin@example.com');
+      const res = await app.request(
+        '/api/auth/sign-out',
+        asJar(again, { method: 'POST', body: JSON.stringify(body) }),
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get('location')).toBeNull();
+      const text = await res.text();
+      expect(text).not.toContain('id_token_hint');
+      expect(text).not.toContain(idToken.slice(0, 40));
+      expect((await app.request('/api/v1/me', asJar(again))).status).toBe(401);
+    }
+    expect((await app.request('/api/v1/me', asJar(jar))).status).toBe(200);
   });
 });

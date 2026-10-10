@@ -1,3 +1,4 @@
+import { canRead } from '@rooster/core/grants';
 import { uuidv7 } from '@rooster/core/ids';
 import type {
   Group,
@@ -24,6 +25,7 @@ import { qk, selfAudience, taskAudiences, taskReach } from './event-audience.ts'
 import {
   authorizeOrgWide,
   authorizeTaskWrite,
+  canReadTask,
   requireReadableGroup,
   requireScope,
 } from './grant-access.ts';
@@ -123,9 +125,13 @@ export class GroupService {
       if (input.id !== undefined) {
         const existing = tx.select().from(taskGroup).where(eq(taskGroup.id, input.id)).get();
         if (existing !== undefined) {
-          // The user's own group the grant cannot read is 404, never a name oracle or its DTO.
-          if (existing.userId === actor.userId && existing.orgId === org.id) {
-            requireReadableGroup(actor, org.id, existing.id);
+          // A group the grant cannot read is simply "in use" (like anyone else's): its name is
+          // never compared, nor its DTO returned.
+          if (
+            actor.grant !== null &&
+            !canRead(actor.grant.constraints, existing.orgId, existing.id)
+          ) {
+            throw new AppError('id_conflict', 409, 'That ID is already in use.');
           }
           const same =
             existing.userId === actor.userId &&
@@ -137,13 +143,12 @@ export class GroupService {
         }
       }
 
-      let target: OrderTarget = intentOf(input);
+      let target: OrderTarget = readableIntent(actor, org.id, input);
       let movedIds: string[] = [];
       if (input.splitAfterTaskId !== undefined) {
         // The split moves tasks into the new group: a task move, beyond `groups:write`.
         requireScope(actor, 'tasks:write');
-        const split = this.splitSource(tx, actor.userId, org.id, input.splitAfterTaskId, now);
-        requireReadableGroup(actor, org.id, split.source.id);
+        const split = this.splitSource(tx, actor, org.id, input.splitAfterTaskId, now);
         target = split.source.kind === 'inbox' ? 'top' : { afterId: split.source.id };
         movedIds = split.below;
       }
@@ -187,13 +192,17 @@ export class GroupService {
   }
 
   /** The split task's group and every placement below the task in it (any state). */
-  private splitSource(tx: Tx, userId: string, orgId: string, taskId: string, now: number) {
+  private splitSource(tx: Tx, actor: Actor, orgId: string, taskId: string, now: number) {
+    const userId = actor.userId;
     const row = requireTask(tx, userId, taskId);
     if (row.orgId !== orgId) throw taskNotFound();
+    // A task the grant cannot read is 404 before anything else about it (deleted or not).
+    if (!canReadTask(tx, actor, row)) throw taskNotFound();
     if (row.deletedAt !== null) throw taskDeleted();
     const place = placementOf(tx, taskId);
     if (place === undefined || place.userId !== userId) throw taskNotFound();
     const source = requireOwnGroup(tx, userId, place.groupId);
+    requireReadableGroup(actor, orgId, source.id);
     const { items } = placementDomain(tx, { userId, orgId, groupId: source.id, now });
     const index = items.findIndex((i) => i.id === taskId);
     return { source, below: items.slice(index + 1).map((i) => i.id) };
@@ -241,7 +250,8 @@ export class GroupService {
       if (!clockAllows(clock, 'pos', meta.editTime)) return { position: group.position };
       const now = this.deps.clock();
       const domain = groupDomain(tx, { userId: actor.userId, orgId: group.orgId, now }, [group.id]);
-      const [position] = this.ordering.place(domain, intentOf(intent)).keys as [string];
+      const [position] = this.ordering.place(domain, readableIntent(actor, group.orgId, intent))
+        .keys as [string];
       clock.pos = meta.editTime;
       tx.update(taskGroup)
         .set({ position, fieldClock: JSON.stringify(clock), updatedAt: now })
@@ -412,6 +422,20 @@ export class GroupService {
 }
 
 /** A client intent as an ordering target; no intent at all means the end of the domain. */
+/**
+ * `intentOf` for a grant: a neighbour group it cannot read counts as unknown (the end), so the
+ * resulting position never tells a hidden group from a missing one.
+ */
+function readableIntent(actor: Actor, orgId: string, input: OrderingIntent): OrderTarget {
+  const grant = actor.grant;
+  if (grant !== null) {
+    for (const id of [input.afterId, input.beforeId]) {
+      if (typeof id === 'string' && !canRead(grant.constraints, orgId, id)) return 'end';
+    }
+  }
+  return intentOf(input);
+}
+
 function intentOf(input: OrderingIntent): OrderTarget {
   const intent: OrderingIntent = {};
   if (input.afterId !== undefined) intent.afterId = input.afterId;

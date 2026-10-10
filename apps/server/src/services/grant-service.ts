@@ -1727,11 +1727,15 @@ export class GrantService {
   }
 
   /**
-   * The provider failed after `applyOAuthConsent`: a grant the decision created goes; a step-up
-   * was never written, so the grant is untouched.
+   * A decision that was not committed (the provider failed, threw or answered without a code):
+   * a grant the decision created goes; a step-up was never written, so the grant is untouched,
+   * and whatever consent the provider recorded meanwhile is put back (`restoreConsents`).
    */
   undoOAuthConsent(actor: Actor, prepared: PreparedConsent): void {
-    if (!prepared.created) return;
+    if (!prepared.created) {
+      immediate(this.deps.db, (tx) => this.restoreConsents(tx, prepared));
+      return;
+    }
     immediate(this.deps.db, (tx) => {
       deleteGrantArtifacts(tx, [prepared.grantId]);
       tx.delete(accessGrant).where(eq(accessGrant.id, prepared.grantId)).run();
@@ -1739,13 +1743,18 @@ export class GrantService {
     });
   }
 
-  /** The grant's provider consent rows exactly as they were before the decision. */
+  /**
+   * The grant's provider consent after a decision that was not committed: the rows it had
+   * before (so no resource or row the provider added stays), with scopes reconciled to what the
+   * grant covers now (a narrowing meanwhile included, so a later step-up shows the screen).
+   */
   private restoreConsents(tx: Tx, prepared: PreparedConsent): void {
     tx.delete(oauthConsent).where(eq(oauthConsent.referenceId, prepared.grantId)).run();
     const row = tx.select().from(accessGrant).where(eq(accessGrant.id, prepared.grantId)).get();
     // A grant revoked meanwhile keeps no consent (revocation deleted it).
     if (row === undefined || row.revokedAt !== null) return;
     for (const consent of prepared.priorConsents) tx.insert(oauthConsent).values(consent).run();
+    this.syncConsentScopes(tx, row.id, parseScopes(row.scopes));
   }
 
   /** The consent rows of a grant name exactly what it covers (plus `offline_access` if given). */

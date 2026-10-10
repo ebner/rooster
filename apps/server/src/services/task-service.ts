@@ -276,6 +276,9 @@ const invalidAssignee = (message: string) =>
   ]);
 
 /** Tasks (FR-TASK, 05 §4.3) and the actor's list reads. Authorisation is org membership. */
+/** A client-chosen ID that is taken (or names a task the grant cannot read). */
+const idInUse = () => new AppError('id_conflict', 409, 'That ID is already in use.');
+
 export class TaskService {
   constructor(
     private readonly deps: ServiceDeps,
@@ -431,6 +434,8 @@ export class TaskService {
       if (input.id !== undefined) {
         const existing = tx.select().from(task).where(eq(task.id, input.id)).get();
         if (existing !== undefined) {
+          // A task the grant cannot read is simply "in use": its content is never compared.
+          if (!canReadTask(tx, actor, existing)) throw idInUse();
           const same =
             existing.orgId === org.id &&
             existing.createdBy === actor.userId &&
@@ -442,7 +447,7 @@ export class TaskService {
             existing.dueTz === due.dueTz &&
             existing.startDate === due.startDate &&
             existing.recurrence === rule.recurrence;
-          if (!same) throw new AppError('id_conflict', 409, 'That ID is already in use.');
+          if (!same) throw idInUse();
           authorizeTaskRead(tx, actor, existing);
           return taskDtoFor(tx, actor, existing);
         }
@@ -497,6 +502,8 @@ export class TaskService {
                 tx,
                 parent.id,
                 'afterId' in intent || 'beforeId' in intent ? intent : 'end',
+                [],
+                actor,
               ),
         title: fields.title,
         description,
@@ -603,8 +610,21 @@ export class TaskService {
     parentId: string,
     target: OrderTarget,
     exclude: readonly string[] = [],
+    actor?: Actor,
   ): string {
     const domain = subtaskDomain(tx, { parentId, now: this.now() }, exclude);
+    // A neighbour the grant cannot read counts as unknown (the end), so where the subtask lands
+    // never tells a hidden sibling from a missing one.
+    if (actor !== undefined && actor.grant !== null && typeof target === 'object') {
+      const named = [target.afterId, target.beforeId].filter(
+        (id): id is string => typeof id === 'string',
+      );
+      const hidden = named.some((id) => {
+        const sibling = tx.select().from(task).where(eq(task.id, id)).get();
+        return sibling !== undefined && !canReadTask(tx, actor, sibling);
+      });
+      if (hidden) target = 'end';
+    }
     const [key] = this.ordering.place(domain, target).keys;
     return key as string;
   }
@@ -1501,7 +1521,7 @@ export class TaskService {
         ...(input.afterId === undefined ? {} : { afterId: input.afterId }),
         ...(input.beforeId === undefined ? {} : { beforeId: input.beforeId }),
       };
-      const subtaskPosition = this.siblingKey(tx, row.parentId, target, [row.id]);
+      const subtaskPosition = this.siblingKey(tx, row.parentId, target, [row.id], actor);
       tx.update(task)
         .set({ subtaskPosition, fieldClock: JSON.stringify(clock), updatedAt: this.now() })
         .where(eq(task.id, row.id))
@@ -1529,12 +1549,13 @@ export class TaskService {
       if (input.id !== undefined) {
         const existing = tx.select().from(task).where(eq(task.id, input.id)).get();
         if (existing !== undefined) {
+          if (!canReadTask(tx, actor, existing)) throw idInUse();
           const same =
             existing.orgId === source.orgId &&
             existing.createdBy === actor.userId &&
             existing.parentId === source.parentId &&
             existing.title === source.title;
-          if (!same) throw new AppError('id_conflict', 409, 'That ID is already in use.');
+          if (!same) throw idInUse();
           authorizeTaskWrite(tx, actor, existing);
           return taskDtoFor(tx, actor, existing);
         }

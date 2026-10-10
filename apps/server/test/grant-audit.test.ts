@@ -450,13 +450,15 @@ describe('boundary 3, round 5', () => {
     expect(trash.items.map((i) => i.id)).toContain(t.id);
   });
 
-  it('P3 a create naming a hidden group’s ID is 404, whatever the name', async () => {
+  it('P3 a create naming a hidden group’s ID is just "in use", whatever the name', async () => {
     const { ctx, owner, org, today, readPrio } = await family('Prio', 'Today');
     const api = bearer(ctx, (await pat(owner, ['groups:write'], readPrio('all'))).token);
     for (const name of ['Today', 'Wrong']) {
       const res = await api.call('POST', `/api/v1/orgs/${org.id}/groups`, { id: today.id, name });
-      expect(res.status, name).toBe(404);
-      expect(await res.text()).not.toContain('Today');
+      expect(res.status, name).toBe(409);
+      const text = await res.text();
+      expect(text).toContain('id_conflict');
+      expect(text).not.toContain('Today');
     }
   });
 
@@ -512,5 +514,197 @@ describe('boundary 3, round 5', () => {
     expect(body.code).toBe('outside_grant');
     expect(body.detail).not.toContain('ConfidentialAcquisition');
     expect(body.detail).toContain('one other group');
+  });
+});
+
+describe('boundary 3, round 6', () => {
+  async function family() {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const bob = ctx.user('bob@example.com');
+    const org = await sharedOrg(owner, [bob]);
+    const prio = await groupNamed(owner, 'Prio', org.id);
+    const today = await groupNamed(owner, 'Today', org.id);
+    const t = await owner.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'T', groupId: prio.id },
+      201,
+    );
+    const s = await bob.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'S', parentId: t.id, assigneeId: bob.userId },
+      201,
+    );
+    const g = await owner.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'G secret', description: 'hidden text', parentId: s.id, assigneeId: owner.userId },
+      201,
+    );
+    await owner.ok('POST', `/api/v1/tasks/${g.id}/move`, { groupId: today.id });
+    const constraints = {
+      orgs: [{ orgId: org.id, read: { groups: [prio.id] }, write: 'all' as const }],
+    };
+    return { ctx, owner, bob, org, prio, today, t, s, g, constraints };
+  }
+
+  it('P2 a reassignment that would move a hidden subtask into view is refused', async () => {
+    const { ctx, owner, s, g, constraints } = await family();
+    const api = bearer(ctx, (await pat(owner, ['tasks:write', 'tasks:assign'], constraints)).token);
+    expect((await api.call('GET', `/api/v1/tasks/${g.id}`)).status).toBe(404);
+    const patch = await api.call('PATCH', `/api/v1/tasks/${s.id}`, { assigneeId: owner.userId });
+    expect(patch.status).toBe(404);
+    const bulk = await api.ok<{ results: { id: string; ok: boolean }[] }>(
+      'POST',
+      '/api/v1/tasks/bulk',
+      { op: 'assign', ids: [s.id], args: { assigneeId: owner.userId } },
+    );
+    expect(JSON.stringify(bulk)).not.toContain('"ok":true');
+    // G is still placed in Today, out of the grant's view.
+    expect((await api.call('GET', `/api/v1/tasks/${g.id}`)).status).toBe(404);
+    expect((await owner.ok<Task>('GET', `/api/v1/tasks/${s.id}`)).assigneeId).not.toBe(
+      owner.userId,
+    );
+  });
+
+  it('P3 a retried create or duplicate naming a hidden task is "in use", whatever its content', async () => {
+    const { ctx, owner, org, prio, today, constraints } = await family();
+    // The owner's top-level task H, in Today: hidden from the grant.
+    const g = await owner.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'G secret', groupId: today.id },
+      201,
+    );
+    const api = bearer(ctx, (await pat(owner, ['tasks:write'], constraints)).token);
+    const source = await api.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'G secret', groupId: prio.id },
+      201,
+    );
+    for (const title of ['G secret', 'wrong guess']) {
+      const create = await api.call('POST', `/api/v1/orgs/${org.id}/tasks`, {
+        id: g.id,
+        title,
+        groupId: prio.id,
+      });
+      expect(create.status, title).toBe(409);
+    }
+    const other = await api.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'wrong guess', groupId: prio.id },
+      201,
+    );
+    for (const from of [source, other]) {
+      const dup = await api.call('POST', `/api/v1/tasks/${from.id}/duplicate`, { id: g.id });
+      expect(dup.status, from.title).toBe(409);
+    }
+  });
+
+  it('P3 a split names a hidden task 404, deleted or not', async () => {
+    const { ctx, owner, org, g, constraints } = await family();
+    const api = bearer(ctx, (await pat(owner, ['groups:write', 'tasks:write'], constraints)).token);
+    const split = (id: string) =>
+      api.call('POST', `/api/v1/orgs/${org.id}/groups`, { name: 'X', splitAfterTaskId: id });
+    expect((await split(g.id)).status).toBe(404);
+    await owner.ok('DELETE', `/api/v1/tasks/${g.id}`, undefined, 204);
+    expect((await split(g.id)).status).toBe(404);
+    expect((await split('0199a1b2-0000-7000-8000-00000000dead')).status).toBe(404);
+  });
+});
+
+describe('systematic pass: ordering intents naming hidden neighbours', () => {
+  it('a subtask placed after a hidden sibling lands as if the sibling were unknown (the end)', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const bob = ctx.user('bob@example.com');
+    const org = await sharedOrg(owner, [bob]);
+    const prio = await groupNamed(owner, 'Prio', org.id);
+    const today = await groupNamed(owner, 'Today', org.id);
+    const t = await owner.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'T', groupId: prio.id },
+      201,
+    );
+    const s = await bob.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'S', parentId: t.id, assigneeId: bob.userId },
+      201,
+    );
+    const sub = (title: string, assigneeId: string, by = bob) =>
+      by.ok<Task>(
+        'POST',
+        `/api/v1/orgs/${org.id}/tasks`,
+        { title, parentId: s.id, assigneeId },
+        201,
+      );
+    const v = await sub('V', bob.userId);
+    const g = await sub('G', owner.userId, owner);
+    await owner.ok('POST', `/api/v1/tasks/${g.id}/move`, { groupId: today.id });
+    const w = await sub('W', bob.userId);
+    const constraints = {
+      orgs: [{ orgId: org.id, read: { groups: [prio.id] }, write: 'all' as const }],
+    };
+    const api = bearer(ctx, (await pat(owner, ['tasks:write'], constraints)).token);
+    const wPos = (await owner.ok<Task>('GET', `/api/v1/tasks/${w.id}`)).subtaskPosition as string;
+    const moved = await api.ok<{ subtaskPosition: string }>(
+      'POST',
+      `/api/v1/tasks/${v.id}/reorder`,
+      { afterId: g.id },
+    );
+    // Not between G and W, but at the end, as for an unknown neighbour.
+    expect(moved.subtaskPosition > wPos).toBe(true);
+    const created = await api.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'X', parentId: s.id, afterId: g.id },
+      201,
+    );
+    expect((created.subtaskPosition as string) > moved.subtaskPosition).toBe(true);
+  });
+
+  it('a group placed after a hidden group lands as if that group were unknown (the end)', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const groups = (await owner.ok<{ groups: Group[] }>('GET', '/api/v1/orgs/personal/my-list'))
+      .groups;
+    const normal = groups.filter((g) => g.kind === 'normal');
+    const first = normal[0] as Group;
+    const readable = normal.filter((g) => g.id !== first.id);
+    const constraints = {
+      orgs: [
+        {
+          orgId: first.orgId,
+          read: { groups: readable.map((g) => g.id) },
+          write: 'all' as const,
+        },
+      ],
+    };
+    const api = bearer(ctx, (await pat(owner, ['groups:write'], constraints)).token);
+    const target = readable[readable.length - 1] as Group;
+    const maxPos = normal
+      .map((g) => g.position)
+      .sort()
+      .at(-1) as string;
+    const created = await api.ok<{ group: Group }>(
+      'POST',
+      '/api/v1/orgs/personal/groups',
+      { name: 'New', afterId: first.id },
+      201,
+    );
+    expect(created.group.position > maxPos).toBe(true);
+    const moved = await api.ok<{ position: string }>(
+      'POST',
+      `/api/v1/groups/${readable[0]?.id}/move`,
+      { afterId: first.id },
+    );
+    expect(moved.position > created.group.position).toBe(true);
+    expect(target).toBeDefined();
   });
 });

@@ -183,40 +183,47 @@ export function registerOAuthRoutes(app: OpenAPIHono<AppEnv>, deps: P9RouteDeps)
     }
     return consentLocks.run(actor.userId, async () => {
       const prepared = services.grants.applyOAuthConsent(actor, query, decision);
-      let url: string | null = null;
+      // Every way out that does not commit (a refusal, an answer without a code, an exception
+      // anywhere below) undoes the decision, provider consent included.
+      let committed = false;
       try {
-        url = await redirectUrl(
-          await consentHandoff.run(
-            { userId: actor.userId, clientId: prepared.clientId, grantId: prepared.grantId },
-            () =>
-              provider.oauth2Consent({
-                headers: headers(),
-                request: request(),
-                body: {
-                  accept: true,
-                  ...(prepared.pluginScope === '' ? {} : { scope: prepared.pluginScope }),
-                  oauth_query: decision.oauthQuery,
-                },
-              }),
-          ),
-        );
-      } catch (error) {
-        logger.warn(
-          { err: logSafeError(error) },
-          'OAuth consent: the provider refused the decision',
-        );
+        let url: string | null = null;
+        try {
+          url = await redirectUrl(
+            await consentHandoff.run(
+              { userId: actor.userId, clientId: prepared.clientId, grantId: prepared.grantId },
+              () =>
+                provider.oauth2Consent({
+                  headers: headers(),
+                  request: request(),
+                  body: {
+                    accept: true,
+                    ...(prepared.pluginScope === '' ? {} : { scope: prepared.pluginScope }),
+                    oauth_query: decision.oauthQuery,
+                  },
+                }),
+            ),
+          );
+        } catch (error) {
+          logger.warn(
+            { err: logSafeError(error) },
+            'OAuth consent: the provider refused the decision',
+          );
+        }
+        // Committed only for a genuine code (the service checks it is stored for this grant,
+        // user, client and redirect URI, and that the grant did not change meanwhile).
+        if (url !== null && services.grants.finishOAuthConsent(prepared, url)) {
+          committed = true;
+          return c.json({ redirectTo: url }, 200);
+        }
+        // The provider's own error redirect (e.g. `invalid_scope`) still goes to the app.
+        if (url !== null && isErrorRedirect(url, prepared.redirectUri)) {
+          return c.json({ redirectTo: url }, 200);
+        }
+        throw consentNotFound();
+      } finally {
+        if (!committed) services.grants.undoOAuthConsent(actor, prepared);
       }
-      // Committed only for a genuine code (the service checks it is stored for this grant,
-      // user, client and redirect URI, and that the grant did not change meanwhile).
-      if (url !== null && services.grants.finishOAuthConsent(prepared, url)) {
-        return c.json({ redirectTo: url }, 200);
-      }
-      services.grants.undoOAuthConsent(actor, prepared);
-      // The provider's own error redirect (e.g. `invalid_scope`) still goes to the app.
-      if (url !== null && isErrorRedirect(url, prepared.redirectUri)) {
-        return c.json({ redirectTo: url }, 200);
-      }
-      throw consentNotFound();
     });
   });
 

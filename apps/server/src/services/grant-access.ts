@@ -471,8 +471,9 @@ export function familyGroups(tx: Tx, userId: string, taskId: string): Map<string
 
 /**
  * After a change that reconciles placements: every task in `before` whose group changed must
- * leave a writable group for a writable one, else `403 outside_grant` (rolling the change
- * back). `leaving` may leave the list altogether (assigned to someone else).
+ * have been readable (else `404`) and leave a writable group for a writable one (else
+ * `403 outside_grant`), rolling the change back. `leaving` may leave the list altogether
+ * (assigned to someone else).
  */
 export function authorizeGroupMoves(
   tx: Tx,
@@ -487,6 +488,9 @@ export function authorizeGroupMoves(
     const to = after.get(id) ?? null;
     if (to === from) continue;
     if (id === options.leaving && to === null) continue;
+    // A task the grant could not read before the change (a subtask placed in a hidden group)
+    // must not be moved, nor made readable, by it: `404`, as if the grant targeted it.
+    if (!canRead(actor.grant.constraints, orgId, from)) throw taskNotFound();
     authorizeGroupTarget(tx, actor, orgId, from);
     authorizeGroupTarget(tx, actor, orgId, to);
   }
