@@ -9,7 +9,7 @@ import {
   Sun,
   Sunrise,
 } from 'lucide-react';
-import { type ReactNode, Suspense, useEffect, useState } from 'react';
+import { type ReactNode, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BottomSheet, SheetOption } from '../../ui/bottom-sheet';
 import type { DatePanelProps, DateSection } from './date-popover';
@@ -17,7 +17,7 @@ import { toDueValue, toLocalDue, useDateText } from './date-text';
 import { LazyDatePanel } from './lazy';
 import { type QuickDateId, quickDateValue } from './quick-dates';
 import { useRuleText } from './recurrence-text';
-import type { DueValue, ViewerDateContext } from './types';
+import { type DueValue, sameDue, type ViewerDateContext } from './types';
 
 /** 02 §13.2: the quick date sheet's options, in this order. */
 const options: readonly { id: Exclude<QuickDateId, 'noDate'>; icon: LucideIcon }[] = [
@@ -75,19 +75,61 @@ export function QuickDateSheet({
   const [picking, setPicking] = useState(startPicking);
   /** P10: the section the full picker opens with ("Repeat…", "Reminders…" rows). */
   const [section, setSection] = useState<DateSection | undefined>(initialSection);
-  useEffect(() => {
-    if (!isOpen) {
+  // The sheet may stay mounted while closed (the phone pane), and its opener can change
+  // `initialSection` together with `isOpen`: every opening starts from the props.
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
+    if (isOpen) {
       setPicking(startPicking);
       setSection(initialSection);
     }
-  }, [isOpen, startPicking, initialSection]);
+  }
   const pickSection = (next: DateSection) => {
     setSection(next);
     setPicking(true);
   };
 
+  /** The full picker's uncommitted draft (a repeat, a time), saved when the sheet is dismissed. */
+  const pending = useRef<DueValue | null | undefined>(undefined);
+  const onDraftChange = useCallback((draft: DueValue | null | undefined) => {
+    pending.current = draft;
+  }, []);
+  /** Set while an Escape is being handled: Esc discards the draft (02 §7). */
+  const escaping = useRef(false);
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      escaping.current = true;
+      // After the whole dispatch: the sheet closes synchronously within it.
+      setTimeout(() => {
+        escaping.current = false;
+      }, 0);
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [isOpen]);
+
   const commit = (next: DueValue | null) => {
+    pending.current = undefined;
     onCommit(next);
+    onOpenChange(false);
+  };
+  /**
+   * A tap on the scrim or a swipe down commits the full picker's draft, as a click outside
+   * the desktop picker does (ADR 0049); Esc closes without saving.
+   */
+  const changeOpen = (open: boolean) => {
+    if (open) {
+      onOpenChange(true);
+      return;
+    }
+    const draft = pending.current;
+    pending.current = undefined;
+    if (picking && !escaping.current && draft !== undefined && !sameDue(draft, value)) {
+      onCommit(draft);
+    }
     onOpenChange(false);
   };
   // A quick date keeps the time of day already set (the same as the desktop chips).
@@ -96,7 +138,7 @@ export function QuickDateSheet({
   return (
     <BottomSheet
       isOpen={isOpen}
-      onOpenChange={onOpenChange}
+      onOpenChange={changeOpen}
       title={t('popover.title')}
       description={subject}
       isStatic={isStatic}
@@ -109,7 +151,11 @@ export function QuickDateSheet({
               ctx={ctx}
               autoFocus={false}
               onCommit={commit}
-              onCancel={() => setPicking(false)}
+              onCancel={() => {
+                pending.current = undefined;
+                setPicking(false);
+              }}
+              onDraftChange={onDraftChange}
               repeatable={repeatable}
               renderReminders={renderReminders}
               initialSection={section}

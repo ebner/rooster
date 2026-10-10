@@ -270,3 +270,9 @@ added below as an amendment.
   - Pending and failed uploads live outside the query cache, in the web upload store. The sync engine signals every wipe through `data/session-events.ts`: sign-out, a 401 on `/me`, or another account on this browser. The store then aborts and forgets its files, and an upload that completes afterwards updates no cache.
   - An upload's 401 goes to the router's sign-in redirect, like any query or mutation.
 - **413 message:** the limit is shown only when the 413 names it (`limitBytes`). A proxy's bare 413 shows the generic message, because the proxy may enforce a lower limit than `/meta` says.
+- **Repeat editor:**
+  - The custom editor keeps the stored anchor of a normalised rule (BYMONTHDAY=31 stays 31 on a clamped Feb 28) while the frequency and monthly mode stay the same.
+  - "Ends → On a date" stays selected until a date is typed.
+  - On phones, dismissing the quick date sheet by its scrim or a swipe commits the picker's draft, as a click outside the desktop picker does. Esc discards it.
+  - The pane's subtasks ask "this task / this and following" before deleting a recurring subtask.
+  - A title edit that changes only the basis ("after done") is sent.

@@ -310,4 +310,38 @@ describe('P10: repeat, reminders and the recurring delete in the pane', () => {
     await waitFor(() => expect(sent.some((op) => op.kind === 'task.skip')).toBe(true));
     expect(sent.some((op) => op.kind === 'task.delete')).toBe(false);
   });
+
+  test('FR-REC-4 Tab+Delete on a repeating subtask in the pane asks first; Esc cancels', async () => {
+    const { sent } = await setup({
+      tasks: {
+        1: [
+          {
+            title: 'Parent',
+            subtasks: [{ title: 'Water', dueDate: today(), recurrence: 'FREQ=DAILY' }],
+          },
+        ],
+      },
+    });
+    fireEvent.click(rowOf('Parent'));
+    const subtasks = await screen.findByRole('treegrid', { name: 'Subtasks' });
+    const tabDelete = () => {
+      fireEvent.click(within(subtasks).getByText('Water'));
+      const input = activeInput();
+      fireEvent.keyDown(input, { key: 'Tab' });
+      fireEvent.keyDown(input, { key: 'Delete' });
+      fireEvent.keyUp(input, { key: 'Tab' });
+    };
+    tabDelete();
+    let prompt = await screen.findByTestId('recurring-delete');
+    expect(within(prompt).getByTestId('recurring-delete-this')).toBe(document.activeElement);
+    press('Escape');
+    await waitFor(() => expect(screen.queryByTestId('recurring-delete')).toBeNull());
+    expect(sent.some((op) => op.kind === 'task.delete' || op.kind === 'task.skip')).toBe(false);
+
+    tabDelete();
+    prompt = await screen.findByTestId('recurring-delete');
+    fireEvent.click(within(prompt).getByTestId('recurring-delete-this'));
+    await waitFor(() => expect(sent.some((op) => op.kind === 'task.skip')).toBe(true));
+    expect(sent.some((op) => op.kind === 'task.delete')).toBe(false);
+  });
 });

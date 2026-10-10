@@ -77,6 +77,9 @@ export function repeatChoiceOf(
 type MonthlyMode = 'day' | 'nth' | 'last';
 type EndMode = 'never' | 'until' | 'count';
 
+/** The anchor parts of the current rule, kept when an unrelated field changes. */
+type RuleAnchor = Pick<RecurrenceRule, 'freq' | 'byDay' | 'byMonthDay' | 'byMonth'>;
+
 /** The custom editor's fields; the rule is rebuilt from them on every change. */
 interface CustomFields {
   freq: RecurrenceFreq;
@@ -87,6 +90,11 @@ interface CustomFields {
   until: IsoDate | null;
   count: number;
   basis: RecurrenceBasis;
+  /**
+   * The current rule's anchor (null for a new rule). A monthly series on the 31st whose
+   * occurrence was clamped to Feb 28 stays on the 31st when only its end changes.
+   */
+  anchor: RuleAnchor | null;
 }
 
 /** 1–4 for the 1st–28th; the 29th and later have no "nth" weekday (only "last"). */
@@ -102,6 +110,7 @@ function fieldsOf(choice: RepeatChoice | null, dueDate: IsoDate): CustomFields {
     until: null,
     count: 5,
     basis: 'due',
+    anchor: null,
   };
   const fields = choice ? repeatFields(choice, dueDate) : null;
   const rule = fields ? parseRule(fields.recurrence) : null;
@@ -118,11 +127,43 @@ function fieldsOf(choice: RepeatChoice | null, dueDate: IsoDate): CustomFields {
     until: rule.until ?? null,
     count: rule.count ?? base.count,
     basis: fields.recurrenceBasis,
+    anchor: {
+      freq: rule.freq,
+      ...(rule.byDay ? { byDay: rule.byDay } : {}),
+      ...(rule.byMonthDay === undefined ? {} : { byMonthDay: rule.byMonthDay }),
+      ...(rule.byMonth === undefined ? {} : { byMonth: rule.byMonth }),
+    },
+  };
+}
+
+/**
+ * The monthly or yearly anchor for the fields: the current rule's while the frequency (and,
+ * for monthly, the day/nth/last mode) is unchanged, otherwise derived from the due date.
+ */
+function anchorOf(
+  fields: CustomFields,
+  dueDate: IsoDate,
+): { monthDay: number; month: number; nthDay: { weekday: Weekday; nth: number } } {
+  const { month, day } = parseIsoDate(dueDate);
+  const kept = fields.anchor?.freq === fields.freq ? fields.anchor : null;
+  const keptNth = kept?.byDay?.[0];
+  const nthMatches =
+    keptNth?.nth !== undefined &&
+    ((fields.monthly === 'last' && keptNth.nth === -1) ||
+      (fields.monthly === 'nth' && keptNth.nth > 0));
+  const derivedNth = fields.monthly === 'last' || nthOf(dueDate) > 4 ? -1 : nthOf(dueDate);
+  return {
+    monthDay: kept?.byMonthDay ?? day,
+    month: kept?.byMonth ?? month,
+    nthDay:
+      nthMatches && keptNth?.nth !== undefined
+        ? { weekday: keptNth.weekday, nth: keptNth.nth }
+        : { weekday: weekdayCode(dueDate), nth: derivedNth },
   };
 }
 
 function ruleOf(fields: CustomFields, dueDate: IsoDate): string {
-  const { month, day } = parseIsoDate(dueDate);
+  const anchor = anchorOf(fields, dueDate);
   const end = {
     ...(fields.end === 'count' ? { count: fields.count } : {}),
     ...(fields.end === 'until' && fields.until ? { until: fields.until } : {}),
@@ -134,14 +175,11 @@ function ruleOf(fields: CustomFields, dueDate: IsoDate): string {
         (weekday) => ({ weekday }),
       );
     } else if (fields.freq === 'MONTHLY') {
-      if (fields.monthly === 'day') rule.byMonthDay = day;
-      else {
-        const nth = fields.monthly === 'last' || nthOf(dueDate) > 4 ? -1 : nthOf(dueDate);
-        rule.byDay = [{ weekday: weekdayCode(dueDate), nth }];
-      }
+      if (fields.monthly === 'day') rule.byMonthDay = anchor.monthDay;
+      else rule.byDay = [anchor.nthDay];
     } else if (fields.freq === 'YEARLY') {
-      rule.byMonth = month;
-      rule.byMonthDay = day;
+      rule.byMonth = anchor.month;
+      rule.byMonthDay = anchor.monthDay;
     }
   }
   return formatRule(rule);
@@ -188,10 +226,18 @@ export function RepeatSection({
   const ruleText = useRuleText(ctx);
   const presets = useMemo(() => recurrencePresets(dueDate), [dueDate]);
   const [custom, setCustom] = useState(defaultCustom || choice?.kind === 'custom');
+  /**
+   * The end the user chose, which the rule cannot hold yet: "On a date" before a date is
+   * typed serialises as no end, and would otherwise read back as "Never".
+   */
+  const [chosenEnd, setChosenEnd] = useState<EndMode | null>(null);
   const selected = custom ? 'custom' : choice?.kind === 'preset' ? choice.id : '';
-  const fields = fieldsOf(choice, dueDate);
+  const stored = fieldsOf(choice, dueDate);
+  const fields: CustomFields =
+    chosenEnd === 'until' && stored.end === 'never' ? { ...stored, end: 'until' } : stored;
 
   const setFields = (patch: Partial<CustomFields>) => {
+    if (patch.end !== undefined) setChosenEnd(patch.end);
     const next = { ...fields, ...patch };
     onChange({ kind: 'custom', rule: ruleOf(next, dueDate), basis: next.basis });
   };
@@ -226,6 +272,7 @@ export function RepeatSection({
             return;
           }
           setCustom(false);
+          setChosenEnd(null);
           onChange({ kind: 'preset', id: id as RecurrencePresetId });
         }}
         className="flex flex-col"
@@ -279,7 +326,12 @@ function CustomEditor({
   const weekdayOrder = ctx.weekStart === 1 ? WEEKDAYS : (['SU', ...WEEKDAYS.slice(0, 6)] as const);
   const sundayIndex = (w: Weekday) => (WEEKDAYS.indexOf(w) + 1) % 7;
   const dueWeekday = text.weekdayLong(sundayIndex(weekdayCode(dueDate)));
-  const nth = nthOf(dueDate);
+  const anchor = anchorOf(fields, dueDate);
+  const anchorWeekday = text.weekdayLong(sundayIndex(anchor.nthDay.weekday));
+  const nth = fields.monthly === 'nth' ? anchor.nthDay.nth : nthOf(dueDate);
+  const hasNth = nth >= 1 && nth <= 4;
+  const hasLast =
+    fields.monthly === 'last' || addDays(dueDate, 7).slice(0, 7) !== dueDate.slice(0, 7);
   const [untilText, setUntilText] = useState(fields.until ? text.short(fields.until) : '');
   const parseCtx = {
     today: ctx.today,
@@ -358,29 +410,32 @@ function CustomEditor({
       {fields.basis === 'due' && fields.freq === 'MONTHLY' && (
         <RadioGroup
           aria-label={t('repeat.monthlyLabel')}
-          value={fields.monthly === 'nth' && nth > 4 ? 'last' : fields.monthly}
+          value={fields.monthly === 'nth' && !hasNth ? 'last' : fields.monthly}
           onChange={(monthly) => onChange({ monthly: monthly as MonthlyMode })}
           className="flex flex-col"
         >
           <Radio value="day" className={radioClass}>
             <span className={radioDot} aria-hidden />
             {t('repeat.monthlyDay', {
-              day: t('repeat.ordinalDay', { day: parseIsoDate(dueDate).day }),
+              day: t('repeat.ordinalDay', { day: anchor.monthDay }),
             })}
           </Radio>
-          {nth <= 4 && (
+          {hasNth && (
             <Radio value="nth" className={radioClass}>
               <span className={radioDot} aria-hidden />
               {t('repeat.monthlyNth', {
                 nth: t(`repeat.nth.${nth}` as 'repeat.nth.1'),
-                weekday: dueWeekday,
+                weekday: fields.monthly === 'nth' ? anchorWeekday : dueWeekday,
               })}
             </Radio>
           )}
-          {addDays(dueDate, 7).slice(0, 7) !== dueDate.slice(0, 7) && (
+          {hasLast && (
             <Radio value="last" className={radioClass}>
               <span className={radioDot} aria-hidden />
-              {t('repeat.monthlyNth', { nth: t('repeat.nth.last'), weekday: dueWeekday })}
+              {t('repeat.monthlyNth', {
+                nth: t('repeat.nth.last'),
+                weekday: fields.monthly === 'last' ? anchorWeekday : dueWeekday,
+              })}
             </Radio>
           )}
         </RadioGroup>
@@ -417,7 +472,13 @@ function CustomEditor({
             { id: 'count', label: t('repeat.endCount') },
           ]}
           value={fields.end}
-          onChange={(end) => onChange({ end: end as EndMode })}
+          onChange={(end) =>
+            onChange({
+              end: end as EndMode,
+              // A date typed before (then "Never", then back) applies again.
+              ...(end === 'until' && untilParsed ? { until: untilParsed.date } : {}),
+            })
+          }
         />
         {fields.end === 'until' && (
           <div className="flex flex-col gap-1">

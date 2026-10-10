@@ -719,7 +719,10 @@ export class ListController {
       (due.dueDate !== task.dueDate ||
         due.dueTime !== task.dueTime ||
         due.dueTz !== task.dueTz ||
-        (due.recurrence !== undefined && due.recurrence !== task.recurrence));
+        (due.recurrence !== undefined &&
+          (due.recurrence !== task.recurrence ||
+            // "every day after done" on a daily task: the same rule, another basis.
+            (due.recurrenceBasis !== undefined && due.recurrenceBasis !== task.recurrenceBasis))));
     const patch = {
       ...(parsed.title === task.title ? {} : { title: parsed.title }),
       ...(dueChanged ? { ...due, startDate: null } : {}),

@@ -129,6 +129,25 @@ describe('recurring tasks (FR-REC)', () => {
     expect(titles()).toEqual(['Other']);
   });
 
+  test('02 §8.1 "after done" in an edited title changes only the basis of the same rule', async () => {
+    const { sent, transport } = await setup({
+      1: [{ title: 'Standup', dueDate: today(), recurrence: 'FREQ=DAILY' }],
+    });
+    fireEvent.click(screen.getByText('Standup', { selector: '[data-focus-target]' }));
+    const input = document.activeElement as HTMLInputElement;
+    input.value = 'Standup every day after done';
+    fireEvent.input(input);
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(sent.some((op) => op.kind === 'task.patch')).toBe(true));
+    const patch = sent.find((op) => op.kind === 'task.patch');
+    expect(patch?.payload).toMatchObject({
+      recurrence: 'FREQ=DAILY',
+      recurrenceBasis: 'completion',
+    });
+    const task = Object.values(transport.state(orgId).tasks).find((t) => t.title === 'Standup');
+    expect(task?.recurrenceBasis).toBe('completion');
+  });
+
   test('the row shows the repeat icon with the rule as its tooltip', async () => {
     await setup({ 1: [{ title: 'Review', dueDate: today(), recurrence: 'FREQ=WEEKLY' }] });
     const icon = within(row('Review')).getByTestId('repeat-indicator');

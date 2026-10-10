@@ -107,6 +107,52 @@ describe('the picker’s Repeat section (02 §7, FR-REC-1)', () => {
       recurrenceBasis: null,
     });
   });
+
+  test('custom: changing the end keeps the stored anchor of a clamped occurrence', () => {
+    // A series on the 31st whose February occurrence was clamped to the 28th.
+    const { onCommit } = renderPanel({
+      ...sampleDue('2027-02-28'),
+      recurrence: 'FREQ=MONTHLY;BYMONTHDAY=31;COUNT=3',
+      recurrenceBasis: 'due',
+    });
+    const custom = screen.getByTestId('repeat-custom');
+    expect(within(custom).getByRole('radio', { name: 'On the 31st' })).toBeTruthy();
+    const count = within(custom).getByRole('textbox', { name: 'Times' });
+    fireEvent.change(count, { target: { value: '4' } });
+    fireEvent.blur(count);
+    expect(screen.getByTestId('repeat-summary').textContent).toBe('Monthly on the 31st, 4 times');
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Type a date' }), { key: 'Enter' });
+    expect(onCommit).toHaveBeenLastCalledWith({
+      ...sampleDue('2027-02-28'),
+      recurrence: 'FREQ=MONTHLY;BYMONTHDAY=31;COUNT=4',
+      recurrenceBasis: 'due',
+    });
+  });
+
+  test('custom: "Ends → On a date" shows the date field until a date is typed', () => {
+    const { onCommit } = renderPanel({
+      ...sampleDue('2026-10-12'),
+      recurrence: 'FREQ=WEEKLY;BYDAY=MO,TH',
+      recurrenceBasis: 'due',
+    });
+    const custom = screen.getByTestId('repeat-custom');
+    fireEvent.click(within(custom).getByRole('button', { name: /Ends$/ }));
+    fireEvent.click(screen.getByRole('option', { name: 'On a date' }));
+    expect(within(custom).getByRole('button', { name: /Ends$/ }).textContent).toContain(
+      'On a date',
+    );
+    const until = within(custom).getByRole('textbox', { name: 'Last date' });
+    fireEvent.change(until, { target: { value: '2026-12-31' } });
+    expect(screen.getByTestId('repeat-summary').textContent).toMatch(
+      /^Weekly on Monday and Thursday, until /,
+    );
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Type a date' }), { key: 'Enter' });
+    expect(onCommit).toHaveBeenLastCalledWith({
+      ...sampleDue('2026-10-12'),
+      recurrence: 'FREQ=WEEKLY;BYDAY=MO,TH;UNTIL=20261231',
+      recurrenceBasis: 'due',
+    });
+  });
 });
 
 describe('the picker’s Reminder section (02 §7, FR-REM)', () => {

@@ -1,9 +1,18 @@
 import { childrenOf, type ListState } from '@rooster/core/reducers';
 import type { Task } from '@rooster/core/schemas';
-import { type ReactElement, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import {
+  type ReactElement,
+  Suspense,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMyListSelect } from '../../data/list';
 import { addSubtaskRowId, type Draft, ListStoreContext, useListUi } from '../../state/list-store';
+import { useIsMobile } from '../../ui/use-media';
 import {
   eventZone,
   type ShortcutHandler,
@@ -12,6 +21,7 @@ import {
 } from '../../use-keymap';
 import { AddSubtaskRowView } from '../list/add-row';
 import type { ListController } from '../list/controller';
+import { LazyRecurringDeletePopover, LazyRecurringDeleteSheet } from '../list/lazy';
 import { ListContext, type ListContextValue } from '../list/list-context';
 import type { Row, TaskRow as TaskRowModel } from '../list/model/rows';
 import { activeTitle, draftPlaceholder, RowTagPicker } from '../list/my-list-view';
@@ -135,6 +145,7 @@ export function PaneSubtasks({
         />
         <SubtaskKeys controller={controller} rootRef={root} onEscapeOut={onEscapeOut} />
         <SubtaskTagPicker controller={controller} rootRef={root} />
+        <SubtaskRecurringDelete controller={controller} rootRef={root} />
       </ListContext.Provider>
     </ListStoreContext.Provider>
   );
@@ -308,4 +319,42 @@ function SubtaskTagPicker({
   );
   if (!anchor) return null;
   return <RowTagPicker anchor={anchor} ids={[popover.rowId]} controller={controller} />;
+}
+
+/**
+ * FR-REC-4 for a recurring subtask: Delete / Tab+Delete in the pane asks "this task / this and
+ * following" here, anchored to the subtask's row (a sheet on phones).
+ */
+function SubtaskRecurringDelete({
+  controller,
+  rootRef,
+}: {
+  controller: ListController;
+  rootRef: { current: HTMLDivElement | null };
+}) {
+  const popover = useListUi((s) => s.popover);
+  const mobile = useIsMobile();
+  if (popover?.kind !== 'recurringDelete') return null;
+  const { rowId } = popover;
+  const props = {
+    title: controller.task(rowId)?.title ?? '',
+    onChoose: (choice: 'this' | 'following') => controller.deleteRecurring(rowId, choice),
+    onCancel: () => controller.ui().set({ popover: null, focusSeq: controller.ui().focusSeq + 1 }),
+  };
+  if (mobile) {
+    return (
+      <Suspense fallback={null}>
+        <LazyRecurringDeleteSheet isOpen {...props} />
+      </Suspense>
+    );
+  }
+  const anchor = rootRef.current?.querySelector(
+    `[data-row-id="${rowId}"] [data-focus-target], [data-row-id="${rowId}"] input, [data-row-id="${rowId}"]`,
+  );
+  if (!anchor) return null;
+  return (
+    <Suspense fallback={null}>
+      <LazyRecurringDeletePopover anchor={anchor} {...props} />
+    </Suspense>
+  );
 }
