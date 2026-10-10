@@ -26,6 +26,13 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - Request middleware covers idempotency (`Idempotency-Key`), edit time (`X-Rooster-Edit-Time`, clamped), client id/name, and the per-user rate limit. ADR 0005 has the list semantics.
   - `src/db/`: client and pragmas, `migrate.ts`, `schema/`, `migrations/` (generated, append-only). Hand-written migrations (FTS, triggers, pragmas only) are created with `pnpm --filter @rooster/server exec drizzle-kit generate --custom --name <name>`, statements separated by `--> statement-breakpoint`; `0004_task_fts.sql` is the example.
   - `src/jobs/`: croner scheduler. Per-user timed sends (the due reminder, the digest) run every minute, claim `job_run(job, "<userId>|<local date>")` **before** sending, and use a 10-minute grace window (`services/job-runs.ts`, ADR 0035).
+  - **P10:**
+    - `src/blob/`: `BlobStore` local or S3 (`store.ts`, `s3-store.ts`; keys validated in `keys.ts`), `multipart.ts` (streamed busboy upload into `<dataDir>/tmp` with the limit), `content.ts` (`file-type` sniffing, file-name cleaning, sharp thumbnails), `gc.ts`.
+    - **Never delete blobs inline:** the `attachment_blob_gc` trigger queues the keys of every deleted `attachment` row in `blob_gc`, and the blob GC job deletes them after commit. Avatars are the exception, because their key is reused.
+    - The upload routes are exempt from the 1 MB API body limit (`isUploadRequest` in `lib/body-limit.ts`) and enforce their own limit.
+    - Private downloads are `Cache-Control: private, no-cache` with an ETag, and answer 304 only after the access check.
+    - `src/ical/ics.ts` (RFC 5545 output) behind `/ical/<token>.ics` (`routes/ical.ts`; tokens are hashed, misses are limited per IP, and the request log redacts them).
+    - Services: `RecurrenceService` (the next instance on complete or skip; with a grant, the whole subtree must be writable), `ReminderService` (`fire_at` resolution with core `resolveFireAt`, re-resolved in the same transaction as any due-unit, timezone or `allDayReminderTime` change; the `task-reminders` job claims each reminder before sending), `AttachmentService`, `AvatarService` and `IcalService`. ADR 0049.
   - `src/push/` (P7): VAPID keys (`vapid.ts`: env or generated into `instance_setting` at boot), `push-service.ts` (subscriptions, sends after commit through `lib/task-queue.ts`, 404/410 removes a device). **Every send re-checks `isAllowedPushEndpoint`** (SSRF, ADR 0033).
   - `src/mail/` (P7): the nodemailer transport (only with `ROOSTER_SMTP_URL`), React email templates rendered with `@react-email/render` (`templates/`, tables and inline styles from `@rooster/tokens`, text in the `mail` i18n namespace), `mail-service.ts` (invites, immediate and batched notification emails, the digest) and HMAC unsubscribe tokens. `routes/unsubscribe.ts` serves `/unsubscribe/:token` outside `/api/v1`: GET only confirms, POST unsubscribes.
   - `src/mcp/` (P9, ADRs 0042, 0043): the remote `/mcp` endpoint (Streamable HTTP, stateless). Checks run origin → method → token → headers → bounded body → scope pre-check (`requiredScopes`) → per-grant rate limit → SDK. Tools run against the REST API **in-process** (`in-process-client.ts`, `IN_PROCESS_ACTOR` from `lib/in-process.ts`), so service authorisation applies unchanged and the token is never forwarded. `routes/discovery.ts` serves the Server Card (`/mcp/server-card`), `/.well-known/ai-catalog.json`, the agent-skills index and `SKILL.md`, and `/llms.txt` (off with `ROOSTER_AGENT_DISCOVERY=off`).
@@ -46,7 +53,8 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
     - pane (the detail pane: split/overlay (tablet: with scrim)/full screen, and the phone's full-screen sheet with `SheetHeader`; its state lives in the URL `/o/:slug/t/:taskId`)
     - tags (picker, chips, `#tag` token)
     - editor (`MarkdownEditor` on Tiptap, `markdown.ts` converter, a 40-sample round-trip corpus; Ctrl/⌘+click opens links, ADR 0022)
-    - dates (`DateLabel`, `DateCell`, `DatePopover` incl. start-date ranges, `useViewerDateContext`)
+    - dates (`DateLabel`, `DateCell`, `DatePopover` incl. start-date ranges, `useViewerDateContext`; P10: `repeat-section.tsx`, `reminder-section.tsx`, `reminder-chips.tsx`, `recurrence-text.ts` (localises core `describeRule`))
+    - attachments (P10: the pane's `AttachmentsSection` (lazy), uploads through XHR in `src/data/attachments.ts` with progress, paste and drop caught on `[data-pane-root]`, the `lightbox.tsx` keymap scope `lightbox`); Settings → Calendar feed (`settings/calendar-feeds.tsx`) and the Profile avatar (`settings/avatar-field.tsx`)
   - **Bundle budget (10 §4, ADR 0016):** UI that appears only on interaction (popovers, the editor, the palette, the better-auth client) is loaded with `lazyWithPreload` (`src/lib/lazy.ts`) and warmed by `InteractionPrefetch`. On the initial route, import constants from `@rooster/core/limits` and i18n helpers from `@rooster/i18n/core`; value imports from `@rooster/core/schemas` or `@rooster/i18n` pull in zod or every catalog. `pnpm bundle:check` fails CI above 450 KB gzip.
   - `src/data/`: **the only place that talks to the API.** TanStack Query hooks over `createRoosterClient()`, query keys in `query-keys.ts`, problem+json mapped to `ApiError` in `errors.ts`, and better-auth client calls in `auth.ts` / `auth-client.ts`. Components take props; route components call `src/data` hooks. P6: `everyone.ts` (`['everyone', orgId, 'open']`, a flat `Task[]` the pipeline writes to), `collab.ts` (the activity infinite query), `notifications.ts` (inbox, unread count, prefs; online-only).
   - `src/routes/_app.tsx`: the signed-in layout. Its `beforeLoad` guard redirects to `/login?redirect=…`.
@@ -73,6 +81,7 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
     - Output: `src/output/*` (token colours, truecolor → 256 → ANSI, `NO_COLOR`).
     - Infrastructure: `refs.ts` (`@last`, stdin; everything else via `GET /tasks/resolve`), `config.ts` (TOML profiles), `secrets.ts` (keychain via a lazy `@napi-rs/keyring`, 0600 file fallback), `errors.ts` (exit codes 07 §4.2), `launch.ts`, `i18n.ts`, `completion.ts`.
     - P9: `commands/{mcp,skill,admin}.ts` (`rooster mcp [setup]`, `rooster skill print|install`, `rooster admin reindex`); `mcp-config.ts` (client configs for `mcp setup`); `tui/**` (Ink 8, lazy-loaded chunk; `KEYMAP` in `tui/keymap.ts` generates `?` help; `tui/sse.ts`; `tui/idempotency.ts` keeps one Idempotency-Key per logical change across retries; ADR 0047).
+  - **Options are read with `readOptions` (`commands/util.ts`)**, with real option boundaries: a missing value, or one that looks like another option, is a usage error (exit 2). Server responses are untrusted: validate numbers and instants and `clean()` text before printing.
   - **`safe-write.ts` is the only way to write files outside the CLI's own config** (other apps' MCP configs, `SKILL.md`): exclusive `O_NOFOLLOW` temp file, every byte written, directories pinned by dev/ino, refuse on change, delete only what it created (ADR 0044).
   - **`launch.ts` is the only way to open a browser or `$EDITOR`:** argv only, never a shell, and only https URLs on the profile's server origin (ADR 0039).
   - Strip control and bidi characters from user content before printing (`output/format.ts`).
@@ -83,6 +92,7 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - `ordering` (fractional keys)
   - `dates` (iso helpers, `dueState`, `formatRelative`, and the NL parser `parseDatePhrase` / `findDateInTitle` / `findGroupToken`; ADR 0004)
   - `views` (`selectView`, `viewCounts`, `inSmartView`: smart views shared by the web and `?view=`; ADR 0012)
+  - `recurrence` (P10: the RRULE subset; `parseRule`/`formatRule`, `normalizeRule` (anchors made explicit from the due date), `nextOccurrence`/`nextInstance`/`firstOccurrence`, `recurrencePresets`, `describeRule`) and `reminders` (`dueMoment`, `resolveFireAt`, reminder offsets); the NL parser reads recurrence phrases (`DateParseResult.recurrence`) and `findReminderTokens` finds `!15m`/`!1h`/`!1d`/`!due` (ADR 0049)
   - `everyone` (`selectEveryone`, `applyOpToTaskList`), `activity` (`groupActivity` and the activity-cache helpers), `comment-markdown` (the safe Markdown-light comment AST), `mentions` (`@[Name](user:<id>)`); `dates` also has `findAssigneeToken`, shared by the web and the server's `parse: true` (ADR 0030)
   - `search` (`parseSearchQuery`, `toFtsMatch`, `matchesTask`, `matchesFilters`, `fuzzyScore`: the search grammar shared by the server's FTS and the palette's offline filter; ADR 0012)
   - `reducers` (`applyOp`, `inverseOf`, `mergeResponse`). These are the optimistic client-side mirror of the server semantics in ADR 0005; **change both together**.
@@ -175,11 +185,19 @@ This file is the entry point for every agent and must describe the repository **
 Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to them. A PR that changes any of the above without updating `AGENTS.md` is not done.
 
 ## Status
-- **Current phase:** Phase 10 (recurrence, task reminders, attachments, iCal) in progress (09; decisions ADR 0049, contract and file ownership ADR 0050). sharp is a native dependency (`NATIVE_DEPS`, Dockerfile).
+- **Current phase:** Phase 11 (hardening → v2.0) is next (09). Phase 10 is done but not yet released; it sits under `[Unreleased]` in the CHANGELOG.
 - **Latest release:** 1.3.0 (Phase 9: OAuth 2.1 AS, remote and stdio MCP, discovery and the skill, the TUI, linked identities, the admin capability; phone settings index; ADRs 0041–0047).
-- **Last completed phase:** Phase 9, TUI, MCP and agent access (2026-10-09; released in 1.3.0): the OAuth 2.1 AS on better-auth (CIMD, consent screen with "Allow deleting tasks" and "This session only", audience-bound tokens, refresh reuse revokes the grant), the remote `/mcp` endpoint with scope step-up, discovery documents and the rooster skill, `packages/mcp` with `rooster mcp`/`mcp setup`/`skill`, the full-screen TUI, linked identities and the `admin` capability (`rooster admin reindex`). AC-9.1 to AC-9.6. ADRs 0041 to 0047. Migration `0010_oauth_provider`.
-- **Before that:** Phase 8, CLI, grants and API polish (2026-10-09; released in 1.2.0): one grant model for PATs and CLI devices (scopes plus user-chosen org and group constraints, enforced in services, `/api/auth` browser-only), the device flow with a consent page, Settings → Connected apps, the documented OpenAPI with contract tests and e2e response validation, and the `rooster` CLI with release binaries. AC-8.1 to AC-8.5 pass. ADRs 0036 to 0039. Migration `0007_agent_access`.
-- **Before that:** Phase 7, notification delivery (2026-10-09; released in 1.2.0): Web Push per device, SMTP email (invites, immediate or batched notifications, the daily digest, confirm-then-POST unsubscribe), the due reminder, and the full preference matrix. AC-7.1 to AC-7.3 pass. ADRs 0033 to 0035. Migration `0006_delivery`.
+- **Last completed phase:** Phase 10, recurrence, task reminders, attachments and iCal (2026-10-10; unreleased):
+  - recurring tasks: the RRULE subset in core; the next instance is created on complete or skip, directly below; "this / this and following" on delete;
+  - personal task reminders: `!15m` tokens, the picker section, the pane line and the row bell; the claim-then-send job; inbox, push and email;
+  - attachments: local or S3, sniffed types, sharp thumbnails, lightbox, paste and drop, blob GC through a trigger;
+  - avatar upload, and secret calendar feeds;
+  - CLI `--remind`/`--repeat`, TUI and MCP support.
+  - AC-10.1, AC-10.2 and AC-10.4 pass in tests. AC-10.3 is verified with ical.js; subscribing from Google Calendar is still a manual check.
+  - ADRs 0049 and 0050; migration `0011_p10_reminders_attachments_ical`.
+- **Before that:** Phase 9, TUI, MCP and agent access (2026-10-09; released in 1.3.0): the OAuth 2.1 AS on better-auth (CIMD, consent screen with "Allow deleting tasks" and "This session only", audience-bound tokens, refresh reuse revokes the grant), the remote `/mcp` endpoint with scope step-up, discovery documents and the rooster skill, `packages/mcp` with `rooster mcp`/`mcp setup`/`skill`, the full-screen TUI, linked identities and the `admin` capability (`rooster admin reindex`). AC-9.1 to AC-9.6. ADRs 0041 to 0047. Migration `0010_oauth_provider`.
+- Phase 8, CLI, grants and API polish (2026-10-09; released in 1.2.0): one grant model for PATs and CLI devices (scopes plus user-chosen org and group constraints, enforced in services, `/api/auth` browser-only), the device flow with a consent page, Settings → Connected apps, the documented OpenAPI with contract tests and e2e response validation, and the `rooster` CLI with release binaries. AC-8.1 to AC-8.5 pass. ADRs 0036 to 0039. Migration `0007_agent_access`.
+- Phase 7, notification delivery (2026-10-09; released in 1.2.0): Web Push per device, SMTP email (invites, immediate or batched notifications, the daily digest, confirm-then-POST unsubscribe), the due reminder, and the full preference matrix. AC-7.1 to AC-7.3 pass. ADRs 0033 to 0035. Migration `0006_delivery`.
 - Phase 6, collaboration (2026-10-09; released in 1.2.0): assignment, Everyone's tasks, comments and activity, followers, the in-app inbox. AC-6.1 to AC-6.4 pass at the API level and in the e2e suite. ADRs 0028 to 0032. Migration `0005_collab`.
 - Phase 5, smart views, search, palette, export and Trash (2026-10-06), released as **v1.0.0**. AC-5.1 to AC-5.3 pass on desktop and the phone projects. ADRs 0012 to 0016 record the decisions; ADR 0016 relaxed the initial-bundle budget to 450 KB.
 - **Backlog:** `docs/spec/09-phases.md` §Backlog. Do not build an item unless it is scheduled.
@@ -187,11 +205,10 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
 - **Git:** commit locally; **do not push to origin unless the maintainer explicitly asks.**
 - **Deferred to later phases** (from ADRs 0003–0011; pick them up in the phase named):
   - **Later, unscheduled:** Show the OAuth client's name in activity ("via Claude (MCP)", 11 §2.3; activity shows "via an app" today).
-  - **P10:** avatar upload (needs sharp).
   - **Whenever touched:**
     - `UserService.reorderOrg` should move onto `OrderingService` (ADR 0005).
     - The retention purge job publishes no SSE events (ADR 0009).
-  - **P11:** the Docker image budget is 350 MB total and 100 MB for rooster's layers (ADR 0048; 1.3.0 is 248 MB). Slimming the base image is still worth a look.
+  - **P11:** a per-user attachment storage quota (only 100 per task and the rate limit bound it today; ADR 0049). The Docker image budget is 350 MB total and 100 MB for rooster's layers (ADR 0048; 1.3.0 is 248 MB, Phase 10 with sharp is 279 MB). Slimming the base image is still worth a look.
 
 ## When you finish a WP
 - Run every gate in 10 §1.

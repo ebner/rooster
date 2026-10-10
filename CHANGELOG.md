@@ -6,6 +6,27 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+Recurring tasks, task reminders, attachments and the calendar feed (Phase 10).
+
+### Added
+- **Recurring tasks:** "↻ Repeat" in the date picker and the task pane (daily, weekdays, weekly, monthly, yearly, or custom: every N days/weeks/months/years, chosen weekdays, the nth or last weekday, counting from completion, ending on a date or after N times), and in titles ("Water plants every mon", "varannan vecka", "every 3 days after done"). Completing a recurring task creates the next one directly below it, with its subtasks, tags, followers and reminders. Deleting one asks "this task" or "this and following" (ADR 0049).
+- **Task reminders:** "🔔 Reminder" (Alt+R) in the date picker, a Reminders line in the pane, and `!15m`, `!1h`, `!1d` or `!due` at the end of a title. Reminders are personal and arrive in the inbox, as a push, and (if you turn it on) by email; "Task reminders" has its own row in Settings → Notifications, and all-day tasks remind at a time you choose (default 09:00). A bell in the row shows a pending reminder.
+- **Attachments:** drop files on a task, paste a screenshot, or choose files. Images get thumbnails and open in a viewer (←/→, Esc); other files download. The limit is 25 MB per file (`ROOSTER_UPLOAD_MAX_MB`). Files are stored under `/data/attachments`, or in S3-compatible storage with `ROOSTER_S3_*`.
+- **Your own avatar:** upload a picture in Settings → Profile, or go back to the one from your sign-in provider.
+- **Calendar feed:** Settings → Calendar feed gives a secret link (for one organisation or all) that Google Calendar, Apple Calendar or Outlook can subscribe to. It shows your open tasks with due dates; you can replace or revoke the link at any time.
+- **CLI, TUI and MCP:** `rooster add/edit --remind 1h` (or `"fri 14:00"`), `edit --no-remind`, `--repeat "every mon"`, `rm --occurrence`; `ls` marks repeating (↻) and reminded (🔔) tasks and `show` lists reminders and attachments. The TUI's `d` accepts repeat phrases and `!1h`; MCP `create_task`/`update_task` take `remind`, `clearReminders` and `repeat`.
+
+### Changed
+- The Docker image includes sharp (image thumbnails). The image budget is now 350 MB (ADR 0048).
+- The CLI checks the whole command line first: unknown option spellings, a missing value, or a value that looks like another option are refused (exit 2) before anything is sent. Pass a value starting with `-` as `--title=-5 degrees`, or put words after `--`.
+
+### Migrations
+- `0011_p10_reminders_attachments_ical`: adds `task_reminder`, `attachment`, `ical_feed` and `blob_gc` (with a trigger that queues the files of deleted attachments for removal), `user.avatar_at`, `user.oidc_image`, and an index on open recurring instances.
+
+### Upgrade notes
+- **Uploads behind a reverse proxy:** allow request bodies of at least 30 MB on `/api/v1/` (Apache `LimitRequestBody`, nginx `client_max_body_size`); `docker/proxy/` has updated snippets. Forward `/ical/` to rooster for calendar feeds.
+- **Backups:** a database backup plus the `attachments/` directory is a complete backup.
+
 ## [1.3.0] - 2026-10-09
 
 AI agents, the terminal UI and agent access (Phase 9), plus phone and settings fixes.
