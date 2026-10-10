@@ -270,7 +270,7 @@ The **cheat sheet** (`?`) is generated from the same keymap registry that dispat
   - Clicking a calendar day, clicking a chip, or pressing Enter in the input with a valid parse **sets the date and closes the popover** immediately.
   - Exception: when the Time or Start date sub-mode is active, the popover stays open until Enter or a click outside.
   - Esc closes without changes.
-- **Clearing:** the "No date" chip, or Backspace/Delete on a **focused date cell** (with undo). See "Focus wins" in §6. Clearing the date also removes relative reminders (FR-REM-2); the undo toast says so and restores them.
+- **Clearing:** the "No date" chip, or Backspace/Delete on a **focused date cell** (with undo). See "Focus wins" in §6. Clearing the date also pauses relative reminders (FR-REM-2); the undo toast says so, and undo restores the date and with it the reminders.
 - **Detail pane (P10):** a "Reminders" line under the due date lists the user's reminders with their resolved times and an "Add reminder" button that opens the same reminder section.
 - **Phone (P10):** the date sheet has the same reminder section, below the calendar.
 

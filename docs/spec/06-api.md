@@ -76,11 +76,12 @@
 | GET `/tasks/resolve?ref=&org=&deleted=` | P8. Resolves a CLI/MCP task ref (07 §3): `42` (seq, with `org`), `acme#42`, or a UUID prefix of at least 8 hex characters across the actor's orgs. → `TaskDTO`; `404` when not found or not readable; `409 ambiguous_ref` with `candidates` (≤ 10). `deleted=true` also matches Trash. | 8 |
 | GET `/tasks/:id` | Full task: `TaskDTO & {description, subtasks: TaskDTO[], tags, followers (P6), attachments (P10), reminders (P10, the requesting user's), parentChain: [{id,title}]}`. | 3 |
 | POST `/tasks/:id/reminders` · DELETE `/tasks/:id/reminders/:reminderId` | P10 (FR-REM). Body `{offsetMinutes}` (relative) or `{at}` (absolute, ms epoch); returns the `ReminderDTO` with its resolved `fireAt`. `422 reminder_needs_due` for a relative reminder without a due date, `409 too_many_reminders` beyond 5. Personal: needs the task readable and `tasks:write` for grants. Through the outbox like follows (ADR 0028). Task create and PATCH also accept `reminders: [{offsetMinutes}|{at}]` and `parse: true` reads the `!15m` token. | 10 |
-| PATCH `/tasks/:id` | Partial: `{title?, description?, dueDate?, dueTime?, dueTz?, startDate?, assigneeId?, parentId?, recurrence?, recurrenceBasis?}` → `{task, ignoredFields}`. | 2 |
+| PATCH `/tasks/:id` | Partial: `{title?, description?, dueDate?, dueTime?, dueTz?, startDate?, assigneeId?, parentId?, recurrence?, recurrenceBasis?}` → `{task, ignoredFields}`. P10: also `reminders` (added for the actor) and `clearReminders: true`; absent recurrence fields are kept when the due unit is replaced, and `dueDate: null` clears them. | 2 |
 | POST `/tasks/:id/move` | Placement move for the actor: `{groupId, beforeId?, afterId?}` → `{placement}`. `404` if the task isn't in the actor's list. | 2 |
 | POST `/tasks/:id/reorder` | Among subtask siblings: `{beforeId?, afterId?}` → `{subtaskPosition}`. | 3 |
-| POST `/tasks/:id/complete` | `{completed: boolean}` → `{task, next?: TaskDTO}` (`next` is the recurring instance, P10). | 2 |
-| DELETE `/tasks/:id` | Soft delete (with descendants) → 204. | 2 |
+| POST `/tasks/:id/complete` | `{completed: boolean, nextId?}` → `{task, next?: TaskDTO}` (`next` is the recurring instance, P10; `nextId` lets an optimistic client name it, ADR 0049 §1). | 2 |
+| DELETE `/tasks/:id` | Soft delete (with descendants) → 204. For a recurring task this is "this and following": the series ends (P10). | 2 |
+| POST `/tasks/:id/skip` | P10 (FR-REC-4) "Delete this occurrence": `{nextId?}` → `{next: TaskDTO \| null}`. The task goes to Trash and the next instance is created as if it had been completed today. `422 not_recurring` without a rule. | 10 |
 | POST `/tasks/:id/restore` | Undo a delete, or restore from Trash. | 2 |
 | DELETE `/tasks/:id/permanent` | Only from Trash (requires `deleted_at`). | 2 |
 | POST `/tasks/:id/duplicate` | `{includeSubtasks: true}` → TaskDTO (placed after the original). | 3 |
@@ -121,8 +122,8 @@
 |---|---|---|
 | GET `/search?q=&orgId=&limit=` | `[{task: TaskDTO, orgId, snippet}]`. No `orgId` means all of the actor's orgs. | 5 |
 | GET `/orgs/:orgId/export?format=json\|markdown` | The user's data in the org (my groups, my tasks with subtasks, comments, tags). | 5 |
-| GET/POST `/me/ical-feeds` · DELETE `/me/ical-feeds/:id` | `{orgId?}` → `{url}` (shown once). | 10 |
-| GET `/ical/:token.ics` | **Outside `/api/v1`, no auth (token-based).** `Cache-Control: private, max-age=900`. | 10 |
+| GET/POST `/me/ical-feeds` · DELETE `/me/ical-feeds/:id` | `{orgId?, replaces?}` → `{feed, url}` (the URL is shown once; `replaces` regenerates by revoking that feed in the same transaction). At most 10 per user. | 10 |
+| GET `/ical/:token.ics` | **Outside `/api/v1`, no auth (token-based).** `Cache-Control: private, max-age=900`, ETag/304. Unknown tokens are 404; more than 20 misses per IP in 10 minutes are 429. | 10 |
 
 ### 2.9 Events
 `GET /api/v1/events` serves `text/event-stream` (see 04 §4.5). It sends `hello`, `invalidate` and `notification`. Clients reconnect with backoff; `EventSource` handles this natively, and the CLI/TUI uses `eventsource-parser` over fetch.

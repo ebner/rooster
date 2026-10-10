@@ -34,7 +34,7 @@ The better-auth CLI generates these through the Drizzle adapter, and they are ke
 
 | Table | Purpose | Additional fields (better-auth `additionalFields`) |
 |---|---|---|
-| `user` | id, name, email, emailVerified, image, createdAt, updatedAt | `locale TEXT NOT NULL DEFAULT 'en'` (en/sv) · `timezone TEXT NOT NULL DEFAULT 'UTC'` · `week_start INTEGER NOT NULL DEFAULT 1` (0=Sun, 1=Mon) · `date_format TEXT NOT NULL DEFAULT 'MMM d'` (or `d MMM`) · `time_format TEXT NOT NULL DEFAULT '24h'` · `prefs TEXT NOT NULL DEFAULT '{}'` (JSON: parseTitleDates, completeHideMs, swipeLeft, swipeRight, reminderTime, digestTime) · `disabled_at INTEGER` |
+| `user` | id, name, email, emailVerified, image, createdAt, updatedAt | `locale TEXT NOT NULL DEFAULT 'en'` (en/sv) · `timezone TEXT NOT NULL DEFAULT 'UTC'` · `week_start INTEGER NOT NULL DEFAULT 1` (0=Sun, 1=Mon) · `date_format TEXT NOT NULL DEFAULT 'MMM d'` (or `d MMM`) · `time_format TEXT NOT NULL DEFAULT '24h'` · `prefs TEXT NOT NULL DEFAULT '{}'` (JSON: parseTitleDates, completeHideMs, swipeLeft, swipeRight, reminderTime, allDayReminderTime (P10, default 09:00), digestTime, emailMode) · `disabled_at INTEGER` · (P10) `avatar_at INTEGER` (set while an uploaded avatar is the picture) · `oidc_image TEXT` (the provider's picture, restored by `DELETE /me/avatar`) |
 | `session` | token, userId, expiresAt, ipAddress, userAgent, `activeOrganizationId` | — |
 | `account` | provider links (providerId, accountId, tokens) | — |
 | `verification` | — | — |
@@ -96,7 +96,7 @@ CREATE TABLE task (
   due_time         TEXT,                      -- 'HH:MM' (requires due_date)
   due_tz           TEXT,                      -- IANA, set when due_time is set
   start_date       TEXT,                      -- <= due_date
-  recurrence       TEXT,                      -- RRULE subset (P10), requires due_date
+  recurrence       TEXT,                      -- RRULE subset (P10), requires due_date; stored normalised (ADR 0049)
   recurrence_basis TEXT CHECK (recurrence_basis IN ('due','completion')),
   series_id        TEXT,                      -- shared by all instances of a recurring series
   completed_at     INTEGER,
@@ -253,6 +253,14 @@ CREATE TABLE attachment (
   deleted_at  INTEGER
 ) STRICT;
 CREATE INDEX attachment_task ON attachment(task_id) WHERE deleted_at IS NULL;
+
+-- P10: blobs to delete. A trigger on attachment queues the keys of every deleted row (DELETE,
+-- a task purge cascading, an org deletion); the blob GC job drains it (ADR 0049 §3.6).
+CREATE TABLE blob_gc (
+  key       TEXT PRIMARY KEY,
+  storage   TEXT NOT NULL,
+  queued_at INTEGER NOT NULL
+) STRICT;
 
 CREATE TABLE ical_feed (
   id          TEXT PRIMARY KEY,
@@ -434,6 +442,8 @@ type OrgDTO = { id: string; slug: string; name: string; isPersonal: boolean; ava
   - `INTERVAL=n`
   - `BYDAY=MO,TH` (weekly) or `BYDAY=2TU` / `-1FR` (monthly nth weekday)
   - `BYMONTHDAY=15`
+  - `BYMONTH=2` (YEARLY only; the anchor for yearly rules, ADR 0049)
   - `COUNT=n` or `UNTIL=YYYYMMDD`
 - `recurrence_basis='completion'` means the next date = completion date + interval, so only `FREQ` and `INTERVAL` are used.
+- The server stores rules normalised (`normalizeRule`): the anchor from the due date is explicit (WEEKLY `BYDAY`, MONTHLY `BYMONTHDAY`, YEARLY `BYMONTH` + `BYMONTHDAY`), so month-end clamping never drifts. `COUNT` is the number of instances left including the current one, and is decremented on each next instance; `UNTIL` is inclusive. Basis `due`: the first occurrence after the due date that is not before the completion date (ADR 0049 §1).
 - `packages/core/src/recurrence.ts` implements `nextOccurrence(rule, basis, fromDate, completedOn)`. It has exhaustive unit tests, including month-end clamping (Jan 31 + 1 month → Feb 28/29) and DST-safe date arithmetic (all floating dates).
