@@ -5,5 +5,8 @@ export default defineProject({
     name: '@rooster/server',
     environment: 'node',
     include: ['test/**/*.test.ts', 'src/**/*.test.ts'],
+    // Timing budgets (AC-11.4) are meaningless under coverage and parallel workers: they run
+    // alone in their own CI step (`pnpm --filter @rooster/server test:perf`).
+    exclude: ['test/**/*.perf.test.ts', '**/node_modules/**'],
   },
 });

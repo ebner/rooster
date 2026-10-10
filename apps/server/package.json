@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "openapi:emit": "tsx src/scripts/emit-openapi.ts",
-    "db:generate": "drizzle-kit generate && node scripts/strictify-migrations.mjs"
+    "db:generate": "drizzle-kit generate && node scripts/strictify-migrations.mjs",
+    "test:perf": "vitest run --config vitest.perf.config.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",

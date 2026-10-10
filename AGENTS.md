@@ -49,7 +49,7 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
     - **Defaults:** `/api/v1` responses without their own cache policy are `no-store`, and the DB files are made 0600 at boot.
     - **Never use `fileTypeFromFile`:** its runtime import can't be resolved in the bundled `dist/main.js`, which broke uploads in the 1.4.0 image. Sniff through `fileTypeFromBlob(await openAsBlob(path))`. Anything imported at runtime by a computed specifier must be checked in the built image (the backup drill uploads a file).
   - Tests live in `test/`. Helpers: `createTestDb`, `createTestApp`, `mock-idp.ts`, `signInAs(email)`.
-    - `test/perf.server.test.ts` holds the AC-11.4 server budgets (`ROOSTER_PERF_SLACK` loosens them on slow machines).
+    - `test/server.perf.test.ts` holds the AC-11.4 server budgets: `*.perf.test.ts` files are left out of the coverage run and run alone in their own CI step (`pnpm --filter @rooster/server test:perf`; `ROOSTER_PERF_SLACK` loosens them on slow machines).
     - `test/migration-fixture.test.ts` migrates the previous release's dump, `test/fixtures/release-<version>.sql`. **Refresh it at each release** with `make-release-fixture.ts`; its header says how.
   - `test/authz.matrix.test.ts` enumerates **every** OpenAPI route; a new route without a matrix row fails it.
   - The build bundles **all** JS deps into `dist/main.js`, except native modules (`NATIVE_DEPS` in `tsdown.config.ts`). Add a native dependency there **and** in `docker/Dockerfile`.

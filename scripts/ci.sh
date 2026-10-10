@@ -13,6 +13,7 @@ step "secret scan";  bash scripts/secret-scan.sh
 step "i18n";         pnpm i18n:check
 step "docs";         pnpm docs:keyboard --check   # the keyboard page matches keymap.ts (ADR 0053)
 step "unit+coverage"; pnpm test:coverage  # full run: coverage globs are repo-relative
+step "server perf";  pnpm --filter @rooster/server test:perf   # AC-11.4 budgets, alone (no coverage, no parallel files)
 step "api client";   pnpm gen:api && git diff --exit-code -- apps/server/openapi.json packages/api-client/src/schema.d.ts
 step "build";        pnpm build
 step "bundle budget"; pnpm bundle:check
