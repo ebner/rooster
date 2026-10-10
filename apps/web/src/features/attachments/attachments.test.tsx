@@ -344,6 +344,68 @@ describe('the upload queue', () => {
     await act(() => new Promise((r) => setTimeout(r)));
     expect(useUploadStore.getState().entries).toEqual([]);
   });
+
+  test("a proxy's bare 413 names no limit, not the server's (it may enforce a lower one)", async () => {
+    const { ApiError } = await import('../../data/errors');
+    const failing = deferredUpload();
+    startUploads(fixtureTaskId, [file('two-mb.bin')], vi.fn(failing.make), vi.fn(), 25 << 20);
+    await act(() => Promise.resolve());
+    failing.reject(new ApiError('http_413', 413));
+    await act(() => new Promise((r) => setTimeout(r)));
+    const [entry] = useUploadStore.getState().entries;
+    expect(entry).toMatchObject({ status: 'failed', error: 'tooLarge' });
+    expect(entry?.limitBytes).toBeUndefined();
+  });
+
+  test('a 401 is handed to the sign-in redirect', async () => {
+    const { ApiError } = await import('../../data/errors');
+    const { onUnauthenticatedRequest } = await import('../../data/session-events');
+    const seen = vi.fn();
+    const stop = onUnauthenticatedRequest(seen);
+    try {
+      const failing = deferredUpload();
+      startUploads(fixtureTaskId, [file('a.txt')], vi.fn(failing.make), vi.fn());
+      await act(() => Promise.resolve());
+      failing.reject(new ApiError('unauthenticated', 401));
+      await act(() => new Promise((r) => setTimeout(r)));
+      expect(seen).toHaveBeenCalledWith(expect.objectContaining({ status: 401 }));
+    } finally {
+      stop();
+    }
+  });
+
+  test("the end of the session drops every upload; a late answer reaches no one's cache", async () => {
+    const { ApiError } = await import('../../data/errors');
+    const { sessionDataCleared } = await import('../../data/session-events');
+    const inFlight = deferredUpload();
+    const failed = deferredUpload();
+    const upload = vi
+      .fn()
+      .mockImplementationOnce(failed.make)
+      .mockImplementationOnce(inFlight.make);
+    const done = vi.fn();
+    startUploads(fixtureTaskId, [file('failed.txt')], upload, done);
+    await act(() => Promise.resolve());
+    failed.reject(new ApiError('http_502', 502));
+    await act(() => new Promise((r) => setTimeout(r)));
+    startUploads('other-task', [file('busy.txt'), file('queued.txt')], upload, done);
+    await act(() => Promise.resolve());
+    expect(useUploadStore.getState().entries.map((e) => e.status)).toEqual([
+      'failed',
+      'uploading',
+      'queued',
+    ]);
+
+    sessionDataCleared();
+    expect(useUploadStore.getState().entries).toEqual([]);
+    expect(inFlight.abort).toHaveBeenCalled();
+    // The XHR had already completed: its result is dropped, and the queue does not go on.
+    inFlight.resolve(fixtureAttachments[6] as Attachment);
+    await act(() => new Promise((r) => setTimeout(r)));
+    expect(done).not.toHaveBeenCalled();
+    expect(upload).toHaveBeenCalledTimes(2);
+    expect(useUploadStore.getState().entries).toEqual([]);
+  });
 });
 
 describe('the pane as drop zone and paste target (ADR 0049 §3.8)', () => {

@@ -6,6 +6,7 @@ import { ApiError } from '../errors';
 import { createFixtureTransport } from '../pipeline/fixture-transport';
 import { myListKey } from '../pipeline/pipeline';
 import type { ListTransport } from '../pipeline/transport';
+import { onSessionDataCleared } from '../session-events';
 import type { Me } from '../types';
 import { nullChannel, type SyncChannel, type SyncMessage } from './channel';
 import { clearLocalData, type SyncEngine, startSync } from './engine';
@@ -129,6 +130,8 @@ describe('sync engine (04 §6)', () => {
     const posted: SyncMessage[] = [];
     const channel: SyncChannel = { ...nullChannel(), post: (m) => posted.push(m) };
     localStorage.setItem('rooster.cacheOwner', 'someone-else');
+    const cleared = vi.fn();
+    const stop = onSessionDataCleared(cleared);
     const { engine, queryClient } = await boot({ storage, outbox, transport, channel });
     await queryClient.fetchQuery({
       queryKey: myListKey(orgId),
@@ -147,6 +150,9 @@ describe('sync engine (04 §6)', () => {
     expect(queryClient.getQueryData(myListKey(orgId))).toBeUndefined();
     expect(queryClient.getQueryData(['me'])).toBeDefined();
     expect(localStorage.getItem('rooster.cacheOwner')).toBe(userId);
+    // State outside the cache (pending uploads) goes too.
+    expect(cleared).toHaveBeenCalled();
+    stop();
   });
 
   test('an online 401 on /me drops the cached data but keeps the outbox for that user', async () => {
@@ -167,6 +173,8 @@ describe('sync engine (04 §6)', () => {
       },
     ]);
     data.set(cacheStorageKey, '{}');
+    const cleared = vi.fn();
+    const stop = onSessionDataCleared(cleared);
     await queryClient
       .fetchQuery({
         queryKey: ['me'],
@@ -179,6 +187,8 @@ describe('sync engine (04 §6)', () => {
     await vi.waitFor(() => expect(data.has(cacheStorageKey)).toBe(false));
     expect(outbox.records.size).toBe(1);
     expect(localStorage.getItem('rooster.cacheOwner')).toBe(userId);
+    expect(cleared).toHaveBeenCalled();
+    stop();
   });
 
   test('sign-out clears everything and tells the other tabs', async () => {
@@ -189,7 +199,11 @@ describe('sync engine (04 §6)', () => {
     const channel: SyncChannel = { ...nullChannel(), post: (m) => posted.push(m) };
     data.set(cacheStorageKey, '{"timestamp":0,"buster":"x","clientState":{"queries":[]}}');
     const { engine } = await boot({ storage, outbox, transport, channel });
+    const cleared = vi.fn();
+    const stop = onSessionDataCleared(cleared);
     await engine.clear({ final: true });
+    stop();
+    expect(cleared).toHaveBeenCalled();
     expect(data.has(cacheStorageKey)).toBe(false);
     expect(posted).toContainEqual({ type: 'cleared' });
     expect(localStorage.getItem('rooster.cacheOwner')).toBeNull();

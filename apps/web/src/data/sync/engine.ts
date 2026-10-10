@@ -10,6 +10,7 @@ import { getClientId, registerListPipeline } from '../list';
 import { httpTransport } from '../pipeline/http-transport';
 import { ListPipeline, myListKey, tagsKey } from '../pipeline/pipeline';
 import type { ListTransport } from '../pipeline/transport';
+import { sessionDataCleared } from '../session-events';
 import type { Me } from '../types';
 import { buildInfo, cacheBuster } from './build-info';
 import { createSyncChannel, type SyncChannel, type SyncMessage } from './channel';
@@ -422,6 +423,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     events.stop();
     started = false;
     queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== 'me' });
+    sessionDataCleared();
     sweepUserStorage();
     // The cached profile must not count as signed in either (the /login guard reads it); its
     // refetch answers 401 again, which the route guard turns into /login?redirect=….
@@ -503,6 +505,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   }
 
   async function wipe({ keepMe }: { keepMe: boolean }) {
+    sessionDataCleared();
     pipeline.reset();
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = null;

@@ -263,3 +263,10 @@ added below as an amendment.
 - **§3.1 (after the full CI run):**
   - An oversized upload, by declared length or by the streamed count, is read and discarded up to 64 MB beyond the limit before `413 payload_too_large`. The 413 is sent with `Connection: close`, so proxies relay it instead of a 502. Past that cap the connection is cut, and nothing is buffered.
   - Upload 413s carry `limitBytes`, and `/meta` carries `uploadMaxBytes`, so the web checks sizes before sending.
+
+## Amendments after the security review of the late commits (ac6fec2, ae520cf, 4c4a5d0)
+- **§3.1 drain bounds:** the drain before a 413 stops after 5 s without data or after 30 s in total (`DRAIN_TIMEOUTS`). It then destroys the stream and answers. A client that declares an oversized body and stalls can no longer hold a request until Node's request timeout. The partial temp file is removed when the limit is hit, not after the drain.
+- **Uploads belong to their session:**
+  - Pending and failed uploads live outside the query cache, in the web upload store. The sync engine signals every wipe through `data/session-events.ts`: sign-out, a 401 on `/me`, or another account on this browser. The store then aborts and forgets its files, and an upload that completes afterwards updates no cache.
+  - An upload's 401 goes to the router's sign-in redirect, like any query or mutation.
+- **413 message:** the limit is shown only when the 413 names it (`limitBytes`). A proxy's bare 413 shows the generic message, because the proxy may enforce a lower limit than `/meta` says.

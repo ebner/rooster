@@ -2,6 +2,7 @@ import type { Attachment } from '@rooster/core/schemas';
 import { create } from 'zustand';
 import type { MultipartUpload } from '../../data/attachments';
 import { ApiError } from '../../data/errors';
+import { onSessionDataCleared, reportUnauthenticated } from '../../data/session-events';
 import { problemLimitBytes, type UploadErrorKind, uploadErrorKind } from './model';
 
 /** One file on its way up, or one that failed (kept until dismissed or retried). */
@@ -50,8 +51,11 @@ function patch(id: string, change: Partial<UploadEntry>) {
   }));
 }
 
-function remove(id: string) {
+/** False when the entry was already gone (dismissed, or its session ended). */
+function remove(id: string): boolean {
+  const had = useUploadStore.getState().entries.some((e) => e.id === id);
   useUploadStore.setState((s) => ({ entries: s.entries.filter((e) => e.id !== id) }));
+  return had;
 }
 
 function run(entry: UploadEntry, upload: Uploader, onDone: (attachment: Attachment) => void) {
@@ -63,21 +67,23 @@ function run(entry: UploadEntry, upload: Uploader, onDone: (attachment: Attachme
     patch(entry.id, { status: 'uploading', progress: 0, abort: request.abort });
     try {
       const attachment = await request.promise;
-      remove(entry.id);
-      onDone(attachment);
+      // A file that finishes after its session ended must not land in the next user's caches.
+      if (remove(entry.id)) onDone(attachment);
     } catch (error) {
       const api = error instanceof ApiError ? error : null;
       if (api?.code === 'aborted') {
         remove(entry.id);
         return;
       }
+      if (api?.status === 401) reportUnauthenticated(api);
       // Files over the known limit never get here (`startUploads`); a 502 from a proxy or a
       // reset connection is then a plain failure, offered for retry.
       patch(entry.id, {
         status: 'failed',
         abort: undefined,
         error: uploadErrorKind(api),
-        limitBytes: problemLimitBytes(api?.problem) ?? entry.maxBytes,
+        // Only a limit the 413 names: a proxy's bare 413 may enforce a lower one than `/meta`.
+        limitBytes: problemLimitBytes(api?.problem),
       });
     }
   });
@@ -131,11 +137,19 @@ export function dismissUpload(id: string): void {
   else remove(id);
 }
 
-/** Test seam: forget every upload. */
+/**
+ * Forgets every upload and cancels those in flight. The files belong to the session that picked
+ * them: sign-out, a lost session or another account on this browser drops them, so nobody else
+ * can see or retry them.
+ */
 export function resetUploads(): void {
+  const { entries } = useUploadStore.getState();
   chains.clear();
   useUploadStore.setState({ entries: [] });
+  for (const entry of entries) entry.abort?.();
 }
+
+onSessionDataCleared(resetUploads);
 
 /** The public shape of a task's uploads (without the file and the abort handle). */
 export function pendingFor(entries: readonly UploadEntry[], taskId: string): PendingUpload[] {

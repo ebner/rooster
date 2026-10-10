@@ -2,6 +2,7 @@ import { MutationCache, notifyManager, QueryCache, QueryClient } from '@tanstack
 import { createRouter } from '@tanstack/react-router';
 import { ApiError } from './data/errors';
 import { queryKeys } from './data/query-keys';
+import { onUnauthenticatedRequest } from './data/session-events';
 import { safeRedirectPath } from './lib/safe-redirect';
 import { routeTree } from './routeTree.gen';
 
@@ -54,6 +55,9 @@ export const router = createRouter({
   defaultPreload: 'intent',
   scrollRestoration: true,
 });
+
+// Uploads go through XHR, outside the caches above.
+onUnauthenticatedRequest((error) => onUnauthenticated(error));
 
 declare module '@tanstack/react-router' {
   interface Register {

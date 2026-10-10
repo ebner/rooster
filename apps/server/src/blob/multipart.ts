@@ -39,6 +39,18 @@ export interface ReceivedFile {
  */
 export const DRAIN_EXTRA_BYTES = 64 * 1024 * 1024;
 
+/**
+ * Time bounds on that drain: a client that stalls (sends nothing for `idleMs`) or trickles
+ * (still sending after `totalMs`) loses the connection instead of holding it, its socket and
+ * the request open until Node's request timeout.
+ */
+export const DRAIN_TIMEOUTS = { idleMs: 5_000, totalMs: 30_000 } as const;
+
+export interface DrainTimeouts {
+  idleMs: number;
+  totalMs: number;
+}
+
 /** `413 payload_too_large` naming the limit (`limitBytes`, which clients show). */
 export const tooLarge = (maxBytes: number) =>
   new AppError(
@@ -51,9 +63,14 @@ export const tooLarge = (maxBytes: number) =>
 
 /**
  * Reads and discards the rest of `source`, at most `budget` more bytes; constant memory.
- * True when it ended within the budget; otherwise the stream is destroyed (the socket goes).
+ * True when it ended within the budget and the time bounds; otherwise the stream is destroyed
+ * (the socket goes).
  */
-function drain(source: Readable, budget: number): Promise<boolean> {
+function drain(
+  source: Readable,
+  budget: number,
+  timeouts: DrainTimeouts = DRAIN_TIMEOUTS,
+): Promise<boolean> {
   return new Promise((resolve) => {
     // A small body may have been read to its end before the limit was noticed.
     if (source.readableEnded) {
@@ -65,7 +82,18 @@ function drain(source: Readable, budget: number): Promise<boolean> {
       return;
     }
     let left = budget;
+    let idle: ReturnType<typeof setTimeout> | undefined;
+    const deadline = setTimeout(() => finish(false), timeouts.totalMs);
+    const armIdle = () => {
+      clearTimeout(idle);
+      idle = setTimeout(() => finish(false), timeouts.idleMs);
+    };
+    let finished = false;
     const finish = (drained: boolean) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(deadline);
+      clearTimeout(idle);
       source.off('data', onData);
       source.off('end', onEnd);
       source.off('error', onError);
@@ -77,6 +105,7 @@ function drain(source: Readable, budget: number): Promise<boolean> {
     const onData = (chunk: Buffer) => {
       left -= chunk.length;
       if (left < 0) finish(false);
+      else armIdle();
     };
     const onEnd = () => finish(true);
     const onError = () => finish(false);
@@ -84,6 +113,7 @@ function drain(source: Readable, budget: number): Promise<boolean> {
     source.once('end', onEnd);
     source.once('error', onError);
     source.once('close', onClose);
+    armIdle();
     source.resume();
   });
 }
@@ -113,7 +143,7 @@ const noFile = (detail = 'Attach one file in the multipart field "file".') =>
  */
 export async function receiveFile(
   request: UploadRequest,
-  options: { maxBytes: number; tmpDir: string },
+  options: { maxBytes: number; tmpDir: string; drainTimeouts?: DrainTimeouts },
 ): Promise<ReceivedFile> {
   const contentType = request.contentType ?? '';
   if (!/^multipart\/form-data\s*;/i.test(contentType)) throw notMultipart();
@@ -123,7 +153,11 @@ export async function receiveFile(
   if (Number.isFinite(declared) && declared > rawMax) {
     // Nothing is stored; the body is only read off the wire so the 413 arrives cleanly.
     if (request.body !== null && declared <= drainCap) {
-      await drain(Readable.fromWeb(request.body as WebReadableStream<Uint8Array>), drainCap);
+      await drain(
+        Readable.fromWeb(request.body as WebReadableStream<Uint8Array>),
+        drainCap,
+        options.drainTimeouts,
+      );
     }
     throw tooLarge(options.maxBytes);
   }
@@ -182,8 +216,13 @@ export async function receiveFile(
           reject(error);
           return;
         }
-        // Oversized: read the rest off the wire (discarded) so the 413 reaches the client.
-        void drain(source, drainCap - rawBytes).then(() => reject(error));
+        // Oversized: the partial file goes now, not after the drain; then the rest of the body is
+        // read off the wire (discarded) so the 413 reaches the client.
+        void fileWritten
+          .catch(() => null)
+          .then(() => rm(path, { force: true }))
+          .catch(() => {});
+        void drain(source, drainCap - rawBytes, options.drainTimeouts).then(() => reject(error));
       };
       parser.on('file', (name, file, info) => {
         if (name !== 'file' || settled) {
