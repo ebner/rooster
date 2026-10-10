@@ -38,7 +38,9 @@ test('the Settings tab opens the index; a section drills in and ‹ Settings goe
     .tap();
   await expect(page).toHaveURL(/\/settings$/);
   const index = page.getByRole('navigation', { name: 'Settings sections' });
-  await expect(index.getByRole('link')).toHaveCount(6);
+  // Six sections, plus Help (ADR 0053).
+  await expect(index.getByRole('link')).toHaveCount(7);
+  await expect(index.getByRole('link', { name: /Help/ })).toHaveAttribute('href', '/help');
   await expect(index.getByRole('link', { name: /Notifications/ })).toContainText(
     'In app, push, email, task reminders and the daily digest',
   );
@@ -63,7 +65,7 @@ test('the Settings tab opens the index; a section drills in and ‹ Settings goe
 
   await header.getByRole('link', { name: 'Back to Settings' }).tap();
   await expect(page).toHaveURL(/\/settings$/);
-  await expect(index.getByRole('link')).toHaveCount(6);
+  await expect(index.getByRole('link')).toHaveCount(7);
 });
 
 test('a deep link opens the section, and back leads to the index', async ({ page }) => {
