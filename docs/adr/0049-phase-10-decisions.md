@@ -276,3 +276,6 @@ added below as an amendment.
   - On phones, dismissing the quick date sheet by its scrim or a swipe commits the picker's draft, as a click outside the desktop picker does. Esc discards it.
   - The pane's subtasks ask "this task / this and following" before deleting a recurring subtask.
   - A title edit that changes only the basis ("after done") is sent.
+- **Session scope, second round:**
+  - A clear announced by another tab (sign-out, another account) signals the upload store before its first await, not only when the page reloads.
+  - Avatar requests are bound to the session through `sessionScope()`. A wipe aborts the upload, and a late answer to an upload or a removal never writes `/me`, which by then may be the next account's.

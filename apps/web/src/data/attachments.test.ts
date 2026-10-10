@@ -1,7 +1,12 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, renderHook } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { attachmentUrl, sendMultipart, thumbnailUrl } from './attachments';
-import { avatarFileProblem, isUploadedAvatar } from './avatar';
+import { avatarFileProblem, isUploadedAvatar, useUploadAvatar } from './avatar';
 import { ApiError } from './errors';
+import { queryKeys } from './query-keys';
+import { sessionDataCleared } from './session-events';
 
 /** A minimal XMLHttpRequest double: the test answers it. */
 class FakeXhr {
@@ -94,5 +99,29 @@ describe('avatar checks (FR-SET-1)', () => {
     expect(isUploadedAvatar('/api/v1/avatars/u1?v=3', 'u1')).toBe(true);
     expect(isUploadedAvatar('https://lh3.googleusercontent.com/a/x', 'u1')).toBe(false);
     expect(isUploadedAvatar(null, 'u1')).toBe(false);
+  });
+});
+
+describe('avatar uploads belong to their session (ADR 0049)', () => {
+  test("an upload outliving its session is aborted and never writes the next account's profile", async () => {
+    vi.stubGlobal('XMLHttpRequest', FakeXhr);
+    const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    const bob = { user: { id: 'bob' } };
+    queryClient.setQueryData(queryKeys.me, bob);
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    const { result } = renderHook(() => useUploadAvatar(), { wrapper });
+    const file = new File([new Uint8Array(10)], 'me.png', { type: 'image/png' });
+    let outcome: Promise<unknown> = Promise.resolve();
+    act(() => {
+      outcome = result.current.mutateAsync(file).catch((e: unknown) => e);
+    });
+    await vi.waitFor(() => expect(FakeXhr.last?.method).toBe('PUT'));
+    const xhr = FakeXhr.last as FakeXhr;
+    const abort = vi.spyOn(xhr, 'abort');
+    sessionDataCleared();
+    expect(abort).toHaveBeenCalled();
+    expect(await outcome).toMatchObject({ code: 'aborted' });
+    expect(queryClient.getQueryData(queryKeys.me)).toBe(bob);
   });
 });

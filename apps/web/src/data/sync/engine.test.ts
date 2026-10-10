@@ -209,6 +209,39 @@ describe('sync engine (04 §6)', () => {
     expect(localStorage.getItem('rooster.cacheOwner')).toBeNull();
   });
 
+  test("a clear in another tab stops this tab's uploads before anything else is awaited", async () => {
+    const { storage } = memoryStorage();
+    let handler: ((m: SyncMessage) => void) | null = null;
+    const channel: SyncChannel = {
+      ...nullChannel(),
+      listen: (h) => {
+        handler = h;
+        return () => {
+          handler = null;
+        };
+      },
+    };
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...globalThis.location, reload });
+    try {
+      await boot({
+        storage,
+        outbox: createMemoryOutbox(),
+        transport: createFixtureTransport({ userId }),
+        channel,
+      });
+      const cleared = vi.fn();
+      const stop = onSessionDataCleared(cleared);
+      (handler as ((m: SyncMessage) => void) | null)?.({ type: 'cleared' });
+      // Synchronously: the persister's awaited write comes after.
+      expect(cleared).toHaveBeenCalled();
+      stop();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   test('AC-1.0.1 sign-out sweeps per-user localStorage (palette recents)', async () => {
     const { storage } = memoryStorage();
     const transport = createFixtureTransport({ userId });

@@ -514,6 +514,8 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   }
 
   async function onClearedElsewhere() {
+    // Before the first await: nothing of this session may go on with the next one's cookies.
+    sessionDataCleared();
     saving = false;
     events.stop();
     await persister.suspend();

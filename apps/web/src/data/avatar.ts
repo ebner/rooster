@@ -1,11 +1,12 @@
 import type { Schemas } from '@rooster/api-client';
 import { AVATAR_MAX_BYTES } from '@rooster/core/limits';
 import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-query';
-import { sendMultipart } from './attachments';
+import { abortedErrorCode, sendMultipart } from './attachments';
 import { ApiError } from './errors';
 import { api, unwrap } from './http';
 import { toMe } from './mappers';
 import { queryKeys } from './query-keys';
+import { sessionScope } from './session-events';
 import type { MutationResult } from './types';
 
 /**
@@ -57,9 +58,16 @@ export function useUploadAvatar(): MutationResult<File> {
       if (problem) {
         throw new ApiError(problem === 'size' ? 'payload_too_large' : 'unsupported_media_type', 0);
       }
-      const me = await sendMultipart<Schemas['Me']>('PUT', '/api/v1/me/avatar', file, file.name)
-        .promise;
-      await refreshPictures(queryClient, me);
+      const request = sendMultipart<Schemas['Me']>('PUT', '/api/v1/me/avatar', file, file.name);
+      const scope = sessionScope(request.abort);
+      try {
+        const me = await request.promise;
+        // Another account may have taken over this tab meanwhile: its profile stays.
+        if (scope.stale()) throw new ApiError(abortedErrorCode, 0);
+        await refreshPictures(queryClient, me);
+      } finally {
+        scope.done();
+      }
     },
   });
 }
@@ -69,7 +77,9 @@ export function useRemoveAvatar(): MutationResult<void> {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
+      const scope = sessionScope();
       const me = await unwrap(api.DELETE('/api/v1/me/avatar'));
+      if (scope.stale()) throw new ApiError(abortedErrorCode, 0);
       await refreshPictures(queryClient, me);
     },
   });
