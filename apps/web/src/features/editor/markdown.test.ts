@@ -143,6 +143,14 @@ describe('pathological nesting (anyone in a shared org can store it)', () => {
     expect(toMarkdown(doc)).toContain(markdown.includes('\t') ? 'a' : 'x');
   });
 
+  test.each([
+    ['a lone CR', 'x\r'],
+    ['CRLF', 'x\r\n'],
+  ])('a line after %s is bounded too', (_name, before) => {
+    const doc = fromMarkdown(`${before}${'> '.repeat(deep)}x`);
+    expect(depth(doc)).toBeLessThanOrEqual(maxNesting * 2);
+  });
+
   test('the text past the limit stays, as text', () => {
     const markdown = `${'> '.repeat(maxNesting + 2)}x`;
     expect(boundNesting(markdown)).toBe(`${'> '.repeat(maxNesting)}\\> > x`);

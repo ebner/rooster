@@ -103,9 +103,17 @@ export function MarkdownEditor({
     return true;
   }, []);
 
+  // A description the converter fails on, met outside React's rendering (a blur, a change from
+  // outside): rethrown while rendering, so the caller's error boundary shows the fallback.
+  const [failure, setFailure] = useState<{ error: unknown } | null>(null);
+  if (failure) throw failure.error;
   const replaceContent = useCallback((markdown: string) => {
     known.current = markdown;
-    editorRef.current?.commands.setContent(fromMarkdown(markdown), { emitUpdate: false });
+    try {
+      editorRef.current?.commands.setContent(fromMarkdown(markdown), { emitUpdate: false });
+    } catch (error) {
+      setFailure({ error });
+    }
   }, []);
 
   const [extensions] = useState(() =>

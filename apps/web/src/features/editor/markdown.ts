@@ -221,8 +221,9 @@ function capIndent(line: string): string {
  */
 export function boundNesting(source: string): string {
   let inFence = false;
+  // Every line break marked knows (`\r\n`, a lone `\r`), or a line could hide behind one.
   return source
-    .split('\n')
+    .split(/\r\n|\r|\n/)
     .map((raw) => {
       if (fence.test(raw)) inFence = !inFence;
       if (inFence) return raw;

@@ -143,8 +143,14 @@ export function PlainDescription({
   const { t } = useTranslation('pane');
   const noteId = useId();
   const [text, setText] = useState(value);
+  // Untouched, it follows the stored text (another device, undo); edited, the user's text wins,
+  // and only then does a blur save it.
+  const [edited, setEdited] = useState(false);
+  if (!edited && text !== value) setText(value);
+  // Saved (the stored text caught up), or typed back to it: pristine again.
+  else if (edited && text === value) setEdited(false);
   const commit = () => {
-    if (text !== value) onChange(text);
+    if (edited && text !== value) onChange(text);
   };
   return (
     <div className="flex flex-col gap-1" data-testid="description-plain">
@@ -157,7 +163,10 @@ export function PlainDescription({
         readOnly={readOnly}
         aria-label={t('description.label')}
         aria-describedby={noteId}
-        onChange={(event) => setText(event.target.value)}
+        onChange={(event) => {
+          setText(event.target.value);
+          setEdited(true);
+        }}
         onBlur={commit}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {

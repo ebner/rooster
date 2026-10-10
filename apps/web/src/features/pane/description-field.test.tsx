@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeAll, describe, expect, test, vi } from 'vitest';
-import { DescriptionField } from './description-field';
+import { DescriptionField, PlainDescription } from './description-field';
 
 // One description the converter cannot handle, whatever the reason: the editor throws on it.
 vi.mock('../editor/markdown', async (original) => {
@@ -46,5 +46,41 @@ describe('the pane description survives any stored text', () => {
     await waitFor(() => expect(onChange).toHaveBeenCalledWith('Fixed'));
     warn.mockRestore();
     error.mockRestore();
+  });
+
+  test('a failure met on blur (a change that waited for it) also falls back', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { rerender } = render(<DescriptionField value="Fine" onChange={vi.fn()} />);
+    const editor = await screen.findByRole('textbox', { name: 'Description' });
+    act(() => editor.focus());
+    // Another device saves text the converter fails on; it waits for the blur.
+    rerender(<DescriptionField value="UNPARSEABLE" onChange={vi.fn()} />);
+    expect(screen.queryByTestId('description-plain')).toBeNull();
+    act(() => {
+      editor.blur();
+      fireEvent.blur(editor);
+    });
+    const plain = (await screen.findByTestId('description-plain')).querySelector('textarea');
+    expect(plain?.value).toBe('UNPARSEABLE');
+    warn.mockRestore();
+    error.mockRestore();
+  });
+});
+
+describe('the plain-text description', () => {
+  test('follows newer text until edited, and saves only an edit', () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<PlainDescription value="Old" onChange={onChange} />);
+    const field = screen.getByRole('textbox', { name: 'Description' }) as HTMLTextAreaElement;
+    rerender(<PlainDescription value="Newer" onChange={onChange} />);
+    expect(field.value).toBe('Newer');
+    fireEvent.blur(field);
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.change(field, { target: { value: 'Mine' } });
+    rerender(<PlainDescription value="Newest" onChange={onChange} />);
+    expect(field.value).toBe('Mine');
+    fireEvent.blur(field);
+    expect(onChange).toHaveBeenCalledWith('Mine');
   });
 });
