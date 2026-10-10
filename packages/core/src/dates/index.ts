@@ -60,3 +60,4 @@ export {
   stripTitleMatch,
   type TagTokenMatch,
 } from './tokens.ts';
+export { isTitleTail, type ReminderSpan, reminderTokenSpans } from './tokens-spans.ts';

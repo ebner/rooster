@@ -1,5 +1,5 @@
 import { BULK_MAX } from '../limits.ts';
-import type { BulkOp, TaskPatch } from '../schemas/list.ts';
+import type { BulkOp, Task, TaskPatch } from '../schemas/list.ts';
 import { type ApplyContext, applyOp, touchesDue } from './apply.ts';
 import { type ListOpSpec, listOps } from './ops.ts';
 import {
@@ -18,12 +18,17 @@ import {
  */
 export function inverseOf(op: ListOpSpec, before: ListState, ctx: ApplyContext): ListOpSpec[] {
   const id = op.entityId;
+  /** The delete of an optimistic next instance this op created. */
+  const spawned = (nextId: string | undefined): ListOpSpec[] =>
+    nextId !== undefined && !before.tasks[nextId] && applyOp(before, op, ctx).tasks[nextId]
+      ? [listOps.deleteTask(nextId)]
+      : [];
   switch (op.kind) {
     case 'task.create':
       return before.tasks[id] || before.deletedTasks[id] ? [] : [listOps.deleteTask(id)];
     case 'task.patch': {
-      const fields = inversePatch(before, id, op.payload);
       const after = applyOp(before, op, ctx);
+      const fields = inversePatch(before, after, id, op.payload);
       const undo =
         op.payload.parentId === undefined
           ? fields
@@ -36,8 +41,11 @@ export function inverseOf(op: ListOpSpec, before: ListState, ctx: ApplyContext):
     case 'task.complete': {
       const task = before.tasks[id];
       if (!task || (task.completedAt !== null) === op.payload.completed) return [];
-      return [listOps.completeTask(id, !op.payload.completed)];
+      // ADR 0049 §1.6: undoing a recurring completion reopens it and deletes the next one.
+      return [listOps.completeTask(id, !op.payload.completed), ...spawned(op.payload.nextId)];
     }
+    case 'task.skip':
+      return before.tasks[id] ? [listOps.restoreTask(id), ...spawned(op.payload.nextId)] : [];
     case 'task.delete':
       return before.tasks[id] ? [listOps.restoreTask(id)] : [];
     case 'task.restore':
@@ -74,6 +82,13 @@ export function inverseOf(op: ListOpSpec, before: ListState, ctx: ApplyContext):
       return [listOps.restoreComment(id, op.taskId)];
     case 'comment.restore':
       return [listOps.deleteComment(id, op.taskId)];
+    case 'reminder.create': {
+      const { id: _id, ...spec } = op.payload;
+      return [listOps.deleteReminder(op.taskId, id, spec)];
+    }
+    case 'reminder.delete':
+      // Re-created with the same id from the spec the caller attached (the list has none).
+      return op.restore === undefined ? [] : [listOps.createReminder(op.taskId, id, op.restore)];
     case 'task.follow':
     case 'comment.patch':
       // The previous follow state and comment body live outside the list: the caller knows them.
@@ -148,9 +163,10 @@ export function inverseOfSequence(
   return inverses.reverse().flat();
 }
 
-function inversePatch(before: ListState, id: string, p: TaskPatch): ListOpSpec[] {
+function inversePatch(before: ListState, after: ListState, id: string, p: TaskPatch): ListOpSpec[] {
   const task = before.tasks[id];
   if (!task) return [];
+  const patched = after.tasks[id];
   const undo: TaskPatch = {
     ...(p.title === undefined || p.title === task.title ? {} : { title: task.title }),
     ...(p.description === undefined || p.description === task.description
@@ -167,6 +183,8 @@ function inversePatch(before: ListState, id: string, p: TaskPatch): ListOpSpec[]
           startDate: task.startDate,
         }
       : {}),
+    // P10: the rule changed directly, or went with a cleared due date.
+    ...(patched && !sameRecurrence(task, patched) ? recurrenceOf(task) : {}),
   };
   return Object.keys(undo).length === 0 ? [] : [listOps.patchTask(id, undo)];
 }
@@ -223,6 +241,23 @@ function sameDue(a: Due, b: Due): boolean {
     (a.dueTz ?? null) === (b.dueTz ?? null) &&
     (a.startDate ?? null) === (b.startDate ?? null)
   );
+}
+
+type Rule = Pick<Task, 'recurrence' | 'recurrenceBasis'>;
+
+function sameRecurrence(a: Rule, b: Rule): boolean {
+  return (
+    (a.recurrence ?? null) === (b.recurrence ?? null) &&
+    (a.recurrenceBasis ?? null) === (b.recurrenceBasis ?? null)
+  );
+}
+
+/** The patch fields that put a task's rule back (a basis only goes with a rule). */
+function recurrenceOf(task: Rule): Pick<TaskPatch, 'recurrence' | 'recurrenceBasis'> {
+  const recurrence = task.recurrence ?? null;
+  return recurrence === null
+    ? { recurrence: null }
+    : { recurrence, recurrenceBasis: task.recurrenceBasis ?? 'due' };
 }
 
 function chunks<T>(items: readonly T[]): T[][] {
@@ -301,16 +336,20 @@ function inverseBulk(
       return [...undo, ...restoreAssigned(before, after, undo, changed, changed, ctx)];
     }
     case 'setDue': {
-      // One bulk op per distinct previous due unit.
-      const byUnit = new Map<string, { due: Due; ids: string[] }>();
+      // One bulk op per distinct previous due unit (and rule, when the op changed it).
+      const after = applyOp(before, listOps.bulk(orgId, op), ctx);
+      const byUnit = new Map<string, { due: Due & Partial<Rule>; ids: string[] }>();
       for (const i of op.ids) {
         const task = before.tasks[i];
-        if (!task || sameDue(task, op.args)) continue;
+        if (!task) continue;
+        const ruleChanged = !sameRecurrence(task, after.tasks[i] ?? task);
+        if (sameDue(task, op.args) && !ruleChanged) continue;
         const due = {
           dueDate: task.dueDate,
           dueTime: task.dueTime,
           dueTz: task.dueTz,
           startDate: task.startDate,
+          ...(ruleChanged ? recurrenceOf(task) : {}),
         };
         const key = JSON.stringify(due);
         const entry = byUnit.get(key) ?? { due, ids: [] };

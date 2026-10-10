@@ -10,7 +10,9 @@ import type {
   TaskCreate,
   TaskMove,
   TaskPatch,
+  TaskSkip,
 } from '../schemas/list.ts';
+import type { ReminderCreate, ReminderSpecInput } from '../schemas/reminders.ts';
 import type { TagCreate } from '../schemas/tags.ts';
 
 type Empty = Record<string, never>;
@@ -26,18 +28,23 @@ export type TaskDuplicateBody = { id: string; includeSubtasks: boolean };
 export type TagCreateBody = TagCreate & { id: string };
 /** P6. POST /tasks/:taskId/comments with the comment's client id. */
 export type CommentCreateBody = { id: string; body: string };
+/** P10. POST /tasks/:taskId/reminders with the reminder's client id (ADR 0049 §2.7). */
+export type ReminderCreateBody = ReminderCreate & { id: string };
 
 /**
  * One list mutation, before the pipeline stamps it (04 §6.2). Each kind is exactly one HTTP
  * request; `payload` is the request body, except for `task.expanded` and `task.follow` (PUT or
  * DELETE) and `task.addTag`/`task.removeTag` (the tag id is part of the path). `entityId` is
- * the task, group, tag or comment id (the org id for bulk ops); comment ops on an existing
- * comment also carry its `taskId`, which locates the `['activity', taskId]` cache.
+ * the task, group, tag, comment or reminder id (the org id for bulk ops); comment ops on an
+ * existing comment also carry its `taskId`, which locates the `['activity', taskId]` cache, and
+ * reminder ops carry the `taskId` of their route. `reminder.delete` may carry the deleted
+ * reminder's `restore` spec (not sent): its undo re-creates it with the same id.
  */
 export type ListOpSpec =
   | { kind: 'task.create'; entityId: string; payload: TaskCreateBody }
   | { kind: 'task.patch'; entityId: string; payload: TaskPatch }
   | { kind: 'task.complete'; entityId: string; payload: TaskComplete }
+  | { kind: 'task.skip'; entityId: string; payload: TaskSkip }
   | { kind: 'task.delete'; entityId: string; payload: Empty }
   | { kind: 'task.restore'; entityId: string; payload: Empty }
   | { kind: 'task.move'; entityId: string; payload: TaskMove }
@@ -52,6 +59,14 @@ export type ListOpSpec =
   | { kind: 'comment.patch'; entityId: string; taskId: string; payload: CommentPatch }
   | { kind: 'comment.delete'; entityId: string; taskId: string; payload: Empty }
   | { kind: 'comment.restore'; entityId: string; taskId: string; payload: Empty }
+  | { kind: 'reminder.create'; entityId: string; taskId: string; payload: ReminderCreateBody }
+  | {
+      kind: 'reminder.delete';
+      entityId: string;
+      taskId: string;
+      payload: Empty;
+      restore?: ReminderSpecInput;
+    }
   | { kind: 'tag.create'; entityId: string; payload: TagCreateBody }
   | { kind: 'group.create'; entityId: string; payload: GroupCreateBody }
   | { kind: 'group.patch'; entityId: string; payload: GroupPatch }
@@ -73,6 +88,14 @@ export type ListOp = ListOpSpec & {
 /** What the reducers need beyond the state: the acting user (creator and assignee). */
 export interface ReducerContext {
   userId: string;
+  /**
+   * P10: the acting user's IANA timezone (`user.timezone`). It gives the completion date of an
+   * all-day recurring task (ADR 0049 §1.2; UTC without it) and resolves relative reminders on
+   * all-day tasks (left unresolved without it).
+   */
+  timezone?: string;
+  /** P10: `prefs.allDayReminderTime` (`HH:MM`, default 09:00), for relative reminders. */
+  allDayReminderTime?: string;
 }
 
 /**
@@ -91,7 +114,12 @@ export function opEntityIds(op: ListOpSpec): string[] {
     case 'comment.patch':
     case 'comment.delete':
     case 'comment.restore':
+    case 'reminder.create':
+    case 'reminder.delete':
       return [op.entityId, op.taskId];
+    case 'task.complete':
+    case 'task.skip':
+      return op.payload.nextId === undefined ? [op.entityId] : [op.entityId, op.payload.nextId];
     default:
       return [op.entityId];
   }
@@ -109,10 +137,20 @@ export const listOps = {
     entityId: id,
     payload,
   }),
-  completeTask: (id: string, completed: boolean): ListOpSpec => ({
+  /**
+   * P10: `nextId` names the next instance when completing a recurring task (ADR 0049 §1.6); the
+   * reducer creates it optimistically and the undo deletes it.
+   */
+  completeTask: (id: string, completed: boolean, nextId?: string): ListOpSpec => ({
     kind: 'task.complete',
     entityId: id,
-    payload: { completed },
+    payload: nextId === undefined || !completed ? { completed } : { completed, nextId },
+  }),
+  /** P10. POST /tasks/:id/skip: this occurrence to Trash, the series goes on (FR-REC-4). */
+  skipTask: (id: string, nextId?: string): ListOpSpec => ({
+    kind: 'task.skip',
+    entityId: id,
+    payload: nextId === undefined ? {} : { nextId },
   }),
   deleteTask: (id: string): ListOpSpec => ({ kind: 'task.delete', entityId: id, payload: {} }),
   restoreTask: (id: string): ListOpSpec => ({ kind: 'task.restore', entityId: id, payload: {} }),
@@ -180,6 +218,25 @@ export const listOps = {
     entityId: commentId,
     taskId,
     payload: {},
+  }),
+  /** P10. POST /tasks/:taskId/reminders; `entityId` is the reminder. */
+  createReminder: (taskId: string, reminderId: string, spec: ReminderSpecInput): ListOpSpec => ({
+    kind: 'reminder.create',
+    entityId: reminderId,
+    taskId,
+    payload: { ...spec, id: reminderId },
+  }),
+  /** P10. DELETE /tasks/:taskId/reminders/:reminderId; `restore` makes it undoable. */
+  deleteReminder: (
+    taskId: string,
+    reminderId: string,
+    restore?: ReminderSpecInput,
+  ): ListOpSpec => ({
+    kind: 'reminder.delete',
+    entityId: reminderId,
+    taskId,
+    payload: {},
+    ...(restore === undefined ? {} : { restore }),
   }),
   createTag: (payload: TagCreateBody): ListOpSpec => ({
     kind: 'tag.create',

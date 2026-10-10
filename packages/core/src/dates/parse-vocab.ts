@@ -145,9 +145,161 @@ export const TIME_CONNECTORS: readonly VocabEntry<null>[] = [
   ...entries('sv', true, null, 'kl', 'kl.'),
 ];
 
+// ── Recurrence (P10, FR-REC-2) ──────────────────────────────────────────────────────────────
+
+export type RecurrenceFreqWord = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+
+/** Opens a recurrence phrase. Swedish `var` only governs a count, a unit or a weekday. */
+export const EVERY: readonly VocabEntry<'every' | 'var'>[] = [
+  ...entries('en', false, 'every', 'every', 'each'),
+  ...entries('sv', false, 'every', 'varje'),
+  ...entries('sv', false, 'var', 'var'),
+];
+
+/** "varannan vecka", "vartannat år": every second. */
+export const EVERY_OTHER: readonly VocabEntry<2>[] = [
+  ...entries('sv', false, 2, 'varannan', 'vartannat'),
+];
+
+const TWO_TO_TEN = [2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+/** An interval after `every`/`var`: "every other week", "every third day", "var tredje dag". */
+export const COUNTS: readonly VocabEntry<number>[] = [
+  ...entries('en', false, 2, 'other'),
+  ...series('en', false, TWO_TO_TEN, 'two three four five six seven eight nine ten'),
+  ...series('en', false, TWO_TO_TEN, 'second third fourth fifth sixth seventh eighth ninth tenth'),
+  ...series('sv', false, TWO_TO_TEN, 'två tre fyra fem sex sju åtta nio tio'),
+  ...series(
+    'sv',
+    false,
+    TWO_TO_TEN,
+    'andra tredje fjärde femte sjätte sjunde åttonde nionde tionde',
+  ),
+];
+
+/** The nth weekday of a month (MONTHLY BYDAY): "every last fri", "första måndagen". */
+export const NTHS: readonly VocabEntry<number>[] = [
+  ...series('en', false, [1, 2, 3, 4, -1], 'first second third fourth last'),
+  ...series('en', false, [1, 2, 3, 4], '1st 2nd 3rd 4th'),
+  ...series('sv', false, [1, 2, 3, 4, -1], 'första andra tredje fjärde sista'),
+  ...series('sv', false, [1, 2, 3, 4], '1:a 2:a 3:e 4:e'),
+];
+
+export const FREQ_UNITS: readonly VocabEntry<RecurrenceFreqWord>[] = [
+  ...series(
+    'en',
+    false,
+    ['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'],
+    'day/days week/weeks month/months year/years',
+  ),
+  ...series(
+    'sv',
+    false,
+    ['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'],
+    'dag/dagar vecka/veckor månad/månader år',
+  ),
+];
+
+export const FREQ_ADVERBS: readonly VocabEntry<{ freq: RecurrenceFreqWord; interval: number }>[] = [
+  ...entries('en', false, { freq: 'DAILY', interval: 1 }, 'daily'),
+  ...entries('en', false, { freq: 'WEEKLY', interval: 1 }, 'weekly'),
+  ...entries('en', false, { freq: 'WEEKLY', interval: 2 }, 'fortnightly'),
+  ...entries('en', false, { freq: 'MONTHLY', interval: 1 }, 'monthly'),
+  ...entries('en', false, { freq: 'YEARLY', interval: 1 }, 'yearly', 'annually'),
+  ...entries('sv', false, { freq: 'DAILY', interval: 1 }, 'dagligen'),
+  ...entries('sv', false, { freq: 'WEEKLY', interval: 1 }, 'veckovis'),
+  ...entries('sv', false, { freq: 'MONTHLY', interval: 1 }, 'månadsvis'),
+  ...entries('sv', false, { freq: 'YEARLY', interval: 1 }, 'årligen'),
+];
+
+/** Monday to Friday. */
+export const WORKDAYS: readonly VocabEntry<null>[] = [
+  ...entries('en', false, null, 'weekday', 'weekdays', 'workday', 'workdays'),
+  ...entries('sv', false, null, 'vardag', 'vardagar'),
+];
+
+/** Weekday forms only recurrence phrases use: plurals ("mondays", "måndagar") and "fredagen". */
+export const WEEKDAY_FORMS: readonly VocabEntry<Weekday>[] = [
+  ...series(
+    'en',
+    false,
+    WEEKDAY_VALUES,
+    'sundays mondays tuesdays wednesdays thursdays fridays saturdays',
+  ),
+  ...series(
+    'sv',
+    false,
+    WEEKDAY_VALUES,
+    'söndagar måndagar tisdagar onsdagar torsdagar fredagar lördagar',
+  ),
+  ...series(
+    'sv',
+    false,
+    WEEKDAY_VALUES,
+    'söndagen måndagen tisdagen onsdagen torsdagen fredagen lördagen',
+  ),
+];
+
+/** "on weekdays", "på vardagar", "alla vardagar", "on mondays". */
+export const ON_ALL: readonly VocabEntry<null>[] = [
+  ...entries('en', false, null, 'on'),
+  ...entries('sv', false, null, 'på', 'alla'),
+];
+
+/** Before the weekdays of a weekly rule: "every 2 weeks on mon", "varannan vecka på måndag". */
+export const ON: readonly VocabEntry<null>[] = [
+  ...entries('en', false, null, 'on'),
+  ...entries('sv', false, null, 'på'),
+];
+
+/** After a monthly day: "the 15th of every month", "sista fredagen i månaden". */
+export const OF_MONTH: readonly VocabEntry<null>[] = [
+  ...entries(
+    'en',
+    false,
+    null,
+    'of the month',
+    'of every month',
+    'of each month',
+    'every month',
+    'each month',
+    'monthly',
+  ),
+  ...entries('sv', false, null, 'i månaden', 'varje månad', 'i varje månad', 'månadsvis'),
+];
+
+/** After a date: "oct 12 every year", "12 okt varje år". */
+export const OF_YEAR: readonly VocabEntry<null>[] = [
+  ...entries('en', false, null, 'every year', 'each year', 'yearly', 'annually'),
+  ...entries('sv', false, null, 'varje år', 'årligen'),
+];
+
+/** Basis `completion`: "every 3 days after done", "var 3:e dag efter klar". */
+export const AFTER_DONE: readonly VocabEntry<null>[] = [
+  ...entries(
+    'en',
+    false,
+    null,
+    'after done',
+    'after completion',
+    'after completing',
+    'after completed',
+    'after it is done',
+  ),
+  ...entries(
+    'sv',
+    false,
+    null,
+    'efter klar',
+    'efter avklarad',
+    'efter slutförd',
+    'efter att den är klar',
+  ),
+];
+
 /**
- * Recurrence (P10) is not parsed yet, but a weekday or date inside a recurrence phrase must not
- * become a one-off due date ("Water plants every mon"). These words open a recurrence phrase.
+ * A weekday or date inside a recurrence phrase that does not parse must not become a one-off
+ * due date ("Water plants every mon fix"). These words open a recurrence phrase.
  */
 export const RECURRENCE_TRIGGERS: ReadonlySet<string> = new Set([
   'every',

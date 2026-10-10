@@ -118,3 +118,21 @@ added below as an amendment.
    - The output follows RFC 5545: escaping, 75-octet folding that is UTF-8 safe, and CRLF line ends.
 4. **Caching.** `Content-Type: text/calendar; charset=utf-8`, `Cache-Control: private, max-age=900`, and an ETag over the body with `304` (FR-CAL-2).
 
+## Amendments: core (WP 10.1, 10.4)
+- **Natural language:**
+  - A new series starts on the first occurrence on or after today, so "every mon" typed on a Monday is due today; "after done" also starts today.
+  - "after done" is only accepted after an interval phrase ("every 3 days", "weekly"), never after weekdays.
+  - English "every 2nd/last fri" is the nth weekday of the month; "every other fri", "varannan fredag" and "var andra fredag" are every second week.
+  - Recurrence phrases match only at the end of a title. A recurrence word that doesn't form a whole phrase still blocks a one-off date.
+- **Week cadence:** weeks start on Monday, anchored on the current due date, so each instance anchors the next.
+- **Reminder tokens:**
+  - A token must be its own word, followed only by other tokens or one unbroken date phrase.
+  - `!29d` (over the four-week maximum), `Ship it!` and `!1h later` stay plain text.
+  - `>Group` and `@name` may be followed by reminder tokens.
+- **Partial recurrence patches:** `recurrenceBasis` alone re-normalises the current rule; `recurrenceBasis: null` without `recurrence` changes nothing.
+- **Reducers:**
+  - `ReducerContext` gains `timezone` (for the completion date and all-day reminders) and `allDayReminderTime`.
+  - The optimistic next instance has no subtask copies and `nextReminderAt: null`; the response fills them in.
+  - A complete or skip response without `next` removes the optimistic instance. This is how "at most one open instance" reaches the client, which has no `seriesId`.
+  - `reminder.delete` carries the deleted spec (not sent) as its undo.
+- **New exports:** `firstOccurrence`, `recurrencePresets`, `presetOf`, `describeRule` (structured, for localisation), `reminderTokenSpans` and `touchesRecurrence`.

@@ -188,6 +188,8 @@ export function applyOpToTaskList(
     case 'task.complete':
       return completeRows(tasks, [op.entityId], op.payload.completed, ctx.now);
     case 'task.delete':
+    case 'task.skip':
+      // P10: a skipped occurrence goes to Trash; its next instance comes with the response.
       return deleteRows(tasks, [op.entityId]);
     case 'task.restore':
       return restoreRows(tasks, [op.entityId], ctx);
@@ -227,6 +229,8 @@ export function applyOpToTaskList(
     case 'task.expanded':
     case 'task.follow':
     case 'comment.patch':
+    case 'reminder.create':
+    case 'reminder.delete':
     case 'tag.create':
     case 'group.create':
     case 'group.patch':
@@ -280,6 +284,10 @@ export function mergeTaskListResponse(
       let next = isTask(r?.task) ? putRow(tasks, r.task, false) : tasks;
       if (isTask(r?.next)) next = putRow(next, r.next, true);
       return { tasks: next, refetch: false };
+    }
+    case 'task.skip': {
+      const next = (response as { next?: unknown } | undefined)?.next;
+      return isTask(next) ? { tasks: putRow(tasks, next, true), refetch: false } : keep;
     }
     case 'task.bulk': {
       const results = (response as { results?: { ok: boolean }[] } | undefined)?.results ?? [];

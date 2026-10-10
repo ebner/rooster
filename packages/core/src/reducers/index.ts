@@ -1,4 +1,11 @@
-export { type ApplyContext, applyOp, applyOps, derivedTaskId, touchesDue } from './apply.ts';
+export {
+  type ApplyContext,
+  applyOp,
+  applyOps,
+  derivedTaskId,
+  touchesDue,
+  touchesRecurrence,
+} from './apply.ts';
 export { applyOpToDetail, detailState, mergeDetailResponse } from './detail.ts';
 export { inverseOf, inverseOfSequence, restorePlacements } from './inverse.ts';
 export { type MergeResult, mergeResponse } from './merge.ts';
@@ -11,6 +18,7 @@ export {
   listOps,
   opEntityIds,
   type ReducerContext,
+  type ReminderCreateBody,
   type TagCreateBody,
   type TaskCreateBody,
   type TaskDuplicateBody,

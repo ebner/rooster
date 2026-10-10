@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { REMINDER_OFFSET_MAX, REMINDERS_MAX } from '../limits.ts';
+import { REMINDER_OFFSET_MAX } from '../limits.ts';
 import { idSchema, timestampSchema } from './common.ts';
 
 /**

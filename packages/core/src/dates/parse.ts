@@ -10,8 +10,9 @@
  * - `in N months` clamps to the month's last day (Jan 31 + 1 month = Feb 28/29).
  * - Title abbreviations of `today`/`tomorrow` (`tod`, `tom`, `tmr`) are ambiguous with names, so
  *   they obey the end-of-title rule; the full words match anywhere.
- * - A possessive ("tomorrow's") never matches; nor does any phrase governed by a recurrence word
- *   (`every`, `daily`, `varje`, `varannan`, …) until recurrence parsing lands (P10).
+ * - A possessive ("tomorrow's") never matches. A weekday or date governed by a recurrence word
+ *   (`every`, `daily`, `varje`, `varannan`, …) is never a one-off date: either the whole
+ *   recurrence phrase parses (P10, `parse-recurrence.ts`) or nothing does.
  * - A time suffix needs a connector (`at`, `@`, `kl`, `klockan`) unless it has minutes or am/pm.
  */
 import {
@@ -26,6 +27,8 @@ import {
   startOfWeek,
   weekdayOf,
 } from './iso.ts';
+import { execAt, type Mode, type ParseLocale, sticky, Vocab } from './parse-lexer.ts';
+import { RecurrenceScanner } from './parse-recurrence.ts';
 import {
   DATE_PREFIXES,
   DAY_WORDS,
@@ -53,7 +56,7 @@ import {
   type Span,
 } from './tokens-spans.ts';
 
-export type ParseLocale = 'en' | 'sv';
+export type { ParseLocale } from './parse-lexer.ts';
 
 export interface DateParseContext {
   /** `YYYY-MM-DD` in the user's timezone. */
@@ -85,13 +88,6 @@ export interface TitleDateMatch extends DateParseResult {
   text: string;
 }
 
-/**
- * - `title`: 02 §8.1 vocabulary gating (UI language + English full words); no slash dates.
- * - `picker`: both languages fully, slash dates per `dateFormat`.
- * - `tail`: both languages fully, no slash dates; used to recognise a date after `>Group`.
- */
-type Mode = 'title' | 'picker' | 'tail';
-
 interface Resolved {
   date: IsoDate;
   /** False for phrases that only match at the end of a title (02 §8.1 position rule). */
@@ -105,6 +101,7 @@ interface Rule {
 
 interface Grammar {
   rules: Rule[];
+  recurrence: RecurrenceScanner;
   connectorTime: RegExp;
   bareTime: RegExp;
 }
@@ -114,46 +111,8 @@ interface Candidate extends Span, DateParseResult {
 }
 
 const WORD_CHAR = /[\p{L}\p{N}_]/u;
-// Word boundary after a phrase. A trailing apostrophe + letter ("tomorrow's") also blocks, so a
-// possessive is never read as a date.
-const BOUNDARY = String.raw`(?![\p{L}\p{N}_])(?!['’]\p{L})`;
 const AM_PM = String.raw`([ap])\.?m\.?`;
 const ORDINAL = '(?:st|nd|rd|th|:e)?';
-
-function normalise(text: string): string {
-  return text.toLowerCase().replace(/\s+/g, ' ');
-}
-
-function escapeRe(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function isActive(entry: VocabEntry<unknown>, mode: Mode, locale: ParseLocale): boolean {
-  if (mode !== 'title') return true;
-  return entry.lang === locale || (entry.lang === 'en' && !entry.abbr);
-}
-
-class Vocab<T> {
-  readonly pattern: string;
-  private readonly byText = new Map<string, VocabEntry<T>>();
-
-  constructor(all: readonly VocabEntry<T>[], mode: Mode, locale: ParseLocale) {
-    for (const e of all) if (isActive(e, mode, locale)) this.byText.set(e.text, e);
-    this.pattern = [...this.byText.keys()]
-      .sort((a, b) => b.length - a.length)
-      .map((t) => escapeRe(t).replace(/ /g, String.raw`\s+`))
-      .join('|');
-  }
-
-  /** The entry for text the pattern matched (so it always exists). */
-  get(text: string): VocabEntry<T> {
-    return this.byText.get(normalise(text)) as VocabEntry<T>;
-  }
-}
-
-function sticky(source: string): RegExp {
-  return new RegExp(source + BOUNDARY, 'iuy');
-}
 
 function addMonths(date: IsoDate, n: number): IsoDate {
   const { year, month, day } = parseIsoDate(date);
@@ -337,6 +296,7 @@ function buildGrammar(mode: Mode, locale: ParseLocale): Grammar {
 
   return {
     rules,
+    recurrence: new RecurrenceScanner(mode, locale),
     connectorTime: sticky(
       `(?:${v(TIME_CONNECTORS).pattern})\\s*(\\d{1,2})(?:[:.](\\d{2}))?(?:\\s*${AM_PM})?`,
     ),
@@ -366,11 +326,6 @@ function grammarFor(mode: Mode, locale: ParseLocale): Grammar {
   return grammar;
 }
 
-function execAt(re: RegExp, text: string, pos: number): RegExpExecArray | null {
-  re.lastIndex = pos;
-  return re.exec(text);
-}
-
 /** A time phrase starting exactly at `pos`. */
 function timeAt(text: string, pos: number, g: Grammar): { end: number; time: string } | null {
   const c = execAt(g.connectorTime, text, pos);
@@ -384,27 +339,50 @@ function timeAt(text: string, pos: number, g: Grammar): { end: number; time: str
   return time ? { end: pos + b[0].length, time } : null;
 }
 
-/** Every phrase starting at `pos`: each matching date rule, with and without a time suffix. */
+/**
+ * Every phrase starting at `pos`: each matching date rule and the longest recurrence phrase,
+ * with and without a time suffix.
+ */
 function candidatesAt(text: string, pos: number, g: Grammar, ctx: DateParseContext): Candidate[] {
   const out: Candidate[] = [];
-  for (const rule of g.rules) {
-    const m = execAt(rule.re, text, pos);
-    const resolved = m && rule.resolve(m, ctx);
-    if (!resolved) continue;
-    const base: Candidate = {
-      start: pos,
-      end: rule.re.lastIndex,
-      date: resolved.date,
-      time: null,
-      anywhere: resolved.anywhere,
-    };
+  const add = (base: Candidate) => {
     out.push(base);
     let timePos = base.end;
     while (/\s/.test(text.charAt(timePos))) timePos++;
     const time = timePos > base.end ? timeAt(text, timePos, g) : null;
     if (time) out.push({ ...base, end: time.end, time: time.time });
+  };
+  for (const rule of g.rules) {
+    const m = execAt(rule.re, text, pos);
+    const resolved = m && rule.resolve(m, ctx);
+    if (!resolved) continue;
+    add({
+      start: pos,
+      end: rule.re.lastIndex,
+      date: resolved.date,
+      time: null,
+      anywhere: resolved.anywhere,
+    });
+  }
+  const recurrence = g.recurrence.at(text, pos, ctx.today);
+  if (recurrence) {
+    add({
+      start: pos,
+      end: recurrence.end,
+      date: recurrence.date,
+      time: null,
+      anywhere: false,
+      recurrence: recurrence.recurrence,
+    });
   }
   return out;
+}
+
+/** The public shape of a candidate (no `recurrence` key unless it is one). */
+function resultOf(c: Candidate): DateParseResult {
+  return c.recurrence === undefined
+    ? { date: c.date, time: c.time }
+    : { date: c.date, time: c.time, recurrence: c.recurrence };
 }
 
 function longest(candidates: Candidate[]): Candidate | null {
@@ -417,7 +395,7 @@ function wholePhrase(input: string, mode: Mode, ctx: DateParseContext): DatePars
   const text = input.trim();
   const g = grammarFor(mode, ctx.locale);
   const best = longest(candidatesAt(text, 0, g, ctx).filter((c) => c.end === text.length));
-  if (best) return { date: best.date, time: best.time };
+  if (best) return resultOf(best);
   if (mode !== 'picker') return null;
   // A lone time in the picker means today at that time.
   const time = timeAt(text, 0, g);
@@ -479,7 +457,7 @@ export function findDateInTitle(
         (c) =>
           !overlapsAny(c, blocked) &&
           (c.anywhere || isTitleTail(title.slice(c.end))) &&
-          !inRecurrence(title, c),
+          (c.recurrence !== undefined || !inRecurrence(title, c)),
       ),
     );
     if (best) {
@@ -490,6 +468,6 @@ export function findDateInTitle(
     }
   }
   if (!found) return null;
-  const { start, end, date, time } = found;
-  return { date, time, start, end, text: title.slice(start, end) };
+  const { start, end } = found;
+  return { ...resultOf(found), start, end, text: title.slice(start, end) };
 }

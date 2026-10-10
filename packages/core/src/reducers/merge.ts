@@ -7,9 +7,12 @@ import type {
   TaskCompleteResult,
   TaskMoveResult,
   TaskPatchResult,
+  TaskSkipResult,
 } from '../schemas/list.ts';
+import type { Reminder } from '../schemas/reminders.ts';
+import { earliest } from './apply.ts';
 import type { ListOpSpec } from './ops.ts';
-import type { ListState } from './state.ts';
+import { type ListState, omit } from './state.ts';
 
 export interface MergeResult {
   state: ListState;
@@ -50,9 +53,13 @@ export function mergeResponse(state: ListState, op: ListOpSpec, response: unknow
     }
     case 'task.complete': {
       const r = response as Partial<TaskCompleteResult> | undefined;
-      let next = isTask(r?.task) ? putTask(state, r.task) : state;
-      if (isTask(r?.next)) next = putTask(next, r.next, true);
-      return { state: next, refetch: false };
+      if (!isTask(r?.task)) return keep;
+      return nextInstance(putTask(state, r.task), op.payload.nextId, r.next);
+    }
+    case 'task.skip': {
+      const r = response as Partial<TaskSkipResult> | undefined;
+      if (!isObject(r) || !('next' in r)) return keep;
+      return nextInstance(state, op.payload.nextId, r.next ?? undefined);
     }
     case 'task.move': {
       const placement = (response as Partial<TaskMoveResult> | undefined)?.placement;
@@ -65,7 +72,11 @@ export function mergeResponse(state: ListState, op: ListOpSpec, response: unknow
       // Bulk results carry no keys; a move, an assignment (new rows) or any failure needs the
       // server's view.
       const placing = op.payload.op === 'move' || op.payload.op === 'assign';
-      return { state, refetch: placing || results.some((r) => !r.ok) };
+      // P10: the server created next instances of recurring tasks that only a refetch brings.
+      const recurring =
+        op.payload.op === 'complete' &&
+        op.payload.ids.some((id) => (state.tasks[id]?.recurrence ?? null) !== null);
+      return { state, refetch: placing || recurring || results.some((r) => !r.ok) };
     }
     case 'group.create': {
       const r = response as Partial<GroupCreateResult> | undefined;
@@ -99,6 +110,17 @@ export function mergeResponse(state: ListState, op: ListOpSpec, response: unknow
     case 'task.addTag':
     case 'task.removeTag':
       return isTask(response) ? { state: putTask(state, response), refetch: false } : keep;
+    case 'reminder.create': {
+      // A reminder the optimistic apply could not resolve (or an identical existing one).
+      const task = state.tasks[op.taskId];
+      if (!isReminder(response) || !task || response.firedAt !== null) return keep;
+      const nextReminderAt = earliest(task.nextReminderAt ?? null, [response.fireAt]);
+      if (nextReminderAt === (task.nextReminderAt ?? null)) return keep;
+      return { state: putTask(state, { ...task, nextReminderAt }), refetch: false };
+    }
+    case 'reminder.delete':
+      // The bell may have been this reminder; only the server knows the next one.
+      return { state, refetch: (state.tasks[op.taskId]?.nextReminderAt ?? null) !== null };
     case 'task.expanded':
     case 'task.follow':
     case 'comment.create':
@@ -113,6 +135,36 @@ export function mergeResponse(state: ListState, op: ListOpSpec, response: unknow
       // The server restored the tasks deleted with the group; refetch picks up their state.
       return { state, refetch: !isGroup(response) };
   }
+}
+
+const isReminder = (v: unknown): v is Reminder =>
+  isObject(v) && typeof v.id === 'string' && typeof v.taskId === 'string' && 'fireAt' in v;
+
+/**
+ * The next instance of a completion or skip: the server's DTO replaces the optimistic copy
+ * (and joins the list when it is a row); without one, the series ended or another instance is
+ * still open (ADR 0049 §1.5), so the optimistic copy goes. Its copied subtasks only a refetch
+ * brings.
+ */
+function nextInstance(state: ListState, nextId: string | undefined, next: unknown): MergeResult {
+  if (isTask(next)) {
+    const base = nextId !== undefined && nextId !== next.id ? dropTask(state, nextId) : state;
+    return { state: putTask(base, next, true), refetch: next.counts.subtasks > 0 };
+  }
+  return { state: nextId === undefined ? state : dropTask(state, nextId), refetch: false };
+}
+
+/** Removes an optimistic task the server did not create, and its parent's count of it. */
+function dropTask(state: ListState, id: string): ListState {
+  const task = state.tasks[id];
+  if (!task) return state;
+  const tasks = omit(state.tasks, [id]);
+  const parent = task.parentId === null ? undefined : tasks[task.parentId];
+  if (parent) {
+    const subtasks = Math.max(0, parent.counts.subtasks - 1);
+    tasks[parent.id] = { ...parent, counts: { ...parent.counts, subtasks } };
+  }
+  return { ...state, tasks };
 }
 
 function putTask(state: ListState, task: Task, allowNew = false): ListState {

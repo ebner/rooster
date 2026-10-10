@@ -1,13 +1,19 @@
+import { todayIn } from '../dates/iso.ts';
+import { DEFAULT_PREFS } from '../limits.ts';
 import { generateKeyBetween, generateNKeysBetween } from '../ordering.ts';
+import { nextInstance, normalizeRule } from '../recurrence.ts';
+import { resolveFireAt } from '../reminders.ts';
 import type {
   BulkOp,
   Group,
   GroupDelete,
   OrderingIntent,
   Task,
+  TaskComplete,
   TaskMove,
   TaskPatch,
 } from '../schemas/list.ts';
+import type { ReminderSpecInput } from '../schemas/reminders.ts';
 import type {
   GroupCreateBody,
   ListOpSpec,
@@ -51,6 +57,10 @@ export function applyOp(state: ListState, op: ListOpSpec, ctx: ApplyContext): Li
       return createTask(state, op.payload, ctx);
     case 'task.patch': {
       let patched = patchTasks(state, [op.entityId], op.payload, ctx.now);
+      if (op.payload.reminders !== undefined || op.payload.clearReminders) {
+        const reminders = op.payload.reminders ?? [];
+        patched = remindTask(patched, op.entityId, reminders, op.payload.clearReminders, ctx);
+      }
       if (op.payload.assigneeId !== undefined) {
         patched = assignTasks(patched, [op.entityId], op.payload.assigneeId, ctx);
       }
@@ -59,7 +69,15 @@ export function applyOp(state: ListState, op: ListOpSpec, ctx: ApplyContext): Li
         : reparent(patched, op.entityId, op.payload.parentId, ctx);
     }
     case 'task.complete':
-      return completeTasks(state, [op.entityId], op.payload.completed, ctx.now);
+      return completeTask(state, op.entityId, op.payload, ctx);
+    case 'task.skip': {
+      // FR-REC-4 "this occurrence": the series goes on as if it had been completed today.
+      const task = state.tasks[op.entityId];
+      if (!task) return state;
+      const nextId = op.payload.nextId;
+      const spawned = nextId === undefined ? state : spawnNext(state, task, nextId, ctx);
+      return deleteTasks(spawned, [op.entityId]);
+    }
     case 'task.delete':
       return deleteTasks(state, [op.entityId]);
     case 'task.restore':
@@ -90,6 +108,12 @@ export function applyOp(state: ListState, op: ListOpSpec, ctx: ApplyContext): Li
       return countComment(state, op.taskId, -1);
     case 'comment.restore':
       return countComment(state, op.taskId, 1);
+    case 'reminder.create':
+      return remindTask(state, op.taskId, [op.payload], false, ctx);
+    case 'reminder.delete':
+      // The list does not know the user's other reminders: the bell is settled by the
+      // response (mergeResponse asks for a refetch) or the detail cache.
+      return state;
     case 'group.create':
       return createGroup(state, op.payload);
     case 'group.patch': {
@@ -153,7 +177,7 @@ function newTask(
   placement: Task['placement'],
   ctx: ApplyContext,
 ): Task {
-  return {
+  const task: Task = {
     id: p.id,
     orgId: state.orgId,
     seq: null,
@@ -172,6 +196,9 @@ function newTask(
     createdAt: ctx.now,
     updatedAt: ctx.now,
   };
+  const withRule = applyRecurrence(task, p);
+  if (!p.reminders?.length) return withRule;
+  return { ...withRule, nextReminderAt: earliest(null, firesOf(p.reminders, withRule, ctx)) };
 }
 
 const uniqueIds = (ids: readonly string[]) => [...new Set(ids)];
@@ -411,6 +438,7 @@ function duplicateTask(
 }
 
 type DueFields = Pick<TaskPatch, 'dueDate' | 'dueTime' | 'dueTz' | 'startDate'>;
+type RecurrenceFields = Pick<TaskPatch, 'recurrence' | 'recurrenceBasis'>;
 
 /** The due unit is replaced as a whole; absent members become null (taskPatchSchema). */
 function dueUnit(p: DueFields): Pick<Task, 'dueDate' | 'dueTime' | 'dueTz' | 'startDate'> {
@@ -422,6 +450,7 @@ function dueUnit(p: DueFields): Pick<Task, 'dueDate' | 'dueTime' | 'dueTz' | 'st
   };
 }
 
+/** Whether a patch replaces the due unit (the recurrence fields are not part of that). */
 export function touchesDue(p: DueFields): boolean {
   return (
     p.dueDate !== undefined ||
@@ -429,6 +458,46 @@ export function touchesDue(p: DueFields): boolean {
     p.dueTz !== undefined ||
     p.startDate !== undefined
   );
+}
+
+/** P10: whether a patch names the recurrence fields. */
+export function touchesRecurrence(p: RecurrenceFields): boolean {
+  return p.recurrence !== undefined || p.recurrenceBasis !== undefined;
+}
+
+/** The recurrence fields actually given (for a bulk `setDue` that also sets a rule). */
+function recurrencePart(p: RecurrenceFields): RecurrenceFields {
+  return {
+    ...(p.recurrence === undefined ? {} : { recurrence: p.recurrence }),
+    ...(p.recurrenceBasis === undefined ? {} : { recurrenceBasis: p.recurrenceBasis }),
+  };
+}
+
+/**
+ * The recurrence fields after a create or patch whose due unit `task` already has (ADR 0049
+ * §1.8): no due date clears the rule and the basis; `recurrence: null` stops the series; a
+ * rule without a basis means `due`; a basis alone re-normalises the current rule; absent
+ * fields keep what the task has. Rules are stored normalised against the due date. A task
+ * that never had the fields (an older cache) only gains them when one is set.
+ */
+function applyRecurrence(task: Task, p: RecurrenceFields): Task {
+  const current = task.recurrence ?? null;
+  const set = (recurrence: string | null, basis: 'due' | 'completion' | null): Task =>
+    recurrence === current && basis === (task.recurrenceBasis ?? null)
+      ? task
+      : { ...task, recurrence, recurrenceBasis: recurrence === null ? null : basis };
+  if (task.dueDate === null || p.recurrence === null) {
+    return current === null && (task.recurrenceBasis ?? null) === null ? task : set(null, null);
+  }
+  if (p.recurrence !== undefined) {
+    const basis = p.recurrenceBasis ?? 'due';
+    return set(normalizeRule(p.recurrence, task.dueDate, basis) ?? p.recurrence, basis);
+  }
+  if (p.recurrenceBasis && current !== null) {
+    const basis = p.recurrenceBasis;
+    return set(normalizeRule(current, task.dueDate, basis) ?? current, basis);
+  }
+  return task;
 }
 
 function mapTasks(
@@ -454,16 +523,151 @@ function patchTasks(
   p: Omit<TaskPatch, 'parentId'>,
   now: number,
 ): ListState {
-  if (p.title === undefined && p.description === undefined && !touchesDue(p)) return state;
-  return mapTasks(state, ids, (task) => ({
+  const due = touchesDue(p);
+  if (p.title === undefined && p.description === undefined && !due && !touchesRecurrence(p)) {
+    return state;
+  }
+  return mapTasks(state, ids, (task) =>
+    applyRecurrence(
+      {
+        ...task,
+        ...(p.title === undefined ? {} : { title: p.title }),
+        ...(p.description === undefined
+          ? {}
+          : { description: p.description, hasDescription: hasText(p.description) }),
+        ...(due ? dueUnit(p) : {}),
+        updatedAt: now,
+      },
+      p,
+    ),
+  );
+}
+
+/** A single completion (P10): completing a recurring task with `nextId` spawns the next one. */
+function completeTask(state: ListState, id: string, p: TaskComplete, ctx: ApplyContext): ListState {
+  const task = state.tasks[id];
+  const next = completeTasks(state, [id], p.completed, ctx.now);
+  if (!task || !p.completed || p.nextId === undefined || task.completedAt !== null) return next;
+  return spawnNext(next, task, p.nextId, ctx);
+}
+
+/**
+ * The completion date of an occurrence (ADR 0049 §1.2): the day of the edit time in the
+ * task's `dueTz` for a timed task, otherwise in the actor's timezone (UTC when unknown).
+ */
+function completionDate(task: Task, ctx: ApplyContext): string {
+  const zone = task.dueTime !== null && task.dueTz !== null ? task.dueTz : ctx.timezone;
+  try {
+    return todayIn(zone ?? 'UTC', ctx.now);
+  } catch {
+    // An unknown zone name (a stale cache): the UTC day is the best local guess; the server's
+    // response replaces the instance anyway.
+    return todayIn('UTC', ctx.now);
+  }
+}
+
+/**
+ * The optimistic next instance of a recurring task (FR-REC-3, ADR 0049 §1.4) with the
+ * client-chosen `nextId`: the next dates from `nextInstance`, what the list shows copied
+ * (title, description, tags, assignee, due time and zone), counts zeroed, directly after the
+ * completed task in its group and, for a subtask, as its next sibling. Subtask copies, the
+ * reminders' bell and the follower list arrive with the server's response. Idempotent.
+ */
+function spawnNext(state: ListState, task: Task, nextId: string, ctx: ApplyContext): ListState {
+  if (state.tasks[nextId] || state.deletedTasks[nextId]) return state;
+  const rule = task.recurrence ?? null;
+  if (rule === null || task.dueDate === null) return state;
+  const basis = task.recurrenceBasis ?? 'due';
+  const next = nextInstance(
+    rule,
+    basis,
+    { dueDate: task.dueDate, startDate: task.startDate },
+    completionDate(task, ctx),
+  );
+  if (next === null) return state;
+  let placement = task.placement;
+  if (placement) {
+    const siblings = placedKeyed(tasksInGroup(state, placement.groupId));
+    const [position = placement.position] = keysForIntent(siblings, { afterId: task.id });
+    placement = { groupId: placement.groupId, position };
+  }
+  let subtaskPosition = task.subtaskPosition;
+  if (task.parentId !== null) {
+    const siblings = subtaskKeyed(childrenOf(state, task.parentId));
+    [subtaskPosition = task.subtaskPosition] = keysForIntent(siblings, { afterId: task.id });
+  }
+  const instance: Task = {
     ...task,
-    ...(p.title === undefined ? {} : { title: p.title }),
-    ...(p.description === undefined
-      ? {}
-      : { description: p.description, hasDescription: hasText(p.description) }),
-    ...(touchesDue(p) ? dueUnit(p) : {}),
-    updatedAt: now,
-  }));
+    id: nextId,
+    seq: null,
+    dueDate: next.dueDate,
+    startDate: next.startDate,
+    recurrence: next.recurrence,
+    recurrenceBasis: basis,
+    completedAt: null,
+    tagIds: [...task.tagIds],
+    counts: noCounts(),
+    placement,
+    subtaskPosition,
+    createdBy: ctx.userId,
+    createdAt: ctx.now,
+    updatedAt: ctx.now,
+    ...(task.nextReminderAt === undefined ? {} : { nextReminderAt: null }),
+  };
+  return adjustCounts(withTask(state, instance), task.parentId, 1, 0);
+}
+
+/** When a reminder spec fires for this task, or null when it cannot be resolved here. */
+function fireAtOf(spec: ReminderSpecInput, task: Task, ctx: ReducerContext): number | null {
+  if ('at' in spec) return spec.at;
+  // An all-day due moment needs the owner's timezone.
+  const allDay = task.dueTime === null || task.dueTz === null;
+  if (allDay && ctx.timezone === undefined) return null;
+  return resolveFireAt(
+    { kind: 'relative', offsetMinutes: spec.offsetMinutes, remindAt: null },
+    task,
+    {
+      timezone: ctx.timezone ?? 'UTC',
+      allDayReminderTime: ctx.allDayReminderTime ?? DEFAULT_PREFS.allDayReminderTime,
+    },
+  );
+}
+
+function firesOf(
+  specs: readonly ReminderSpecInput[],
+  task: Task,
+  ctx: ReducerContext,
+): (number | null)[] {
+  return specs.map((spec) => fireAtOf(spec, task, ctx));
+}
+
+/** The earliest of the instants (nulls ignored), or `current` when there are none. */
+export function earliest(
+  current: number | null,
+  instants: readonly (number | null)[],
+): number | null {
+  let min = current;
+  for (const at of instants) if (at !== null && (min === null || at < min)) min = at;
+  return min;
+}
+
+/**
+ * The row's bell (FR-REM-4) after the actor adds reminders (`clear` first drops the ones the
+ * task had): `nextReminderAt` becomes the earliest pending instant. Dormant reminders (a
+ * relative one without a due date) do not count.
+ */
+function remindTask(
+  state: ListState,
+  taskId: string,
+  specs: readonly ReminderSpecInput[],
+  clear: boolean | undefined,
+  ctx: ReducerContext,
+): ListState {
+  const task = state.tasks[taskId];
+  if (!task) return state;
+  const before = task.nextReminderAt ?? null;
+  const nextReminderAt = earliest(clear ? null : before, firesOf(specs, task, ctx));
+  return nextReminderAt === before ? state : withTask(state, { ...task, nextReminderAt });
 }
 
 function completeTasks(
@@ -594,7 +798,7 @@ function applyBulk(state: ListState, op: BulkOp, ctx: ApplyContext): ListState {
     case 'move':
       return moveTasks(state, op.ids, op.args);
     case 'setDue':
-      return patchTasks(state, op.ids, dueUnit(op.args), now);
+      return patchTasks(state, op.ids, { ...dueUnit(op.args), ...recurrencePart(op.args) }, now);
     case 'addTag':
     case 'removeTag':
       return tagTasks(state, op.ids, op.args.tagId, op.op === 'addTag');

@@ -22,6 +22,12 @@ function flat(result: DateParseResult | null): string | null {
   return result.time ? `${result.date} ${result.time}` : result.date;
 }
 
+function flatRecurrence(result: DateParseResult | null): string | undefined {
+  const r = result?.recurrence;
+  if (r === undefined) return undefined;
+  return r.basis === 'completion' ? `after:${r.rule}` : r.rule;
+}
+
 const W = '2026-10-07';
 const en = ctxFor('en', W);
 const sv = ctxFor('sv', W);
@@ -37,15 +43,18 @@ describe('NL date corpus (10 §3.1)', () => {
     expect(CORPUS.filter((r) => r[5] === null).length).toBeGreaterThanOrEqual(40);
   });
 
-  for (const [locale, mode, input, today, ws, expected, rest] of CORPUS) {
+  for (const [locale, mode, input, today, ws, expected, rest, recurrence] of CORPUS) {
     it(`${locale} ${mode} ${JSON.stringify(input)} (today ${today}, ws ${ws}) → ${expected}`, () => {
       const ctx = ctxFor(locale, today, ws);
       if (mode === 'picker') {
-        expect(flat(parseDatePhrase(input, ctx))).toBe(expected);
+        const result = parseDatePhrase(input, ctx);
+        expect(flat(result)).toBe(expected);
+        expect(flatRecurrence(result)).toBe(recurrence);
         return;
       }
       const match = findDateInTitle(input, ctx);
       expect(flat(match)).toBe(expected);
+      expect(flatRecurrence(match)).toBe(recurrence);
       if (match) {
         expect(match.text).toBe(input.slice(match.start, match.end));
         if (rest !== undefined) expect(stripTitleMatch(input, match)).toBe(rest);
@@ -198,6 +207,8 @@ describe('findGroupToken', () => {
     ['Buy milk >Errands 12 okt', { name: 'Errands', start: 9, end: 17 }],
     ['>A then >B', { name: 'B', start: 8, end: 10 }],
     ['>A then >B next week', { name: 'B', start: 8, end: 10 }],
+    ['Water >Home every mon at 9', { name: 'Home', start: 6, end: 11 }],
+    ['Hyra >Hem den 15:e varje månad', { name: 'Hem', start: 5, end: 9 }],
   ])('%j → %j', (title, expected) => {
     expect(findGroupToken(title)).toEqual(expected);
   });

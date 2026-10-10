@@ -1,5 +1,11 @@
 import { isDatePhrase } from './parse.ts';
-import { escapeSpans, overlapsAny } from './tokens-spans.ts';
+import {
+  escapeSpans,
+  inlineTokenSpans,
+  overlapsAny,
+  reminderTokenSpans,
+  type Span,
+} from './tokens-spans.ts';
 
 /** `>Group` token for smart views and the CLI (02 §3.4). */
 export interface GroupTokenMatch {
@@ -34,8 +40,7 @@ export function findGroupToken(title: string): GroupTokenMatch | null {
   for (const m of title.matchAll(GROUP_TOKEN_RE)) {
     const span = { start: m.index, end: m.index + m[0].length };
     if (overlapsAny(span, escaped)) continue;
-    const rest = title.slice(span.end).trim();
-    if (rest === '' || isDatePhrase(rest)) {
+    if (isTokenTail(title.slice(span.end), false)) {
       found = { name: (m[1] ?? m[2]) as string, ...span };
     }
   }
@@ -112,8 +117,7 @@ export function findAssigneeToken(
   for (const m of title.matchAll(ASSIGNEE_TOKEN_RE)) {
     const span = { start: m.index, end: m.index + m[0].length };
     if (overlapsAny(span, escaped)) continue;
-    const rest = title.slice(span.end).trim();
-    if (rest !== '' && !isDatePhrase(rest)) continue;
+    if (!isTokenTail(title.slice(span.end), false)) continue;
     const query = (m[1] ?? m[2]) as string;
     const matches = matchMembers(query, members, viewerId);
     const exact = matches.filter((c) => c.exact);
@@ -191,9 +195,33 @@ export interface ReminderTokenMatch {
 }
 
 /**
- * Reminder tokens at the end of the title (in any order with `#tag`, `>Group`, `@name` and the
- * date phrase), left to right. A bare `!`, or `!` followed by anything else, is plain text.
+ * True when `rest` (what follows a token) holds nothing but whitespace, reminder tokens, (with
+ * `inline`) `#tag`/`@name`/`>Group` tokens, and at most one date phrase in one piece, in any
+ * order: "fri 14:00 !1h", "!1h fri #home". A date phrase split by a token does not count.
  */
-export function findReminderTokens(_title: string): ReminderTokenMatch[] {
-  return [];
+function isTokenTail(rest: string, inline: boolean): boolean {
+  const spans: Span[] = [...reminderTokenSpans(rest), ...(inline ? inlineTokenSpans(rest) : [])];
+  spans.sort((a, b) => a.start - b.start);
+  const gaps: string[] = [];
+  let at = 0;
+  for (const span of spans) {
+    if (span.start < at) continue;
+    gaps.push(rest.slice(at, span.start));
+    at = span.end;
+  }
+  gaps.push(rest.slice(at));
+  const text = gaps.map((g) => g.trim()).filter((g) => g !== '');
+  return text.length === 0 || (text.length === 1 && isDatePhrase(text[0] as string));
+}
+
+/**
+ * Reminder tokens at the end of the title (in any order with `#tag`, `>Group`, `@name` and the
+ * date phrase), left to right. A bare `!`, `!` followed by anything else, an offset above
+ * `REMINDER_OFFSET_MAX` or a token followed by other text is plain text ("Ship it!",
+ * "Ping !1h later"). The spans are what the title input highlights and removes on commit.
+ */
+export function findReminderTokens(title: string): ReminderTokenMatch[] {
+  return reminderTokenSpans(title)
+    .filter((span) => isTokenTail(title.slice(span.end), true))
+    .map((span) => ({ ...span, text: title.slice(span.start, span.end) }));
 }
