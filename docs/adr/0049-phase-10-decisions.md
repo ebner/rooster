@@ -256,3 +256,7 @@ added below as an amendment.
   - Every refusal is exit 2.
   - A value or positional that starts with `-` is passed with `=` or after `--`.
 - **MCP:** summaries and the My tasks resource contain only canonical or escaped server values. A count that isn't a nonnegative integer is reported as unknown.
+- **Refusals and placement:**
+  - A refused command line is reported in the output format it asked for (`--json`). Output switches count only where they stand as flags.
+  - Only global flags may come before a subcommand name. `--org` must follow `login` and `token create`, which own it. Anything else there is refused (exit 2) instead of being silently dropped.
+- **MCP resources:** resource metadata (URI, name, title) uses only valid slugs; orgs without one are not listed.

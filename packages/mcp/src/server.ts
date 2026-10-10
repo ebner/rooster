@@ -779,11 +779,17 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
         list: async () => {
           try {
             const orgs = await context().orgs();
+            // URIs, names and titles are metadata the client shows as rooster's: only orgs
+            // with a valid slug are listed (the template still reads any org by id).
+            const slugs = orgs.flatMap((o) => {
+              const slug = canonical.slug(o.slug);
+              return slug === null ? [] : [slug];
+            });
             return {
-              resources: orgs.map((o) => ({
-                uri: `rooster://${o.slug}/my`,
-                name: `my-tasks-${o.slug}`,
-                title: `My tasks (${o.slug})`,
+              resources: slugs.map((slug) => ({
+                uri: `rooster://${slug}/my`,
+                name: `my-tasks-${slug}`,
+                title: `My tasks (${slug})`,
                 mimeType: 'text/markdown',
               })),
             };

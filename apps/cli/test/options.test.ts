@@ -271,3 +271,51 @@ describe('checkArgv', () => {
     }
   });
 });
+
+describe('review final check: refusals keep --json, and nothing goes before a subcommand', () => {
+  it('a refused command line still reports in JSON when --json was given as a flag', async () => {
+    const result = await run({}, ['--json', 'edit', '41', '--title']);
+    expect(result.code).toBe(2);
+    const error = JSON.parse(result.stderr.trim()) as {
+      error: { exitCode: number; message: string };
+    };
+    expect(error.error.exitCode).toBe(2);
+    expect(error.error.message).toContain('--title needs a value');
+    // After the command, too.
+    const after = await run({}, ['edit', '41', '--descFile', 'x', '--json']);
+    expect(JSON.parse(after.stderr.trim()).error.message).toContain('Unknown option --descFile');
+    // A refused value position is not consumed, so `--json` there is still the flag; a value
+    // given with = is never read as one.
+    const plain = await run({}, ['edit', '41', '--title=--json', '--bogus']);
+    expect(plain.code).toBe(2);
+    expect(plain.stderr).toContain('Unknown option --bogus');
+    expect(() => JSON.parse(plain.stderr.trim())).toThrow();
+  });
+
+  it.each([
+    [['token', '--org=acme', 'create', 'agent', '--scope', 'tasks:write'], 'Put --org after'],
+    [['--org', 'acme', 'token', 'create', 'agent'], 'Put --org after'],
+    [['--org', 'acme', 'login'], 'Put --org after'],
+    [['token', '--scope', 'tasks:write', 'create', 'agent'], 'Unknown option --scope'],
+    // `mcp` declares --read-only for serving; before `setup` it would be dropped.
+    [['mcp', '--read-only', 'setup'], 'Put --read-only after'],
+  ])('%j is refused: %s', async (argv, message) => {
+    const result = await run({ 'POST /api/v1/me/tokens': tokenRoute }, argv);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain(message);
+    expect(result.calls.filter((c) => c.method !== 'GET')).toEqual([]);
+  });
+
+  it('globals before a subcommand still work, and --org stays global for other commands', async () => {
+    const { checkCommandLine } = await import('../src/cli.ts');
+    for (const argv of [
+      ['--org', 'acme', 'tag', 'add', 'home'],
+      ['--json', '--profile', 'work', 'token', 'create', 'agent', '--org', 'acme'],
+      ['--org', 'acme', 'group', 'add', 'Prio'],
+      ['login', '--org', 'acme'],
+      ['-q', 'mcp', 'setup', '--no-browser'],
+    ]) {
+      await expect(checkCommandLine(argv)).resolves.toBeUndefined();
+    }
+  });
+});

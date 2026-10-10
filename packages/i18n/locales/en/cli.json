@@ -382,7 +382,8 @@
     "unexpected": "Unexpected argument “{arg}”.",
     "seeHelp": "See rooster --help.",
     "unknownOption": "Unknown option {flag}.",
-    "noValue": "{flag} takes no value."
+    "noValue": "{flag} takes no value.",
+    "misplaced": "Put {flag} after “{command}”; before it, the option would not reach the command."
   },
   "error": {
     "network": "Can’t reach {server}. Check the address and your connection.",

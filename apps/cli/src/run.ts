@@ -1,4 +1,5 @@
 import { RoosterApiError } from './api.ts';
+import { ArgvError } from './argv-check.ts';
 import { checkCommandLine, dispatch } from './cli.ts';
 import { ConfigLockedError } from './config.ts';
 import { CliError, EXIT, type ExitCode } from './errors.ts';
@@ -44,7 +45,9 @@ export async function runCli(
     rest = extracted.rest;
     runtime = new Runtime(io, extracted.globals, options);
   } catch (error) {
-    const fallback = new Runtime(io, NO_GLOBALS, options);
+    // A refused command line still reports the way it asked to (`--json`: ADR 0039).
+    const globals = error instanceof ArgvError ? { ...NO_GLOBALS, ...error.output } : NO_GLOBALS;
+    const fallback = new Runtime(io, globals, options);
     return withLocale(fallbackLocale, () => report(fallback, error));
   }
   let locale = fallbackLocale;

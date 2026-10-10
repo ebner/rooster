@@ -382,7 +382,8 @@
     "unexpected": "Oväntat argument ”{arg}”.",
     "seeHelp": "Se rooster --help.",
     "unknownOption": "Okänd flagga {flag}.",
-    "noValue": "{flag} tar inget värde."
+    "noValue": "{flag} tar inget värde.",
+    "misplaced": "Skriv {flag} efter ”{command}”; före det når flaggan inte kommandot."
   },
   "error": {
     "network": "Når inte {server}. Kontrollera adressen och din anslutning.",
