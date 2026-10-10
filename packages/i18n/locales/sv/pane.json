@@ -50,7 +50,8 @@
   },
   "description": {
     "label": "Beskrivning",
-    "placeholder": "Lägg till mer information…"
+    "placeholder": "Lägg till mer information…",
+    "plainNote": "Beskrivningen kan inte visas formaterad. Du kan fortfarande redigera den som vanlig text."
   },
   "subtasks": {
     "label": "Deluppgifter",
@@ -60,7 +61,8 @@
   },
   "dev": {
     "section": "Detaljpanel",
-    "live": "Panel på listan i minnet"
+    "live": "Panel på listan i minnet",
+    "plainDescription": "Beskrivning som vanlig text (när redigeraren inte kan visa den)"
   },
   "activity": {
     "heading": "Aktivitet",

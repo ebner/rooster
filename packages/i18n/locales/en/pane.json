@@ -50,7 +50,8 @@
   },
   "description": {
     "label": "Description",
-    "placeholder": "Add more detail…"
+    "placeholder": "Add more detail…",
+    "plainNote": "This description can’t be shown formatted. You can still edit it as plain text."
   },
   "subtasks": {
     "label": "Subtasks",
@@ -60,7 +61,8 @@
   },
   "dev": {
     "section": "Detail pane",
-    "live": "Pane on the in-memory list"
+    "live": "Pane on the in-memory list",
+    "plainDescription": "Description as plain text (editor fallback)"
   },
   "activity": {
     "heading": "Activity",

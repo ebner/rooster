@@ -8,6 +8,7 @@ import { queryKeys } from '../../data/query-keys';
 import { Group, Section } from '../dev-ui/layout';
 import { MyListView } from '../list/my-list-view';
 import { fixtureMe } from '../shell/fixtures';
+import { PlainDescription } from './description-field';
 import { DetailPane } from './detail-pane';
 import { SaveStateView } from './save-state';
 import { SplitView } from './split-view';
@@ -109,6 +110,11 @@ export function PaneSection() {
             <SaveStateView status="saved" />
             <SaveStateView status="offline" />
             <SaveStateView status="failed" onRetry={() => undefined} />
+          </Group>
+          <Group title={t('dev.plainDescription')} className="block">
+            <div className="max-w-pane">
+              <PlainDescription value={`${'> '.repeat(40)}x`} onChange={() => undefined} />
+            </div>
           </Group>
         </ListTransportContext.Provider>
       </QueryClientProvider>

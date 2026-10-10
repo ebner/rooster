@@ -161,10 +161,82 @@ export function markdownManager(): MarkdownManager {
   return manager;
 }
 
+/**
+ * Blockquotes and lists nested deeper than this on one line read as text from there on. marked
+ * re-lexes every level, so `> > > …` thousands deep (any member can store it: the schema only
+ * caps the length) would exhaust the stack or memory and break the pane for everyone.
+ */
+export const maxNesting = 20;
+
+const isBlank = (ch: string | undefined) => ch === ' ' || ch === '\t';
+const isDigit = (ch: string | undefined) => ch !== undefined && ch >= '0' && ch <= '9';
+
+/**
+ * Where a line's container marker beyond `maxNesting` starts (the offset to escape), or -1.
+ * A linear scan of the line-start markers: `>`, `-`/`*`/`+` and `1.`/`1)` before a blank.
+ */
+function excessMarker(line: string): number {
+  let i = 0;
+  let depth = 0;
+  while (i < line.length) {
+    let j = i;
+    while (isBlank(line[j])) j += 1;
+    let k = j;
+    let escapeAt = j;
+    if (line[k] === '>') k += 1;
+    else if ((line[k] === '-' || line[k] === '*' || line[k] === '+') && isBlank(line[k + 1])) {
+      k += 1;
+    } else {
+      while (isDigit(line[k]) && k - j < 9) k += 1;
+      if (k === j || (line[k] !== '.' && line[k] !== ')') || !isBlank(line[k + 1])) return -1;
+      escapeAt = k;
+      k += 1;
+    }
+    depth += 1;
+    if (depth > maxNesting) return escapeAt;
+    i = k;
+  }
+  return -1;
+}
+
+/** Leading indentation is capped at this many columns (lists nest by indentation too). */
+const maxIndentColumns = maxNesting * 4;
+const fence = /^[ \t]*(?:`{3,}|~{3,})/;
+
+/** The line with its leading blanks capped at `maxIndentColumns` (a tab counts 4). */
+function capIndent(line: string): string {
+  let columns = 0;
+  let i = 0;
+  while (isBlank(line[i])) {
+    columns += line[i] === '\t' ? 4 - (columns % 4) : 1;
+    i += 1;
+  }
+  return columns > maxIndentColumns ? ' '.repeat(maxIndentColumns) + line.slice(i) : line;
+}
+
+/**
+ * Bounds how deep one line can nest: indentation past `maxIndentColumns` is capped, and the
+ * first container marker past `maxNesting` is escaped, so the rest reads as text. Lines inside
+ * fenced code keep their indentation.
+ */
+export function boundNesting(source: string): string {
+  let inFence = false;
+  return source
+    .split('\n')
+    .map((raw) => {
+      if (fence.test(raw)) inFence = !inFence;
+      if (inFence) return raw;
+      const line = capIndent(raw);
+      const at = excessMarker(line);
+      return at < 0 ? line : `${line.slice(0, at)}\\${line.slice(at)}`;
+    })
+    .join('\n');
+}
+
 /** Parses a description into an editor document (always at least one paragraph). */
 export function fromMarkdown(markdown: string): JSONContent {
   // Leading and trailing blank lines would become empty paragraphs (N8 in the corpus).
-  const source = markdown.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '');
+  const source = boundNesting(markdown.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, ''));
   const doc = markdownManager().parse(source);
   return doc.content?.length ? doc : { type: 'doc', content: [{ type: 'paragraph' }] };
 }

@@ -2,7 +2,7 @@ import { Editor, type JSONContent } from '@tiptap/react';
 import { describe, expect, test } from 'vitest';
 import { editorExtensions } from './extensions';
 import { isAllowedLinkHref } from './link';
-import { fromMarkdown, toMarkdown } from './markdown';
+import { boundNesting, fromMarkdown, maxNesting, toMarkdown } from './markdown';
 import { markdownCorpus } from './markdown.corpus';
 
 const noKeys = {
@@ -116,5 +116,46 @@ describe('link schemes (security)', () => {
     ]) {
       expect(isAllowedLinkHref(href), href).toBe(true);
     }
+  });
+});
+
+/** How deep blockquotes and lists nest in a parsed document. */
+function depth(node: JSONContent): number {
+  const inner = Math.max(0, ...(node.content ?? []).map(depth));
+  const container = ['blockquote', 'bulletList', 'orderedList', 'taskList'].includes(
+    node.type ?? '',
+  );
+  return inner + (container ? 1 : 0);
+}
+
+describe('pathological nesting (anyone in a shared org can store it)', () => {
+  const deep = 5000;
+  test.each([
+    ['blockquotes', `${'> '.repeat(deep)}x`],
+    ['quote markers without blanks', `${'>'.repeat(deep)}x`],
+    ['bullet lists', `${'- '.repeat(deep)}x`],
+    ['ordered lists', `${'1. '.repeat(deep)}x`],
+    ['quotes and lists', `${'> - '.repeat(deep / 2)}x`],
+    ['indentation', Array.from({ length: 450 }, (_, i) => `${'\t'.repeat(i)}- a`).join('\n')],
+  ])('%s 5,000 deep parse and serialise without blowing the stack', (_name, markdown) => {
+    const doc = fromMarkdown(markdown);
+    expect(depth(doc)).toBeLessThanOrEqual(maxNesting * 2);
+    expect(toMarkdown(doc)).toContain(markdown.includes('\t') ? 'a' : 'x');
+  });
+
+  test('the text past the limit stays, as text', () => {
+    const markdown = `${'> '.repeat(maxNesting + 2)}x`;
+    expect(boundNesting(markdown)).toBe(`${'> '.repeat(maxNesting)}\\> > x`);
+    expect(depth(fromMarkdown(markdown))).toBe(maxNesting);
+  });
+
+  test('normal nesting and fenced code are left alone', () => {
+    const fenced = [
+      '```',
+      ...Array.from({ length: 30 }, (_, i) => `${' '.repeat(i * 4)}> x`),
+      '```',
+    ];
+    expect(boundNesting(fenced.join('\n'))).toBe(fenced.join('\n'));
+    expect(boundNesting('> - 1. quote, list, item')).toBe('> - 1. quote, list, item');
   });
 });
