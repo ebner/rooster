@@ -154,6 +154,12 @@ export class AttachmentService {
     const sniffed = await sniffFile(file.path);
     const raster = RASTER_TYPES.has(sniffed.mime);
     if (isMimeMismatch(file.declaredType, file.filename, sniffed.mime)) {
+      // Types and size only (never the name or content), so an unexpected refusal can be
+      // told apart from a spoofed file.
+      this.deps.logger.info(
+        { declared: file.declaredType, sniffed: sniffed.mime, size: file.size },
+        'attachment refused: type mismatch',
+      );
       throw new AppError(
         'mime_mismatch',
         415,

@@ -177,24 +177,43 @@ test('AC-10.2 a non-image is a row that downloads; an oversize file shows the li
   const file = await download;
   expect(file.suggestedFilename()).toBe('receipts.csv');
 
-  // 30 MB against the default 25 MB limit: cut off with 413, said plainly.
-  const tooBig = uploaded(page);
-  await page.getByTestId('attachment-input').setInputFiles([
-    {
-      name: 'footage.mov',
-      mimeType: 'video/quicktime',
-      buffer: Buffer.alloc(30 * 1024 * 1024, 1),
-    },
-  ]);
-  expect((await tooBig).status()).toBe(413);
+  // 30 MB against the default 25 MB limit (`/meta` uploadMaxBytes): refused in the browser with
+  // the limit, and nothing is sent.
+  const posts: string[] = [];
+  page.on('request', (r) => {
+    if (r.method() === 'POST' && r.url().includes('/attachments')) posts.push(r.url());
+  });
+  const big = Buffer.alloc(30 * 1024 * 1024, 1);
+  await page
+    .getByTestId('attachment-input')
+    .setInputFiles([{ name: 'footage.mov', mimeType: 'video/quicktime', buffer: big }]);
   const failed = page.getByTestId('attachment-upload');
   await expect(failed).toHaveAttribute('data-status', 'failed');
-  await expect(failed).toContainText('footage.mov is larger than the upload limit.');
+  await expect(failed).toContainText('footage.mov is too large. Files can be at most 25 MB.');
+  expect(posts).toEqual([]);
   await failed.getByRole('button', { name: 'Dismiss' }).click();
   await expect(failed).toHaveCount(0);
   expect((await detail(page, task.id)).attachments?.map((a) => a.filename)).toEqual([
     'receipts.csv',
   ]);
+});
+
+test('AC-10.2 the server refuses 30 MB with a 413 (the browser check aside)', async ({ page }) => {
+  const task = await openTask(page, 'Send the footage');
+  const origin = new URL(page.url()).origin;
+  const res = await page.request.post(`/api/v1/tasks/${task.id}/attachments`, {
+    headers: { Origin: origin },
+    multipart: {
+      file: {
+        name: 'footage.mov',
+        mimeType: 'video/quicktime',
+        buffer: Buffer.alloc(30 * 1024 * 1024, 1),
+      },
+    },
+  });
+  expect(res.status()).toBe(413);
+  expect(((await res.json()) as { code: string }).code).toBe('payload_too_large');
+  expect((await detail(page, task.id)).attachments).toEqual([]);
 });
 
 test('a pasted image becomes an attachment, never part of the description; drop works too', async ({

@@ -20,6 +20,8 @@ export interface PendingUpload {
 
 interface UploadEntry extends PendingUpload {
   file: File;
+  /** The server's upload limit (`/meta`), when known. */
+  maxBytes?: number | undefined;
   abort?: (() => void) | undefined;
 }
 
@@ -69,37 +71,47 @@ function run(entry: UploadEntry, upload: Uploader, onDone: (attachment: Attachme
         remove(entry.id);
         return;
       }
+      // Files over the known limit never get here (`startUploads`); a 502 from a proxy or a
+      // reset connection is then a plain failure, offered for retry.
       patch(entry.id, {
         status: 'failed',
         abort: undefined,
         error: uploadErrorKind(api),
-        limitBytes: problemLimitBytes(api?.problem),
+        limitBytes: problemLimitBytes(api?.problem) ?? entry.maxBytes,
       });
     }
   });
   chains.set(entry.taskId, next);
 }
 
-/** Queues `files` for the task; `onDone` runs for each one the server took. */
+/**
+ * Queues `files` for the task; `onDone` runs for each one the server took. A file over the
+ * server's limit (`maxBytes`, from `/meta`) fails at once with the limit message and is never
+ * sent (AC-10.2).
+ */
 export function startUploads(
   taskId: string,
   files: readonly File[],
   upload: Uploader,
   onDone: (attachment: Attachment) => void,
+  maxBytes?: number,
 ): void {
   for (const file of files) {
     nextId += 1;
+    const tooLarge = maxBytes !== undefined && file.size > maxBytes;
     const entry: UploadEntry = {
       id: `upload-${nextId}`,
       taskId,
       name: file.name,
       size: file.size,
       progress: 0,
-      status: 'queued',
+      status: tooLarge ? 'failed' : 'queued',
       file,
+      maxBytes,
+      ...(tooLarge ? { error: 'tooLarge' as const, limitBytes: maxBytes } : {}),
     };
     useUploadStore.setState((s) => ({ entries: [...s.entries, entry] }));
-    run(entry, upload, onDone);
+    if (!tooLarge) run(entry, upload, onDone);
   }
 }
 
@@ -129,5 +141,5 @@ export function resetUploads(): void {
 export function pendingFor(entries: readonly UploadEntry[], taskId: string): PendingUpload[] {
   return entries
     .filter((e) => e.taskId === taskId)
-    .map(({ file: _file, abort: _abort, ...rest }) => rest);
+    .map(({ file: _file, abort: _abort, maxBytes: _max, ...rest }) => rest);
 }

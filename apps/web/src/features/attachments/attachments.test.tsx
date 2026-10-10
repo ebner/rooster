@@ -31,6 +31,7 @@ vi.mock('../../data/attachments', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../data/attachments')>()),
   uploadAttachment: uploadMock,
   afterAttachmentChange: changeMock,
+  useUploadLimit: () => 25 * 1024 * 1024,
 }));
 vi.mock('../../data/me', () => ({
   useMe: () => ({ data: { user: { id: fixtureUserId, name: 'Jannik Lunde' } } }),
@@ -292,6 +293,33 @@ describe('the upload queue', () => {
     second.resolve(fixtureAttachments[5] as Attachment);
     await act(() => new Promise((r) => setTimeout(r)));
     expect(useUploadStore.getState().entries).toEqual([]);
+  });
+
+  test('a file over the server limit fails at once with the limit, and is never sent', async () => {
+    const upload = vi.fn();
+    const big = new File([new Uint8Array(2048)], 'big.bin');
+    startUploads(fixtureTaskId, [big], upload, vi.fn(), 1024);
+    await act(() => Promise.resolve());
+    expect(upload).not.toHaveBeenCalled();
+    expect(useUploadStore.getState().entries[0]).toMatchObject({
+      status: 'failed',
+      error: 'tooLarge',
+      limitBytes: 1024,
+    });
+  });
+
+  test('a proxy 502 is a plain failure, offered for retry', async () => {
+    const { ApiError } = await import('../../data/errors');
+    const failing = deferredUpload();
+    const upload = vi.fn().mockImplementationOnce(failing.make);
+    startUploads(fixtureTaskId, [new File(['x'], 'y.bin')], upload, vi.fn(), 100);
+    await act(() => Promise.resolve());
+    failing.reject(new ApiError('http_502', 502));
+    await act(() => new Promise((r) => setTimeout(r)));
+    expect(useUploadStore.getState().entries[0]).toMatchObject({
+      status: 'failed',
+      error: 'failed',
+    });
   });
 
   test('a failure stays with its reason; retry sends it again; dismiss drops it', async () => {

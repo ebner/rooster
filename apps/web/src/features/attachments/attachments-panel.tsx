@@ -9,6 +9,7 @@ import {
   thumbnailUrl,
   uploadAttachment,
   useDeleteAttachment,
+  useUploadLimit,
 } from '../../data/attachments';
 import { useDisplayPrefs, useMe } from '../../data/me';
 import { useOrgMembers } from '../../data/orgs';
@@ -54,6 +55,7 @@ export function AttachmentsPanel({
   const members = useOrgMembers(orgId).data;
   const remove = useDeleteAttachment();
   const online = useOnline();
+  const maxBytes = useUploadLimit();
   const entries = useUploadStore((s) => s.entries);
   const uploads = useMemo(() => pendingFor(entries, taskId), [entries, taskId]);
   const input = useRef<HTMLInputElement>(null);
@@ -83,9 +85,9 @@ export function AttachmentsPanel({
         toast({ message: t('offline'), tone: 'danger' });
         return;
       }
-      startUploads(taskId, files, upload, onUploaded);
+      startUploads(taskId, files, upload, onUploaded, maxBytes);
     },
-    [taskId, upload, onUploaded, t],
+    [taskId, upload, onUploaded, t, maxBytes],
   );
   const pick = useCallback(() => {
     if (navigator.onLine) input.current?.click();

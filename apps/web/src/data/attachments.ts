@@ -1,5 +1,5 @@
 import type { Attachment, TaskDetail } from '@rooster/core/schemas';
-import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from './errors';
 import { api, toApiError, unwrap } from './http';
 import { myListKey } from './list';
@@ -22,6 +22,24 @@ export function attachmentUrl(id: string, options: { inline?: boolean } = {}): s
 /** `GET /attachments/:id/thumb`: the 320 px WebP thumbnail of a raster image. */
 export function thumbnailUrl(id: string): string {
   return `/api/v1/attachments/${encodeURIComponent(id)}/thumb`;
+}
+
+/**
+ * `GET /meta` → `uploadMaxBytes` (`ROOSTER_UPLOAD_MAX_MB`): files above it are refused before
+ * anything is sent. Undefined until known (or from a server that does not say); the server's
+ * 413 still applies then.
+ */
+export function useUploadLimit(): number | undefined {
+  return (
+    useQuery({
+      queryKey: [...queryKeys.meta, 'upload-limit'],
+      queryFn: async () => {
+        const meta: { uploadMaxBytes?: number } = await unwrap(api.GET('/api/v1/meta'));
+        return meta.uploadMaxBytes ?? null;
+      },
+      staleTime: 5 * 60_000,
+    }).data ?? undefined
+  );
 }
 
 /** Thrown when the network fails or the request is aborted (no HTTP status). */
