@@ -49,7 +49,7 @@ async function joinAndSeed(
   const email = uniqueEmail(`perf.helper${'abc'[index]}`);
   await signInAs(page, email, displayNameOf(email), {
     startAt: invitePath,
-    button: 'Accept and sign in',
+    button: 'Accept and sign in with Dev login',
     landing: new RegExp(`/o/${slug}/my$`),
   });
   // Off the app, so its refetches (every create is an SSE event) don't eat the budget.

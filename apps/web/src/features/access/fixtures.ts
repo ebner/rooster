@@ -1,4 +1,9 @@
-import type { Grant, LinkedIdentity, OAuthConsentRequest } from '@rooster/core/schemas';
+import type {
+  Grant,
+  LinkedIdentity,
+  OAuthConsentRequest,
+  RemovedIdentity,
+} from '@rooster/core/schemas';
 import { fixtureIds } from '../shell/fixtures';
 import type { GrantOrgOption } from './grant-model';
 
@@ -284,6 +289,26 @@ export function fixtureIdentities(now: number): LinkedIdentity[] {
       providerName: 'Company SSO',
       email: 'jannik@company.example',
       createdAt: now - 20 * day,
+    },
+  ];
+}
+
+/** Removed sign-in identities, blocked until allowed again (FR-SET-3). */
+export function fixtureRemovedIdentities(now: number): RemovedIdentity[] {
+  return [
+    {
+      id: 'acc_google_old',
+      providerId: 'google',
+      providerName: 'Google',
+      email: 'jannik.old@example.com',
+      removedAt: now - 3 * day,
+    },
+    {
+      id: 'acc_oidc_old',
+      providerId: 'company-sso',
+      providerName: 'Company SSO',
+      email: null,
+      removedAt: now - 60 * day,
     },
   ];
 }

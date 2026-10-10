@@ -12,6 +12,7 @@
     "notInvited": "Den här e-postadressen har inte bjudits in till den här rooster-instansen.",
     "disabled": "Kontot har inaktiverats av en administratör.",
     "unverifiedEmail": "Din inloggningstjänst har inte verifierat den här e-postadressen.",
-    "accountLinkBlocked": "Den här inloggningstjänsten kan inte kopplas till ditt befintliga konto. Logga in på samma sätt som du brukar."
+    "accountLinkBlocked": "Den här inloggningstjänsten kan inte kopplas till ditt befintliga konto. Logga in på samma sätt som du brukar.",
+    "identityUnlinked": "Den här inloggningen har tagits bort från ditt konto. Om du vill använda den igen loggar du in på ett annat sätt och tillåter den under Inställningar → Säkerhet."
   }
 }

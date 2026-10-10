@@ -4,6 +4,7 @@ export { activity, comment, follower, notification, notificationPref } from './c
 export { jobRun, pushSubscription } from './delivery.ts';
 export { accessGrant, apikey, deviceCode } from './grants.ts';
 export { idempotency } from './idempotency.ts';
+export { unlinkedIdentity } from './identity.ts';
 export { instanceSetting } from './instance-setting.ts';
 export {
   oauthAccessToken,

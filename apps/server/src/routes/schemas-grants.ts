@@ -9,6 +9,7 @@ import {
   oauthConsentDecisionSchema,
   oauthConsentRequestSchema,
   oauthConsentResultSchema,
+  removedIdentitySchema,
   tokenCreatedSchema,
   tokenCreateSchema,
 } from '@rooster/core/schemas';
@@ -198,5 +199,15 @@ export const LinkedIdentitySchema = named(linkedIdentitySchema, 'LinkedIdentity'
     providerName: 'Google',
     email: 'ada@example.com',
     createdAt: 1767225600000,
+  },
+});
+
+export const RemovedIdentitySchema = named(removedIdentitySchema, 'RemovedIdentity', {
+  example: {
+    id: '0199a1b2-0000-7000-8000-0000000000c2',
+    providerId: 'google',
+    providerName: 'Google',
+    email: 'ada@gmail.example',
+    removedAt: 1767312000000,
   },
 });

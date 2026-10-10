@@ -67,11 +67,21 @@
       "linked": "Länkad {date}",
       "unlink": "Ta bort länk",
       "unlinkNamed": "Ta bort länken till {name}",
-      "unlinkConfirm": "Ta bort länken till {name}? Du kan inte längre logga in med det.",
+      "unlinkConfirm": "Ta bort länken till {name}? Du kan inte logga in med det förrän du tillåter det igen under Borttagna inloggningar.",
       "unlinked": "Länken har tagits bort",
       "lastHint": "Det är ditt enda sätt att logga in, så länken kan inte tas bort.",
       "lastRefused": "Det är nu ditt enda sätt att logga in, så länken kan inte tas bort.",
-      "loadFailed": "Det gick inte att hämta dina länkade identiteter."
+      "loadFailed": "Det gick inte att hämta dina länkade identiteter.",
+      "removed": {
+        "title": "Borttagna inloggningar",
+        "body": "De här kan inte användas för att logga in, och de kopplas inte till ditt konto igen av sig själva. Tillåt en igen om du vill använda den.",
+        "removedOn": "Borttagen {date}",
+        "allow": "Tillåt igen",
+        "allowNamed": "Tillåt {name} igen",
+        "allowConfirm": "Tillåta {name} igen? Nästa gång du loggar in med den kopplas den till ditt konto igen.",
+        "allowed": "Inloggningen är tillåten igen",
+        "loadFailed": "Det gick inte att hämta dina borttagna inloggningar."
+      }
     }
   },
   "org": {
@@ -474,7 +484,9 @@
       "newTokenAdmin": "Ny token, som administratör",
       "identities": "Länkade identiteter",
       "identitiesLast": "Länkade identiteter: bara en kvar",
-      "identitiesConfirm": "Länkade identiteter: bekräfta borttagning av länk"
+      "identitiesConfirm": "Länkade identiteter: bekräfta borttagning av länk",
+      "identitiesRemoved": "Länkade identiteter: med borttagna inloggningar",
+      "identitiesAllowConfirm": "Länkade identiteter: bekräfta att tillåta igen"
     }
   }
 }

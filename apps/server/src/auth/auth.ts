@@ -141,6 +141,22 @@ function deviceError(error: string, description: string): APIError {
   return new APIError('BAD_REQUEST', { error, error_description: description });
 }
 
+/**
+ * The callback error for an identity the user unlinked (FR-SET-3): the auth mount sends the
+ * browser to `/login?error=identity_unlinked`.
+ */
+export const IDENTITY_UNLINKED = 'identity_unlinked';
+
+/**
+ * The provider subject of a sign-in, as better-auth derives the account ID for rooster's
+ * providers (Google and OIDC: the `sub` claim). Only an early check; the account create hook
+ * compares the real account ID.
+ */
+function profileSubject(profile: unknown): string | null {
+  const sub = (profile as { sub?: unknown } | null | undefined)?.sub;
+  return typeof sub === 'string' && sub !== '' ? sub : null;
+}
+
 const REJECTION_TEXT: Record<SignInRejection, ServerTextKey> = {
   not_invited: 'signIn.notInvited',
   account_disabled: 'signIn.disabled',
@@ -227,6 +243,13 @@ export function createAuth(deps: AuthDeps) {
     errorDescription: serverText(
       localeFromAcceptLanguage(headers?.get('accept-language')),
       REJECTION_TEXT[reason],
+    ),
+  });
+  const identityUnlinked = (headers: Headers | null) => ({
+    error: IDENTITY_UNLINKED,
+    errorDescription: serverText(
+      localeFromAcceptLanguage(headers?.get('accept-language')),
+      'signIn.identityUnlinked',
     ),
   });
 
@@ -411,6 +434,20 @@ export function createAuth(deps: AuthDeps) {
         // not authoritative for the address could take over the account of whoever owns
         // it, so only email authorities may link (by email, or explicitly).
         const providerId = source.oauth?.providerId ?? source.sso?.providerId;
+        // An identity the user unlinked stays out until they allow it again (FR-SET-3). The
+        // account create hook below is the authoritative check; this one runs before a new
+        // user row exists, so a removed identity whose email now matches no account leaves
+        // nothing behind either.
+        const subject = profileSubject(source.oauth?.profile);
+        if (
+          source.action !== 'sign-in' &&
+          providerId !== undefined &&
+          subject !== null &&
+          services.identities.isBlocked(providerId, subject)
+        ) {
+          authLogger.warn({ providerId }, 'sign-in refused: identity was unlinked');
+          return identityUnlinked(headers);
+        }
         if (
           source.action === 'link-account' &&
           (providerId === undefined || !linkableProviders.has(providerId))
@@ -444,6 +481,24 @@ export function createAuth(deps: AuthDeps) {
       cookieCache: { enabled: false },
     },
     databaseHooks: {
+      account: {
+        create: {
+          // Every way better-auth attaches an identity (a new user, linking by email, an
+          // explicit link) creates an `account` row through here. An identity the user
+          // unlinked may not come back until they allow it again (FR-SET-3); the thrown
+          // error ends the sign-in before any session exists.
+          before: async (data, ctx) => {
+            if (services.identities.isBlocked(data.providerId, data.accountId)) {
+              authLogger.warn(
+                { providerId: data.providerId },
+                'account link refused: identity was unlinked',
+              );
+              const { error, errorDescription } = identityUnlinked(headersOf(ctx));
+              throw new APIError('FORBIDDEN', { code: error, message: errorDescription });
+            }
+          },
+        },
+      },
       user: {
         create: {
           // The UI language comes from the browser that completes the first sign-in.

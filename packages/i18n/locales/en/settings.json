@@ -67,11 +67,21 @@
       "linked": "Linked {date}",
       "unlink": "Unlink",
       "unlinkNamed": "Unlink {name}",
-      "unlinkConfirm": "Unlink {name}? You can no longer sign in with it.",
+      "unlinkConfirm": "Unlink {name}? You can’t sign in with it until you allow it again under Removed sign-ins.",
       "unlinked": "Identity unlinked",
       "lastHint": "It’s your only way to sign in, so it can’t be unlinked.",
       "lastRefused": "It’s now your only way to sign in, so it can’t be unlinked.",
-      "loadFailed": "Couldn’t load your linked identities."
+      "loadFailed": "Couldn’t load your linked identities.",
+      "removed": {
+        "title": "Removed sign-ins",
+        "body": "These can’t be used to sign in, and they don’t link to your account again on their own. Allow one again to use it.",
+        "removedOn": "Removed {date}",
+        "allow": "Allow again",
+        "allowNamed": "Allow {name} again",
+        "allowConfirm": "Allow {name} again? The next time you sign in with it, it’s linked to your account again.",
+        "allowed": "Sign-in allowed again",
+        "loadFailed": "Couldn’t load your removed sign-ins."
+      }
     }
   },
   "org": {
@@ -474,7 +484,9 @@
       "newTokenAdmin": "New token, as an admin",
       "identities": "Linked identities",
       "identitiesLast": "Linked identities: only one left",
-      "identitiesConfirm": "Linked identities: confirm unlinking"
+      "identitiesConfirm": "Linked identities: confirm unlinking",
+      "identitiesRemoved": "Linked identities: with removed sign-ins",
+      "identitiesAllowConfirm": "Linked identities: confirm allowing again"
     }
   }
 }

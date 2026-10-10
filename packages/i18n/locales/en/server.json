@@ -12,6 +12,7 @@
     "notInvited": "This email address has not been invited to this rooster instance.",
     "disabled": "This account has been deactivated by an administrator.",
     "unverifiedEmail": "Your sign-in provider has not verified this email address.",
-    "accountLinkBlocked": "This sign-in provider cannot be connected to your existing account. Sign in the way you usually do."
+    "accountLinkBlocked": "This sign-in provider cannot be connected to your existing account. Sign in the way you usually do.",
+    "identityUnlinked": "This sign-in was removed from your account. To use it again, sign in another way and allow it in Settings → Security."
   }
 }

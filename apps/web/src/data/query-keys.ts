@@ -26,4 +26,6 @@ export const queryKeys = {
   oauthConsent: (oauthQuery: string) => ['oauth-consent', oauthQuery] as const,
   /** P9. Settings → Security → Linked identities (FR-SET-3). */
   identities: ['identities'] as const,
+  /** Removed sign-in identities; under `identities`, so invalidating that refreshes both. */
+  removedIdentities: ['identities', 'removed'] as const,
 };

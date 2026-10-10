@@ -31,6 +31,16 @@ const serverEnv = {
       clientId: 'rooster-dev',
       clientSecret: 'rooster-dev-secret',
     },
+    // FR-SET-3 (identities.spec.ts): a second identity on the same mock IdP. An email
+    // authority, so it links to an existing account by email, as Google does.
+    {
+      id: 'corp',
+      name: 'Corp SSO',
+      discoveryUrl: `${idpIssuer}/.well-known/openid-configuration`,
+      clientId: 'rooster-dev',
+      clientSecret: 'rooster-dev-secret',
+      trustEmail: true,
+    },
   ]),
   ROOSTER_DATA_DIR: process.env.ROOSTER_E2E_DATA_DIR,
   // Each browser context sends its own X-Forwarded-For (e2e/support/auth.ts), so the

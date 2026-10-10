@@ -6,7 +6,13 @@ import { Button } from '../../ui/button';
 import { AuthLayout } from './auth-layout';
 
 /** Why the user landed back on the login page (`/login?error=…`). */
-export const loginErrors = ['not_invited', 'disabled', 'invite_invalid', 'failed'] as const;
+export const loginErrors = [
+  'not_invited',
+  'disabled',
+  'invite_invalid',
+  'identity_unlinked',
+  'failed',
+] as const;
 export type LoginError = (typeof loginErrors)[number];
 
 export function isLoginError(value: unknown): value is LoginError {

@@ -112,7 +112,7 @@ test('AC-1.3 an owner invites by single-use link; the invitee joins; the link ca
   await expect(b.getByRole('heading', { level: 1, name: 'Join Northwind' })).toBeVisible();
   await signInAs(b, bEmail, displayNameOf(bEmail), {
     startAt: invitePath,
-    button: 'Accept and sign in',
+    button: 'Accept and sign in with Dev login',
     landing: new RegExp(`/o/${slug}/my$`),
   });
   await expect(b.getByRole('heading', { level: 1 })).toContainText('Northwind');

@@ -11,7 +11,12 @@ import {
   useRevokeGrant,
   useUpdateGrant,
 } from '../../data/grants';
-import { useLinkedIdentities, useUnlinkIdentity } from '../../data/identities';
+import {
+  useAllowIdentity,
+  useLinkedIdentities,
+  useRemovedIdentities,
+  useUnlinkIdentity,
+} from '../../data/identities';
 import { ConnectedAppsSection } from '../../features/access/connected-apps';
 import { LinkedIdentitiesSection } from '../../features/settings/linked-identities';
 import { SecurityPage } from '../../features/settings/security-page';
@@ -60,10 +65,24 @@ function LinkedIdentities({ now }: { now: number }) {
   const prefs = useDisplayPrefs();
   const identities = useLinkedIdentities();
   const unlink = useUnlinkIdentity();
+  const removed = useRemovedIdentities();
+  const allow = useAllowIdentity();
   return (
     <LinkedIdentitiesSection
       identities={identities.data}
       error={identities.error}
+      removed={removed.data}
+      removedError={removed.error}
+      onAllow={async (id) => {
+        try {
+          await allow.mutateAsync({ id });
+          toast({ message: t('security.identities.removed.allowed') });
+          return true;
+        } catch {
+          toast({ message: t('error.saveFailed'), tone: 'danger' });
+          return false;
+        }
+      }}
       prefs={prefs}
       now={now}
       onUnlink={async (id) => {

@@ -1,4 +1,4 @@
-import type { LinkedIdentity } from '@rooster/core/schemas';
+import type { LinkedIdentity, RemovedIdentity } from '@rooster/core/schemas';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrap } from './http';
 import { queryKeys } from './query-keys';
@@ -17,6 +17,15 @@ export function useLinkedIdentities(): QueryResult<LinkedIdentity[]> {
   });
 }
 
+/** `GET /me/identities/removed`: unlinked identities, blocked until allowed again. */
+export function useRemovedIdentities(): QueryResult<RemovedIdentity[]> {
+  return useQuery({
+    queryKey: queryKeys.removedIdentities,
+    queryFn: async () =>
+      (await unwrap(api.GET('/api/v1/me/identities/removed'))) as RemovedIdentity[],
+  });
+}
+
 /** `DELETE /me/identities/:id`; `409 last_identity` for the only one left. */
 export function useUnlinkIdentity(): MutationResult<{ id: string }> {
   const queryClient = useQueryClient();
@@ -25,5 +34,16 @@ export function useUnlinkIdentity(): MutationResult<{ id: string }> {
       await unwrap(api.DELETE('/api/v1/me/identities/{id}', { params: { path: { id } } }));
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.identities }),
+  });
+}
+
+/** `DELETE /me/identities/removed/:id`: the next sign-in through it links it again. */
+export function useAllowIdentity(): MutationResult<{ id: string }> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      await unwrap(api.DELETE('/api/v1/me/identities/removed/{id}', { params: { path: { id } } }));
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.removedIdentities }),
   });
 }

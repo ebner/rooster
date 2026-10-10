@@ -184,6 +184,21 @@ export const linkedIdentitySchema = z.object({
 });
 export const linkedIdentityListSchema = z.array(linkedIdentitySchema);
 
+/**
+ * GET /me/identities/removed (FR-SET-3, session only): identities the user unlinked. They stay
+ * blocked from signing in (and from linking again by email) until the user allows them again.
+ */
+export const removedIdentitySchema = z.object({
+  /** The id the identity had while linked; the DELETE path parameter. */
+  id: z.string(),
+  providerId: z.string(),
+  providerName: z.string(),
+  /** The email the provider vouched for while it was linked, when known. */
+  email: z.string().nullable(),
+  removedAt: timestampSchema,
+});
+export const removedIdentityListSchema = z.array(removedIdentitySchema);
+
 export type GrantScopeValue = z.infer<typeof grantScopeSchema>;
 export type OrgGrantValue = z.infer<typeof orgGrantSchema>;
 export type GrantConstraintsValue = z.infer<typeof grantConstraintsSchema>;
@@ -199,3 +214,4 @@ export type OAuthConsentRequest = z.infer<typeof oauthConsentRequestSchema>;
 export type OAuthConsentDecision = z.infer<typeof oauthConsentDecisionSchema>;
 export type OAuthConsentResult = z.infer<typeof oauthConsentResultSchema>;
 export type LinkedIdentity = z.infer<typeof linkedIdentitySchema>;
+export type RemovedIdentity = z.infer<typeof removedIdentitySchema>;

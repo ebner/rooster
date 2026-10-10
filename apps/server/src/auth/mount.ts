@@ -7,7 +7,7 @@ import { problemResponse } from '../lib/errors.ts';
 import type { Services } from '../services/index.ts';
 import { hashOAuthToken } from '../services/oauth-grants.ts';
 import type { SignInRejection } from '../services/sign-in-policy.ts';
-import { AUTH_BASE_PATH, type Auth, CLIENT_IP_HEADER } from './auth.ts';
+import { AUTH_BASE_PATH, type Auth, CLIENT_IP_HEADER, IDENTITY_UNLINKED } from './auth.ts';
 import { clearInviteCookie } from './cookies.ts';
 import { KeyedLock } from './keyed-lock.ts';
 import { resourceOf } from './oauth-metadata.ts';
@@ -21,8 +21,9 @@ const REJECTIONS: ReadonlySet<string> = new Set<SignInRejection>([
 
 /**
  * Post-processes OAuth callback responses: a sign-in rejected by the allowlist goes to the
- * SPA's `/not-invited` page (FR-AUTH-2), and a successful sign-in drops the consumed
- * `rooster.invite` cookie.
+ * SPA's `/not-invited` page (FR-AUTH-2); one through an identity the user unlinked goes back
+ * to `/login?error=identity_unlinked`, where they can sign in another way (FR-SET-3); a
+ * successful sign-in drops the consumed `rooster.invite` cookie.
  */
 function rewriteCallback(res: Response, config: Config): Response {
   const location = res.headers.get('location');
@@ -35,6 +36,8 @@ function rewriteCallback(res: Response, config: Config): Response {
   const error = raw === 'account_not_linked' ? 'unverified_email' : raw;
   if (error !== null && REJECTIONS.has(error)) {
     headers.set('location', `${config.baseUrl}/not-invited?reason=${error}`);
+  } else if (error === IDENTITY_UNLINKED) {
+    headers.set('location', `${config.baseUrl}/login?error=${IDENTITY_UNLINKED}`);
   } else if (error === null) {
     headers.append('set-cookie', clearInviteCookie(config.baseUrl.startsWith('https://')));
   }

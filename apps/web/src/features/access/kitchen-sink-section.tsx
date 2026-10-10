@@ -14,6 +14,7 @@ import {
   fixtureGrants,
   fixtureGroupIds,
   fixtureIdentities,
+  fixtureRemovedIdentities,
   fixtureUserCode,
 } from './fixtures';
 import { ceilingForGrant, defaultTokenValue, type GrantValue, valueFromGrant } from './grant-model';
@@ -93,6 +94,8 @@ export function AccessKitchenSection() {
     ],
   ];
   const identities = useMemo(() => fixtureIdentities(now), [now]);
+  const removedIdentities = useMemo(() => fixtureRemovedIdentities(now), [now]);
+  const allowed = async () => true;
   const unlinked = async () => 'unlinked' as const;
 
   return (
@@ -223,6 +226,33 @@ export function AccessKitchenSection() {
           />
           <figcaption className="text-xs text-text-muted">
             {t('access.dev.identitiesConfirm')}
+          </figcaption>
+        </figure>
+        <figure className="flex max-w-pane-max flex-col gap-2">
+          <LinkedIdentitiesSection
+            identities={identities}
+            prefs={prefs}
+            now={now}
+            onUnlink={unlinked}
+            removed={removedIdentities}
+            onAllow={allowed}
+          />
+          <figcaption className="text-xs text-text-muted">
+            {t('access.dev.identitiesRemoved')}
+          </figcaption>
+        </figure>
+        <figure className="flex max-w-pane-max flex-col gap-2">
+          <LinkedIdentitiesSection
+            identities={identities.slice(0, 1)}
+            prefs={prefs}
+            now={now}
+            onUnlink={unlinked}
+            removed={removedIdentities}
+            onAllow={allowed}
+            initialAllowingId={removedIdentities[0]?.id}
+          />
+          <figcaption className="text-xs text-text-muted">
+            {t('access.dev.identitiesAllowConfirm')}
           </figcaption>
         </figure>
       </Group>

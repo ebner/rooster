@@ -113,6 +113,7 @@ describe('migrations', () => {
       'task_group',
       'task_reminder',
       'task_tag',
+      'unlinked_identity',
     ]);
     expect(tables.map((t) => t.name)).toEqual(
       expect.arrayContaining([

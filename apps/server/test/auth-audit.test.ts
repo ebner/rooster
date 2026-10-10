@@ -2,7 +2,7 @@
 // Each `it` names the finding it covers.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SESSION_COOKIE } from '../src/auth/cookies.ts';
-import { account, user } from '../src/db/schema/index.ts';
+import { user } from '../src/db/schema/index.ts';
 import { asJar, BASE_URL, CookieJar, createTestApp, idpEnv, signInAs } from './helpers.ts';
 import { type MockIdp, startMockIdp } from './mock-idp.ts';
 
@@ -21,29 +21,19 @@ afterAll(async () => {
 const HTTPS = 'https://rooster.example.com';
 
 describe('boundary 1: sign-in and account linking', () => {
-  it('P1 a generic OIDC provider named "google" is not an email authority', async () => {
-    // No built-in Google: the `google` id is free for a generic provider without trustEmail.
+  it('P1 a generic OIDC provider cannot take the id "google" (an email authority)', () => {
+    // Refused at startup even with built-in Google off (config.ts), so `google` always means
+    // the built-in provider; auth.ts also trusts it only when that provider is configured.
     const providers = [idp.provider('dev'), second.provider('google', 'Not Google')];
-    const { app, db, config } = createTestApp({
-      env: {
-        ROOSTER_OIDC_PROVIDERS: JSON.stringify(providers),
-        // Unset the built-in Google of TEST_ENV.
-        ROOSTER_GOOGLE_CLIENT_ID: undefined as unknown as string,
-        ROOSTER_GOOGLE_CLIENT_SECRET: undefined as unknown as string,
-      },
-    });
-    expect(config.google).toBeNull();
-    await signInAs(app, 'admin@example.com');
-    const { jar, location } = await signInAs(app, 'admin@example.com', { provider: 'google' });
-    expect(location).toBe(`${BASE_URL}/not-invited?reason=account_link_blocked`);
-    expect(jar.get(SESSION_COOKIE)).toBeUndefined();
-    expect(
-      db.orm
-        .select()
-        .from(account)
-        .all()
-        .map((a) => a.providerId),
-    ).toEqual(['dev']);
+    expect(() =>
+      createTestApp({
+        env: {
+          ROOSTER_OIDC_PROVIDERS: JSON.stringify(providers),
+          ROOSTER_GOOGLE_CLIENT_ID: undefined as unknown as string,
+          ROOSTER_GOOGLE_CLIENT_SECRET: undefined as unknown as string,
+        },
+      }),
+    ).toThrow(/reserved for the built-in Google provider/);
   });
 
   it('P2 better-auth’s account endpoints (link, unlink, token export) are not reachable', async () => {

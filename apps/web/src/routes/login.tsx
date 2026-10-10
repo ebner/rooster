@@ -36,6 +36,8 @@ function toLoginError(code: unknown): LoginError | undefined {
   if (code === 'not_invited') return 'not_invited';
   if (code === 'account_disabled' || code === 'disabled') return 'disabled';
   if (code === 'invite_invalid') return 'invite_invalid';
+  // A sign-in through an identity the user removed in Settings → Security (FR-SET-3).
+  if (code === 'identity_unlinked') return 'identity_unlinked';
   return 'failed';
 }
 
