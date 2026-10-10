@@ -11,7 +11,7 @@ import { getClientId, registerListPipeline } from '../list';
 import { httpTransport } from '../pipeline/http-transport';
 import { ListPipeline, myListKey, tagsKey } from '../pipeline/pipeline';
 import type { ListTransport } from '../pipeline/transport';
-import { sessionDataCleared } from '../session-events';
+import { closeSessionForGood, sessionDataCleared } from '../session-events';
 import type { Me } from '../types';
 import { buildInfo, cacheBuster } from './build-info';
 import { createSyncChannel, type SyncChannel, type SyncMessage } from './channel';
@@ -99,6 +99,25 @@ export function syncEngine(): SyncEngine | null {
 export async function clearLocalData(): Promise<void> {
   sweepUserStorage();
   await current?.clear({ final: true });
+}
+
+/** Once per tab and account: a page whose stored data cannot be dropped must not reload forever. */
+const reloadedKey = 'rooster.reloadedAs';
+
+function reloadedAs(userId: string): boolean {
+  try {
+    return globalThis.sessionStorage?.getItem(reloadedKey) === userId;
+  } catch {
+    return false;
+  }
+}
+
+function markReloadedAs(userId: string): void {
+  try {
+    globalThis.sessionStorage?.setItem(reloadedKey, userId);
+  } catch {
+    // Without session storage a second switch to the same account just wipes in place.
+  }
 }
 
 function readOwner(): string | null {
@@ -213,6 +232,8 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   await withTimeout(persistQueryClientRestore(restoreOptions), undefined);
   const records = withOwner(await withTimeout(outbox.load(), []));
   pipeline.restore(restoredBases(queryClient), records);
+  // The restored data renders before a fresh `/me`: this page has run as that account too.
+  ranAs = (queryClient.getQueryData<Me>(['me']) as Me | undefined)?.user?.id ?? null;
   // Restored data renders now but is never trusted as fresh: every query refetches on mount
   // (when online), whatever its staleTime. This is also what notices a revoked session.
   void queryClient.invalidateQueries({ refetchType: 'none' });
@@ -395,35 +416,43 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
    * request (the next one would carry another account's cookies) or reach its caches.
    */
   function closeSession() {
-    saving = false;
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = null;
-    events.stop();
+    // Every request is refused from here on, whatever path it takes (ADR 0051).
+    closeSessionForGood();
+    userId = null;
     pipeline.reset();
     queryClient.getMutationCache().clear();
-    sessionDataCleared();
+    // No more saves, SSE, channel messages (a ping would reconcile the shared outbox with the
+    // old account's view) or leadership: the page is only waiting to unload.
+    engine.stop();
   }
 
   let started = false;
   function onUser(me: Me) {
     const owner = readOwner();
-    if (ranAs !== null && ranAs !== me.user.id) {
-      // This document ran as another account (signed in elsewhere in this browser). Its
-      // continuations (pending requests, revealed secrets, undo, drafts, consent) belong to
-      // that account: stop them, then start over as the new one. The tab that signed in has normally wiped the shared outbox and cache already (below);
-      // wiping again here could drop ops the new account has queued since.
+    if (ranAs !== null && ranAs !== me.user.id && !reloadedAs(me.user.id)) {
+      // This page ran as another account (signed in elsewhere in this browser, or restored
+      // from its cache). Its continuations (pending requests, revealed secrets, undo, drafts,
+      // consent) belong to that account: close the session at once, then start over as the
+      // new one. The tab that signed in has normally wiped the shared outbox and cache
+      // already (below); wiping again here could drop ops the new account has queued since.
       closeSession();
-      let cleared: Promise<unknown> = Promise.resolve();
-      if (owner && owner !== me.user.id) {
-        void unsubscribeThisBrowser();
-        sweepUserStorage(me.user.id);
-        writeOwner(me.user.id);
-        cleared = wipe({ keepMe: false }).then(() => channel.post({ type: 'cleared' }));
-      }
-      void cleared
-        .then(() => persister.suspend())
+      const takeOver = async () => {
+        if (owner && owner !== me.user.id) {
+          // Before the owner changes: a reload must not leave the old account's push behind.
+          await unsubscribeThisBrowser();
+          sweepUserStorage(me.user.id);
+          writeOwner(me.user.id);
+          await wipe({ keepMe: false });
+          channel.post({ type: 'cleared' });
+        }
+        await persister.suspend();
+      };
+      void takeOver()
         .catch(() => {})
-        .finally(() => globalThis.location?.reload());
+        .finally(() => {
+          markReloadedAs(me.user.id);
+          globalThis.location?.reload();
+        });
       return;
     }
     if (owner && owner !== me.user.id) {

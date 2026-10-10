@@ -6,7 +6,7 @@ import { ApiError } from '../errors';
 import { createFixtureTransport } from '../pipeline/fixture-transport';
 import { myListKey } from '../pipeline/pipeline';
 import type { ListTransport } from '../pipeline/transport';
-import { onSessionDataCleared } from '../session-events';
+import { onSessionDataCleared, reopenSessionForTests } from '../session-events';
 import type { Me } from '../types';
 import { nullChannel, type SyncChannel, type SyncMessage } from './channel';
 import { clearLocalData, type SyncEngine, startSync } from './engine';
@@ -82,6 +82,8 @@ async function boot(
 afterEach(() => {
   for (const engine of engines.splice(0)) engine.stop();
   localStorage.clear();
+  sessionStorage.clear();
+  reopenSessionForTests();
 });
 
 describe('sync engine (04 §6)', () => {
@@ -237,6 +239,112 @@ describe('sync engine (04 §6)', () => {
       expect(useUndoStore.getState().undo).toEqual([]);
       expect(readDraft('task-1')).toBe('');
       await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test('after an account change the page sends nothing more, through any client', async () => {
+    const { storage } = memoryStorage();
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...globalThis.location, reload });
+    try {
+      const { queryClient } = await boot({
+        storage,
+        outbox: createMemoryOutbox(),
+        transport: createFixtureTransport({ userId }),
+      });
+      await fetchMe(queryClient, me(userId));
+      const other = '01900000-0000-7000-8000-000000000002';
+      localStorage.setItem('rooster.cacheOwner', other);
+      await fetchMe(queryClient, me(other));
+      const { api } = await import('../http');
+      await expect(api.GET('/api/v1/me')).rejects.toMatchObject({ code: 'session_closed' });
+      const { sendMultipart } = await import('../attachments');
+      await expect(
+        sendMultipart('PUT', '/api/v1/me/avatar', new Blob(['x']), 'a.png').promise,
+      ).rejects.toMatchObject({ code: 'session_closed' });
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test('a page that rendered a restored account reloads when the first fresh /me is another', async () => {
+    const { storage } = memoryStorage();
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...globalThis.location, reload });
+    try {
+      const queryClient = new QueryClient();
+      queryClient.setQueryData(['me'], me(userId));
+      localStorage.setItem('rooster.cacheOwner', userId);
+      await boot(
+        { storage, outbox: createMemoryOutbox(), transport: createFixtureTransport({ userId }) },
+        queryClient,
+      );
+      const other = '01900000-0000-7000-8000-000000000002';
+      await fetchMe(queryClient, me(other));
+      await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      // The previous account's browser data went first, and the owner is the new account.
+      expect(localStorage.getItem('rooster.cacheOwner')).toBe(other);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test('the push subscription is gone before the owner changes and the page reloads', async () => {
+    const { storage } = memoryStorage();
+    const reload = vi.fn();
+    let finishUnsubscribe: (value: boolean) => void = () => {};
+    const unsubscribe = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishUnsubscribe = resolve;
+        }),
+    );
+    const registration = { pushManager: { getSubscription: async () => ({ unsubscribe }) } };
+    vi.stubGlobal('location', { ...globalThis.location, reload });
+    vi.stubGlobal('navigator', {
+      ...globalThis.navigator,
+      serviceWorker: { getRegistration: async () => registration },
+    });
+    try {
+      const queryClient = new QueryClient();
+      queryClient.setQueryData(['me'], me(userId));
+      localStorage.setItem('rooster.cacheOwner', userId);
+      await boot(
+        { storage, outbox: createMemoryOutbox(), transport: createFixtureTransport({ userId }) },
+        queryClient,
+      );
+      const other = '01900000-0000-7000-8000-000000000002';
+      await fetchMe(queryClient, me(other));
+      await vi.waitFor(() => expect(unsubscribe).toHaveBeenCalled());
+      expect(localStorage.getItem('rooster.cacheOwner')).toBe(userId);
+      expect(reload).not.toHaveBeenCalled();
+      finishUnsubscribe(true);
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+      expect(localStorage.getItem('rooster.cacheOwner')).toBe(other);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test('a tab reloads at most once for the same account (no loop when storage cannot be cleared)', async () => {
+    const { storage } = memoryStorage();
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...globalThis.location, reload });
+    try {
+      const other = '01900000-0000-7000-8000-000000000002';
+      sessionStorage.setItem('rooster.reloadedAs', other);
+      const queryClient = new QueryClient();
+      queryClient.setQueryData(['me'], me(userId));
+      await boot(
+        { storage, outbox: createMemoryOutbox(), transport: createFixtureTransport({ userId }) },
+        queryClient,
+      );
+      await fetchMe(queryClient, me(other));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(reload).not.toHaveBeenCalled();
     } finally {
       vi.unstubAllGlobals();
     }

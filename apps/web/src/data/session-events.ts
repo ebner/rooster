@@ -40,6 +40,25 @@ export function sessionScope(abort?: () => void): { stale: () => boolean; done: 
   return { stale: () => epoch !== started, done };
 }
 
+let closed = false;
+
+/**
+ * The page's session is over for good (another account took over this browser): every request
+ * is refused from now on, and the page reloads (ADR 0051). Until it unloads, continuations still
+ * in flight can run, but they can no longer reach the server with the next account's cookies.
+ */
+export function closeSessionForGood(): void {
+  closed = true;
+  sessionDataCleared();
+}
+
+export const isSessionClosed = () => closed;
+
+/** Test seam: a fresh page. */
+export function reopenSessionForTests(): void {
+  closed = false;
+}
+
 /** A request outside TanStack Query (XHR uploads) answered 401. */
 export const onUnauthenticatedRequest = (listener: Listener<ApiError>) =>
   subscribe(unauthenticated, listener);

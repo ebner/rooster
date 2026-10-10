@@ -28,6 +28,14 @@ Guarding each of these one by one would never be complete.
 - **State outside the query cache subscribes to `data/session-events.ts`** (`onSessionDataCleared`): the upload queue, comment drafts and the undo stack. A request that outlives its session takes a `sessionScope()` and drops a late answer (avatars).
 - **The first `/me` after another account owned the browser** also drops this browser's push subscription. The new user has no marker, so any subscription here is someone else's, even one whose registration was still in flight.
 
+## Amendment after the re-check (the barrier)
+The reload alone left a window between detecting the switch and unloading the page. During that window callbacks still ran, a channel `ping` could reconcile the shared outbox with the old account's view, and a fire-and-forget push cleanup could be cut off by the reload. So:
+- **`closeSessionForGood()`** (in `data/session-events.ts`) latches the page closed. From then on, `api`, through openapi-fetch middleware, and `sendMultipart` refuse every request with `session_closed`, and an XHR answer that arrives later is rejected instead of resolved. Continuations may still run until the page unloads, but they reach neither the server nor the persisted cache.
+- **`closeSession()`** also calls the engine's `stop()`. This means no more saves or SSE, the page stops listening on the channel, and it releases leadership.
+- **The account the page ran as** includes the restored cache: `ranAs` is taken from the restored `/me` before the first fresh one arrives.
+- **Order of the switch:** when this tab is the first to see the new account, the push unsubscription and the wipe finish before the owner changes and the page reloads.
+- **Loop guard:** a tab reloads at most once per account (`sessionStorage` `rooster.reloadedAs`). If its stored data cannot be dropped, it wipes in place instead.
+
 ## Consequences
 - In-flight continuations die with the page, so stale writes, revealed secrets and replayed undo can't cross accounts.
 - **Remaining window:** requests already sent before a tab learns of the switch carry the new cookie. This is inherent to cookie sessions shared by tabs. The `cleared` broadcast from the tab that signed in usually closes the window within about a second of its boot.

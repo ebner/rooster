@@ -1,5 +1,6 @@
 import { createRoosterClient } from '@rooster/api-client';
 import { ApiError } from './errors';
+import { isSessionClosed } from './session-events';
 
 /**
  * The typed REST client. Same-origin (Vite proxies /api in development), so the
@@ -10,11 +11,21 @@ export const api = createRoosterClient({
   clientName: 'web',
 });
 
+/** The session barrier (ADR 0051): a closed page sends nothing more. */
+api.use({
+  onRequest: ({ request }) => {
+    if (isSessionClosed()) throw new ApiError(sessionClosedCode, 0);
+    return request;
+  },
+});
+
 interface FetchResult<T> {
   data?: T;
   error?: unknown;
   response: Response;
 }
+
+export const sessionClosedCode = 'session_closed';
 
 /** Maps a problem+json body (04 §4.10) or a bare status to an `ApiError`. */
 export function toApiError(body: unknown, status: number): ApiError {

@@ -1,9 +1,10 @@
 import type { Attachment, TaskDetail } from '@rooster/core/schemas';
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from './errors';
-import { api, toApiError, unwrap } from './http';
+import { api, sessionClosedCode, toApiError, unwrap } from './http';
 import { myListKey } from './list';
 import { queryKeys } from './query-keys';
+import { isSessionClosed } from './session-events';
 import { taskDetailKey } from './task-detail';
 import type { MutationResult } from './types';
 
@@ -66,6 +67,10 @@ export function sendMultipart<T>(
 ): MultipartUpload<T> {
   const xhr = new XMLHttpRequest();
   const promise = new Promise<T>((resolve, reject) => {
+    if (isSessionClosed()) {
+      reject(new ApiError(sessionClosedCode, 0));
+      return;
+    }
     xhr.open(method, `${globalThis.location?.origin ?? ''}${path}`);
     xhr.setRequestHeader('X-Rooster-Client', 'web');
     xhr.setRequestHeader('Accept', 'application/json');
@@ -74,7 +79,9 @@ export function sendMultipart<T>(
     };
     xhr.onload = () => {
       const body = parseJson(xhr.responseText);
-      if (xhr.status >= 200 && xhr.status < 300) resolve(body as T);
+      // Sent before the session closed: the answer belongs to an account that is gone here.
+      if (isSessionClosed()) reject(new ApiError(sessionClosedCode, 0));
+      else if (xhr.status >= 200 && xhr.status < 300) resolve(body as T);
       else reject(toApiError(body, xhr.status));
     };
     xhr.onerror = () => reject(new ApiError(networkErrorCode, 0));
