@@ -783,3 +783,73 @@ describe('boundary 3, final', () => {
     expect((await owner.call('GET', `/api/v1/tasks/${g.id}`)).status).toBe(200);
   });
 });
+
+describe('boundary 3, final 2', () => {
+  async function hiddenParentFamily() {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const bob = ctx.user('bob@example.com');
+    const org = await sharedOrg(owner, [bob]);
+    const prio = await groupNamed(owner, 'Prio', org.id);
+    const today = await groupNamed(owner, 'Today', org.id);
+    const upcoming = await groupNamed(owner, 'Upcoming', org.id);
+    const t = await owner.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'T', groupId: today.id },
+      201,
+    );
+    const s = await bob.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'S', parentId: t.id, assigneeId: bob.userId },
+      201,
+    );
+    const g = await owner.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      {
+        title: 'G',
+        parentId: s.id,
+        assigneeId: owner.userId,
+        dueDate: '2026-10-12',
+        recurrence: 'FREQ=DAILY',
+      },
+      201,
+    );
+    return { ctx, owner, bob, org, prio, today, upcoming, t, s, g };
+  }
+
+  it('P2 completing or skipping a repeating subtask under a hidden parent is refused', async () => {
+    const { ctx, owner, org, prio, s, g } = await hiddenParentFamily();
+    await owner.ok('POST', `/api/v1/tasks/${g.id}/move`, { groupId: prio.id });
+    const constraints = {
+      orgs: [{ orgId: org.id, read: { groups: [prio.id] }, write: 'all' as const }],
+    };
+    const api = bearer(ctx, (await pat(owner, ALL, constraints)).token);
+    const complete = await api.call('POST', `/api/v1/tasks/${g.id}/complete`, { completed: true });
+    expect(complete.status).toBe(403);
+    const skip = await api.call('POST', `/api/v1/tasks/${g.id}/skip`, {});
+    expect(skip.status).toBe(403);
+    await api.ok('POST', '/api/v1/tasks/bulk', { op: 'complete', ids: [g.id] });
+    const parent = await owner.ok<Task>('GET', `/api/v1/tasks/${s.id}`);
+    expect(parent.counts.subtasks).toBe(1);
+    expect((await owner.ok<Task>('GET', `/api/v1/tasks/${g.id}`)).completedAt).toBeNull();
+  });
+
+  it('P3 a group restore re-homes a task whose own group is still deleted', async () => {
+    const { owner, org, prio, upcoming, g, t } = await hiddenParentFamily();
+    await owner.ok('POST', `/api/v1/tasks/${t.id}/move`, { groupId: prio.id });
+    await owner.ok('POST', `/api/v1/tasks/${g.id}/move`, { groupId: upcoming.id });
+    await owner.ok('DELETE', `/api/v1/groups/${prio.id}`, { deleteTasks: true }, 204);
+    await owner.ok('DELETE', `/api/v1/groups/${upcoming.id}`, {}, 204);
+    await owner.ok('POST', `/api/v1/groups/${prio.id}/restore`);
+    const list = await owner.ok<{ groups: Group[]; tasks: Task[] }>(
+      'GET',
+      `/api/v1/orgs/${org.id}/my-list`,
+    );
+    const inbox = list.groups.find((x) => x.kind === 'inbox');
+    const restored = list.tasks.find((x) => x.id === g.id);
+    expect(restored?.placement?.groupId).toBe(inbox?.id);
+  });
+});

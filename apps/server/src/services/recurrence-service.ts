@@ -113,6 +113,7 @@ export class RecurrenceService {
       if (taken !== undefined) throw new AppError('id_conflict', 409, 'That ID is already in use.');
     }
     this.authorizeSubtree(tx, actor, row);
+    this.authorizeParent(tx, actor, row);
     const now = this.deps.clock();
     const shift = diffDays(dates.dueDate, row.dueDate);
     const next = insertTaskRow(tx, {
@@ -164,6 +165,24 @@ export class RecurrenceService {
         authorizeTaskWrite(tx, actor, child);
       }
     }
+  }
+
+  /**
+   * The next instance of a subtask is a new child of the same parent: as for a create or a
+   * duplicate, the grant must be able to read and write that parent. One it cannot read is
+   * refused like a hidden subtask (`authorizeSubtree`), without naming it.
+   */
+  private authorizeParent(tx: Tx, actor: Actor, row: TaskRow): void {
+    if (actor.grant === null || row.parentId === null) return;
+    const parent = tx.select().from(task).where(eq(task.id, row.parentId)).get();
+    if (parent === undefined || !canReadTask(tx, actor, parent)) {
+      throw new AppError(
+        'outside_grant',
+        403,
+        'This repeating task sits under a task this token or app may not change.',
+      );
+    }
+    authorizeTaskWrite(tx, actor, parent);
   }
 
   /** Where the completed instance sits in its user's list: the next one goes right below. */

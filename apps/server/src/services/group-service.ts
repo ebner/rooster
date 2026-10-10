@@ -435,6 +435,18 @@ export class GroupService {
           detached.push(r.id);
         }
       }
+      // Placements of restored tasks in a group that is still deleted go to the top of their
+      // user's Inbox, as for a task restore (05 §4.1).
+      for (const chunk of chunked(all)) {
+        for (const p of tx
+          .select({ taskId: placement.taskId, userId: placement.userId, orgId: placement.orgId })
+          .from(placement)
+          .innerJoin(taskGroup, eq(taskGroup.id, placement.groupId))
+          .where(and(inArray(placement.taskId, chunk), isNotNull(taskGroup.deletedAt)))
+          .all()) {
+          this.placements.rehomeToInbox(tx, p.userId, p.orgId, [p.taskId]);
+        }
+      }
       if (detached.length > 0) this.placements.reconcilePlacements(tx, detached);
       this.emit(tx, actor, 'group.restored', group, ids);
       return toGroupDto({ ...group, deletedAt: null, updatedAt: now, fieldClock });
