@@ -69,7 +69,22 @@ const DOWNLOAD_HEADERS: HeaderDocs = {
     schema: { type: 'string' },
     required: true,
   },
-  'Cache-Control': { description: '`private, max-age=300`', schema: { type: 'string' } },
+  'Cache-Control': {
+    description: '`private, no-cache`: cached copies are revalidated on every use.',
+    schema: { type: 'string' },
+  },
+  ETag: {
+    description: 'Strong; send it as `If-None-Match` for a `304`.',
+    schema: { type: 'string' },
+  },
+};
+
+const NOT_MODIFIED = {
+  description:
+    'Not modified: `If-None-Match` matched the `ETag` (answered only after the access check).',
+  headers: {
+    ETag: { description: 'The current ETag', schema: { type: 'string' as const } },
+  },
 };
 
 const REDIRECT: { description: string; headers: HeaderDocs } = {
@@ -143,6 +158,7 @@ const downloadAttachment = createRoute({
   responses: {
     200: binary('The file', ['*/*'], DOWNLOAD_HEADERS),
     302: REDIRECT,
+    304: NOT_MODIFIED,
     ...problems(401, 404),
   },
 });
@@ -159,6 +175,7 @@ const downloadThumb = createRoute({
   responses: {
     200: binary('The thumbnail', ['image/webp'], DOWNLOAD_HEADERS),
     302: REDIRECT,
+    304: NOT_MODIFIED,
     ...problems(401, 404),
   },
 });
@@ -178,17 +195,28 @@ const deleteAttachment = createRoute({
   },
 });
 
-/** Sends a download: the stream with the §3.5 headers, or the presigned redirect. */
+/**
+ * Private downloads may be kept by the browser but never reused without asking: a shared
+ * browser after sign-out would otherwise show the previous user's files from its cache. Every
+ * use revalidates (`304` only after the access check), so a signed-out request gets `401`.
+ */
+export const PRIVATE_REVALIDATE = 'private, no-cache';
+
+/** Sends a download: the stream with the §3.5 headers, a `304`, or the presigned redirect. */
 export function sendDownload(c: Context<AppEnv>, download: AttachmentDownload): Response {
   if (download.kind === 'redirect') {
     return c.body(null, 302, { Location: download.url, 'Cache-Control': 'no-store' });
+  }
+  if (download.kind === 'not-modified') {
+    return c.body(null, 304, { ETag: download.etag, 'Cache-Control': PRIVATE_REVALIDATE });
   }
   const headers: Record<string, string> = {
     'Content-Type': download.contentType,
     'Content-Disposition': download.disposition,
     'X-Content-Type-Options': 'nosniff',
     'Content-Security-Policy': DOWNLOAD_CSP,
-    'Cache-Control': 'private, max-age=300',
+    'Cache-Control': PRIVATE_REVALIDATE,
+    ETag: download.etag,
   };
   if (download.size !== null) headers['Content-Length'] = String(download.size);
   return c.body(Readable.toWeb(download.stream) as ReadableStream<Uint8Array>, 200, headers);
@@ -210,12 +238,16 @@ export function registerAttachmentRoutes(
     const actor = actorOf(c);
     const download = await attachments.download(actor, c.req.valid('param').id, {
       inline: truthy(c.req.valid('query').inline),
+      ifNoneMatch: c.req.header('if-none-match'),
     });
     return sendDownload(c, download);
   });
   app.openapi(downloadThumb, async (c) => {
     const actor = actorOf(c);
-    const download = await attachments.download(actor, c.req.valid('param').id, { thumb: true });
+    const download = await attachments.download(actor, c.req.valid('param').id, {
+      thumb: true,
+      ifNoneMatch: c.req.header('if-none-match'),
+    });
     return sendDownload(c, download);
   });
   app.openapi(deleteAttachment, (c) => {

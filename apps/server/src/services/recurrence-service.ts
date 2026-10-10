@@ -1,12 +1,20 @@
 import { addDays, diffDays, todayIn } from '@rooster/core/dates';
 import { uuidv7 } from '@rooster/core/ids';
 import { nextInstance, normalizeRule, type RecurrenceBasis } from '@rooster/core/recurrence';
-import { and, asc, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { follower, task, taskGroup, taskTag, user } from '../db/schema/index.ts';
 import { AppError } from '../lib/errors.ts';
 import type { ActivityScope, ActivityService } from './activity-service.ts';
-import type { ServiceDeps, Tx } from './context.ts';
-import { insertTaskRow, placementOf, subtaskDomain, type TaskRow } from './list-access.ts';
+import type { Actor, ServiceDeps, Tx } from './context.ts';
+import { authorizeTaskWrite, canReadTask } from './grant-access.ts';
+import {
+  chunked,
+  descendantsOf,
+  insertTaskRow,
+  placementOf,
+  subtaskDomain,
+  type TaskRow,
+} from './list-access.ts';
 import type { OrderingService } from './ordering-service.ts';
 import type { PlacementService, PlacementTarget } from './placement-service.ts';
 import type { ReminderService } from './reminder-service.ts';
@@ -62,10 +70,12 @@ export class RecurrenceService {
    * (ADR 0049 §1.4): the next instance directly after it, with the same assignee, group and
    * parent, its copies and its subtasks. Null when the task does not repeat, the series ended
    * (COUNT, UNTIL), or another instance of the series is still open (§1.5). A `nextId` that
-   * is already taken is `409 id_conflict`.
+   * is already taken is `409 id_conflict`. A grant must be able to write every live subtask
+   * that would be copied, or the completion is refused (`403 outside_grant`).
    */
   continueSeries(
     tx: Tx,
+    actor: Actor,
     scope: ActivityScope,
     row: TaskRow,
     completedOn: string,
@@ -102,6 +112,7 @@ export class RecurrenceService {
       const taken = tx.select({ id: task.id }).from(task).where(eq(task.id, nextId)).get();
       if (taken !== undefined) throw new AppError('id_conflict', 409, 'That ID is already in use.');
     }
+    this.authorizeSubtree(tx, actor, row);
     const now = this.deps.clock();
     const shift = diffDays(dates.dueDate, row.dueDate);
     const next = insertTaskRow(tx, {
@@ -131,6 +142,28 @@ export class RecurrenceService {
     const created = [next.id, ...this.copySubtasks(tx, scope, row, next, shift, now)];
     this.reminders.copyRelative(tx, row.id, next);
     return { next, created };
+  }
+
+  /**
+   * A grant actor's completion copies the whole live subtree, so it must reach all of it (as
+   * for duplicate): a subtask it cannot write is `403 outside_grant`, and one it cannot even
+   * read is refused the same way, without naming it, rather than copied into view.
+   */
+  private authorizeSubtree(tx: Tx, actor: Actor, row: TaskRow): void {
+    if (actor.grant === null) return;
+    const ids = descendantsOf(tx, [row.id], { deletedAt: null });
+    for (const chunk of chunked(ids)) {
+      for (const child of tx.select().from(task).where(inArray(task.id, chunk)).all()) {
+        if (!canReadTask(tx, actor, child)) {
+          throw new AppError(
+            'outside_grant',
+            403,
+            'This repeating task has subtasks this token or app may not change.',
+          );
+        }
+        authorizeTaskWrite(tx, actor, child);
+      }
+    }
   }
 
   /** Where the completed instance sits in its user's list: the next one goes right below. */
@@ -221,6 +254,7 @@ export class RecurrenceService {
             now,
           });
           this.copyTags(tx, child.id, copy.id, now);
+          this.copyFollowers(tx, child.id, copy.id);
           this.activity.record(tx, copy, scope, { type: 'created', data: {} });
           created.push(copy.id);
           next.push([child, copy]);

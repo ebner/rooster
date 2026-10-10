@@ -285,7 +285,8 @@ describe('AC-10.2 attachments', () => {
       'content-disposition': `attachment; filename="Kvitto _.png"; filename*=UTF-8''Kvitto%20%C3%A5.png`,
       'x-content-type-options': 'nosniff',
       'content-security-policy': "default-src 'none'; sandbox",
-      'cache-control': 'private, max-age=300',
+      'cache-control': 'private, no-cache',
+      etag: `"${image.id}"`,
       'content-length': String(image.size),
     });
     const inline = await ctx.a.call('GET', `/api/v1/attachments/${image.id}?inline=1`);
@@ -302,6 +303,41 @@ describe('AC-10.2 attachments', () => {
     expect(svgRes.headers.get('content-type')).not.toMatch(/svg/);
     expect(svgRes.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox");
     expect((await ctx.a.call('GET', `/api/v1/attachments/${doc.id}/thumb`)).status).toBe(404);
+  });
+
+  it('revalidates cached copies: 304 only after the access check, never after sign-out', async () => {
+    const ctx = await team();
+    const att = await uploaded(ctx, ctx.a, fileForm(await png(30, 30), 'a.png', 'image/png'));
+    const paths = [
+      { path: `/api/v1/attachments/${att.id}`, etag: `"${att.id}"` },
+      { path: `/api/v1/attachments/${att.id}?inline=1`, etag: `"${att.id}"` },
+      { path: `/api/v1/attachments/${att.id}/thumb`, etag: `"${att.id}.thumb"` },
+    ];
+    for (const { path, etag } of paths) {
+      const first = await ctx.b.call('GET', path);
+      expect(first.headers.get('etag')).toBe(etag);
+      expect(first.headers.get('cache-control')).toBe('private, no-cache');
+      await first.arrayBuffer();
+      const again = await ctx.b.call('GET', path, undefined, { 'if-none-match': etag });
+      expect(again.status).toBe(304);
+      expect(again.headers.get('etag')).toBe(etag);
+      expect(again.headers.get('cache-control')).toBe('private, no-cache');
+      expect(await again.text()).toBe('');
+      // A stale validator gets the bytes again.
+      const stale = await ctx.b.call('GET', path, undefined, { 'if-none-match': '"other"' });
+      expect(stale.status).toBe(200);
+      await stale.arrayBuffer();
+      // The browser's revalidation without the session, or as someone else: never a 304.
+      const signedOut = await ctx.app.request(path, { headers: { 'if-none-match': etag } });
+      expect(signedOut.status).toBe(401);
+      const outsider = await ctx.c.call('GET', path, undefined, { 'if-none-match': etag });
+      expect(outsider.status).toBe(404);
+    }
+    await ctx.a.ok('DELETE', `/api/v1/attachments/${att.id}`, undefined, 204);
+    const gone = await ctx.b.call('GET', `/api/v1/attachments/${att.id}`, undefined, {
+      'if-none-match': `"${att.id}"`,
+    });
+    expect(gone.status).toBe(404);
   });
 
   it('applies the EXIF orientation to the size and the thumbnail', async () => {
@@ -420,6 +456,9 @@ describe('AC-8.4 response validation of the P10 routes', () => {
       const res = await ctx.a.call('GET', path);
       expect(res.status).toBe(200);
       await res.arrayBuffer();
+      const etag = res.headers.get('etag') ?? '';
+      const cached = await ctx.a.call('GET', path, undefined, { 'if-none-match': etag });
+      expect(cached.status).toBe(304);
     }
     const avatar = await sendForm(
       ctx,

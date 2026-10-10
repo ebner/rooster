@@ -28701,7 +28701,13 @@
                 "required": true
               },
               "Cache-Control": {
-                "description": "`private, max-age=300`",
+                "description": "`private, no-cache`: cached copies are revalidated on every use.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Strong; send it as `If-None-Match` for a `304`.",
                 "schema": {
                   "type": "string"
                 }
@@ -28725,6 +28731,17 @@
                   "type": "string"
                 },
                 "required": true
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: `If-None-Match` matched the `ETag` (answered only after the access check).",
+            "headers": {
+              "ETag": {
+                "description": "The current ETag",
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -29137,7 +29154,13 @@
                 "required": true
               },
               "Cache-Control": {
-                "description": "`private, max-age=300`",
+                "description": "`private, no-cache`: cached copies are revalidated on every use.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Strong; send it as `If-None-Match` for a `304`.",
                 "schema": {
                   "type": "string"
                 }
@@ -29161,6 +29184,17 @@
                   "type": "string"
                 },
                 "required": true
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: `If-None-Match` matched the `ETag` (answered only after the access check).",
+            "headers": {
+              "ETag": {
+                "description": "The current ETag",
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -29734,7 +29768,7 @@
         ],
         "operationId": "getAvatar",
         "summary": "A user’s uploaded avatar",
-        "description": "For anyone who shares an organisation with the user (and the user), otherwise `404`. The `?v=` of the `image` URL changes with every upload, so the response may be cached for a day.",
+        "description": "For anyone who shares an organisation with the user (and the user), otherwise `404`. Cached copies are revalidated on every use (`private, no-cache` with a strong `ETag`; `304` only after the access check), so a shared browser never shows them after sign-out. The `?v=` of the `image` URL changes with every upload.",
         "parameters": [
           {
             "schema": {
@@ -29753,7 +29787,13 @@
             "description": "The 256 × 256 WebP image",
             "headers": {
               "Cache-Control": {
-                "description": "`private, max-age=86400`",
+                "description": "`private, no-cache`",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Strong; changes with every upload",
                 "schema": {
                   "type": "string"
                 }
@@ -29764,6 +29804,17 @@
                 "schema": {
                   "type": "string",
                   "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: `If-None-Match` matched the `ETag`",
+            "headers": {
+              "ETag": {
+                "description": "The current ETag",
+                "schema": {
+                  "type": "string"
                 }
               }
             }

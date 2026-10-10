@@ -860,14 +860,16 @@ export class TaskService {
             dueTz: row.dueTz,
             startDate: row.startDate,
           };
-      const rule = this.recurrenceFor(due.dueDate, input, {
-        recurrence: row.recurrence,
-        recurrenceBasis: row.recurrenceBasis,
-      });
       apply(
         'due',
         DUE_KEYS.filter((k) => input[k] !== undefined),
         () => {
+          // Checked against the current rule and date only once the edit wins: a stale rule
+          // edit (another device cleared the date since) is ignored, not a 422.
+          const rule = this.recurrenceFor(due.dueDate, input, {
+            recurrence: row.recurrence,
+            recurrenceBasis: row.recurrenceBasis,
+          });
           Object.assign(changes, due, rule);
           // ADR 0049 §1.4: a series is named after its first instance.
           if (rule.recurrence !== null && row.seriesId === null) changes.seriesId = row.id;
@@ -1088,11 +1090,21 @@ export class TaskService {
     if (row.recurrence === null) return null;
     const { recurrence } = this.collab;
     const completedOn = recurrence.completionDate(tx, row, actor.userId, meta.editTime);
-    const series = recurrence.continueSeries(tx, this.scope(actor, meta), row, completedOn, nextId);
+    const series = recurrence.continueSeries(
+      tx,
+      actor,
+      this.scope(actor, meta),
+      row,
+      completedOn,
+      nextId,
+    );
     if (series === null) return null;
-    // The next instance lands where the completed one is, which the actor could write.
+    // Every new task must land where the grant may write (11 §2.2): the instance and each
+    // copied subtask with its own place in the actor's list.
     if (actor.grant !== null) {
-      authorizeGroupTarget(tx, actor, row.orgId, grantGroupOf(tx, actor.userId, series.next));
+      for (const [, group] of groupSnapshot(tx, actor.userId, series.created)) {
+        authorizeGroupTarget(tx, actor, row.orgId, group);
+      }
     }
     this.emit(tx, actor, 'task.created', row.orgId, [series.next.id], {
       activity: series.created,

@@ -91,7 +91,8 @@ export class S3BlobStore implements BlobStore {
       Key: assertBlobKey(key),
       ResponseContentType: options.contentType,
       ResponseContentDisposition: options.disposition,
-      ResponseCacheControl: 'private, max-age=60',
+      // Never reusable from a cache: the browser may be shared after sign-out.
+      ResponseCacheControl: 'private, no-store',
     });
     return getSignedUrl(client, command, { expiresIn: options.ttlSeconds });
   }

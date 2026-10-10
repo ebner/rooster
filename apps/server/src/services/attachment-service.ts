@@ -23,6 +23,7 @@ import type { BlobStore, BlobStores } from '../blob/store.ts';
 import { PRIVATE_DIR_MODE } from '../db/boot.ts';
 import { attachment, blobGc } from '../db/schema/index.ts';
 import { AppError } from '../lib/errors.ts';
+import { matchesEtag } from '../lib/etag.ts';
 import type { ActivityService } from './activity-service.ts';
 import { viaFor } from './activity-service.ts';
 import { type AttachmentRow, attachmentCounts, toAttachmentDto } from './attachment-queries.ts';
@@ -50,11 +51,15 @@ export type AttachmentDownload =
   | {
       kind: 'stream';
       stream: Readable;
+      /** Strong: a blob never changes once stored (its key is unique per attachment). */
+      etag: string;
       size: number | null;
       contentType: string;
       disposition: string;
     }
-  | { kind: 'redirect'; url: string };
+  | { kind: 'redirect'; url: string }
+  /** The client's copy (`If-None-Match`) is current; sent only after the access check. */
+  | { kind: 'not-modified'; etag: string };
 
 /** `Content-Type` of a stored type: sniffed text is known to be UTF-8. */
 export function contentTypeOf(mime: string): string {
@@ -199,7 +204,7 @@ export class AttachmentService {
   async download(
     actor: Actor,
     attachmentId: string,
-    options: { inline?: boolean; thumb?: boolean } = {},
+    options: { inline?: boolean; thumb?: boolean; ifNoneMatch?: string | undefined } = {},
   ): Promise<AttachmentDownload> {
     const row = readOnly(this.deps.db, (tx) => {
       const found = this.findLive(tx, attachmentId);
@@ -235,12 +240,21 @@ export class AttachmentService {
       });
       return { kind: 'redirect', url };
     }
+    const etag = `"${row.id}${options.thumb === true ? '.thumb' : ''}"`;
+    if (matchesEtag(options.ifNoneMatch, etag)) return { kind: 'not-modified', etag };
     const blob = await store.get(key);
     if (blob === null) {
       this.deps.logger.warn({ attachmentId: row.id }, 'attachment blob missing');
       throw attachmentNotFound();
     }
-    return { kind: 'stream', stream: blob.stream, size: blob.size, contentType, disposition };
+    return {
+      kind: 'stream',
+      stream: blob.stream,
+      size: blob.size,
+      etag,
+      contentType,
+      disposition,
+    };
   }
 
   /** DELETE /attachments/:id: the uploader or the task's assignee; no undo. */

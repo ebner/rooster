@@ -233,3 +233,12 @@ added below as an amendment.
 - **Display and MCP data:**
   - `↻` and `🔔` mark recurring rows and rows with a pending reminder in `ls`, task lines and the TUI. `show` and the TUI details list the rule, reminders and attachments, all through `clean()`.
   - MCP rows carry `repeat`, `repeatFrom` and `nextReminder`; `get_task` carries reminders and attachments inside the framed data block. `remind`, `clearReminders` and `repeat` need only `tasks:write`.
+
+## Amendments after the security review of the server (e785776)
+- **§1.4:**
+  - With a grant, completing or skipping a recurring task needs write access to its whole live subtree and to every new task's place in the list; otherwise it is `403 outside_grant` and nothing changes. A subtask the grant cannot read is refused the same way, without naming it, as for duplicate.
+  - Copied subtasks keep their follower rows, muted ones included.
+- **§1.8:** a rule is checked against the current task only after the due unit's clock has accepted the edit. A stale rule edit is listed in `ignoredFields` instead of failing the patch.
+- **§3.5 and §3.7 (supersede the cache lifetimes above):**
+  - Attachments, thumbnails and avatars are `Cache-Control: private, no-cache` with a strong ETag: the attachment id (`.thumb` for thumbnails), or `avatar-<avatar_at>`. A 304 is answered only after the access check, so a shared browser never reuses a private file after sign-out.
+  - S3 redirects are `no-store`, and the presigned object response is `private, no-store`.

@@ -11,6 +11,7 @@ import type {
   TaskSkipResult,
 } from '@rooster/core/schemas';
 import { describe, expect, it } from 'vitest';
+import { ALL, bearer, pat } from './grant-helpers.ts';
 import {
   type Caller,
   createTask,
@@ -370,5 +371,101 @@ describe('skip: "delete this occurrence" (FR-REC-4, ADR 0049 §1.7)', () => {
     await a.ok('DELETE', `/api/v1/tasks/${r.id}`, undefined, 204);
     const open = (await myList(a)).tasks.filter((x: Task) => x.title === 'Weekly');
     expect(open).toEqual([]);
+  });
+});
+
+describe('review fixes', () => {
+  it('a grant cannot complete a recurring task whose subtree it cannot fully write (403 outside_grant)', async () => {
+    const time = manualClock(MON_OCT_5);
+    const ctx = listCtx({ clock: time.clock });
+    const a = ctx.user('ann@example.com', 'Ann');
+    const b = ctx.user('bo@example.com', 'Bo');
+    const org = await sharedOrg(a, [b]);
+    const prio = await groupNamed(a, 'Prio', org.id);
+    const upcoming = await groupNamed(a, 'Upcoming', org.id);
+    const inbox = (await myList(a, org.id)).groups.find((g) => g.kind === 'inbox');
+    const parent = await createTask(
+      a,
+      { title: 'Weekly', groupId: prio.id, dueDate: '2026-10-05', recurrence: 'FREQ=WEEKLY' },
+      org.id,
+    );
+    const child = await createTask(
+      a,
+      { title: 'Bo’s part', parentId: parent.id, assigneeId: b.userId },
+      org.id,
+    );
+    // Ann's own grandchild under Bo's subtask has its own place in Ann's list: Upcoming.
+    const secret = await createTask(
+      a,
+      { title: 'Secret', description: 'Hidden', parentId: child.id, assigneeId: a.userId },
+      org.id,
+    );
+    await a.ok('POST', `/api/v1/tasks/${secret.id}/move`, { groupId: upcoming.id });
+    const token = await pat(a, ALL, {
+      orgs: [
+        {
+          orgId: org.id,
+          read: { groups: [prio.id, inbox?.id ?? ''] },
+          write: { groups: [prio.id, inbox?.id ?? ''] },
+        },
+      ],
+    });
+    const api = bearer(ctx, token.token);
+    expect((await api.call('GET', `/api/v1/tasks/${secret.id}`)).status).toBe(404);
+
+    const problem = await api.problem(
+      'POST',
+      `/api/v1/tasks/${parent.id}/complete`,
+      { completed: true },
+      403,
+    );
+    expect(problem.code).toBe('outside_grant');
+    expect(problem.detail).not.toContain('Secret');
+    // Nothing happened: no completion, no copy.
+    expect((await detail(a, parent.id)).completedAt).toBeNull();
+    const copies = (await myList(a, org.id)).tasks.filter((t) => t.title === 'Secret');
+    expect(copies).toHaveLength(1);
+    // The browser session completes it, subtree and all.
+    expect((await complete(a, parent.id)).next).toBeDefined();
+  });
+
+  it('a stale recurrence edit is ignored, not a 422, and the rest of the patch applies', async () => {
+    const { a } = await setup();
+    const t = await createTask(a, { title: 'Report', dueDate: '2026-10-07' });
+    const later = String(MON_OCT_5 + 60_000);
+    await a.ok('PATCH', `/api/v1/tasks/${t.id}`, { dueDate: null }, 200, {
+      'x-rooster-edit-time': later,
+    });
+    const res = await a.ok<TaskPatchResult>(
+      'PATCH',
+      `/api/v1/tasks/${t.id}`,
+      { title: 'Weekly report', recurrence: 'FREQ=WEEKLY' },
+      200,
+      { 'x-rooster-edit-time': String(MON_OCT_5 - 60_000) },
+    );
+    expect(res.task).toMatchObject({ title: 'Weekly report', dueDate: null, recurrence: null });
+    expect(res.ignoredFields).toEqual(['recurrence']);
+  });
+
+  it('copied subtasks keep their followers, explicit unfollows included', async () => {
+    const time = manualClock(MON_OCT_5);
+    const ctx = listCtx({ clock: time.clock });
+    const a = ctx.user('ann@example.com', 'Ann');
+    const b = ctx.user('bo@example.com', 'Bo');
+    const org = await sharedOrg(a, [b]);
+    const t = await createTask(
+      a,
+      { title: 'Weekly', dueDate: '2026-10-05', recurrence: 'FREQ=WEEKLY' },
+      org.id,
+    );
+    const sub = await createTask(a, { title: 'Part', parentId: t.id }, org.id);
+    await b.ok('PUT', `/api/v1/tasks/${sub.id}/followers/me`);
+    await a.ok('DELETE', `/api/v1/tasks/${sub.id}/followers/me`);
+    const { next } = await complete(a, t.id);
+    const [copy] = (await detail(a, next?.id ?? '')).subtasks;
+    expect((await detail(a, copy?.id ?? '')).followers).toEqual([b.userId]);
+    // Ann's unfollow stuck: a comment of hers does not make her follow it again either.
+    await a.ok('POST', `/api/v1/tasks/${copy?.id}/comments`, { body: 'Hi' }, 201);
+    expect((await detail(a, copy?.id ?? '')).followers).toEqual([b.userId]);
   });
 });

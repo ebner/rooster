@@ -12,6 +12,7 @@ import { PRIVATE_DIR_MODE } from '../db/boot.ts';
 import { member, organization, user } from '../db/schema/index.ts';
 import type { Audience } from '../events/bus.ts';
 import { AppError } from '../lib/errors.ts';
+import { matchesEtag } from '../lib/etag.ts';
 import { logSafeError } from '../lib/log-safe-error.ts';
 import {
   type Actor,
@@ -25,6 +26,10 @@ import { memberIds, qk, selfAudience } from './event-audience.ts';
 import { grantReachesOrg, requireBrowserSession } from './grant-access.ts';
 import { listMemberships } from './org-access.ts';
 import type { UserService } from './user-service.ts';
+
+export type AvatarDownload =
+  | { kind: 'stream'; blob: BlobObject; etag: string }
+  | { kind: 'not-modified'; etag: string };
 
 const avatarNotFound = () => new AppError('not_found', 404, 'Avatar not found.');
 
@@ -143,24 +148,27 @@ export class AvatarService {
    * GET /avatars/:userId: for users who share a live org with that user (themselves
    * included; a grant only through the orgs it reaches), otherwise `404`.
    */
-  async get(actor: Actor, userId: string): Promise<BlobObject> {
-    const visible = readOnly(this.deps.db, (tx) => {
+  async get(actor: Actor, userId: string, ifNoneMatch?: string): Promise<AvatarDownload> {
+    const avatarAt = readOnly(this.deps.db, (tx) => {
       const row = tx
         .select({ avatarAt: user.avatarAt })
         .from(user)
         .where(eq(user.id, userId))
         .get();
-      if (row === undefined || row.avatarAt === null) return false;
-      return userId === actor.userId || this.sharesOrg(tx, actor, userId);
+      if (row === undefined || row.avatarAt === null) return null;
+      return userId === actor.userId || this.sharesOrg(tx, actor, userId) ? row.avatarAt : null;
     });
-    if (!visible) throw avatarNotFound();
+    if (avatarAt === null) throw avatarNotFound();
+    // Strong: each upload has its own `avatar_at`. Only answered after the access check.
+    const etag = `"avatar-${avatarAt}"`;
+    if (matchesEtag(ifNoneMatch, etag)) return { kind: 'not-modified', etag };
     const key = avatarKey(userId);
     // The current backend first; the other one holds avatars from before a storage switch.
     const current = this.stores.current;
     const other = this.stores.byKind(current.kind === 'local' ? 's3' : 'local');
     const blob = (await current.get(key)) ?? (await other?.get(key)) ?? null;
     if (blob === null) throw avatarNotFound();
-    return blob;
+    return { kind: 'stream', blob, etag };
   }
 
   /**

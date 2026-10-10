@@ -1646,7 +1646,7 @@ export interface paths {
         };
         /**
          * A user’s uploaded avatar
-         * @description For anyone who shares an organisation with the user (and the user), otherwise `404`. The `?v=` of the `image` URL changes with every upload, so the response may be cached for a day.
+         * @description For anyone who shares an organisation with the user (and the user), otherwise `404`. Cached copies are revalidated on every use (`private, no-cache` with a strong `ETag`; `304` only after the access check), so a shared browser never shows them after sign-out. The `?v=` of the `image` URL changes with every upload.
          */
         get: operations["getAvatar"];
         put?: never;
@@ -13646,8 +13646,10 @@ export interface operations {
                 headers: {
                     /** @description `attachment` (or `inline` for `?inline=1` on a raster image), with an ASCII `filename` and the RFC 5987 `filename*`. */
                     "Content-Disposition": string;
-                    /** @description `private, max-age=300` */
+                    /** @description `private, no-cache`: cached copies are revalidated on every use. */
                     "Cache-Control"?: string;
+                    /** @description Strong; send it as `If-None-Match` for a `304`. */
+                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -13659,6 +13661,15 @@ export interface operations {
                 headers: {
                     /** @description The presigned URL */
                     Location: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not modified: `If-None-Match` matched the `ETag` (answered only after the access check). */
+            304: {
+                headers: {
+                    /** @description The current ETag */
+                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -13835,8 +13846,10 @@ export interface operations {
                 headers: {
                     /** @description `attachment` (or `inline` for `?inline=1` on a raster image), with an ASCII `filename` and the RFC 5987 `filename*`. */
                     "Content-Disposition": string;
-                    /** @description `private, max-age=300` */
+                    /** @description `private, no-cache`: cached copies are revalidated on every use. */
                     "Cache-Control"?: string;
+                    /** @description Strong; send it as `If-None-Match` for a `304`. */
+                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -13848,6 +13861,15 @@ export interface operations {
                 headers: {
                     /** @description The presigned URL */
                     Location: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not modified: `If-None-Match` matched the `ETag` (answered only after the access check). */
+            304: {
+                headers: {
+                    /** @description The current ETag */
+                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -14111,13 +14133,24 @@ export interface operations {
             /** @description The 256 × 256 WebP image */
             200: {
                 headers: {
-                    /** @description `private, max-age=86400` */
+                    /** @description `private, no-cache` */
                     "Cache-Control"?: string;
+                    /** @description Strong; changes with every upload */
+                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
                     "image/webp": string;
                 };
+            };
+            /** @description Not modified: `If-None-Match` matched the `ETag` */
+            304: {
+                headers: {
+                    /** @description The current ETag */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
             401: {

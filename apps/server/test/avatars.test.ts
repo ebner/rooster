@@ -50,7 +50,8 @@ describe('avatars (FR-SET-1)', () => {
       const img = await who.call('GET', `/api/v1/avatars/${ctx.a.userId}`);
       expect(img.status).toBe(200);
       expect(img.headers.get('content-type')).toBe('image/webp');
-      expect(img.headers.get('cache-control')).toBe('private, max-age=86400');
+      expect(img.headers.get('cache-control')).toBe('private, no-cache');
+      expect(img.headers.get('etag')).toBe(`"avatar-${stored?.avatarAt}"`);
       const meta = await sharp(Buffer.from(await img.arrayBuffer())).metadata();
       expect(meta).toMatchObject({ format: 'webp', width: 256, height: 256 });
     }
@@ -58,6 +59,23 @@ describe('avatars (FR-SET-1)', () => {
     expect((await ctx.c.call('GET', `/api/v1/avatars/${ctx.a.userId}`)).status).toBe(404);
     // Bo has no uploaded avatar.
     expect((await ctx.a.call('GET', `/api/v1/avatars/${ctx.b.userId}`)).status).toBe(404);
+  });
+
+  it('revalidates cached avatars: 304 for co-members, never after sign-out or removal', async () => {
+    const ctx = await team();
+    await put(ctx, ctx.a, fileForm(await png(40, 40), 'me.png'));
+    const path = `/api/v1/avatars/${ctx.a.userId}`;
+    const etag = (await ctx.b.call('GET', path)).headers.get('etag') ?? '';
+    const again = await ctx.b.call('GET', path, undefined, { 'if-none-match': etag });
+    expect(again.status).toBe(304);
+    expect(again.headers.get('cache-control')).toBe('private, no-cache');
+    expect((await ctx.app.request(path, { headers: { 'if-none-match': etag } })).status).toBe(401);
+    expect((await ctx.c.call('GET', path, undefined, { 'if-none-match': etag })).status).toBe(404);
+    // A new upload changes the validator.
+    await put(ctx, ctx.a, fileForm(await png(50, 50), 'me.png'));
+    expect((await ctx.b.call('GET', path, undefined, { 'if-none-match': etag })).status).toBe(200);
+    await ctx.a.ok('DELETE', '/api/v1/me/avatar');
+    expect((await ctx.b.call('GET', path, undefined, { 'if-none-match': etag })).status).toBe(404);
   });
 
   it('a second upload keeps the provider picture; DELETE restores it and removes the blob', async () => {

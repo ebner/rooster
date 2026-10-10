@@ -2,7 +2,13 @@ import { Readable } from 'node:stream';
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi';
 import type { AppEnv } from '../lib/context.ts';
 import type { Services } from '../services/index.ts';
-import { DOWNLOAD_CSP, multipartFile, uploadProblems, uploadRequestOf } from './attachments.ts';
+import {
+  DOWNLOAD_CSP,
+  multipartFile,
+  PRIVATE_REVALIDATE,
+  uploadProblems,
+  uploadRequestOf,
+} from './attachments.ts';
 import { ANY_CREDENTIAL, AUTHED, actorOf, idParam, json, problems } from './common.ts';
 import { MeSchema } from './schemas.ts';
 
@@ -39,15 +45,20 @@ const getAvatar = createRoute({
   operationId: 'getAvatar',
   summary: 'A user’s uploaded avatar',
   description:
-    'For anyone who shares an organisation with the user (and the user), otherwise `404`. The `?v=` of the `image` URL changes with every upload, so the response may be cached for a day.',
+    'For anyone who shares an organisation with the user (and the user), otherwise `404`. Cached copies are revalidated on every use (`private, no-cache` with a strong `ETag`; `304` only after the access check), so a shared browser never shows them after sign-out. The `?v=` of the `image` URL changes with every upload.',
   request: { params: z.object({ userId: idParam('userId', 'User ID') }) },
   responses: {
     200: {
       description: 'The 256 × 256 WebP image',
       headers: {
-        'Cache-Control': { description: '`private, max-age=86400`', schema: { type: 'string' } },
+        'Cache-Control': { description: '`private, no-cache`', schema: { type: 'string' } },
+        ETag: { description: 'Strong; changes with every upload', schema: { type: 'string' } },
       },
       content: { 'image/webp': { schema: { type: 'string' as const, format: 'binary' } } },
+    },
+    304: {
+      description: 'Not modified: `If-None-Match` matched the `ETag`',
+      headers: { ETag: { description: 'The current ETag', schema: { type: 'string' } } },
     },
     ...problems(401, 404, ANY_CREDENTIAL),
   },
@@ -60,10 +71,19 @@ export function registerAvatarRoutes(app: OpenAPIHono<AppEnv>, { avatars }: Serv
   );
   app.openapi(deleteAvatar, async (c) => c.json(await avatars.remove(actorOf(c)), 200));
   app.openapi(getAvatar, async (c) => {
-    const blob = await avatars.get(actorOf(c), c.req.valid('param').userId);
+    const download = await avatars.get(
+      actorOf(c),
+      c.req.valid('param').userId,
+      c.req.header('if-none-match'),
+    );
+    if (download.kind === 'not-modified') {
+      return c.body(null, 304, { ETag: download.etag, 'Cache-Control': PRIVATE_REVALIDATE });
+    }
+    const { blob } = download;
     const headers: Record<string, string> = {
       'Content-Type': 'image/webp',
-      'Cache-Control': 'private, max-age=86400',
+      'Cache-Control': PRIVATE_REVALIDATE,
+      ETag: download.etag,
       'X-Content-Type-Options': 'nosniff',
       'Content-Security-Policy': DOWNLOAD_CSP,
     };

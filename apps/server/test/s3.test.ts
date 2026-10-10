@@ -132,6 +132,8 @@ describe('S3 blob storage', () => {
       `inline; filename="Kvitto _.png"; filename*=UTF-8''Kvitto%20%C3%A5.png`,
     );
     expect(url.searchParams.get('X-Amz-Signature')).toMatch(/^[0-9a-f]{64}$/);
+    // The object response is never reusable from a cache, and neither is the redirect.
+    expect(url.searchParams.get('response-cache-control')).toBe('private, no-store');
 
     const thumb = await ctx.app.request(`/api/v1/attachments/${att.id}/thumb`, {
       headers: { cookie: ctx.owner.jar.header() },
