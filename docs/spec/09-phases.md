@@ -292,7 +292,7 @@ Phase 11 changes no API contract, so it is a minor release (ADR 0052). v2.0 wait
 
 **Acceptance criteria**
 - AC-11.1 The security audit is complete when both of these hold:
-  - every trust boundary above has a final re-check reporting it clean;
+  - every trust boundary above has a final re-check reporting it clean, or its remaining findings are triaged (refuted, or accepted with the reason) under AGENTS.md → Reviews;
   - `docs/security/security-review.md` lists each finding with its boundary, ASVS item, severity, and the fixing commit or the ADR that accepts it.
 - AC-11.2 CI fails on a high or critical `pnpm audit --prod` finding or a gitleaks hit, and both pass. `docs/security/asvs.md` gives evidence for every listed requirement. An upload that would take a user past their storage quota gets `413 storage_quota_exceeded`, and nothing is stored.
 - AC-11.3 axe reports no WCAG 2.2 AA violation on any screen, on desktop or phone. A keyboard-only e2e signs in, creates a task with a natural-language date, adds a subtask, moves, completes and undoes, searches with the palette and changes a setting, without the pointer. A task row's accessible name matches 10 §5.
