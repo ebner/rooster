@@ -227,8 +227,8 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
 
 ## Status
 - **Current phase:** none scheduled. Phase 11 was the last phase in 09; the next work is the backlog (09 §Backlog).
-- **Latest release:** 1.4.0 (Phase 10: recurrence, task reminders, attachments, avatars, calendar feeds; account-switch isolation, ADR 0051).
-- **Last completed phase:** Phase 11, hardening (2026-10-10; to be released as 1.5.0; under `[Unreleased]` in the CHANGELOG):
+- **Latest release:** 1.5.0 (Phase 11: the security audit, accessibility, 2,000-task performance, the guide at /help, Admin → System, the storage quota, removed sign-ins, apps without colleagues' emails; ADRs 0052–0056).
+- **Last completed phase:** Phase 11, hardening (2026-10-10; released in 1.5.0):
   - the security audit of every trust boundary: 107 findings, 102 fixed, 5 accepted or refuted (`docs/security/security-review.md`, ADR 0056);
   - the ASVS L2 map (`docs/security/asvs.md`); `pnpm audit` and gitleaks in CI;
   - accessibility: axe on every screen, a keyboard-only journey, accessible list names, and a manual screen-reader checklist;

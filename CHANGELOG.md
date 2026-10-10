@@ -6,6 +6,8 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-10
+
 Hardening (Phase 11): a full security audit, accessibility, performance with 2,000 tasks, the user guide in the app, and operations tooling.
 
 ### Added
