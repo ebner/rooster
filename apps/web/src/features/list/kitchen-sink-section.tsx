@@ -5,16 +5,24 @@ import { useTranslation } from 'react-i18next';
 import { ListTransportContext, useListPipeline } from '../../data/list';
 import { createFixtureTransport } from '../../data/pipeline/fixture-transport';
 import { cn } from '../../lib/cn';
+import { Menu } from '../../ui/menu';
 import { popoverSurface } from '../../ui/popover';
 import { useViewerDateContext } from '../dates';
 import { Group, Section, Specimen } from '../dev-ui/layout';
 import { BulkBar } from './bulk-bar';
 import { ListController } from './controller';
+import { ListHeaderMenu, ListMenuItems, type ListMenuView } from './header-actions';
 import { ListContext } from './list-context';
 import { MyListView } from './my-list-view';
 import { RecurringDeleteBody, RecurringDeleteSheet } from './recurring-delete';
 
 const noop = () => {};
+
+const headerMenuViews = [
+  ['my', 'dev.headerMenuMy'],
+  ['smart', 'dev.headerMenuSmart'],
+  ['everyone', 'dev.headerMenuEveryone'],
+] as const satisfies readonly (readonly [ListMenuView, string])[];
 
 const fixtureUser = '01900000-0000-7000-8000-000000000001';
 const fixtureOrg = '01900000-0000-7000-8000-0000000000aa';
@@ -110,6 +118,20 @@ export function ListSection() {
             <div className="w-full rounded-md border border-border px-3 py-4">
               <MyListView orgId={fixtureOrg} userId={fixtureUser} label={t('dev.live')} />
             </div>
+          </Group>
+          <Group title={t('dev.headerMenu')}>
+            {headerMenuViews.map(([view, label]) => (
+              <Specimen key={view} label={t(label)}>
+                <div className={cn(popoverSurface, 'p-1')}>
+                  <Menu aria-label={t('header.menu')}>
+                    <ListMenuItems orgId={fixtureOrg} view={view} />
+                  </Menu>
+                </div>
+              </Specimen>
+            ))}
+            <Specimen label={t('header.menu')}>
+              <ListHeaderMenu orgId={fixtureOrg} view="my" />
+            </Specimen>
           </Group>
           <Group title={t('dev.bulkBar')}>
             <BulkBarSpecimen />

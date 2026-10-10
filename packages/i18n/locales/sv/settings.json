@@ -10,7 +10,7 @@
     "data": "Data",
     "hint": {
       "profile": "Namn, språk, tidszon och datumformat",
-      "behaviour": "Svepgester på mobilen",
+      "behaviour": "Datum i uppgiftsnamn, klara uppgifter och svepgester",
       "notifications": "I appen, push, e-post, påminnelser och den dagliga sammanfattningen",
       "calendar": "Dina förfallodatum i en kalenderapp",
       "security": "Inloggade enheter, inloggning och anslutna appar",
@@ -166,6 +166,16 @@
     "saveFailed": "Det gick inte att spara. Kontrollera anslutningen och försök igen."
   },
   "behaviour": {
+    "datesTitle": "Datum i uppgiftsnamn",
+    "parseTitleDates": "Känn igen datum i uppgiftsnamn",
+    "parseTitleDatesBody": "Skriver du ”fre” eller ”imorgon 14:00” i ett uppgiftsnamn får uppgiften det förfallodatumet. När det är avstängt sparas namnet precis som du skriver det.",
+    "completedTitle": "Klara uppgifter",
+    "hideAfter": {
+      "label": "Dölj klara uppgifter efter",
+      "body": "Hur länge en klar uppgift ligger kvar i listan. ”Tills sidan laddas om” behåller den tills du lämnar listan eller laddar om sidan.",
+      "seconds": "{seconds, number} s",
+      "untilReload": "Tills sidan laddas om"
+    },
     "swipeTitle": "Svepgester",
     "swipeBody": "Svep en uppgift åt höger eller vänster på mobilen för att direkt göra något med den.",
     "swipeRight": "Svep åt höger",

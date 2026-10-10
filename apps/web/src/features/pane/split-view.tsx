@@ -114,6 +114,21 @@ export function SplitView({
   });
   const overlayWidth = viewport < 1200 ? undefined : width;
 
+  // Phones (02 §13.4): the sheet covers the whole frame, so what it covers (the list column
+  // here, the bottom nav in the shell) is inert, as under a modal: no tab stops, no screen
+  // reader cursor and no targets hidden behind the sheet (WCAG 2.4.11, 2.5.8).
+  const sheetOpen = open && mode === 'sheet';
+  useEffect(() => {
+    const self = container.current;
+    const shell = self?.closest('[data-shell="mobile"]');
+    if (!sheetOpen || !self || !shell) return;
+    const covered = [...shell.children].filter((el) => !el.contains(self));
+    for (const el of covered) el.setAttribute('inert', '');
+    return () => {
+      for (const el of covered) el.removeAttribute('inert');
+    };
+  }, [sheetOpen]);
+
   const drag = useRef<{ x: number; width: number } | null>(null);
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -163,6 +178,7 @@ export function SplitView({
           'flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto',
           open && mode === 'full' && 'hidden',
         )}
+        inert={sheetOpen || undefined}
         data-list-column
       >
         {list}

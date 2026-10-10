@@ -8,7 +8,13 @@ import type { Org } from '../../data/types';
 import { useListStore } from '../../state/list-store';
 import { usePaneStore } from '../../state/pane-store';
 import { isMobileViewport } from '../../ui/use-media';
-import { ShowCompletedMenuItem, ShowCompletedToggle } from '../list/header-actions';
+import {
+  ListHeaderMenu,
+  ListMenuItems,
+  type ListMenuView,
+  ShowCompletedToggle,
+  useListPrint,
+} from '../list/header-actions';
 import { MyListView } from '../list/my-list-view';
 import { EveryoneFilterButton } from '../people/everyone-filters';
 import { ViewBody, ViewHeader } from '../shell/app-shell';
@@ -110,6 +116,12 @@ export function TasksScreen({
   const tabs = useViewTabs(org, orgSlug, everyone || view !== 'everyone' ? view : 'my');
   const title = t(`view.${everyone || view !== 'everyone' ? view : 'my'}`);
   const members = useOrgMembers(everyone ? org.id : undefined).data;
+  const menuView: ListMenuView = everyone
+    ? 'everyone'
+    : view === 'my' || view === 'everyone'
+      ? 'my'
+      : 'smart';
+  useListPrint();
   useEffect(() => {
     if (view === 'everyone' && !shared && !taskId) {
       void navigate({ href: paths.orgView(orgSlug, 'my'), replace: true });
@@ -184,11 +196,13 @@ export function TasksScreen({
                 <>
                   <EveryoneFilterButton members={members ?? []} meId={userId} />
                   <TagFilterButton orgId={org.id} />
+                  <ListHeaderMenu orgId={org.id} view={menuView} />
                 </>
               ) : (
                 <>
                   <TagFilterButton orgId={org.id} />
                   <ShowCompletedToggle />
+                  <ListHeaderMenu orgId={org.id} view={menuView} />
                 </>
               )
             }
@@ -202,11 +216,15 @@ export function TasksScreen({
               ) : (
                 <TagFilterButton orgId={org.id} />
               ),
-              // Everyone's tasks lists open tasks only (02 §11).
-              menu: everyone ? undefined : <ShowCompletedMenuItem />,
+              // 02 §2: the list's ⋯ items (Everyone's tasks lists open tasks only, 02 §11).
+              menu: <ListMenuItems orgId={org.id} view={menuView} mobile />,
               views: tabs,
             }}
           />
+          {/* Printed above the list only (styles/print.css). */}
+          <p data-print-title className="hidden">
+            {title} <span>{org.name}</span>
+          </p>
           <ViewBody>
             <MyListView
               orgId={org.id}

@@ -183,6 +183,24 @@ describe('InboxPage (FR-NOT-1)', () => {
     expect(rows[2]?.hasAttribute('data-unread')).toBe(false);
   });
 
+  test('comment excerpts show as plain text, without their Markdown', () => {
+    const first = items[0] as (typeof items)[number];
+    renderInbox({
+      items: [
+        {
+          ...first,
+          data: {
+            ...first.data,
+            excerpt: 'Call **Bob** about [the plan](https://example.com) — `now`',
+          },
+        },
+      ],
+    });
+    const row = screen.getByTestId('notification');
+    expect(row.textContent).toContain('Call Bob about the plan — now');
+    expect(row.textContent).not.toContain('**');
+  });
+
   test('P10: a reminder has no actor, shows the due moment and marks a late one', () => {
     renderInbox();
     const rows = screen.getAllByTestId('notification');

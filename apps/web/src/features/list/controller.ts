@@ -39,6 +39,7 @@ import { resolveAssigneeToken } from '../people/assignee-token';
 import { sectionAssignee } from '../people/everyone-model';
 import type { Person } from '../people/members';
 import { announce } from './announcer';
+import { holdsUntilReload } from './hide-delay';
 import {
   groupStepTarget,
   isNoopIntent,
@@ -370,8 +371,11 @@ export class ListController {
     if (!before) return;
     // Redoing a create must restore, not re-create: recompute redo from the inverse.
     const redoOps = inverseOfSequence(entry.inverseOps, before, this.ctx());
-    for (const id of Object.keys(this.store().hiding)) this.clearHiding(id);
     this.deps.pipeline.enqueue(entry.orgId, entry.inverseOps, this.reducerContext());
+    // Stop the running hide timers. Rows held until reload (FR-SET-2) stay while completed.
+    for (const id of Object.keys(this.store().hiding)) {
+      if (hideTimers.has(id) || this.task(id)?.completedAt == null) this.clearHiding(id);
+    }
     useUndoStore.getState().pushRedo({ ...entry, redoOps });
     announce(this.t('undo.undone', { label: entry.label }));
   }
@@ -1167,13 +1171,19 @@ export class ListController {
     }
   }
 
-  /** `holdMs` 0: a swipe already showed the completion, so the row collapses at once. */
+  /**
+   * `holdMs` 0: a swipe already showed the completion, so the row collapses at once, unless
+   * the user keeps completed rows until reload.
+   */
   private startHiding(id: string, holdMs?: number): void {
     if (this.store().showCompleted) return;
     this.clearHiding(id);
-    const hold = holdMs ?? this.deps.prefs?.().holdMs ?? this.deps.holdMs ?? completionHoldMs;
+    const preferred = this.deps.prefs?.().holdMs ?? this.deps.holdMs ?? completionHoldMs;
+    const hold = holdMs ?? preferred;
     const collapse = this.deps.collapseMs ?? completionCollapseMs;
     this.store().setHiding(id, 'hold');
+    // FR-SET-2 "Until reload" (swipes too): no timers; leaving the list or reloading drops it.
+    if (holdsUntilReload(preferred)) return;
     const timers = [
       setTimeout(() => this.store().setHiding(id, 'collapsing'), hold),
       setTimeout(() => {
@@ -1814,6 +1824,20 @@ export class ListController {
       }),
     ]);
     this.store().edit(groupRowId(id), 'all');
+  }
+
+  /**
+   * The header ⋯ menu's Collapse all / Expand all, Shift+←/→ (02 §2, §4): every normal group,
+   * like an Alt+click on a chevron. A row that disappears into its group hands the cursor to
+   * the group's header.
+   */
+  setAllCollapsed(collapsed: boolean): void {
+    const row = this.cursorRow();
+    this.setCollapsed('', collapsed, true);
+    if (!collapsed || !row || row.kind === 'group' || !('groupId' in row)) return;
+    if (this.state()?.groups[row.groupId]?.kind === 'normal') {
+      this.store().select(groupRowId(row.groupId));
+    }
   }
 
   /** Header "⋯" → Collapse others. */

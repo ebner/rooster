@@ -2,7 +2,7 @@ import { DEFAULT_PREFS } from '@rooster/core/limits';
 import { createFileRoute } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { useMe, useUpdateProfile } from '../../data';
-import { BehaviourPage, type SwipeSettings } from '../../features/settings/behaviour-page';
+import { BehaviourPage, type BehaviourSettings } from '../../features/settings/behaviour-page';
 import { toast } from '../../ui/toast';
 
 export const Route = createFileRoute('/_app/settings/behaviour')({
@@ -17,8 +17,13 @@ function BehaviourRoute() {
   const prefs = me.data.prefs ?? DEFAULT_PREFS;
   return (
     <BehaviourPage
-      value={{ swipeLeft: prefs.swipeLeft, swipeRight: prefs.swipeRight }}
-      onChange={(patch: Partial<SwipeSettings>) =>
+      value={{
+        parseTitleDates: prefs.parseTitleDates,
+        completeHideMs: prefs.completeHideMs,
+        swipeLeft: prefs.swipeLeft,
+        swipeRight: prefs.swipeRight,
+      }}
+      onChange={(patch: Partial<BehaviourSettings>) =>
         update
           // `PATCH /me` takes partial prefs (FR-SET-2).
           .mutateAsync({ prefs: patch })

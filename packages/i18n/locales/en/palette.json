@@ -68,7 +68,11 @@
     "openTrash": "Open Trash",
     "exportData": "Export data",
     "openOrgSettings": "Organisation settings",
-    "openAdmin": "Open admin"
+    "openAdmin": "Open admin",
+    "collapseAllGroups": "Collapse all groups",
+    "expandAllGroups": "Expand all groups",
+    "printList": "Print list",
+    "addGroupAtEnd": "Add group at the end"
   },
   "dev": {
     "section": "Command palette",

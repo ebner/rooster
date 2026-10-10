@@ -32,7 +32,7 @@ export function UsersSection({
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-border text-xs text-text-muted">
-              <th scope="col" className="py-2 pe-3 text-start font-medium">
+              <th scope="col" className="w-full py-2 pe-3 text-start font-medium">
                 {t('users.user')}
               </th>
               <th scope="col" className="hidden py-2 pe-3 text-start font-medium tablet:table-cell">
@@ -52,7 +52,8 @@ export function UsersSection({
               const isSelf = user.id === currentUserId;
               return (
                 <tr key={user.id} className="border-b border-border last:border-b-0">
-                  <td className="py-3 pe-3">
+                  {/* max-w-0 with the header's w-full: the name and email truncate on phones. */}
+                  <td className="max-w-0 py-3 pe-3">
                     <div className="flex min-w-0 items-center gap-3">
                       <Avatar
                         id={user.id}
@@ -62,7 +63,7 @@ export function UsersSection({
                         decorative
                       />
                       <div className="flex min-w-0 flex-col">
-                        <span className="flex items-center gap-2">
+                        <span className="flex min-w-0 items-center gap-2">
                           <span className="truncate font-medium">{user.name}</span>
                           {user.isAdmin && <Chip color="purple">{t('users.admin')}</Chip>}
                         </span>

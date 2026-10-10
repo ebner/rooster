@@ -1,5 +1,6 @@
 import type { SwipeAction } from '@rooster/core/schemas';
 import { type RefObject, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { SwipeReveal, type SwipeRevealAction } from '../../ui/swipe-reveal';
 import type { ListController } from './controller';
@@ -240,8 +241,10 @@ export function SwipeRows({
     };
   }, [rootRef, layerRef, controller]);
 
-  if (!reveal) return null;
-  return (
+  const layer = layerRef.current;
+  if (!reveal || !layer) return null;
+  // Drawn inside the layer: `top` is measured from it, so it must be the offset parent.
+  return createPortal(
     <SwipeReveal
       action={reveal.action}
       side={reveal.side}
@@ -249,6 +252,7 @@ export function SwipeRows({
       label={t(`swipe.${reveal.action}`)}
       className="pointer-events-none absolute inset-x-0"
       style={{ top: reveal.top, height: reveal.height }}
-    />
+    />,
+    layer,
   );
 }

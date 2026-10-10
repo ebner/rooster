@@ -1,12 +1,16 @@
 import { cn } from '../../lib/cn';
-import { useListUi } from '../../state/list-store';
+import { type ListUiState, useRowUi } from '../../state/list-store';
+
+function dropEdge(s: ListUiState, rowId: string) {
+  return s.drop?.rowId === rowId ? s.drop.edge : null;
+}
 
 /**
  * 02 §5 / 03: the 2 px accent insertion line with an 8 px ring at its left end, drawn at the
  * top or bottom edge of the row it belongs to.
  */
 export function DropLine({ rowId }: { rowId: string }) {
-  const edge = useListUi((s) => (s.drop?.rowId === rowId ? s.drop.edge : null));
+  const edge = useRowUi(rowId, dropEdge);
   if (edge !== 'before' && edge !== 'after') return null;
   return (
     <span

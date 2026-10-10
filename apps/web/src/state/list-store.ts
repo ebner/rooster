@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useCallback, useContext, useSyncExternalStore } from 'react';
 import { create, type StoreApi, type UseBoundStore, useStore } from 'zustand';
 
 /** 02 §3.2: Navigate (a row is selected) or Edit (caret in a title or group name). */
@@ -256,6 +256,101 @@ export function useListStoreApi(): ListStoreHook {
 /** `useListStore(selector)` for the list in context. */
 export function useListUi<T>(selector: (state: ListStore) => T): T {
   return useStore(useContext(ListStoreContext), selector);
+}
+
+/**
+ * Rows whose per-row UI state can differ between two store states: only these rows' listeners
+ * run (`useRowUi`). `'all'` when a change touches every row (selection mode).
+ */
+export function changedRowIds(next: ListUiState, prev: ListUiState): Set<string> | 'all' {
+  if (next.selectionMode !== prev.selectionMode) return 'all';
+  const ids = new Set<string>();
+  const add = (id: string | null | undefined) => {
+    if (id) ids.add(id);
+  };
+  const diffKeys = (a: Readonly<Record<string, unknown>>, b: Readonly<Record<string, unknown>>) => {
+    for (const key in a) if (a[key] !== b[key]) ids.add(key);
+    for (const key in b) if (a[key] !== b[key]) ids.add(key);
+  };
+  if (next.selected !== prev.selected) diffKeys(next.selected, prev.selected);
+  if (next.hiding !== prev.hiding) diffKeys(next.hiding, prev.hiding);
+  if (next.dragging !== prev.dragging) {
+    for (const id of prev.dragging ?? []) ids.add(id);
+    for (const id of next.dragging ?? []) ids.add(id);
+  }
+  if (next.keyboardDrag?.ids !== prev.keyboardDrag?.ids) {
+    for (const id of prev.keyboardDrag?.ids ?? []) ids.add(id);
+    for (const id of next.keyboardDrag?.ids ?? []) ids.add(id);
+  }
+  if (next.popover !== prev.popover) {
+    add(prev.popover?.rowId);
+    add(next.popover?.rowId);
+  }
+  if (next.editing !== prev.editing) {
+    add(prev.editing?.rowId);
+    add(next.editing?.rowId);
+  }
+  if (next.drop !== prev.drop) {
+    add(prev.drop?.rowId);
+    add(next.drop?.rowId);
+  }
+  return ids;
+}
+
+interface RowListeners {
+  byRow: Map<string, Set<() => void>>;
+}
+
+const rowListeners = new WeakMap<ListStoreHook, RowListeners>();
+
+function rowListenersOf(store: ListStoreHook): RowListeners {
+  let registry = rowListeners.get(store);
+  if (!registry) {
+    const created: RowListeners = { byRow: new Map() };
+    store.subscribe((next, prev) => {
+      const ids = changedRowIds(next, prev);
+      if (ids === 'all') {
+        for (const set of created.byRow.values()) for (const listener of set) listener();
+        return;
+      }
+      for (const id of ids) {
+        const set = created.byRow.get(id);
+        if (set) for (const listener of set) listener();
+      }
+    });
+    rowListeners.set(store, created);
+    registry = created;
+  }
+  return registry;
+}
+
+/**
+ * Per-row UI state (selection, editing, drag, popovers, the drop line) for the row `id`.
+ * Unlike `useListUi`, a store change runs only the listeners of the rows it touches
+ * (`changedRowIds`), so a keypress costs O(changed rows), not O(rows) (AC-11.4, 2,000 rows).
+ * `select` must only read the fields `changedRowIds` watches, and return a primitive or a
+ * reference taken from the state.
+ */
+export function useRowUi<T>(id: string, select: (state: ListUiState, id: string) => T): T {
+  const store = useContext(ListStoreContext);
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      const { byRow } = rowListenersOf(store);
+      let set = byRow.get(id);
+      if (!set) {
+        set = new Set();
+        byRow.set(id, set);
+      }
+      set.add(listener);
+      return () => {
+        const current = byRow.get(id);
+        current?.delete(listener);
+        if (current?.size === 0) byRow.delete(id);
+      };
+    },
+    [store, id],
+  );
+  return useSyncExternalStore(subscribe, () => select(store.getState(), id));
 }
 
 /** The selected row ids in no particular order. */

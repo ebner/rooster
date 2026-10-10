@@ -10,7 +10,7 @@
     "data": "Data",
     "hint": {
       "profile": "Name, language, timezone and date format",
-      "behaviour": "Swipe actions on phones",
+      "behaviour": "Dates in task names, completed tasks and swipe actions",
       "notifications": "In app, push, email, task reminders and the daily digest",
       "calendar": "Your due dates in a calendar app",
       "security": "Signed-in devices, sign-in and connected apps",
@@ -166,6 +166,16 @@
     "saveFailed": "Couldn’t save. Check your connection and try again."
   },
   "behaviour": {
+    "datesTitle": "Dates in task names",
+    "parseTitleDates": "Recognise dates in task names",
+    "parseTitleDatesBody": "Typing “fri” or “tomorrow 14:00” in a task name sets its due date. When this is off, names stay exactly as you type them.",
+    "completedTitle": "Completed tasks",
+    "hideAfter": {
+      "label": "Hide completed tasks after",
+      "body": "How long a completed task stays in the list. “Until reload” keeps it until you leave the list or reload the page.",
+      "seconds": "{seconds, number} s",
+      "untilReload": "Until reload"
+    },
     "swipeTitle": "Swipe actions",
     "swipeBody": "On phones, swipe a task right or left to act on it at once.",
     "swipeRight": "Swipe right",

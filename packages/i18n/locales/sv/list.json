@@ -63,7 +63,11 @@
   "header": {
     "showCompleted": "Visa klara",
     "completedShown": "Klara uppgifter visas",
-    "completedHidden": "Klara uppgifter döljs"
+    "completedHidden": "Klara uppgifter döljs",
+    "menu": "Alternativ för listan",
+    "collapseAll": "Fäll ihop alla grupper",
+    "expandAll": "Fäll ut alla grupper",
+    "print": "Skriv ut"
   },
   "hint": {
     "emptyTitle": "Namnet kan inte vara tomt",
@@ -211,6 +215,9 @@
     "moveToGroupBottom": "Flytta längst ned i gruppen",
     "newGroup": "Ny grupp vid markören",
     "renameGroup": "Byt namn på grupp",
+    "collapseAllGroups": "Fäll ihop alla grupper",
+    "expandAllGroups": "Fäll ut alla grupper",
+    "printList": "Skriv ut listan",
     "dragLift": "Plocka upp eller släpp (draghandtag)",
     "dragMove": "Flytta medan du drar",
     "dragJumpGroup": "Hoppa till föregående eller nästa grupp",
@@ -271,7 +278,11 @@
       "weekly": "Vattna blommorna"
     },
     "recurringDeletePopover": "Förankrad popover (fokus)",
-    "recurringDeleteSheet": "Ark på telefon"
+    "recurringDeleteSheet": "Ark på telefon",
+    "headerMenu": "Menyn ⋯ i sidhuvudet",
+    "headerMenuMy": "Mina uppgifter",
+    "headerMenuSmart": "Smart vy",
+    "headerMenuEveryone": "Allas uppgifter"
   },
   "subtasks": {
     "add": "Lägg till deluppgift",

@@ -65,6 +65,7 @@ import { MobileListChrome } from './mobile-list-chrome';
 import { buildRows, type Row, type RowCache } from './model/rows';
 import { buildViewRows } from './model/view-rows';
 import { PullToRefresh } from './pull-to-refresh';
+import { ChunkAssigner, isChunk, RowChunkView } from './row-chunks';
 import { SectionHeader } from './section-header';
 import { TaskRow } from './task-row';
 import { type AssignDrop, ListDnd } from './use-list-dnd';
@@ -275,14 +276,29 @@ const ListRows = memo(function ListRows({
   rowsRef.current = rows;
   // Same row object → same element: React skips it without even a memo comparison.
   const elements = useRef(new WeakMap<Row, ReactElement>());
-  return rows.map((row) => {
-    let element = elements.current.get(row);
-    if (!element) {
-      element = rowElement(row);
-      elements.current.set(row, element);
+  const element = useRef((row: Row) => {
+    let cached = elements.current.get(row);
+    if (!cached) {
+      cached = rowElement(row);
+      elements.current.set(row, cached);
     }
-    return element;
-  });
+    return cached;
+  }).current;
+  // Task rows render in chunks (AC-11.4); the focused and edited rows keep theirs.
+  const chunks = useRef(new ChunkAssigner()).current;
+  const ui = useListStore.getState();
+  const pinned = new Set<string>();
+  if (ui.cursor) pinned.add(ui.cursor);
+  if (ui.editing) pinned.add(ui.editing.rowId);
+  return chunks
+    .assign(rows, pinned)
+    .map((item) =>
+      isChunk(item) ? (
+        <RowChunkView key={item.key} rows={item.rows} element={element} />
+      ) : (
+        element(item)
+      ),
+    );
 });
 
 /** The list's own text input has focus: commit it before a chord acts on the row. */
@@ -699,6 +715,14 @@ export function MyListView({
           if (!pane.taskId() && openPane(null) === false) return false;
           pane.toggleFullScreen();
         }),
+      // The header ⋯ (02 §2): smart views and Everyone's tasks have no groups to add or fold.
+      ...(view || everyone
+        ? {}
+        : {
+            collapseAllGroups: () => controller.setAllCollapsed(true),
+            expandAllGroups: () => controller.setAllCollapsed(false),
+            addGroupAtEnd: () => withTitle(() => controller.addGroupAtEnd()),
+          }),
     }),
     ready,
   );

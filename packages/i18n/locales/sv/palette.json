@@ -68,7 +68,11 @@
     "openTrash": "Öppna papperskorgen",
     "exportData": "Exportera data",
     "openOrgSettings": "Organisationsinställningar",
-    "openAdmin": "Öppna administrationen"
+    "openAdmin": "Öppna administrationen",
+    "collapseAllGroups": "Fäll ihop alla grupper",
+    "expandAllGroups": "Fäll ut alla grupper",
+    "printList": "Skriv ut listan",
+    "addGroupAtEnd": "Lägg till grupp sist"
   },
   "dev": {
     "section": "Kommandopalett",

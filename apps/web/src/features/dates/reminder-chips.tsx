@@ -91,7 +91,7 @@ export function ReminderChips({
             data-dormant={view.when === null || undefined}
             data-fired={view.fired || undefined}
             className={cn(
-              'inline-flex h-chip max-w-full items-center gap-1 rounded-xs bg-bg-muted ps-1.5 pe-0.5 text-xs font-medium',
+              'inline-flex h-chip max-w-full items-center gap-1 rounded-xs bg-bg-muted ps-1.5 text-xs font-medium',
               muted ? 'text-text-muted' : 'text-text-secondary',
             )}
           >
@@ -102,13 +102,18 @@ export function ReminderChips({
               aria-label={t('reminder.remove', { reminder: text })}
               onPress={() => onRemove(view.reminder)}
               {...(i === 0 && force ? { 'data-force': force } : {})}
+              // WCAG 2.5.8: a 24 px target around the 16 px visual, overhanging the 20 px chip.
               className={cn(
-                'inline-flex size-4 cursor-default items-center justify-center rounded-2xs outline-none',
-                'hover:bg-bg-app/50 focus-visible:outline-2 focus-visible:outline-border-focus',
-                'pointer-coarse:size-hit-touch',
+                'group/remove -my-0.5 -ms-1 inline-flex size-6 shrink-0 cursor-default items-center justify-center rounded-xs outline-none',
+                'focus-ring:outline-2 focus-ring:outline-border-focus pointer-coarse:size-hit-touch',
               )}
             >
-              <X className="size-3" strokeWidth={iconStrokeWidth} aria-hidden />
+              <span
+                aria-hidden
+                className="inline-flex size-4 items-center justify-center rounded-2xs group-hover/remove:bg-bg-app/50"
+              >
+                <X className="size-3" strokeWidth={iconStrokeWidth} />
+              </span>
             </AriaButton>
           </li>
         );

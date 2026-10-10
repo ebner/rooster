@@ -1,0 +1,146 @@
+/*
+ * Printing a list (02 §2: the header ⋯ → Print, Mod+P, or the browser's own Print).
+ *
+ * The tasks screen marks <html> with `data-print="list"` while it is mounted; other screens
+ * print as they are. Only the list prints: everything that is not on the path from <body> to
+ * the list's tree grid goes (the sidebar, headers, toolbars, the pane, the FAB, the bottom nav,
+ * toasts and popovers), plus the list's own screen-only parts (add rows, drag handles,
+ * chevrons). Group and section headings stay, and each task keeps its title, date, tags and
+ * assignee, with subtasks indented and the checkbox as ☐ / ☑.
+ *
+ * The main list is the `[data-list-root]` outside the detail pane (the pane's subtask list
+ * uses the same grid). `:has()` is only evaluated while printing: rules under a media query
+ * that does not match are not part of the active style, so the list's keypress budget
+ * (AC-2.12) is not affected.
+ *
+ * Plain CSS, outside Tailwind's layers, so these rules win over the utility classes.
+ */
+/* biome-ignore-all lint/complexity/noImportantStyles: print layout must also beat inline styles (React Aria positioning, row indents, the phone frame). */
+@media print {
+  [data-print="list"],
+  [data-print="list"] body {
+    height: auto !important;
+    overflow: visible !important;
+    background: var(--color-bg-app) !important;
+  }
+
+  [data-print="list"]
+    body
+    *:not(
+      :has([data-list-root]:not([data-pane-root] *)),
+      [data-list-root]:not([data-pane-root] *),
+      [data-list-root]:not([data-pane-root] *) *,
+      [data-print-title],
+      [data-print-title] *
+    ) {
+    display: none !important;
+  }
+
+  /* The frame around the list (fixed, clipped and scrolling on screen) flows onto pages. */
+  [data-print="list"] body :has([data-list-root]:not([data-pane-root] *)) {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    width: auto !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  [data-print="list"] [data-print-title] {
+    display: block !important;
+    margin: 0 0 var(--space-4);
+    padding-inline: var(--space-2);
+    font-size: var(--text-lg);
+    line-height: var(--text-lg--line-height);
+    font-weight: var(--text-lg--font-weight);
+    color: var(--color-text);
+  }
+  [data-print="list"] [data-print-title] span {
+    font-size: var(--text-sm);
+    font-weight: 400;
+    color: var(--color-text-muted);
+  }
+
+  [data-print="list"] [data-list-root] {
+    padding: 0 !important;
+  }
+
+  /* Screen-only parts of the list. */
+  [data-print="list"]
+    [data-list-root]
+    :is(
+      [data-row-id^="add"],
+      [data-row-id^="hint:"],
+      [data-drag-handle],
+      [data-chevron],
+      [data-testid="group-header"] button,
+      [data-testid="section-header"] button,
+      [data-testid="member-section"] button,
+      [role="row"] > [aria-hidden].absolute
+    ) {
+    display: none !important;
+  }
+
+  /* Rows grow with their text, never split across pages, and lose their screen tints. */
+  [data-print="list"] [data-list-root] [role="row"] {
+    position: static !important;
+    height: auto !important;
+    min-height: var(--h-row-subtask);
+    content-visibility: visible !important;
+    background: none !important;
+    opacity: 1 !important;
+    break-inside: avoid;
+  }
+  [data-print="list"] [data-list-root] [role="row"] > *,
+  [data-print="list"] [data-list-root] [role="row"] > * > * {
+    height: auto !important;
+    background: none;
+  }
+  [data-print="list"]
+    [data-list-root]
+    :is(
+      [data-testid="group-header"],
+      [data-testid="section-header"],
+      [data-testid="member-section"]
+    ) {
+    margin-top: var(--space-4) !important;
+    break-after: avoid;
+  }
+  [data-print="list"] [data-list-root] .truncate {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  /* The round checkbox prints as a ballot box: ☐ open, ☑ completed. */
+  [data-print="list"] [data-testid="task-row"] label:has(input[type="checkbox"]) {
+    width: auto !important;
+    height: auto !important;
+    padding-inline: var(--space-1);
+  }
+  [data-print="list"]
+    [data-testid="task-row"]
+    label:has(input[type="checkbox"])
+    > :not(:has(input)) {
+    display: none !important;
+  }
+  [data-print="list"] [data-testid="task-row"] label:has(input[type="checkbox"])::before {
+    content: "\2610";
+    font-size: var(--text-md);
+    line-height: var(--text-md--line-height);
+    color: var(--color-text);
+  }
+  [data-print="list"]
+    [data-testid="task-row"][data-done]
+    label:has(input[type="checkbox"])::before {
+    content: "\2611";
+  }
+}

@@ -46,8 +46,7 @@
   },
   "header": {
     "more": "Mer",
-    "backTo": "Tillbaka till {title}",
-    "hideCompleted": "Dölj klara"
+    "backTo": "Tillbaka till {title}"
   },
   "views": {
     "label": "Vyer",

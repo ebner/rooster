@@ -2,7 +2,7 @@ import { Check, ChevronRight, GripVertical } from 'lucide-react';
 import { type MouseEvent, memo, Suspense, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
-import { type ListUiState, useListUi } from '../../state/list-store';
+import { type ListUiState, useRowUi } from '../../state/list-store';
 import { iconStrokeWidth } from '../../ui/button';
 import { TaskCheckbox } from '../../ui/task-checkbox';
 import { DateCell, type DueValue } from '../dates';
@@ -13,6 +13,7 @@ import { GridCell, GridRow } from './grid';
 import { LazyTaskReminders } from './lazy';
 import { useListContext } from './list-context';
 import type { TaskRow as TaskRowModel } from './model/rows';
+import { useTaskRowName } from './row-name';
 import {
   AttachmentCount,
   DescriptionIndicator,
@@ -65,6 +66,10 @@ function rowFlags(s: ListUiState, id: string): number {
   return bits;
 }
 
+function editingOf(s: ListUiState, id: string): ListUiState['editing'] {
+  return s.editing?.rowId === id ? s.editing : null;
+}
+
 /**
  * Selection mode's stand-in for the checkbox (02 §13.2): a circle that fills with the accent
  * when the row is selected. The row's `aria-selected` carries the state.
@@ -114,13 +119,13 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
   const subtaskRow = compact || level > 2;
   const indent = level - baseLevel;
   // One packed subscription per row: 500 rows × several selectors per store update add up.
-  const flags = useListUi((s) => rowFlags(s, id));
+  const flags = useRowUi(id, rowFlags);
   const selected = (flags & flag.selected) !== 0;
   const isSource = (flags & flag.source) !== 0;
   const dateOpen = (flags & flag.dateOpen) !== 0;
   const selectionMode = (flags & flag.selectionMode) !== 0;
   const hiding = flags & flag.collapsing ? 'collapsing' : flags & flag.hold ? 'hold' : undefined;
-  const editing = useListUi((s) => (s.editing?.rowId === id ? s.editing : null));
+  const editing = useRowUi(id, editingOf);
   const done = task.completedAt !== null;
   // FR-TASK-10: in Everyone's tasks, and on subtasks someone else does.
   const assignee =
@@ -183,9 +188,14 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
   );
 
   const label = task.title || t('row.untitled');
+  // 10 §5: the row reads "Book dentist, due tomorrow, not completed, 2 of 5 subtasks". Focus
+  // sits on the title, so it carries the rest as its description: an attribute, not a node,
+  // so the row's text stays its title.
+  const rowName = useTaskRowName(task, label, dateCtx);
   return (
     <GridRow
       aria-level={level}
+      aria-label={draft ? undefined : rowName.name}
       aria-selected={selected}
       {...(expandable ? { 'aria-expanded': expanded } : {})}
       data-row-id={id}
@@ -200,7 +210,6 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
         if (store.cursor !== id && store.mode === 'navigate') store.select(id);
       }}
       data-level={level}
-      data-cv={editing ? undefined : true}
       style={indent > 0 ? { paddingInlineStart: `calc(var(--space-6) * ${indent})` } : undefined}
       className={cn(
         'group/row relative flex shrink-0 items-center rounded-sm pe-1 max-tablet:h-row-mobile',
@@ -321,6 +330,7 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
               // biome-ignore lint/a11y/noNoninteractiveTabindex: the title is a tab stop (02 §6).
               tabIndex={0}
               data-focus-target
+              aria-description={draft ? undefined : rowName.description}
               className="min-w-0 cursor-text truncate outline-none"
             >
               {task.title}
@@ -328,7 +338,12 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
           </>
         )}
         {!draft && (
-          <span className="flex shrink-0 items-center gap-2 ps-2 no-underline empty:hidden">
+          <span
+            // Never more than half the cell, so a row full of meta (phones, Everyone's tasks)
+            // keeps a readable title; the meta's tags truncate and the rest clips first.
+            data-row-meta
+            className="flex min-w-0 max-w-[50%] shrink-0 items-center gap-2 overflow-hidden ps-2 no-underline empty:hidden"
+          >
             {row.groupChip !== undefined && <GroupChip name={row.groupChip} />}
             <RowTagChips task={task} />
             <DescriptionIndicator task={task} />

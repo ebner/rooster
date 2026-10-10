@@ -84,3 +84,47 @@ test('a personal org has no Everyone tab', async ({ page }) => {
     'No date',
   ]);
 });
+
+test('a row full of meta keeps a readable title on a phone (Everyone and My tasks)', async ({
+  page,
+}) => {
+  await signInAs(page, uniqueEmail('ev.meta'));
+  const created = await apiCall(page, 'POST', '/api/v1/orgs', { name: 'Harbour' });
+  const org = (await created.json()) as { id: string; slug: string };
+  const me = (await (await apiCall(page, 'GET', '/api/v1/me')).json()) as { timezone: string };
+  const today = await page.evaluate(
+    (zone) => new Intl.DateTimeFormat('en-CA', { timeZone: zone }).format(new Date()),
+    me.timezone,
+  );
+  const task = await createTask(page, org.id, {
+    title: 'Replace the harbour gate hinges before the storm',
+    dueDate: today,
+    description: 'Bring the big wrench.',
+    tagNames: ['maintenance', 'urgent', 'outdoor'],
+    recurrence: 'FREQ=WEEKLY',
+    reminders: [{ offsetMinutes: 60 }],
+  });
+  await createTask(page, org.id, { title: 'Buy hinges', parentId: task.id });
+  const origin = new URL(page.url()).origin;
+  const upload = await page.request.post(`/api/v1/tasks/${task.id}/attachments`, {
+    headers: { Origin: origin },
+    multipart: { file: { name: 'gate.txt', mimeType: 'text/plain', buffer: Buffer.from('x') } },
+  });
+  expect(upload.status()).toBe(201);
+  for (const view of ['everyone', 'my']) {
+    await page.goto(`/o/${org.slug}/${view}`).catch(() => page.goto(`/o/${org.slug}/${view}`));
+    const title = row(page, 'Replace the harbour gate hinges before the storm').locator(
+      '[data-focus-target]',
+    );
+    await expect(title).toBeVisible();
+    const cell = await title.evaluate((el) => {
+      const parent = el.parentElement as HTMLElement;
+      return {
+        title: el.getBoundingClientRect().width,
+        cell: parent.getBoundingClientRect().width,
+      };
+    });
+    // The meta takes at most half of the cell; the title gets the rest.
+    expect(cell.title, view).toBeGreaterThanOrEqual(cell.cell * 0.4);
+  }
+});

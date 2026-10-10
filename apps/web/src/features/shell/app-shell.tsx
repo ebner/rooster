@@ -133,6 +133,13 @@ export function AppShell({ renderSidebar, children, navKey, mobile }: AppShellPr
             </main>
             {/* The keyboard and selection mode's bulk bar take the nav's place (02 §13). */}
             {!editingFocus && !selectionMode && mobile.nav}
+            {/*
+             * Selection mode's bar is fixed where the nav was: keep the nav's room so the list
+             * ends above the bar instead of under it (WCAG 2.5.8, 2.4.11).
+             */}
+            {!editingFocus && selectionMode && (
+              <div aria-hidden className="h-bottom-nav-safe shrink-0" />
+            )}
             <OrgSwitcherSheet
               isOpen={orgsOpen}
               onOpenChange={setOrgsOpen}

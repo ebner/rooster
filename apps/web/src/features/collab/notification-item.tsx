@@ -1,3 +1,4 @@
+import { commentToPlainText, parseCommentMarkdown } from '@rooster/core/comment-markdown';
 import type { Notification } from '@rooster/core/schemas';
 import type { Locale } from '@rooster/i18n/core';
 import { Bell, Mail, MailOpen } from 'lucide-react';
@@ -65,6 +66,14 @@ export function NotificationSentence({
     );
   }
   return <>{t(`type.${type}`)}</>;
+}
+
+/**
+ * A comment excerpt as one line of plain text: the server keeps the comment's Markdown-light
+ * (`**bold**`, links, lists), which the inbox shows without its markup.
+ */
+export function excerptText(excerpt: string): string {
+  return commentToPlainText(parseCommentMarkdown(excerpt)).replace(/\s+/g, ' ').trim();
 }
 
 /**
@@ -145,7 +154,7 @@ export function NotificationItem({
           )}
           {notification.data.excerpt && (
             <span className="line-clamp-2 text-sm text-text-secondary">
-              {t('excerpt', { text: notification.data.excerpt })}
+              {t('excerpt', { text: excerptText(notification.data.excerpt) })}
             </span>
           )}
           <span className="text-xs text-text-muted">

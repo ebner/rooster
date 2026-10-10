@@ -4,7 +4,7 @@ import { addDays, todayIn } from '@rooster/core/dates';
 import { apiCall, signInAs, uniqueEmail } from './support/auth';
 import { createTask, groupId, myList, personalOrg, waitForSync } from './support/p3';
 import { expect, test } from './support/test';
-import { longPress, showKeyboard, swipe } from './support/touch';
+import { longPress, showKeyboard, swipe, swipeAndHold } from './support/touch';
 
 /**
  * Phase 4 phone layout and gestures (WP 4.5–4.6, AC-4.5) on the iPhone 15 (WebKit) and
@@ -77,6 +77,19 @@ test('AC-4.5 swipe right completes the task', async ({ page }) => {
   const list = await myList(page, orgId);
   expect(list.tasks.find((t) => t.id === ids[0])?.completedAt).not.toBeNull();
   expect(list.tasks.find((t) => t.id === ids[1])?.completedAt).toBeNull();
+});
+
+test('the swipe reveal sits exactly behind the swiped row', async ({ page }) => {
+  await setup(page, 'swipe.reveal', ['First row', 'Second row', 'Third row']);
+  const target = row(page, 'Third row');
+  const release = await swipeAndHold(page, target, 0.2);
+  const reveal = page.locator('[data-swipe-reveal]');
+  await expect(reveal).toBeVisible();
+  const [revealBox, rowBox] = [await reveal.boundingBox(), await target.boundingBox()];
+  expect(Math.abs((revealBox?.y ?? 0) - (rowBox?.y ?? 0))).toBeLessThanOrEqual(1);
+  expect(Math.abs((revealBox?.height ?? 0) - (rowBox?.height ?? 0))).toBeLessThanOrEqual(1);
+  await release();
+  await expect(reveal).toHaveCount(0);
 });
 
 test('AC-4.5 a short swipe springs back without acting', async ({ page }) => {

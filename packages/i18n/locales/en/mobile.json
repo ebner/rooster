@@ -46,8 +46,7 @@
   },
   "header": {
     "more": "More",
-    "backTo": "Back to {title}",
-    "hideCompleted": "Hide completed"
+    "backTo": "Back to {title}"
   },
   "views": {
     "label": "Views",

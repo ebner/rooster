@@ -107,11 +107,17 @@ export const GroupHeader = memo(function GroupHeader({ row }: GroupHeaderProps) 
 
   const canDelete = controller.canDeleteGroup(group.id);
   const nameText = group.name;
+  // 10 §5: "Today, group, 3 tasks, expanded". The row's aria-expanded says the state; the
+  // focused name (the row's tab stop) says all of it in its description.
+  const kind = t('a11y.group');
+  const tasks = t('a11y.groupCount', { count });
+  const description = `${kind}, ${tasks}, ${t(collapsed ? 'a11y.collapsed' : 'a11y.expanded')}`;
 
   return (
     <GridRow
       ref={headerRef}
       aria-level={1}
+      aria-label={`${nameText}, ${kind}, ${tasks}`}
       aria-expanded={!collapsed}
       aria-selected={selected}
       data-row-id={id}
@@ -173,6 +179,7 @@ export const GroupHeader = memo(function GroupHeader({ row }: GroupHeaderProps) 
               // biome-ignore lint/a11y/noNoninteractiveTabindex: a header is a tab stop (02 §6).
               tabIndex={0}
               data-focus-target
+              aria-description={description}
               className={cn('min-w-0 truncate text-group outline-none', !inbox && 'cursor-text')}
             >
               {nameText}

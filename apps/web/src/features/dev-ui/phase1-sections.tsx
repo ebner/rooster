@@ -34,6 +34,7 @@ import { DangerZone } from '../org-settings/danger-zone';
 import { fixtureInvites, fixtureMembers } from '../org-settings/fixtures';
 import { GeneralSection } from '../org-settings/general-section';
 import { OrgSettingsPage } from '../org-settings/org-settings-page';
+import { BehaviourPage, type BehaviourSettings } from '../settings/behaviour-page';
 import { fixtureSessions } from '../settings/fixtures';
 import { ProfilePage } from '../settings/profile-page';
 import { SecurityPage } from '../settings/security-page';
@@ -509,6 +510,12 @@ function UserSettingsSection() {
   const prefs = usePrefs();
   const [user, setUser] = useState<CurrentUser>(fixtureMe.user);
   const [sessions, setSessions] = useState<UserSession[]>(fixtureSessions);
+  const [behaviour, setBehaviour] = useState<BehaviourSettings>({
+    parseTitleDates: true,
+    completeHideMs: 10_000,
+    swipeLeft: 'date',
+    swipeRight: 'complete',
+  });
   return (
     <Section id="userSettings" title={t('section.userSettings')}>
       <Group title={t('group.profile')} className="flex-col items-stretch">
@@ -527,6 +534,13 @@ function UserSettingsSection() {
           now={Date.now()}
           pendingSessionId="session-laptop"
           onRevoke={(id) => setSessions((list) => list.filter((s) => s.id !== id))}
+        />
+      </Group>
+      <Group title={t('group.behaviour')} className="flex-col items-stretch">
+        <BehaviourPage
+          value={behaviour}
+          onChange={(patch) => setBehaviour((b) => ({ ...b, ...patch }))}
+          data-force="focus"
         />
       </Group>
     </Section>

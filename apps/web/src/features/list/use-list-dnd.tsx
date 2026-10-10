@@ -378,7 +378,7 @@ function DragSurface({
       data-dragging={dragging || undefined}
       onPointerDown={onPointerDown}
       onTouchStart={onTouchStart}
-      className={cn('flex flex-col', !compact && 'pb-16')}
+      className={cn('flow-root', !compact && 'pb-16')}
     >
       {children}
     </div>

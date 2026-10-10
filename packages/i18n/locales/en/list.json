@@ -63,7 +63,11 @@
   "header": {
     "showCompleted": "Show completed",
     "completedShown": "Completed tasks shown",
-    "completedHidden": "Completed tasks hidden"
+    "completedHidden": "Completed tasks hidden",
+    "menu": "List options",
+    "collapseAll": "Collapse all groups",
+    "expandAll": "Expand all groups",
+    "print": "Print"
   },
   "hint": {
     "emptyTitle": "Title can’t be empty",
@@ -211,6 +215,9 @@
     "moveToGroupBottom": "Move to the bottom of the group",
     "newGroup": "New group at the cursor",
     "renameGroup": "Rename group",
+    "collapseAllGroups": "Collapse all groups",
+    "expandAllGroups": "Expand all groups",
+    "printList": "Print the list",
     "dragLift": "Pick up or drop (drag handle)",
     "dragMove": "Move while dragging",
     "dragJumpGroup": "Jump to the previous or next group",
@@ -271,7 +278,11 @@
       "weekly": "Water the plants"
     },
     "recurringDeletePopover": "Anchored popover (focus)",
-    "recurringDeleteSheet": "Phone sheet"
+    "recurringDeleteSheet": "Phone sheet",
+    "headerMenu": "Header ⋯ menu",
+    "headerMenuMy": "My tasks",
+    "headerMenuSmart": "Smart view",
+    "headerMenuEveryone": "Everyone’s tasks"
   },
   "subtasks": {
     "add": "Add subtask",

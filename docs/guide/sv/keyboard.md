@@ -28,6 +28,7 @@ Alla kortkommandon i rooster. Tryck på ? i appen för att se dem när som helst
 | Gå till Inkorgen | <kbd>G</kbd> <kbd>I</kbd> | <kbd>G</kbd> <kbd>I</kbd> |
 | Öppna guiden | <kbd>G</kbd> <kbd>H</kbd> | <kbd>G</kbd> <kbd>H</kbd> |
 | Sök uppgifter | <kbd>/</kbd> | <kbd>/</kbd> |
+| Skriv ut listan | <kbd>⌘P</kbd> | <kbd>Ctrl+P</kbd> |
 
 ## Navigera
 
@@ -96,6 +97,8 @@ Alla kortkommandon i rooster. Tryck på ? i appen för att se dem när som helst
 | --- | --- | --- |
 | Ny grupp vid markören | <kbd>⇥N</kbd> | <kbd>Tab+N</kbd> |
 | Byt namn på grupp | <kbd>F2</kbd> | <kbd>F2</kbd> |
+| Fäll ihop alla grupper | <kbd>⇧←</kbd> | <kbd>Shift+←</kbd> |
+| Fäll ut alla grupper | <kbd>⇧→</kbd> | <kbd>Shift+→</kbd> |
 
 ## Detaljpanel
 

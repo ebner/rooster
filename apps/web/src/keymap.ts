@@ -165,6 +165,20 @@ export const keymap = {
   assign: { keys: ['Tab+A'], scope: 'list', section: 'editing', palette: 'task' },
   focusComment: { keys: ['Tab+C'], scope: 'list', section: 'pane', palette: 'task' },
   renameGroup: { keys: ['F2'], scope: 'navigate', section: 'groups' },
+  // The list header's ⋯ menu (02 §2): every group at once, and printing the list.
+  collapseAllGroups: {
+    keys: ['Shift+ArrowLeft'],
+    scope: 'navigate',
+    section: 'groups',
+    palette: 'list',
+  },
+  expandAllGroups: {
+    keys: ['Shift+ArrowRight'],
+    scope: 'navigate',
+    section: 'groups',
+    palette: 'list',
+  },
+  printList: { keys: ['Mod+P'], scope: 'list', section: 'general', palette: 'list' },
 
   // Keyboard drag on a focused handle (02 §5).
   dragLift: { keys: ['Space'], scope: 'drag', section: 'moving' },
@@ -208,6 +222,8 @@ export const keymap = {
   exportData: { keys: [], scope: 'palette', section: 'general', palette: 'navigation' },
   openOrgSettings: { keys: [], scope: 'palette', section: 'general', palette: 'navigation' },
   openAdmin: { keys: [], scope: 'palette', section: 'general', palette: 'navigation' },
+  // The header ⋯ → Add group: a new group at the end (Tab+N adds one at the cursor).
+  addGroupAtEnd: { keys: [], scope: 'palette', section: 'groups', palette: 'list' },
 } as const satisfies Record<string, ShortcutDefinition>;
 
 export type ShortcutId = keyof typeof keymap;

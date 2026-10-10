@@ -47,6 +47,47 @@ export async function swipe(page: Page, locator: Locator, share: number, steps =
   );
 }
 
+/**
+ * A swipe that stops `share` of the way without lifting the finger, so the reveal can be
+ * inspected mid-gesture; call the returned function to release.
+ */
+export async function swipeAndHold(page: Page, locator: Locator, share: number, steps = 8) {
+  const { y, box } = await centre(locator);
+  const startX = share > 0 ? box.x + box.width * 0.1 : box.x + box.width * 0.9;
+  const dx = box.width * share;
+  const fire = (type: string, x: number) =>
+    page.evaluate(
+      ({ type, x, y, startX }) => {
+        const w = window as unknown as { __swipeTarget?: Element | undefined };
+        if (type === 'pointerdown')
+          w.__swipeTarget = document.elementFromPoint(startX, y) ?? undefined;
+        const target = w.__swipeTarget;
+        if (!target) throw new Error('nothing under the finger');
+        target.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            pointerId: 8,
+            pointerType: 'touch',
+            isPrimary: true,
+            button: type === 'pointermove' ? -1 : 0,
+            buttons: type === 'pointerup' ? 0 : 1,
+            clientX: x,
+            clientY: y,
+          }),
+        );
+      },
+      { type, x, y, startX },
+    );
+  await fire('pointerdown', startX);
+  for (let i = 1; i <= steps; i += 1) {
+    await page.waitForTimeout(16);
+    await fire('pointermove', startX + (dx * i) / steps);
+  }
+  return () => fire('pointerup', startX + dx);
+}
+
 /** Dispatches one TouchEvent at (x, y) on `target` (dnd-kit listens on the touched element). */
 async function touch(
   page: Page,

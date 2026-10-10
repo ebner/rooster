@@ -46,7 +46,7 @@ export function MembersSection({
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-border text-start text-xs font-medium text-text-muted">
-              <th scope="col" className="py-2 pe-3 text-start font-medium">
+              <th scope="col" className="w-full py-2 pe-3 text-start font-medium">
                 {t('org.members.member')}
               </th>
               <th scope="col" className="w-label-col py-2 pe-3 text-start font-medium">
@@ -63,7 +63,8 @@ export function MembersSection({
               const isLastOwner = member.role === 'owner' && owners === 1;
               return (
                 <tr key={member.userId} className="border-b border-border last:border-b-0">
-                  <td className="py-3 pe-3">
+                  {/* max-w-0 with the header's w-full: the name and email truncate on phones. */}
+                  <td className="max-w-0 py-3 pe-3">
                     <div className="flex min-w-0 items-center gap-3">
                       <Avatar
                         id={member.userId}

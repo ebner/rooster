@@ -28,6 +28,7 @@ Every keyboard shortcut in rooster. Press ? in the app to see them at any time; 
 | Go to Inbox | <kbd>G</kbd> <kbd>I</kbd> | <kbd>G</kbd> <kbd>I</kbd> |
 | Open the guide | <kbd>G</kbd> <kbd>H</kbd> | <kbd>G</kbd> <kbd>H</kbd> |
 | Search tasks | <kbd>/</kbd> | <kbd>/</kbd> |
+| Print the list | <kbd>⌘P</kbd> | <kbd>Ctrl+P</kbd> |
 
 ## Navigate
 
@@ -96,6 +97,8 @@ Every keyboard shortcut in rooster. Press ? in the app to see them at any time; 
 | --- | --- | --- |
 | New group at the cursor | <kbd>⇥N</kbd> | <kbd>Tab+N</kbd> |
 | Rename group | <kbd>F2</kbd> | <kbd>F2</kbd> |
+| Collapse all groups | <kbd>⇧←</kbd> | <kbd>Shift+←</kbd> |
+| Expand all groups | <kbd>⇧→</kbd> | <kbd>Shift+→</kbd> |
 
 ## Detail pane
 

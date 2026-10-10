@@ -494,15 +494,16 @@
 }
 
 /*
- * List rendering budget (AC-2.12, 04 §5.4): rows outside the viewport skip style, layout and
- * paint. Rows have a fixed height, so nothing shifts. Paint containment would clip the drop
- * line (it straddles row edges) and the title's tag suggestions, so it is off while dragging
- * and on the row being edited.
+ * List rendering budget (AC-2.12, AC-11.4, 04 §5.4): chunks of task rows outside the viewport
+ * skip style, layout and paint (features/list/row-chunks.tsx). Rows have fixed heights, and a
+ * chunk's intrinsic size is the sum of them, so nothing shifts. Paint containment would clip the
+ * drop line (it straddles row edges) and the title's tag suggestions, so it is off while
+ * dragging and on the chunk with the title being edited. Print renders every row.
  */
 @layer components {
   /* Not on phones: WebKit skips painting rows of a nested scroller that are in view. */
-  @media (min-width: 768px) {
-    [data-list-root]:not([data-dragging]) > [data-cv] {
+  @media screen and (min-width: 768px) {
+    [data-list-root]:not([data-dragging]) > [data-row-chunk]:not(:has([data-list-input])) {
       content-visibility: auto;
     }
   }

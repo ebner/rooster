@@ -63,6 +63,7 @@
     "deleteConfirm": "Delete confirmation",
     "profile": "Profile",
     "security": "Security",
+    "behaviour": "Behaviour",
     "sessionExpired": "Session expired",
     "updateToast": "Update prompt",
     "iosSheet": "iOS install sheet",
