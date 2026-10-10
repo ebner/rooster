@@ -232,7 +232,9 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     canSend: () => userId !== null,
     isOnline: online,
     afterPaint,
-    user: () => userId ?? readOwner(),
+    // The page's own account, also after its session ended: never the browser's owner when
+    // another tab has made someone else the owner meanwhile (an edit flushed late).
+    user: () => userId ?? ranAs ?? startOwner ?? readOwner(),
     browserOwner: readOwner,
   });
   registerListPipeline(queryClient, transport, pipeline);

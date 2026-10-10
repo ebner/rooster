@@ -1473,6 +1473,33 @@ describe('session expiry across tabs (ADR 0051)', () => {
   });
 });
 
+describe('an edit flushed after the session ended', () => {
+  test("is stamped with the page's own account, not the browser's next owner", async () => {
+    localStorage.setItem('rooster.cacheOwner', userId);
+    const outbox = createMemoryOutbox();
+    const { engine, queryClient } = await boot({
+      storage: memoryStorage().storage,
+      outbox,
+      transport: createFixtureTransport({ userId }),
+    });
+    await fetchMe(queryClient, me(userId));
+    await queryClient
+      .fetchQuery({
+        queryKey: ['me'],
+        queryFn: () => Promise.reject(new ApiError('unauthenticated', 401)),
+        staleTime: 0,
+        retry: false,
+      })
+      .catch(() => {});
+    // Another tab signs in as someone else; then this page's editor flushes on unmount.
+    const other = '01900000-0000-7000-8000-000000000002';
+    localStorage.setItem('rooster.cacheOwner', other);
+    engine.pipeline.enqueue(orgId, [listOps.patchTask('t', { description: 'Late' })], { userId });
+    await vi.waitFor(() => expect(outbox.records.size).toBe(1));
+    expect([...outbox.records.values()][0]?.userId).toBe(userId);
+  });
+});
+
 describe('secrets in mutation results (ADR 0051)', () => {
   test('an online 401 on /me drops every mutation result', async () => {
     const { engine, queryClient } = await boot({
