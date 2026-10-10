@@ -121,11 +121,23 @@ export async function startTui(
     exitOnCtrlC: false,
     alternateScreen: true,
   });
+  // A failure no handler caught (a callback, a promise nobody awaits) ends the session and is
+  // reported by `runCli` like any other error: cleaned and redacted, never printed raw by Node.
+  let fatal: { error: unknown } | null = null;
+  const onFatal = (error: unknown) => {
+    fatal ??= { error };
+    instance.unmount();
+  };
+  process.on('uncaughtException', onFatal);
+  process.on('unhandledRejection', onFatal);
   try {
     await session.start();
     await instance.waitUntilExit();
   } finally {
+    process.off('uncaughtException', onFatal);
+    process.off('unhandledRejection', onFatal);
     session.stop();
     instance.unmount();
   }
+  if (fatal !== null) throw (fatal as { error: unknown }).error;
 }

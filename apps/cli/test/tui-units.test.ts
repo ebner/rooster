@@ -414,3 +414,29 @@ describe('tui entry', () => {
     expect(await runTui(runtime({}, false), streams(tty))).toBe(false);
   });
 });
+
+describe('[P2] TUI timers', () => {
+  it('guarded: a throwing timer callback reaches onError instead of the event loop', async () => {
+    const { guarded } = await import('../src/tui/controller.ts');
+    const errors: unknown[] = [];
+    const boom = new RangeError('Invalid time zone specified: UTC\u001b]52;c;QUJD\u0007');
+    expect(() =>
+      guarded(
+        () => {
+          throw boom;
+        },
+        (error) => errors.push(error),
+      )(),
+    ).not.toThrow();
+    expect(errors).toEqual([boom]);
+    let ran = false;
+    guarded(
+      () => {
+        ran = true;
+      },
+      () => errors.push('unexpected'),
+    )();
+    expect(ran).toBe(true);
+    expect(errors).toHaveLength(1);
+  });
+});

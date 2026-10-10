@@ -164,6 +164,17 @@ export function orgsInOrder(me: Me): Org[] {
 
 const isNetwork = (error: unknown) => error instanceof CliError && error.exitCode === EXIT.network;
 
+/** `fn` for a timer: a throw goes to `onError` instead of escaping to the event loop. */
+export function guarded(fn: () => void, onError: (error: unknown) => void): () => void {
+  return () => {
+    try {
+      fn();
+    } catch (error) {
+      onError(error);
+    }
+  };
+}
+
 /**
  * The TUI's state and every action on it. Ink only renders `getState()` and forwards keys to
  * `key()`; everything else (API calls, the undo stack, live updates) lives here, so it is
@@ -209,14 +220,21 @@ export class TuiController {
   private typeaheadOwner = 0;
 
   constructor(private readonly deps: ControllerDeps) {
-    this.setTimer =
+    const schedule =
       deps.setTimer ??
-      ((fn, ms) => {
+      ((fn: () => void, ms: number) => {
         // UI timers never keep the process alive after quitting.
         const handle = setTimeout(fn, ms);
         handle.unref?.();
         return handle;
       });
+    // A timer runs outside every caller's error handling: a failure becomes the usual cleaned
+    // error line instead of an uncaught exception printed raw by Node.
+    this.setTimer = (fn, ms) =>
+      schedule(
+        guarded(fn, (error) => this.fail(error)),
+        ms,
+      );
     this.clearTimer =
       deps.clearTimer ?? ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>));
     this.state = {
@@ -257,8 +275,17 @@ export class TuiController {
 
   private set(patch: Partial<TuiState>, derive = false): void {
     if (this.closed) return;
+    const previous = this.state;
     this.state = { ...this.state, ...patch };
-    if (derive) this.derive();
+    if (derive) {
+      try {
+        this.derive();
+      } catch (error) {
+        // All or nothing: a value derivation can't use (a server's bad timezone) never stays.
+        this.state = previous;
+        throw error;
+      }
+    }
     for (const listener of this.listeners) listener();
   }
 
@@ -379,8 +406,9 @@ export class TuiController {
   private tickClock(): void {
     this.clockTimer = this.setTimer(() => {
       if (this.closed) return;
-      this.set({}, true);
+      // Re-armed first, so one failed tick does not stop the clock.
       this.tickClock();
+      this.set({}, true);
     }, 60_000);
   }
 
@@ -624,6 +652,8 @@ export class TuiController {
   private async reloadMe(): Promise<void> {
     try {
       const me = await this.ctx(() => unwrap(this.api.GET('/api/v1/me')));
+      // Dates must work with the new profile (a valid timezone) before any of it is shown.
+      dateContext(me, this.deps.locale, this.deps.now());
       const org = me.orgs.find((o) => o.id === this.state.org.id);
       if (org === undefined) {
         // Removed from the org: back to the personal one.

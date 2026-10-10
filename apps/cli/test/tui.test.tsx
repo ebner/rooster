@@ -567,6 +567,42 @@ describe('TUI: live updates and failures', () => {
     expect(frame).not.toMatch(UNSAFE_CHARS);
   });
 
+  it('[P2] a /me with a timezone dates cannot use is never installed (SSE invalidation)', async () => {
+    const { user, cli } = await setup();
+    await addTask(user, { title: 'Steady' });
+    let hostile = false;
+    let reloaded = false;
+    const t = await tui(cli, {
+      io: {
+        fetch: async (input, init) => {
+          const request = input instanceof Request ? input : new Request(input, init);
+          const response = await globalThis.fetch(request);
+          if (!hostile || new URL(request.url).pathname !== '/api/v1/me') return response;
+          const me = (await response.json()) as Record<string, unknown>;
+          reloaded = true;
+          return Response.json({ ...me, timezone: 'UTC\u001b]52;c;QUJD\u0007' });
+        },
+      },
+    });
+    await t.waitFor((f) => f.includes('Steady') && f.includes('● synced'));
+    const before = t.session.controller.getState().me.timezone;
+    hostile = true;
+    t.session.controller.onSseMessage({
+      event: 'invalidate',
+      data: JSON.stringify({ org: null, keys: [['me']], origin: null }),
+    } as never);
+    await eventually(
+      async () => reloaded,
+      (v) => v,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(t.session.controller.getState().me.timezone).toBe(before);
+    // Everything that derives the list (a key, the minute clock) still works.
+    await t.press('j');
+    expect(t.frame()).toContain('Steady');
+    expect(t.frame()).not.toMatch(UNSAFE_CHARS);
+  });
+
   it('q quits', async () => {
     const { cli } = await setup();
     const t = await tui(cli);
