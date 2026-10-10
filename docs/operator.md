@@ -300,29 +300,42 @@ Copy `/data/backups` and `/data/attachments` off the host on a schedule with res
 
 For point-in-time restore, the optional overlay `compose.litestream.yaml` adds a [Litestream](https://litestream.io/) 0.5 sidecar. It shares the volume with rooster and replicates the database continuously to S3 or another supported target, so you lose at most seconds of changes instead of up to a day. It replicates the database only: keep backing up `attachments/` (or use S3 storage for them).
 
-<!-- TODO: exact env vars from compose.litestream.yaml (replica URL, bucket, credentials, sync interval) -->
+Set these in the same `.env` that Compose reads. Litestream expands them at runtime, so they never appear in the generated config.
 
-| Variable | Description |
-|---|---|
-| _TODO_ | _The replica target and credentials, as `compose.litestream.yaml` defines them._ |
+| Variable | Default | Description |
+|---|---|---|
+| `LITESTREAM_S3_BUCKET` | required | The bucket that receives the replica. |
+| `LITESTREAM_S3_PATH` | `rooster` | The path inside the bucket. |
+| `LITESTREAM_S3_REGION` | `us-east-1` | The bucket's region. |
+| `LITESTREAM_S3_ENDPOINT` | empty | Empty for AWS. Set it for MinIO, Cloudflare R2, Garage and other S3-compatible stores; this also switches to path-style URLs. |
+| `LITESTREAM_ACCESS_KEY_ID` | required | The access key. |
+| `LITESTREAM_SECRET_ACCESS_KEY` | required | The secret key. |
+
+Litestream takes a snapshot every 24 hours and keeps them for 7 days, so you can restore any point in the last week. The sidecar (`litestream/litestream:0.5.17`, pinned by digest) runs as the same unprivileged user as rooster and starts once rooster is healthy.
 
 Start rooster with the overlay:
-
-<!-- TODO: confirm the command against compose.litestream.yaml -->
 
 ```sh
 docker compose -f compose.yaml -f compose.litestream.yaml up -d
 ```
 
-Restore from the replica (rooster stopped):
-
-<!-- TODO: the exact restore command for compose.litestream.yaml -->
+To restore the latest state, stop both containers, restore into a new file, swap it in, and start again. `litestream restore` refuses to overwrite an existing file, so it restores to `restored.db` first, and the old database is kept as `rooster.db.before-restore`:
 
 ```sh
-# TODO: litestream restore into /data/rooster.db, then start rooster
+docker compose -f compose.yaml -f compose.litestream.yaml stop rooster litestream
+docker compose -f compose.yaml -f compose.litestream.yaml run --rm --no-deps --entrypoint sh litestream -c \
+  'litestream restore -o /data/restored.db /data/rooster.db \
+   && mv /data/rooster.db /data/rooster.db.before-restore \
+   && rm -f /data/rooster.db-wal /data/rooster.db-shm \
+   && mv /data/restored.db /data/rooster.db'
+docker compose -f compose.yaml -f compose.litestream.yaml up -d
 ```
 
-Follow Litestream's guidance on checkpointing: Litestream must be able to manage the WAL, so don't run other tools that checkpoint the database while it replicates. rooster's own nightly snapshots keep working alongside it.
+For a point in time, add `-timestamp 2026-10-09T12:00:00Z` after `litestream restore`. When rooster starts, its migrations bring an older snapshot forward, and it makes the restored file readable only by itself (0600).
+
+rooster needs no setting change for Litestream. It already uses WAL mode, `busy_timeout=5000` and `synchronous=NORMAL`, and keeps SQLite's automatic checkpoints, which Litestream 0.5 detects. Turning automatic checkpoints off is only worth it under heavy write load, and it would let the WAL grow without bound if the sidecar stopped.
+
+Don't run other tools that checkpoint the database while Litestream replicates. rooster's own nightly snapshots keep working alongside it.
 
 ## Upgrades
 

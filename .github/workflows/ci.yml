@@ -39,3 +39,10 @@ jobs:
         run: docker build -f docker/Dockerfile --build-arg ROOSTER_GIT_SHA=${{ github.sha }} -t rooster:ci .
       - name: smoke
         run: bash scripts/docker-smoke.sh rooster:ci
+      # The drill's mock IdP and HTTP client run from the repo (Node 24 + the workspace deps).
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable && pnpm install --frozen-lockfile
+      - name: backup drill
+        run: bash scripts/backup-drill.sh rooster:ci

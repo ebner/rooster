@@ -22,4 +22,5 @@ step "e2e";          pnpm e2e
 if [[ "${1:-}" == "--with-docker" ]]; then
   step "docker build"; docker build -f docker/Dockerfile -t rooster:ci .
   step "docker smoke"; bash scripts/docker-smoke.sh rooster:ci
+  step "backup drill"; bash scripts/backup-drill.sh rooster:ci   # 10 §3.6: backup, restore, verify (uploads included)
 fi

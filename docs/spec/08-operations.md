@@ -61,6 +61,7 @@ On boot, the server:
 | `ROOSTER_OAUTH_DCR` | | `off` | P9. `on` enables OAuth Dynamic Client Registration for older MCP clients that lack Client ID Metadata Document support (11 §4.2). |
 | `ROOSTER_AGENT_DISCOVERY` | | `on` | P9. `off` hides the best-effort agent discovery documents (Server Card, AI Catalog, skills index, `llms.txt`); the OAuth metadata stays (11 §6.1). |
 | `ROOSTER_UPLOAD_MAX_MB` | | `25` | |
+| `ROOSTER_USER_STORAGE_MB` | | `1024` | Attachment storage per user; `0` = no quota (ADR 0052 §6). |
 | `ROOSTER_S3_ENDPOINT`, `_REGION`, `_BUCKET`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`, `_FORCE_PATH_STYLE` | | — | Setting the bucket switches attachments to S3. |
 | `ROOSTER_BACKUP_CRON` | | `0 3 * * *` | Set to `off` to disable. |
 | `ROOSTER_BACKUP_KEEP_DAILY` / `_WEEKLY` | | `7` / `4` | |
