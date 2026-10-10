@@ -74,6 +74,12 @@ export interface PipelineOptions {
    * Default: no stamping and no check.
    */
   user?: () => string | null;
+  /**
+   * The account that owns the browser right now (shared storage): records of it are never
+   * deleted from the outbox as another user's, since a tab of that account may have just queued
+   * them while this one still runs as the previous account. Default: none.
+   */
+  browserOwner?: () => string | null;
   /** A request still unanswered after this long is aborted and retried. Default 20 s. */
   sendTimeoutMs?: number;
 }
@@ -268,6 +274,7 @@ export class ListPipeline {
    */
   private session = 0;
   private readonly user: (() => string | null) | undefined;
+  private readonly browserOwner: (() => string | null) | undefined;
   private lastError: string | null = null;
   private readonly sendTimeout: number;
   /** Queued ops known to be in the shared outbox (see `syncWithOutbox`). */
@@ -294,6 +301,7 @@ export class ListPipeline {
     this.isOnline = options.isOnline ?? (() => globalThis.navigator?.onLine ?? true);
     this.afterPaint = options.afterPaint ?? (() => Promise.resolve());
     this.user = options.user;
+    this.browserOwner = options.browserOwner;
     this.sendTimeout = options.sendTimeoutMs ?? sendTimeoutMs;
   }
 
@@ -301,6 +309,12 @@ export class ListPipeline {
   private foreign(item: Queued): boolean {
     const owner = this.user?.() ?? null;
     return owner !== null && item.userId !== owner;
+  }
+
+  /** A foreign record the browser's current owner may have just queued: it stays stored. */
+  private ownersRecord(item: Queued): boolean {
+    const owner = this.browserOwner?.() ?? null;
+    return owner !== null && item.userId === owner;
   }
 
   /** The query function for `['my-list', orgId]`: fetch, rebase, replay pending ops. */
@@ -346,7 +360,7 @@ export class ListPipeline {
     for (const record of records) {
       const id = record.op.opId;
       if (this.foreign(record)) {
-        foreign.push(id);
+        if (!this.ownersRecord(record)) foreign.push(id);
         continue;
       }
       // A copy of an op settled since (the outbox removal may still be on its way).
@@ -418,7 +432,10 @@ export class ListPipeline {
    * and the outbox unsent.
    */
   retainUser(): void {
-    this.discard((item) => this.foreign(item));
+    this.discard(
+      (item) => this.foreign(item),
+      (item) => this.ownersRecord(item),
+    );
   }
 
   /**
@@ -433,14 +450,21 @@ export class ListPipeline {
     this.discard((item) => orgIds.has(item.orgId));
   }
 
-  /** Removes matching ops without telling the server or the drop listeners. */
-  private discard(match: (item: Queued) => boolean): void {
+  /**
+   * Removes matching ops without telling the server or the drop listeners; `stored` ones leave
+   * the queue but stay in the outbox.
+   */
+  private discard(
+    match: (item: Queued) => boolean,
+    stored: (item: Queued) => boolean = () => false,
+  ): void {
     const gone = this.queue.filter(match);
     if (gone.length === 0) return;
     this.queue = this.queue.filter((item) => !match(item));
     const ids = gone.map((item) => item.op.opId);
     for (const id of ids) this.markSettled(id);
-    this.write(() => this.outbox?.remove(ids));
+    const removed = gone.filter((item) => !stored(item)).map((item) => item.op.opId);
+    if (removed.length > 0) this.write(() => this.outbox?.remove(removed));
     for (const orgId of new Set(gone.map((item) => item.orgId))) this.render(orgId);
     for (const item of gone) this.refetchSide(item);
     this.publish();
@@ -753,7 +777,10 @@ export class ListPipeline {
         const head = this.queue[0];
         if (!head) break;
         if (this.foreign(head)) {
-          this.discard((item) => item === head);
+          this.discard(
+            (item) => item === head,
+            (item) => this.ownersRecord(item),
+          );
           continue;
         }
         if (!useSyncStore.getState().syncing) this.publish(true);

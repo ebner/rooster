@@ -1371,6 +1371,43 @@ describe('session expiry after another account took over (ADR 0051/0056)', () =>
   });
 });
 
+describe('session expiry after a timed-out restore', () => {
+  test("a 401 still deletes the stored account's snapshot and keys", async () => {
+    const { data, storage } = memoryStorage();
+    localStorage.setItem('rooster.cacheOwner', userId);
+    data.set(cacheStorageKey(userId), '{"private":"inbox"}');
+    localStorage.setItem(recentsKey(userId), '[{"title":"Private"}]');
+    // IndexedDB never answers the snapshot read in time: nothing is restored, no account known.
+    const slow: KeyValueStorage = {
+      ...storage,
+      get: (key) => (key === cacheStorageKey(userId) ? new Promise(() => {}) : storage.get(key)),
+    };
+    const queryClient = new QueryClient();
+    const engine = await startSync({
+      queryClient,
+      transport: createFixtureTransport({ userId }),
+      outbox: createMemoryOutbox(),
+      channel: nullChannel(),
+      persister: createCachePersister(() => undefined, slow),
+      eventSource: quietSource,
+      locks: null,
+      listen: false,
+      restoreTimeoutMs: 10,
+    });
+    engines.push(engine);
+    await queryClient
+      .fetchQuery({
+        queryKey: ['me'],
+        queryFn: () => Promise.reject(new ApiError('unauthenticated', 401)),
+        staleTime: 0,
+        retry: false,
+      })
+      .catch(() => {});
+    await vi.waitFor(() => expect(data.has(cacheStorageKey(userId))).toBe(false));
+    expect(localStorage.getItem(recentsKey(userId))).toBeNull();
+  });
+});
+
 describe('secrets in mutation results (ADR 0051)', () => {
   test('an online 401 on /me drops every mutation result', async () => {
     const { engine, queryClient } = await boot({

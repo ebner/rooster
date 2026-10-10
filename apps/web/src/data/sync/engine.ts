@@ -195,6 +195,8 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   const transport = options.transport ?? httpTransport;
   const listen = options.listen ?? typeof window !== 'undefined';
   const startedAt = Date.now();
+  /** The account the stored cache belonged to when this page started (restored or not). */
+  const startOwner = readOwner();
   const online = () => globalThis.navigator?.onLine ?? true;
   onlineManager.setOnline(online());
   useSyncStore.setState({ online: online() });
@@ -231,6 +233,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     isOnline: online,
     afterPaint,
     user: () => userId ?? readOwner(),
+    browserOwner: readOwner,
   });
   registerListPipeline(queryClient, transport, pipeline);
 
@@ -533,7 +536,10 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
    * wiped if someone else does.
    */
   function onSessionEnded() {
-    const ended = userId ?? ranAs;
+    // Without a fresh or restored `/me` (the restore timed out), the account whose cache this
+    // browser holds: still the one from the start, unless another tab changed the owner since.
+    const ended =
+      userId ?? ranAs ?? (startOwner !== null && readOwner() === startOwner ? startOwner : null);
     userId = null;
     saving = false;
     if (saveTimer) clearTimeout(saveTimer);

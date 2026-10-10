@@ -420,6 +420,50 @@ describe('AC-1.0.1 the outbox is bound to its user', () => {
     expect(pipeline.pending).toBe(0);
   });
 
+  test("an old tab never deletes the browser owner's records as another user's", async () => {
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const outbox = createMemoryOutbox();
+    const next = '01900000-0000-7000-8000-000000000002';
+    const record = (opId: string, owner: string) => ({
+      op: { ...listOps.deleteTask('x'), opId, editTime: 1, clientId: 'c' },
+      orgId,
+      ctx: { userId: owner },
+      userId: owner,
+    });
+    // A tab of the new owner queued one; a stale record of a third account lies there too.
+    await outbox.put([record('theirs', next), record('stale', 'someone-else')]);
+    const pipeline = new ListPipeline({
+      transport: server,
+      queryClient: new QueryClient(),
+      clientId: 'client-1',
+      outbox,
+      user: () => userId,
+      browserOwner: () => next,
+    });
+    pipeline.restore(new Map(), await outbox.load());
+    await pipeline.idle();
+    expect(pipeline.pending).toBe(0);
+    await vi.waitFor(() => expect([...outbox.records.keys()]).toEqual(['theirs']));
+    // Queued before `/me` named this tab's user, then discarded as foreign: still stored.
+    let current: string | null = null;
+    const early = new ListPipeline({
+      transport: server,
+      queryClient: new QueryClient(),
+      clientId: 'client-2',
+      outbox,
+      canSend: () => false,
+      user: () => current,
+      browserOwner: () => next,
+    });
+    early.restore(new Map(), await outbox.load());
+    expect(early.pending).toBe(1);
+    current = userId;
+    early.retainUser();
+    expect(early.pending).toBe(0);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect([...outbox.records.keys()]).toEqual(['theirs']);
+  });
+
   test('an op still waiting for its paint is not written back after a reset', async () => {
     const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
     const outbox = createMemoryOutbox();
