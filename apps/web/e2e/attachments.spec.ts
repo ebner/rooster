@@ -338,6 +338,10 @@ test('FR-SET-1 a profile picture uploads, shows everywhere, and can be removed',
   await page.setViewportSize({ width: 390, height: 844 });
   if (shots) await page.screenshot({ path: `${shots}/profile-avatar-390.png` });
   await page.setViewportSize({ width: 1440, height: 900 });
+  // The phone and desktop settings layouts are different trees: wait until the desktop one is
+  // back, or the field below can remount (losing its error) right after the file is chosen.
+  await expect(page.getByRole('navigation', { name: 'Settings sections' })).toBeVisible();
+  await expect(page.getByTestId('avatar-remove')).toBeVisible();
 
   // SVG is never accepted as a picture.
   await page
