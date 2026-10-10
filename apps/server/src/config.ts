@@ -162,8 +162,13 @@ const mailFrom = z
 
 const envSchema = z.object({
   ROOSTER_BASE_URL: z
-    .url({ protocol: /^https?$/, error: 'must be an absolute http(s) URL' })
-    .transform((u) => u.replace(/\/+$/, '')),
+    .url({ protocol: /^https?$/i, error: 'must be an absolute http(s) URL' })
+    // Canonical (lowercase scheme and host, no query or trailing slash): every origin
+    // comparison and the cookie prefix decision see one spelling (ADR 0056).
+    .transform((u) => {
+      const url = new URL(u);
+      return `${url.origin}${url.pathname}`.replace(/\/+$/, '');
+    }),
   ROOSTER_AUTH_SECRET: authSecret,
   ROOSTER_ADMIN_EMAILS: emailList.refine((l) => l.length > 0, 'must list at least one email'),
   ROOSTER_ALLOWED_EMAILS: emailList,

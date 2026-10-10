@@ -195,6 +195,13 @@ describe('parseConfig', () => {
     ]);
   });
 
+  it('canonicalises ROOSTER_BASE_URL (scheme and host lowercase, no trailing slash)', () => {
+    const parsed = parseConfig({ ...TEST_ENV, ROOSTER_BASE_URL: 'HTTPS://Rooster.Example.COM/' });
+    expect(parsed.ok && parsed.config.baseUrl).toBe('https://rooster.example.com');
+    const sub = parseConfig({ ...TEST_ENV, ROOSTER_BASE_URL: 'https://example.com/rooster//' });
+    expect(sub.ok && sub.config.baseUrl).toBe('https://example.com/rooster');
+  });
+
   it('rejects the change-me placeholder and repeated-pattern secrets', () => {
     for (const secret of [
       'change-me-change-me-change-me-change-me',
