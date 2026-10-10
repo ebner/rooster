@@ -75,7 +75,11 @@ Tags belong to an organisation and are shared by its members.
 
 Click the checkbox or press **Ctrl+Enter**. The row is struck through, waits a moment and fades out; the toast's **Undo** (or Ctrl+Z) brings it back to the same place. Completing a parent doesn't complete its open subtasks.
 
-**Show completed** in the list header (or **Shift+H**) shows completed tasks where they were, greyed out. Click a checkbox to reopen one.
+**Show completed** in the list header (or **Shift+H**) shows completed tasks where they were, greyed out. Click a checkbox to reopen one. How long a completed task stays before it fades is a setting: see [Settings](./settings-and-data.md#behaviour).
+
+## The list menu
+
+The **⋯** button in the list header has the list-wide actions: **Add group**, **Show completed**, **Collapse all groups** (**Shift+←**), **Expand all groups** (**Shift+→**), **Export** as JSON or Markdown, and **Print** (**Ctrl+P**, or **⌘P** on a Mac). The printout shows only the list: groups, tasks with their dates, tags and assignees, and subtasks indented. On a phone, the same actions are at the top of the **⋯** menu in the header.
 
 ## Move tasks
 

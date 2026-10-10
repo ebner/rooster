@@ -5,7 +5,7 @@
 | Avsnitt | Innehåll |
 |---|---|
 | **Profil** | Namn, profilbild, språk, tidszon, datum- och tidsformat, installera appen |
-| **Beteende** | Svepgester på mobilen |
+| **Beteende** | Datum i uppgiftsnamn, hur länge klara uppgifter syns, svepgester på mobilen |
 | **Aviseringar** | Vad som når dig var, push på den här enheten, tider för påminnelser och sammanfattning |
 | **Kalenderflöde** | Dina förfallodatum i en kalenderapp |
 | **Säkerhet** | Inloggade enheter, länkade identiteter, anslutna appar och token |
@@ -23,7 +23,9 @@
 
 ## Beteende
 
-Välj vad som händer när du sveper en uppgift åt höger eller vänster på mobilen: Markera som klar, Välj datum, Flytta till grupp, Ta bort eller Ingenting. En förhandsvisning visar vad svepet tar fram.
+- **Känn igen datum i uppgiftsnamn:** när det är på får uppgiften ett förfallodatum om du skriver till exempel ”fre” eller ”imorgon 14:00” i namnet (se [Datum och återkommande uppgifter](./dates-and-repeats.md)). Stäng av det för att spara namnen precis som du skriver dem.
+- **Dölj klara uppgifter efter:** hur länge en klar uppgift ligger kvar i listan innan den tonas bort: 1,5 s, 3 s eller **Tills sidan laddas om**, som behåller den tills du lämnar listan eller laddar om sidan.
+- **Svepgester:** välj vad som händer när du sveper en uppgift åt höger eller vänster på mobilen: Markera som klar, Välj datum, Flytta till grupp, Ta bort eller Ingenting. En förhandsvisning visar vad svepet tar fram.
 
 ## Aviseringar och kalenderflöde
 

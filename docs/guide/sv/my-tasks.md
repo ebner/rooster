@@ -75,7 +75,11 @@ Taggar hör till en organisation och delas av alla dess medlemmar.
 
 Klicka i rutan eller tryck på **Ctrl+Enter**. Raden stryks över, ligger kvar en stund och tonas sedan bort. **Ångra** i meddelandet (eller Ctrl+Z) tar tillbaka den till samma plats. En överordnad uppgift kan bli klar även om deluppgifterna är öppna; de påverkas inte.
 
-**Visa klara** i listans rubrik (eller **Skift+H**) visar klara uppgifter gråade där de låg. Klicka i rutan för att öppna en igen.
+**Visa klara** i listans rubrik (eller **Skift+H**) visar klara uppgifter gråade där de låg. Klicka i rutan för att öppna en igen. Hur länge en klar uppgift ligger kvar innan den tonas bort ställer du in under [Inställningar](./settings-and-data.md#beteende).
+
+## Listans meny
+
+Knappen **⋯** i listans rubrik har åtgärderna för hela listan: **Lägg till grupp**, **Visa klara**, **Fäll ihop alla grupper** (**Skift+←**), **Fäll ut alla grupper** (**Skift+→**), **Exportera** som JSON eller Markdown och **Skriv ut** (**Ctrl+P**, eller **⌘P** på Mac). Utskriften visar bara listan: grupper, uppgifter med datum, taggar och ansvariga, och deluppgifter indragna. På mobilen finns samma åtgärder överst i menyn **⋯** i sidhuvudet.
 
 ## Flytta uppgifter
 

@@ -5,7 +5,7 @@ Open **Settings** from the menu under your name at the bottom of the sidebar, wi
 | Section | What's there |
 |---|---|
 | **Profile** | Name, picture, language, time zone, date and time format, installing the app |
-| **Behaviour** | Swipe actions on phones |
+| **Behaviour** | Dates in task names, how long completed tasks stay, swipe actions on phones |
 | **Notifications** | What reaches you where, push on this device, reminder and digest times |
 | **Calendar feed** | Your due dates in a calendar app |
 | **Security** | Signed-in devices, linked identities, connected apps and tokens |
@@ -23,7 +23,9 @@ Open **Settings** from the menu under your name at the bottom of the sidebar, wi
 
 ## Behaviour
 
-Choose what happens when you swipe a task right or left on a phone: Complete, Set date, Move to group, Delete, or Nothing. A preview shows what the swipe uncovers.
+- **Recognise dates in task names:** with this on, typing "fri" or "tomorrow 14:00" in a task name gives the task that due date (see [Dates and repeating tasks](./dates-and-repeats.md)). Turn it off to keep names exactly as you type them.
+- **Hide completed tasks after:** how long a completed task stays in the list before it fades out: 1.5 s, 3 s, or **Until reload**, which keeps it until you leave the list or reload the page.
+- **Swipe actions:** choose what happens when you swipe a task right or left on a phone: Complete, Set date, Move to group, Delete, or Nothing. A preview shows what the swipe uncovers.
 
 ## Notifications and calendar feed
 
