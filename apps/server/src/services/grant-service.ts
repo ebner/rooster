@@ -134,6 +134,13 @@ export interface PreparedConsent {
   redirectUri: string;
   /** True when the decision created the grant (undo deletes it). */
   created: boolean;
+  /**
+   * Authorization codes of the grant that existed before the provider was asked (hashed
+   * identifiers): only a code issued for this decision can complete it.
+   */
+  priorCodes: string[];
+  /** The grant's provider consent rows before the decision, restored if it is not committed. */
+  priorConsents: (typeof oauthConsent.$inferSelect)[];
   /** Step-up only: what `finishOAuthConsent` writes, merged with the grant as it is then. */
   stepUp: {
     approved: GrantScope[];
@@ -190,6 +197,18 @@ type ConsentCeiling =
   /** Malformed, ambiguous or naming nothing that still exists: the request is refused. */
   | { kind: 'invalid' }
   | { kind: 'ok'; constraints: GrantConstraintsValue };
+
+/** Hashed identifiers of the authorization codes the provider holds for a grant. */
+function grantCodeIdentifiers(tx: Tx, grantId: string): string[] {
+  return tx
+    .select({ identifier: verification.identifier })
+    .from(verification)
+    .where(
+      sql`CASE WHEN json_valid(${verification.value}) THEN json_extract(${verification.value}, '$.type') = 'authorization_code' AND json_extract(${verification.value}, '$.referenceId') = ${grantId} ELSE 0 END`,
+    )
+    .all()
+    .map((r) => r.identifier);
+}
 
 /** The capabilities an OAuth client may get, in contract order. */
 const ALL_OAUTH_SCOPES = GRANT_SCOPES.filter((s) => !OAUTH_EXCLUDED_SCOPES.includes(s));
@@ -1291,12 +1310,14 @@ export class GrantService {
     const client = clientId === null ? undefined : findClient(tx, clientId);
     const resources = query.getAll('resource');
     const resource = resources.length === 1 ? (resources[0] as string) : null;
+    const redirectUri = query.get('redirect_uri') ?? '';
     if (
       clientId === null ||
       client === undefined ||
       client.disabled === true ||
       resource === null ||
-      resourceOf(this.deps.config, resource) === null
+      resourceOf(this.deps.config, resource) === null ||
+      this.redirectsToRooster(redirectUri)
     ) {
       throw consentNotFound();
     }
@@ -1305,12 +1326,24 @@ export class GrantService {
     return {
       clientId,
       client,
-      redirectUri: query.get('redirect_uri') ?? '',
+      redirectUri,
       resource,
       literal,
       scopes,
       authorizationDetails: query.get('authorization_details'),
     };
+  }
+
+  /**
+   * A redirect URI on rooster's own origin: no app lives there, and a code "delivered" to
+   * rooster (its login page, say) could be confused with rooster's own continuations. Such a
+   * request is never consented to (the native-loopback exception is another origin).
+   */
+  private redirectsToRooster(redirectUri: string): boolean {
+    return (
+      URL.canParse(redirectUri) &&
+      new URL(redirectUri).origin === new URL(this.deps.config.baseUrl).origin
+    );
   }
 
   /** The user's unrevoked OAuth grant for a client (live or not). */
@@ -1575,6 +1608,12 @@ export class GrantService {
         .flatMap((r) => jsonList(r.resources));
       if (live === undefined) this.emitGrants(tx, actor.userId, grantId, []);
       return {
+        priorCodes: grantCodeIdentifiers(tx, grantId),
+        priorConsents: tx
+          .select()
+          .from(oauthConsent)
+          .where(eq(oauthConsent.referenceId, grantId))
+          .all(),
         grantId,
         clientId: req.clientId,
         userId: actor.userId,
@@ -1613,8 +1652,12 @@ export class GrantService {
     const url = new URL(redirectTo);
     const expected = new URL(prepared.redirectUri);
     if (url.origin !== expected.origin || url.pathname !== expected.pathname) return null;
+    // Never an answer that stays on rooster (its login continuation, say): apps live elsewhere.
+    if (url.origin === new URL(this.deps.config.baseUrl).origin) return null;
     const code = url.searchParams.get('code');
     if (code === null) return null;
+    // Issued for this decision: an earlier, unredeemed code of the same grant does not count.
+    if (prepared.priorCodes.includes(hashOAuthToken(code))) return null;
     const value = authorizationCodeValue(tx, code) as
       | (ReturnType<typeof authorizationCodeValue> & {
           type?: unknown;
@@ -1645,13 +1688,18 @@ export class GrantService {
   finishOAuthConsent(prepared: PreparedConsent, redirectTo: string): boolean {
     return immediate(this.deps.db, (tx) => {
       const code = this.issuedCode(tx, prepared, redirectTo);
-      if (code === null) return false;
+      // Whatever the provider recorded for an uncommitted decision is put back as it was:
+      // its consent (else a later step-up would skip the screen) and any code it issued now.
       const withdraw = () => {
-        tx.delete(verification)
-          .where(eq(verification.identifier, hashOAuthToken(code)))
-          .run();
+        if (code !== null) {
+          tx.delete(verification)
+            .where(eq(verification.identifier, hashOAuthToken(code)))
+            .run();
+        }
+        if (!prepared.created) this.restoreConsents(tx, prepared);
         return false;
       };
+      if (code === null) return withdraw();
       let row = tx.select().from(accessGrant).where(eq(accessGrant.id, prepared.grantId)).get();
       // Revoked meanwhile (by the user, or refresh-token reuse): it stays revoked.
       if (row === undefined || row.revokedAt !== null) return withdraw();
@@ -1689,6 +1737,15 @@ export class GrantService {
       tx.delete(accessGrant).where(eq(accessGrant.id, prepared.grantId)).run();
       this.emitGrants(tx, actor.userId, prepared.grantId, [prepared.grantId]);
     });
+  }
+
+  /** The grant's provider consent rows exactly as they were before the decision. */
+  private restoreConsents(tx: Tx, prepared: PreparedConsent): void {
+    tx.delete(oauthConsent).where(eq(oauthConsent.referenceId, prepared.grantId)).run();
+    const row = tx.select().from(accessGrant).where(eq(accessGrant.id, prepared.grantId)).get();
+    // A grant revoked meanwhile keeps no consent (revocation deleted it).
+    if (row === undefined || row.revokedAt !== null) return;
+    for (const consent of prepared.priorConsents) tx.insert(oauthConsent).values(consent).run();
   }
 
   /** The consent rows of a grant name exactly what it covers (plus `offline_access` if given). */

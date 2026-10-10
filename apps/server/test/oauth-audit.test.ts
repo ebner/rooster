@@ -2,8 +2,9 @@
 // rounds). Each `it` names the finding it covers.
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { accessGrant, verification } from '../src/db/schema/index.ts';
+import { accessGrant, oauthConsent, verification } from '../src/db/schema/index.ts';
 import { hashOAuthToken } from '../src/services/oauth-grants.ts';
+import { BASE_URL } from './helpers.ts';
 import { groupNamed, inboxOf } from './list-helpers.ts';
 import {
   API_RESOURCE,
@@ -12,6 +13,8 @@ import {
   CLIENT_ID,
   connect,
   consentRequest,
+  fakeCimd,
+  metadataDoc,
   type OAuthCtx,
   oauthCtx,
   oauthQueryOf,
@@ -116,7 +119,7 @@ describe('boundary 2: the consent decision', () => {
           constraints: {
             orgs: [{ orgId, read: { groups: [(await inboxOf(user)).id] }, write: 'none' }],
           },
-          expiresInDays: 1,
+          expiresAt: Date.now() + 86_400_000,
         });
       } else {
         await user.ok('DELETE', `/api/v1/me/grants/${before.id}`, undefined, 204);
@@ -299,5 +302,138 @@ describe('boundary 2: the consent decision', () => {
       );
       expect(shown.status, bad).toBe(404);
     }
+  });
+});
+
+/** A pending step-up of the narrow app to `tasks:write`, prepared through the service. */
+async function pendingStepUp(ctx: OAuthCtx, user: Parameters<typeof consentRequest>[0]) {
+  const page = await authorize(ctx, user, { resource: API_RESOURCE, scope: 'tasks:write' });
+  const oauthQuery = oauthQueryOf(page);
+  const { decisionNonce } = await consentRequest(user, page);
+  const signed = new URLSearchParams(oauthQuery);
+  for (const name of ['sig', 'exp', 'ba_iat', 'ba_pl', 'ba_param']) signed.delete(name);
+  return ctx.app.services.grants.applyOAuthConsent(user.actor, signed, {
+    accept: true,
+    oauthQuery,
+    decisionNonce,
+    scopes: ['tasks:write'],
+    constraints: { orgs: 'all' },
+  });
+}
+
+/** A code row as the provider stores it, for `grantId`. */
+function storeCode(
+  ctx: OAuthCtx,
+  code: string,
+  userId: string,
+  grantId: string,
+  redirectUri = REDIRECT_URI,
+) {
+  ctx.db.orm
+    .insert(verification)
+    .values({
+      id: `v-${code}`,
+      identifier: hashOAuthToken(code),
+      value: JSON.stringify({
+        type: 'authorization_code',
+        query: { client_id: CLIENT_ID, redirect_uri: redirectUri },
+        userId,
+        referenceId: grantId,
+      }),
+      expiresAt: new Date(Date.now() + 600_000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .run();
+}
+
+describe('boundary 2, round 5: the code and consent of one decision', () => {
+  it('P1 an earlier, unredeemed code of the same grant does not complete a decision', async () => {
+    const ctx = oauthCtx();
+    const { user, before } = await narrowApp(ctx);
+    // A code of this grant issued before the decision (another authorization, not redeemed).
+    storeCode(ctx, 'earlier-code', user.userId, before.id);
+    const prepared = await pendingStepUp(ctx, user);
+    const grants = ctx.app.services.grants;
+    expect(grants.finishOAuthConsent(prepared, `${REDIRECT_URI}?code=earlier-code`)).toBe(false);
+    expectUnchanged(ctx, user.userId, before);
+    // A code issued during the decision does.
+    storeCode(ctx, 'fresh-code', user.userId, before.id);
+    expect(grants.finishOAuthConsent(prepared, `${REDIRECT_URI}?code=fresh-code`)).toBe(true);
+    expect(grantsOf(ctx, user.userId)[0]?.scopes).toBe('tasks:write');
+  });
+
+  it('P1 an answer that stays on rooster (its login continuation) never completes a decision', async () => {
+    const ctx = oauthCtx();
+    const { user, before } = await narrowApp(ctx);
+    const prepared = await pendingStepUp(ctx, user);
+    const login = `${BASE_URL}/login`;
+    storeCode(ctx, 'login-code', user.userId, before.id, login);
+    const onRooster = { ...prepared, redirectUri: login };
+    expect(
+      ctx.app.services.grants.finishOAuthConsent(
+        onRooster,
+        `${login}?prompt=login&code=login-code`,
+      ),
+    ).toBe(false);
+    expectUnchanged(ctx, user.userId, before);
+  });
+
+  it('P1 an app whose redirect URI is on rooster’s own origin is never consented to', async () => {
+    const appId = 'https://evil.example.com/oauth/client.json';
+    const ctx = oauthCtx({
+      cimd: fakeCimd({ [appId]: metadataDoc(appId, { redirect_uris: [`${BASE_URL}/login`] }) }),
+    });
+    const user = ctx.user('ada@example.com');
+    const res = await ctx.app.request(
+      `/api/auth/oauth2/authorize?${new URLSearchParams({
+        response_type: 'code',
+        client_id: appId,
+        redirect_uri: `${BASE_URL}/login`,
+        scope: 'tasks:read',
+        resource: API_RESOURCE,
+        code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+        code_challenge_method: 'S256',
+        state: 'x',
+      })}`,
+      { headers: { cookie: user.jar.header() } },
+    );
+    const location = new URL(res.headers.get('location') ?? '/', BASE_URL);
+    if (location.pathname === '/oauth/consent') {
+      const shown = await user.call(
+        'GET',
+        `/api/v1/oauth/consent?oauth_query=${encodeURIComponent(location.search.slice(1))}`,
+      );
+      expect(shown.status).toBe(404);
+    }
+    expect(grantsOf(ctx, user.userId)).toEqual([]);
+  });
+
+  it('P2 a step-up that is not committed leaves the provider’s consent as it was', async () => {
+    const ctx = oauthCtx();
+    const { user, before } = await narrowApp(ctx);
+    const consentsOf = () =>
+      ctx.db.orm.select().from(oauthConsent).where(eq(oauthConsent.referenceId, before.id)).all();
+    const prior = consentsOf();
+    expect(prior.length).toBeGreaterThan(0);
+    const prepared = await pendingStepUp(ctx, user);
+    // The provider records the wider consent and issues a code; meanwhile the user re-dates the
+    // grant in another tab.
+    ctx.db.orm
+      .update(oauthConsent)
+      .set({ scopes: JSON.stringify(['tasks:write', 'tasks:read']) })
+      .where(eq(oauthConsent.referenceId, before.id))
+      .run();
+    storeCode(ctx, 'raced-code', user.userId, before.id);
+    await user.ok('PATCH', `/api/v1/me/grants/${before.id}`, {
+      expiresAt: Date.now() + 86_400_000,
+    });
+    expect(
+      ctx.app.services.grants.finishOAuthConsent(prepared, `${REDIRECT_URI}?code=raced-code`),
+    ).toBe(false);
+    expect(consentsOf()).toEqual(prior);
+    // So asking for writing again shows the consent screen instead of a read-only token.
+    const again = await authorize(ctx, user, { resource: API_RESOURCE, scope: 'tasks:write' });
+    expect(again.pathname).toBe('/oauth/consent');
   });
 });
