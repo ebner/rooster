@@ -222,7 +222,7 @@ export class Runtime {
   /** `token` when it can be a bearer credential; exit 3 otherwise, without quoting it. */
   private wellFormed(token: string): string {
     this.usedTokens.add(token);
-    if (!isBearerToken(token)) throw new CliError(EXIT.auth, t('login.tokenRejected'));
+    if (!isBearerToken(token)) throw new CliError(EXIT.auth, t('login.tokenMalformed'));
     return token;
   }
 

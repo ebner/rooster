@@ -26,7 +26,10 @@ export async function readBodyBounded(
   for (;;) {
     const { done, value } = await reader.read();
     if (done) return buffer.subarray(0, size);
-    if (value.byteLength > maxSize - size) return null;
+    if (value.byteLength > maxSize - size) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
     if (size + value.byteLength > buffer.byteLength) {
       const grown = new Uint8Array(
         Math.min(maxSize, Math.max(size + value.byteLength, buffer.byteLength * 2, INITIAL_BUFFER)),

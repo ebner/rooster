@@ -272,9 +272,8 @@ export const loginCommand = defineCommand({
       const token = (await runtime.io.readStdin()).trim();
       runtime.usedTokens.add(token);
       // Refused before any request, and never quoted: a malformed paste may hold a secret.
-      if (token === '' || !isBearerToken(token)) {
-        throw new CliError(EXIT.usage, t('login.tokenMissing'));
-      }
+      if (token === '') throw new CliError(EXIT.usage, t('login.tokenMissing'));
+      if (!isBearerToken(token)) throw new CliError(EXIT.usage, t('login.tokenMalformed'));
       await fetchMeta(runtime, server);
       const me = await finishLogin(runtime, server, token, orgFlag);
       if (out.json) out.data({ server, profile: runtime.profileName, user: me.email });

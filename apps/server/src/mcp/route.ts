@@ -6,7 +6,7 @@ import { coversScopes, isToolName, requiredScopes } from '@rooster/mcp/tools';
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { resolveOAuthBearer } from '../auth/oauth-bearer.ts';
-import { API_BODY_LIMIT } from '../lib/body-limit.ts';
+import { API_BODY_LIMIT, readBodyBounded } from '../lib/body-limit.ts';
 import { clientIp } from '../lib/client-ip.ts';
 import type { AppEnv } from '../lib/context.ts';
 import { logSafeError } from '../lib/log-safe-error.ts';
@@ -87,20 +87,9 @@ export async function readBoundedText(request: Request, maxBytes: number): Promi
   const declared = request.headers.get('content-length');
   if (declared !== null && Number(declared) > maxBytes) return null;
   if (request.body === null) return '';
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      await reader.cancel().catch(() => {});
-      return null;
-    }
-    chunks.push(value);
-  }
-  return new TextDecoder().decode(Buffer.concat(chunks));
+  // One growing buffer, never an object per chunk (a body dribbled in 1-byte chunks).
+  const bytes = await readBodyBounded(request.body, maxBytes);
+  return bytes === null ? null : new TextDecoder().decode(bytes);
 }
 
 /** Scopes in `ALL_GRANT_SCOPES` order, without duplicates, for a stable challenge. */

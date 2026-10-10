@@ -240,7 +240,17 @@ function providerErrors(env: Env): string[] {
     ];
   }
   const duplicates = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
-  return duplicates.map((id) => `ROOSTER_OIDC_PROVIDERS: provider id "${id}" is used twice`);
+  const errors = duplicates.map(
+    (id) => `ROOSTER_OIDC_PROVIDERS: provider id "${id}" is used twice`,
+  );
+  // `google` is the built-in provider's id, which counts as an email authority (ADR 0017): a
+  // generic OIDC provider may never take it, even with built-in Google off.
+  if (env.ROOSTER_GOOGLE_CLIENT_ID === undefined && ids.includes(GOOGLE_PROVIDER_ID)) {
+    errors.push(
+      `ROOSTER_OIDC_PROVIDERS: provider id "${GOOGLE_PROVIDER_ID}" is reserved for the built-in Google provider`,
+    );
+  }
+  return errors;
 }
 
 function toConfig(env: Env) {

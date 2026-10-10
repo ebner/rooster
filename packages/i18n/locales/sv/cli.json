@@ -326,6 +326,7 @@
     "serverMissing": "Vilken server? Ange --server https://rooster.example.com",
     "tokenMissing": "Ingen token på stdin. Exempel: echo $TOKEN | rooster login --with-token --server URL",
     "tokenRejected": "Servern godtog inte inloggningen.",
+    "tokenMalformed": "Det här är ingen giltig token. Kontrollera att den inte har extra mellanslag eller radbrytningar.",
     "instructions": "Logga in genom att öppna {url} och ange koden nedan.",
     "codeLabel": "Kod:",
     "waiting": "Väntar på godkännande…",

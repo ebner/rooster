@@ -326,6 +326,7 @@
     "serverMissing": "Which server? Pass --server https://rooster.example.com",
     "tokenMissing": "No token on stdin. Example: echo $TOKEN | rooster login --with-token --server URL",
     "tokenRejected": "The server rejected this credential.",
+    "tokenMalformed": "This credential isn’t a valid token. Check it for stray spaces or line breaks.",
     "instructions": "To sign in, open {url} and enter the code below.",
     "codeLabel": "Code:",
     "waiting": "Waiting for approval…",

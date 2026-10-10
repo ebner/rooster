@@ -182,6 +182,17 @@ describe('parseConfig', () => {
     expect(
       errorsOf({ ...TEST_ENV, ROOSTER_OIDC_PROVIDERS: JSON.stringify([{ ...sso, id: 'google' }]) }),
     ).toEqual(['ROOSTER_OIDC_PROVIDERS: provider id "google" is used twice']);
+    // `google` is reserved for the built-in provider (an email authority), even when it is off.
+    expect(
+      errorsOf({
+        ...TEST_ENV,
+        ROOSTER_GOOGLE_CLIENT_ID: undefined,
+        ROOSTER_GOOGLE_CLIENT_SECRET: undefined,
+        ROOSTER_OIDC_PROVIDERS: JSON.stringify([{ ...sso, id: 'google' }]),
+      }),
+    ).toEqual([
+      'ROOSTER_OIDC_PROVIDERS: provider id "google" is reserved for the built-in Google provider',
+    ]);
   });
 
   it('rejects the change-me placeholder and repeated-pattern secrets', () => {

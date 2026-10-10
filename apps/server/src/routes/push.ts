@@ -17,7 +17,7 @@ const getVapidKey = createRoute({
   operationId: 'getVapidPublicKey',
   summary: 'The VAPID public key for `pushManager.subscribe({applicationServerKey})`',
   description:
-    'Keys exist from the first boot on (generated unless set in the environment). After an admin regenerates them, existing subscriptions are gone and the browser must subscribe again with the new key.',
+    'Keys exist from the first boot on (generated unless set in the environment). After an admin regenerates them, existing subscriptions are paused until the device renews them with the new key (ADR 0056).',
   responses: { 200: json(VapidPublicKeySchema, 'The key'), ...problems(401, ANY_CREDENTIAL) },
 });
 
@@ -80,9 +80,9 @@ const regenerateKeys = createRoute({
   path: '/api/v1/admin/push-keys/regenerate',
   tags: ['admin'],
   operationId: 'regeneratePushKeys',
-  summary: 'Replace the VAPID keys and delete every push subscription (instance admins)',
+  summary: 'Replace the VAPID keys and pause every push subscription (instance admins)',
   description:
-    'Devices subscribe again with the new key when the app next opens. Keys set through `ROOSTER_VAPID_PUBLIC`/`_PRIVATE` cannot be replaced here (`409 push_keys_from_env`).',
+    'Nothing is sent with the old keys again. Each device renews its subscription with the new key when the app next opens there; a removed device never comes back, and subscriptions not renewed by the next regeneration are deleted then. Keys set through `ROOSTER_VAPID_PUBLIC`/`_PRIVATE` cannot be replaced here (`409 push_keys_from_env`).',
   responses: {
     200: json(VapidPublicKeySchema, 'The new key'),
     ...problems(...AUTHED, 'forbidden', 'push_keys_from_env'),

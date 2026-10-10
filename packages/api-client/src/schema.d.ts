@@ -1373,7 +1373,7 @@ export interface paths {
         };
         /**
          * The VAPID public key for `pushManager.subscribe({applicationServerKey})`
-         * @description Keys exist from the first boot on (generated unless set in the environment). After an admin regenerates them, existing subscriptions are gone and the browser must subscribe again with the new key.
+         * @description Keys exist from the first boot on (generated unless set in the environment). After an admin regenerates them, existing subscriptions are paused until the device renews them with the new key (ADR 0056).
          */
         get: operations["getVapidPublicKey"];
         put?: never;
@@ -1458,8 +1458,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Replace the VAPID keys and delete every push subscription (instance admins)
-         * @description Devices subscribe again with the new key when the app next opens. Keys set through `ROOSTER_VAPID_PUBLIC`/`_PRIVATE` cannot be replaced here (`409 push_keys_from_env`).
+         * Replace the VAPID keys and pause every push subscription (instance admins)
+         * @description Nothing is sent with the old keys again. Each device renews its subscription with the new key when the app next opens there; a removed device never comes back, and subscriptions not renewed by the next regeneration are deleted then. Keys set through `ROOSTER_VAPID_PUBLIC`/`_PRIVATE` cannot be replaced here (`409 push_keys_from_env`).
          */
         post: operations["regeneratePushKeys"];
         delete?: never;
