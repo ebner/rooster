@@ -20,6 +20,10 @@ Recurring tasks, task reminders, attachments and the calendar feed (Phase 10).
 - The Docker image includes sharp (image thumbnails). The image budget is now 350 MB (ADR 0048).
 - The CLI checks the whole command line first: unknown option spellings, a missing value, or a value that looks like another option are refused (exit 2) before anything is sent. Pass a value starting with `-` as `--title=-5 degrees`, or put words after `--`.
 
+### Security
+- **Signing in as someone else in another tab:** open rooster tabs used to wipe their data on noticing the change, but kept running. Edits, uploads, undo, drafts, a revealed calendar or token link, or an OAuth approval still in progress could then carry on as the new account. Now a tab that notices another account stops sending at once, finishes clearing push and local data, and reloads (ADR 0051).
+- An oversized upload that stalls is cut off within seconds instead of holding the connection for minutes. Pending uploads are dropped when the session ends.
+
 ### Migrations
 - `0011_p10_reminders_attachments_ical`: adds `task_reminder`, `attachment`, `ical_feed` and `blob_gc` (with a trigger that queues the files of deleted attachments for removal), `user.avatar_at`, `user.oidc_image`, and an index on open recurring instances.
 
