@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { signInAs, uniqueEmail } from './support/auth';
 import { createTask, groupId, personalOrg } from './support/p3';
-import { expect, test } from './support/test';
+import { expect, reload, test } from './support/test';
 
 /** Phase 11: the list's ⋯ items in the phone header (02 §2, §13.1), and printing on a phone. */
 
@@ -35,7 +35,7 @@ test('the phone ⋯ has the list items; Collapse all, Expand all and Print work'
     title: 'Reply to Anna',
     groupId: await groupId(page, orgId, 'Today'),
   });
-  await page.reload();
+  await reload(page);
   await expect(row(page, 'Reply to Anna')).toBeVisible();
 
   await openMenu(page);

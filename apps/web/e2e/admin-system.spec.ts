@@ -9,11 +9,14 @@ test('AC-11.5 an admin sees every item of 08 §9 in Admin → System and can ref
   page,
 }) => {
   await signInAs(page, e2eEnv.adminEmail, 'Admin');
-  const response = await apiCall(page, 'GET', '/api/v1/admin/system');
+  // Compare with the answer the page rendered: the instance is shared, so other tests make
+  // backups and the scheduler records jobs between any two requests.
+  const loaded = page.waitForResponse((r) => r.url().endsWith('/api/v1/admin/system'));
+  await page.goto('/admin');
+  const response = await loaded;
   expect(response.status()).toBe(200);
   const system = (await response.json()) as AdminSystem;
 
-  await page.goto('/admin');
   const section = page.getByTestId('system-section');
   await expect(page.getByRole('heading', { level: 2, name: 'System' })).toBeVisible();
   await expect(section.getByTestId('system-version')).toContainText(system.version);

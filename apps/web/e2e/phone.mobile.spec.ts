@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { addDays, todayIn } from '@rooster/core/dates';
 import { apiCall, signInAs, uniqueEmail } from './support/auth';
 import { createTask, groupId, myList, personalOrg, waitForSync } from './support/p3';
-import { expect, test } from './support/test';
+import { expect, reload, test } from './support/test';
 import { longPress, showKeyboard, swipe, swipeAndHold } from './support/touch';
 
 /**
@@ -42,8 +42,7 @@ async function setup(page: Page, name: string, titles: string[]) {
     ids.push(task.id);
     afterId = task.id;
   }
-  // WebKit sometimes reports the first reload as interrupted (a dev-server module reload).
-  await page.reload().catch(() => page.goto('/o/personal/my'));
+  await reload(page);
   await expect(page.getByTestId('task-row').first()).toBeVisible({ timeout: 15_000 });
   return { orgId, today, ids };
 }
@@ -247,7 +246,7 @@ test('the org switcher sheet lists the orgs and switches', async ({ page }) => {
   await signInAs(page, uniqueEmail('org.switch'));
   const res = await apiCall(page, 'POST', '/api/v1/orgs', { name: 'Garden club' });
   expect(res.status()).toBe(201);
-  await page.reload().catch(() => page.goto('/o/personal/my'));
+  await reload(page);
   await page.getByTestId('org-switcher').click();
   const sheet = page.getByRole('dialog', { name: 'Organisations' });
   await expect(sheet.getByRole('button', { name: 'Personal' })).toBeVisible();
@@ -326,7 +325,7 @@ test('390 × 844 screenshots', async ({ page }, testInfo) => {
     afterId: null,
     beforeId: null,
   });
-  await page.reload();
+  await reload(page);
   await expect(row(page, 'Write Q4 plan')).toBeVisible();
   await page.screenshot({ path: `${shots}/390-list${tag}.png` });
   await page.getByTestId('org-switcher').click();

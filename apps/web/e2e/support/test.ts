@@ -1,4 +1,4 @@
-import { test as base } from '@playwright/test';
+import { test as base, type Page } from '@playwright/test';
 
 export { expect } from '@playwright/test';
 
@@ -18,3 +18,18 @@ export const test = base.extend({
     await use({ 'X-Forwarded-For': randomClientIp() });
   },
 });
+
+/**
+ * `page.reload()` for the phone projects: WebKit sometimes fails a reload with "Frame load
+ * interrupted" when the dev server reloads the page itself (a module update) at the same time.
+ * Then it navigates to the same URL once; any other error still fails.
+ */
+export async function reload(page: Page): Promise<void> {
+  const url = page.url();
+  try {
+    await page.reload();
+  } catch (error) {
+    if (!String(error).includes('Frame load interrupted')) throw error;
+    await page.goto(url);
+  }
+}

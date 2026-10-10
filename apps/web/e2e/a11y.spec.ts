@@ -71,11 +71,14 @@ test('AC-11.3 axe: My tasks, the smart views, the pane and the list popovers', a
   await page.keyboard.press('d');
   const date = page.getByRole('dialog', { name: 'Due date' });
   await expect(date).toBeVisible();
-  // The panel is lazy: wait until it has rendered, or the reminder section may open by itself
-  // (a reminder is pending) right after the check below, and Alt+R would close it again.
-  await expect(date.getByRole('grid').first()).toBeVisible();
-  if (!(await date.getByTestId('reminder-section').isVisible())) await page.keyboard.press('Alt+r');
-  await expect(date.getByTestId('reminder-section')).toBeVisible();
+  // A pending reminder opens the section by itself, but its content is a lazy chunk that renders
+  // nothing while it loads: wait for the section or the closed state's toggle, never press Alt+R
+  // into a section that is still loading (it would close it again).
+  const reminderSection = date.getByTestId('reminder-section');
+  const reminderToggle = date.locator('[aria-keyshortcuts="Alt+R"]');
+  await expect(reminderSection.or(reminderToggle).first()).toBeVisible();
+  if (await reminderToggle.isVisible()) await page.keyboard.press('Alt+r');
+  await expect(reminderSection).toBeVisible();
   await expect(
     date.getByRole('button', { name: 'Repeat' }).or(date.getByTestId('repeat-section')).first(),
   ).toBeVisible();

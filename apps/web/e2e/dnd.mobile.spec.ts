@@ -1,7 +1,7 @@
 import type { Locator, Page, Request } from '@playwright/test';
 import { signInAs, uniqueEmail } from './support/auth';
 import { createTask, groupId, myList, personalOrg, waitForSync } from './support/p3';
-import { expect, test } from './support/test';
+import { expect, reload, test } from './support/test';
 
 /**
  * 02 §5 / §13.2 on phones: a long-press drag shows the preview under the finger at the grab
@@ -38,8 +38,7 @@ async function setup(page: Page, name: string, count: number) {
     ids.push(task.id);
     afterId = task.id;
   }
-  // WebKit sometimes reports the first reload as interrupted (a dev-server module reload).
-  await page.reload().catch(() => page.goto('/o/personal/my'));
+  await reload(page);
   await expect(row(page, `Task ${count}`)).toBeVisible({ timeout: 15_000 });
   return { orgId, today, ids };
 }

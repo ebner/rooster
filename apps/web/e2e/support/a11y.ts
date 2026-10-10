@@ -49,7 +49,15 @@ async function settled(page: Page) {
  */
 export async function expectAxeClean(page: Page, screen: string, include?: string) {
   await settled(page);
-  expect.soft(await axeViolations(page, include), screen).toEqual([]);
+  let violations = await axeViolations(page, include);
+  // A transition can start after `settled` (a button enabled once its data arrives), and axe
+  // reads it mid-way as low contrast. A real violation is still there a moment later.
+  for (let attempt = 1; attempt < 3 && violations.length > 0; attempt++) {
+    await page.waitForTimeout(500);
+    await settled(page);
+    violations = await axeViolations(page, include);
+  }
+  expect.soft(violations, screen).toEqual([]);
 }
 
 /** The browser's zone date, as the server sees the e2e user (the default timezone). */

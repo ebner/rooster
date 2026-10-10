@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { myList, waitForSync } from './support/p3';
 import { setupViews } from './support/p5-views';
-import { expect, test } from './support/test';
+import { expect, reload, test } from './support/test';
 
 /** Phase 5, WP 5.1 on phones (02 §13): the view switcher tabs and the FAB in a smart view. */
 
@@ -23,7 +23,7 @@ test('the view switcher lists the smart views; the FAB creates in Today with due
   page,
 }, testInfo) => {
   const { orgId, today, groups } = await setupViews(page, 'views.phone');
-  await page.reload().catch(() => page.goto('/o/personal/my'));
+  await reload(page);
   const switcher = page.getByRole('navigation', { name: 'Views' });
   await expect(switcher.getByRole('link')).toHaveText([
     'My tasks',

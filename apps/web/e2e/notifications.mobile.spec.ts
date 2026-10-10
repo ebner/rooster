@@ -1,5 +1,5 @@
 import { signInAs, uniqueEmail } from './support/auth';
-import { expect, test } from './support/test';
+import { expect, reload, test } from './support/test';
 
 /**
  * WP 7.4 on phones: the matrix is a stacked list per event (no wide table), each switch a
@@ -37,7 +37,7 @@ test('the matrix stacks per event, toggles persist, and push explains itself', a
   await row.getByText('Push', { exact: true }).tap();
   expect((await saved).status()).toBe(200);
   await expect(push).not.toBeChecked();
-  await page.reload();
+  await reload(page);
   await expect(page.getByRole('switch', { name: 'Someone mentions me: Push' })).not.toBeChecked();
 
   if (shots) {
