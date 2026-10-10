@@ -11,6 +11,7 @@ import {
   useOAuthConsentDecision,
   useOAuthConsentRequest,
 } from '../data/oauth-consent';
+import { isSessionClosed } from '../data/session-events';
 import { clientName, externalRedirect, signedOAuthQuery } from '../features/access/client-display';
 import { ConsentPage, type ConsentPageState } from '../features/access/consent-page';
 import { setLocale } from '../lib/i18n';
@@ -102,6 +103,9 @@ function ConsentRoute() {
         accepted: accept,
         clientName: clientName(request.data.client),
       });
+      // A decision that finishes after another account took over this browser must not be
+      // delivered (the code would be that account's; ADR 0051).
+      if (isSessionClosed()) return;
       window.location.assign(target);
     } catch (error) {
       const kind = consentErrorKind(error);

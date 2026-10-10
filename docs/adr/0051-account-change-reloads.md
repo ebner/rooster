@@ -36,6 +36,12 @@ The reload alone left a window between detecting the switch and unloading the pa
 - **Order of the switch:** when this tab is the first to see the new account, the push unsubscription and the wipe finish before the owner changes and the page reloads.
 - **Loop guard:** a tab reloads at most once per account (`sessionStorage` `rooster.reloadedAs`). If its stored data cannot be dropped, it wipes in place instead.
 
+## Amendment after the second re-check
+- **The pipeline closes for good** (`ListPipeline.close()`): ops enqueued after the switch are refused, so an editor flushing on unmount stores and announces nothing.
+- **better-auth requests** check the latch (`fetchOptions.onRequest`). Sign-out checks it again after its push cleanup, so it can't sign the next account out. A consent decision that finishes after the latch doesn't navigate to the client's redirect URI.
+- **The shared outbox is wiped by owner:** a takeover keeps the new account's records (`wipe({ keepUser })`). A slower tab of the old account re-reads the owner after its push cleanup and leaves the wipe to the tab that took over.
+- **The reload guard** is spent on the next confirmed `/me` that needs no reload. A page that already reloaded once for the account and still holds the old account's data wipes it in place.
+
 ## Consequences
 - In-flight continuations die with the page, so stale writes, revealed secrets and replayed undo can't cross accounts.
 - **Remaining window:** requests already sent before a tab learns of the switch carry the new cookie. This is inherent to cookie sessions shared by tabs. The `cleared` broadcast from the tab that signed in usually closes the window within about a second of its boot.

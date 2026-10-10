@@ -276,7 +276,8 @@ describe('sync engine (04 §6)', () => {
     vi.stubGlobal('location', { ...globalThis.location, reload });
     try {
       const queryClient = new QueryClient();
-      queryClient.setQueryData(['me'], me(userId));
+      // Restored from storage: confirmed long ago.
+      queryClient.setQueryData(['me'], me(userId), { updatedAt: 1 });
       localStorage.setItem('rooster.cacheOwner', userId);
       await boot(
         { storage, outbox: createMemoryOutbox(), transport: createFixtureTransport({ userId }) },
@@ -310,7 +311,8 @@ describe('sync engine (04 §6)', () => {
     });
     try {
       const queryClient = new QueryClient();
-      queryClient.setQueryData(['me'], me(userId));
+      // Restored from storage: confirmed long ago.
+      queryClient.setQueryData(['me'], me(userId), { updatedAt: 1 });
       localStorage.setItem('rooster.cacheOwner', userId);
       await boot(
         { storage, outbox: createMemoryOutbox(), transport: createFixtureTransport({ userId }) },
@@ -337,7 +339,8 @@ describe('sync engine (04 §6)', () => {
       const other = '01900000-0000-7000-8000-000000000002';
       sessionStorage.setItem('rooster.reloadedAs', other);
       const queryClient = new QueryClient();
-      queryClient.setQueryData(['me'], me(userId));
+      // Restored from storage: confirmed long ago.
+      queryClient.setQueryData(['me'], me(userId), { updatedAt: 1 });
       await boot(
         { storage, outbox: createMemoryOutbox(), transport: createFixtureTransport({ userId }) },
         queryClient,
@@ -345,6 +348,125 @@ describe('sync engine (04 §6)', () => {
       await fetchMe(queryClient, me(other));
       await new Promise((r) => setTimeout(r, 20));
       expect(reload).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test("taking over keeps the new account's ops in the shared outbox", async () => {
+    const { storage } = memoryStorage();
+    const outbox = createMemoryOutbox();
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...globalThis.location, reload });
+    try {
+      const other = '01900000-0000-7000-8000-000000000002';
+      const queryClient = new QueryClient();
+      // Restored from storage: confirmed long ago.
+      queryClient.setQueryData(['me'], me(userId), { updatedAt: 1 });
+      localStorage.setItem('rooster.cacheOwner', userId);
+      await boot({ storage, outbox, transport: createFixtureTransport({ userId }) }, queryClient);
+      const record = (id: string, owner: string) => ({
+        op: { ...listOps.deleteTask('x'), opId: id, editTime: 1, clientId: 'c' },
+        orgId,
+        ctx: { userId: owner },
+        userId: owner,
+      });
+      await outbox.put([record('old', userId), record('new', other)]);
+      await fetchMe(queryClient, me(other));
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+      expect([...outbox.records.keys()]).toEqual(['new']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test('a slower tab of the old account does not wipe once another tab took over', async () => {
+    const { storage } = memoryStorage();
+    const outbox = createMemoryOutbox();
+    const reload = vi.fn();
+    let finishUnsubscribe: (value: boolean) => void = () => {};
+    const unsubscribe = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishUnsubscribe = resolve;
+        }),
+    );
+    const registration = {
+      pushManager: {
+        getSubscription: async () => ({
+          unsubscribe,
+        }),
+      },
+    };
+    vi.stubGlobal('location', { ...globalThis.location, reload });
+    vi.stubGlobal('navigator', {
+      ...globalThis.navigator,
+      serviceWorker: { getRegistration: async () => registration },
+    });
+    try {
+      const other = '01900000-0000-7000-8000-000000000002';
+      const queryClient = new QueryClient();
+      // Restored from storage: confirmed long ago.
+      queryClient.setQueryData(['me'], me(userId), { updatedAt: 1 });
+      localStorage.setItem('rooster.cacheOwner', userId);
+      await boot({ storage, outbox, transport: createFixtureTransport({ userId }) }, queryClient);
+      await outbox.put([
+        {
+          op: { ...listOps.deleteTask('x'), opId: 'old', editTime: 1, clientId: 'c' },
+          orgId,
+          ctx: { userId },
+          userId,
+        },
+      ]);
+      await fetchMe(queryClient, me(other));
+      await vi.waitFor(() => expect(unsubscribe).toHaveBeenCalled());
+      // Meanwhile the other tab finished first and took the browser over.
+      localStorage.setItem('rooster.cacheOwner', other);
+      finishUnsubscribe(true);
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+      expect([...outbox.records.keys()]).toEqual(['old']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test('after its one reload, a page still holding the old account drops it in place', async () => {
+    const { data, storage } = memoryStorage();
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...globalThis.location, reload });
+    try {
+      const other = '01900000-0000-7000-8000-000000000002';
+      sessionStorage.setItem('rooster.reloadedAs', other);
+      localStorage.setItem('rooster.cacheOwner', other);
+      data.set(cacheStorageKey, '{}');
+      const queryClient = new QueryClient();
+      // Restored from storage: confirmed long ago.
+      queryClient.setQueryData(['me'], me(userId), { updatedAt: 1 });
+      queryClient.setQueryData(['notifications', 'x'], { secret: true });
+      await boot(
+        { storage, outbox: createMemoryOutbox(), transport: createFixtureTransport({ userId }) },
+        queryClient,
+      );
+      await fetchMe(queryClient, me(other));
+      await vi.waitFor(() => expect(data.has(cacheStorageKey)).toBe(false));
+      expect(queryClient.getQueryData(['notifications', 'x'])).toBeUndefined();
+      expect(reload).not.toHaveBeenCalled();
+      // The guard is spent: the next switch closes the session again.
+      expect(sessionStorage.getItem('rooster.reloadedAs')).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test('sign-in and sign-out requests are refused once the session is closed', async () => {
+    const { closeSessionForGood } = await import('../session-events');
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    try {
+      const { authClient } = await import('../auth-client');
+      closeSessionForGood();
+      await authClient.signOut({ disableRedirect: true }).catch(() => {});
+      expect(fetchSpy).not.toHaveBeenCalled();
     } finally {
       vi.unstubAllGlobals();
     }

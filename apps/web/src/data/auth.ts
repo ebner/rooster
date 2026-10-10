@@ -1,8 +1,9 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { safeRedirectPath } from '../lib/safe-redirect';
 import { ApiError } from './errors';
-import { api, unwrap } from './http';
+import { api, sessionClosedCode, unwrap } from './http';
 import { queryKeys } from './query-keys';
+import { isSessionClosed } from './session-events';
 import { clearLocalData } from './sync/engine';
 import type { AuthProvider, MutationResult, QueryResult } from './types';
 
@@ -88,6 +89,8 @@ export function useSignOut(): MutationResult<void> {
       // out of rooster should not sign the user out of their company SSO.
       const authClient = await loadAuthClient();
       await forgetPushBeforeSignOut();
+      // Another account may have taken over this browser meanwhile: its session stays.
+      if (isSessionClosed()) throw new ApiError(sessionClosedCode, 0);
       const result = await authClient.signOut({ disableRedirect: true });
       if (result.error) throw new ApiError('sign_out_failed', result.error.status ?? 500);
       await clearLocalData();

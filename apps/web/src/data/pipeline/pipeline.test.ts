@@ -272,3 +272,28 @@ test('deepEqual ignores key order and undefined members', () => {
   expect(deepEqual([1], { 0: 1 })).toBe(false);
   expect(deepEqual(null, {})).toBe(false);
 });
+
+describe('a closed pipeline (ADR 0051)', () => {
+  test('refuses every later op: nothing applied, stored, announced or sent', async () => {
+    const transport = fixture();
+    const send = vi.spyOn(transport, 'send');
+    const { createMemoryOutbox } = await import('../sync/outbox');
+    const outbox = createMemoryOutbox();
+    const posted: unknown[] = [];
+    const pipeline = new ListPipeline({
+      transport,
+      queryClient: new QueryClient(),
+      clientId: 'client-1',
+      outbox,
+      channel: { post: (m) => posted.push(m), listen: () => () => {}, close: () => {} },
+    });
+    await pipeline.fetch(orgId);
+    pipeline.close();
+    expect(pipeline.enqueue(orgId, [listOps.deleteTask('x')], { userId })).toEqual([]);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pipeline.pending).toBe(0);
+    expect(outbox.records.size).toBe(0);
+    expect(posted).toEqual([]);
+    expect(send).not.toHaveBeenCalled();
+  });
+});

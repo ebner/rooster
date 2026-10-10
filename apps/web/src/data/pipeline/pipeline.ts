@@ -359,6 +359,18 @@ export class ListPipeline {
   }
 
   /** Forgets everything local (sign-out, another user): queue, confirmed states, status. */
+  /**
+   * The page's session is over (ADR 0051): drops the queue and refuses every later op, so an
+   * edit flushed while the page unloads (an editor's unmount) is neither stored nor announced
+   * under the next account.
+   */
+  close(): void {
+    this.closed = true;
+    this.reset();
+  }
+
+  private closed = false;
+
   reset(): void {
     this.generation += 1;
     this.queue = [];
@@ -479,6 +491,7 @@ export class ListPipeline {
    * change in the same frame (02 §1.3). Returns the stamped ops.
    */
   enqueue(orgId: string, specs: readonly ListOpSpec[], ctx: ReducerContext): ListOp[] {
+    if (this.closed) return [];
     // Without a loaded list (a comment from a pane opened by link) the ops still queue; the
     // list's first fetch replays them.
     let view = this.view(orgId) ?? this.bases.get(orgId);

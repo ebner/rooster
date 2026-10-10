@@ -112,6 +112,14 @@ function reloadedAs(userId: string): boolean {
   }
 }
 
+function forgetReloaded(): void {
+  try {
+    globalThis.sessionStorage?.removeItem(reloadedKey);
+  } catch {
+    // Nothing was stored either.
+  }
+}
+
 function markReloadedAs(userId: string): void {
   try {
     globalThis.sessionStorage?.setItem(reloadedKey, userId);
@@ -419,7 +427,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     // Every request is refused from here on, whatever path it takes (ADR 0051).
     closeSessionForGood();
     userId = null;
-    pipeline.reset();
+    pipeline.close();
     queryClient.getMutationCache().clear();
     // No more saves, SSE, channel messages (a ping would reconcile the shared outbox with the
     // old account's view) or leadership: the page is only waiting to unload.
@@ -436,14 +444,18 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
       // new one. The tab that signed in has normally wiped the shared outbox and cache
       // already (below); wiping again here could drop ops the new account has queued since.
       closeSession();
+      const page = globalThis.location;
       const takeOver = async () => {
         if (owner && owner !== me.user.id) {
           // Before the owner changes: a reload must not leave the old account's push behind.
           await unsubscribeThisBrowser();
-          sweepUserStorage(me.user.id);
-          writeOwner(me.user.id);
-          await wipe({ keepMe: false });
-          channel.post({ type: 'cleared' });
+          // Another tab of the old account may have taken over meanwhile.
+          if (readOwner() === owner) {
+            sweepUserStorage(me.user.id);
+            writeOwner(me.user.id);
+            await wipe({ keepMe: false, keepUser: me.user.id });
+            channel.post({ type: 'cleared' });
+          }
         }
         await persister.suspend();
       };
@@ -451,7 +463,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
         .catch(() => {})
         .finally(() => {
           markReloadedAs(me.user.id);
-          globalThis.location?.reload();
+          page?.reload();
         });
       return;
     }
@@ -460,8 +472,16 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
       // push subscription here is not this user's (their marker would have been swept), even
       // one whose registration was still under way when the account changed.
       void unsubscribeThisBrowser();
-      void wipe({ keepMe: true }).then(() => channel.post({ type: 'cleared' }));
+      void wipe({ keepMe: true, keepUser: me.user.id }).then(() =>
+        channel.post({ type: 'cleared' }),
+      );
+    } else if (ranAs !== null && ranAs !== me.user.id) {
+      // Already reloaded once for this account and the old one's data is still here (its
+      // stored cache could not be dropped): drop it in place instead of reloading again.
+      void wipe({ keepMe: true, keepUser: me.user.id });
     }
+    // The reload guard is spent: a later switch to this account closes the session again.
+    forgetReloaded();
     ranAs = me.user.id;
     sweepUserStorage(me.user.id);
     writeOwner(me.user.id);
@@ -573,13 +593,25 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     else setTimeout(run, 500);
   }
 
-  async function wipe({ keepMe }: { keepMe: boolean }) {
+  /**
+   * `keepUser`: the account taking over. Its records stay in the shared outbox: another tab
+   * may already have queued them (ADR 0051).
+   */
+  async function wipe({ keepMe, keepUser }: { keepMe: boolean; keepUser?: string }) {
     sessionDataCleared();
     pipeline.reset();
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = null;
     queryClient.removeQueries({ predicate: (q) => !keepMe || q.queryKey[0] !== 'me' });
-    await Promise.all([outbox.clear().catch(() => {}), persister.removeClient()]);
+    const clearOutbox =
+      keepUser === undefined
+        ? outbox.clear()
+        : outbox
+            .load()
+            .then((records) =>
+              outbox.remove(records.filter((r) => r.userId !== keepUser).map((r) => r.op.opId)),
+            );
+    await Promise.all([clearOutbox.catch(() => {}), persister.removeClient()]);
   }
 
   async function onClearedElsewhere() {
