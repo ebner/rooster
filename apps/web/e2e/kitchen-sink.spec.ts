@@ -62,6 +62,8 @@ test('AC-0.4 /_dev/ui renders every Coop v0 component section', async ({ page })
 });
 
 test('AC-0.4 kitchen sink has no axe violations (WCAG 2.2 AA)', async ({ page }) => {
+  // axe over the whole kitchen sink takes well over 30 s when every worker is busy.
+  test.setTimeout(120_000);
   await openKitchenSink(page);
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])

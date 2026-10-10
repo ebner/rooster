@@ -90,6 +90,8 @@ test('AC-11.3 keyboard only: sign in, create with a date, subtask, move, complet
 
   // Sign in: Tab to the provider button, Enter.
   await page.goto('/login');
+  // The provider buttons come with /meta: Tab only once they are there.
+  await expect(page.getByRole('button', { name: 'Continue with Dev login' })).toBeVisible();
   await tabTo(page, 'Continue with Dev login');
   await expectVisibleFocus(page, 'sign-in button');
   await page.keyboard.press('Enter');

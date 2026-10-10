@@ -71,7 +71,9 @@ test('AC-11.3 axe: My tasks, the smart views, the pane and the list popovers', a
   await page.keyboard.press('d');
   const date = page.getByRole('dialog', { name: 'Due date' });
   await expect(date).toBeVisible();
-  // The section opens by itself while a reminder is pending; Alt+R opens it either way.
+  // The panel is lazy: wait until it has rendered, or the reminder section may open by itself
+  // (a reminder is pending) right after the check below, and Alt+R would close it again.
+  await expect(date.getByRole('grid').first()).toBeVisible();
   if (!(await date.getByTestId('reminder-section').isVisible())) await page.keyboard.press('Alt+r');
   await expect(date.getByTestId('reminder-section')).toBeVisible();
   await expect(
