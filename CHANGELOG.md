@@ -6,7 +6,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
-Recurring tasks, task reminders, attachments and the calendar feed (Phase 10).
+## [1.4.0] - 2026-10-10
+
+Recurring tasks, task reminders, attachments and the calendar feed (Phase 10), plus isolation between accounts on a shared browser.
 
 ### Added
 - **Recurring tasks:** "↻ Repeat" in the date picker and the task pane (daily, weekdays, weekly, monthly, yearly, or custom: every N days/weeks/months/years, chosen weekdays, the nth or last weekday, counting from completion, ending on a date or after N times), and in titles ("Water plants every mon", "varannan vecka", "every 3 days after done"). Completing a recurring task creates the next one directly below it, with its subtasks, tags, followers and reminders. Deleting one asks "this task" or "this and following" (ADR 0049).
