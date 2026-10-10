@@ -208,7 +208,12 @@
     "deleted": "Tog bort ”{title}” för gott",
     "cancel": "Avbryt",
     "loadMore": "Visa fler",
-    "failed": "Det gick inte. Kontrollera anslutningen och försök igen."
+    "failed": "Det gick inte. Kontrollera anslutningen och försök igen.",
+    "storageTitle": "Lagring",
+    "storageBody": "Filer som du har bifogat till uppgifter, även uppgifter i papperskorgen tills de tas bort för gott.",
+    "storageUsedOf": "Bilagor: {used} av {quota} används",
+    "storageUsed": "Bilagor: {used} används",
+    "storageFull": "Ditt lagringsutrymme är fullt. Ta bort bilagor som du inte längre behöver för att kunna lägga till nya."
   },
   "notifications": {
     "title": "Aviseringar",

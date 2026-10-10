@@ -30,4 +30,7 @@ export const paths = {
   admin: '/admin',
   /** The notification inbox (P6, FR-NOT-1): one list across every org. */
   inbox: '/inbox',
+  /** The user guide (ADR 0052 §2): the page list, and one page per slug. */
+  help: '/help',
+  helpPage: (slug: string) => `/help/${slug}`,
 } as const;

@@ -172,6 +172,7 @@
     "goNoDate": "Go to No date",
     "goEveryone": "Go to Everyone's tasks",
     "goInbox": "Go to Inbox",
+    "goHelp": "Open the guide",
     "focusSearch": "Search tasks",
     "selectPrevious": "Previous row",
     "selectNext": "Next row",
@@ -298,5 +299,16 @@
     "this": "Delete this task",
     "following": "Delete this and following",
     "cancel": "Cancel"
+  },
+  "a11y": {
+    "due": "due {date}",
+    "overdue": "overdue, due {date}",
+    "open": "not completed",
+    "done": "completed",
+    "subtasks": "{done} of {total} subtasks",
+    "group": "group",
+    "groupCount": "{count, plural, one {# task} other {# tasks}}",
+    "expanded": "expanded",
+    "collapsed": "collapsed"
   }
 }

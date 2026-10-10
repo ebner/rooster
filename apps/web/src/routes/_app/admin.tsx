@@ -4,6 +4,7 @@ import {
   backupDownloadUrl,
   meQueryOptions,
   useAddAllowlistEntry,
+  useAdminSystem,
   useAdminUsers,
   useAllowlist,
   useBackups,
@@ -11,6 +12,7 @@ import {
   useDisplayPrefs,
   useMe,
   useRegeneratePushKeys,
+  useReindexSearch,
   useRemoveAllowlistEntry,
   useServerFeatures,
   useSetUserDisabled,
@@ -19,8 +21,11 @@ import { AdminPage } from '../../features/admin/admin-page';
 import { AllowlistSection } from '../../features/admin/allowlist-section';
 import { BackupsSection } from '../../features/admin/backups-section';
 import { PushKeysSection } from '../../features/admin/push-keys-section';
+import { SystemSection } from '../../features/admin/system-section';
 import { UsersSection } from '../../features/admin/users-section';
+import { useMinuteClock } from '../../features/dates/use-viewer-date-context';
 import { ViewBody, ViewHeader } from '../../features/shell/app-shell';
+import { useSyncStore } from '../../state/sync-store';
 import { toast } from '../../ui/toast';
 
 /** Instance admins only; everyone else gets the plain 404 (no hint that it exists). */
@@ -45,9 +50,14 @@ function AdminRoute() {
   const createBackup = useCreateBackup();
   const features = useServerFeatures();
   const regeneratePushKeys = useRegeneratePushKeys();
+  const system = useAdminSystem();
+  const reindex = useReindexSearch();
+  const online = useSyncStore((s) => s.online);
+  const clock = useMinuteClock();
 
   if (!me.data) return null;
-  const now = Date.now();
+  // Relative times count from the clock, or from the moment the status arrived if that is later.
+  const now = Math.max(clock, system.updatedAt);
   const failed = () => toast({ message: t('error.saveFailed'), tone: 'danger' });
 
   return (
@@ -55,6 +65,17 @@ function AdminRoute() {
       <ViewHeader title={t('title')} />
       <ViewBody>
         <AdminPage
+          system={
+            <SystemSection
+              system={system.data}
+              error={system.error}
+              isRefreshing={system.isFetching && !system.isPending}
+              onRefresh={system.refetch}
+              prefs={prefs}
+              now={now}
+              reindex={{ onRun: () => reindex.mutateAsync(), online }}
+            />
+          }
           allowlist={
             <AllowlistSection
               entries={allowlist.data ?? []}

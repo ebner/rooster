@@ -97,7 +97,7 @@ export function backupDownloadUrl(name: string): string {
 
 /**
  * `POST /admin/push-keys/regenerate` (06 §2.10, 08 key rotation): new VAPID keys; every push
- * subscription is dropped, and devices re-subscribe on their next open.
+ * subscription is dropped, and push stays off until each user turns it on again (ADR 0040).
  */
 export function useRegeneratePushKeys(): MutationResult<void> {
   const queryClient = useQueryClient();

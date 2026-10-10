@@ -1,13 +1,15 @@
 import type { ExportFormat, Task } from '@rooster/core/schemas';
 import { Download, RotateCcw, Trash2 } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { ProgressBar } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
-import type { Org } from '../../data/types';
+import type { MeStorage, Org } from '../../data/types';
 import { cn } from '../../lib/cn';
 import { type DisplayPrefs, formatTimeAgo } from '../../lib/format';
 import { Button, buttonVariants, iconStrokeWidth } from '../../ui/button';
 import { Select } from '../../ui/select';
 import { Skeleton } from '../../ui/skeleton';
+import { formatBytes } from '../attachments/model';
 import { SettingsSection } from './settings-section';
 
 export interface TrashListState {
@@ -36,6 +38,8 @@ export interface DataPageProps {
   pendingId?: string | null | undefined;
   prefs: Pick<DisplayPrefs, 'locale'>;
   now: number;
+  /** The user's attachment storage (`Me.storage`); hidden when the server doesn't send it. */
+  storage?: MeStorage | undefined;
 }
 
 const formats: readonly ExportFormat[] = ['json', 'markdown'];
@@ -55,10 +59,20 @@ export function DataPage({
   pendingId,
   prefs,
   now,
+  storage,
 }: DataPageProps) {
   const { t } = useTranslation('settings');
   return (
     <div className="flex flex-col gap-12">
+      {storage && (
+        <SettingsSection
+          id="storage"
+          title={t('data.storageTitle')}
+          description={t('data.storageBody')}
+        >
+          <StorageUsage storage={storage} locale={prefs.locale} />
+        </SettingsSection>
+      )}
       {orgs.length > 1 && (
         <Select
           label={t('data.org')}
@@ -105,6 +119,52 @@ export function DataPage({
         />
       </SettingsSection>
     </div>
+  );
+}
+
+/** Above this share of the quota the meter turns to the danger colour. */
+const storageWarnShare = 0.9;
+
+/**
+ * ADR 0052 §6: "Attachments: 312 MB of 1 GB used" with a meter, or "312 MB used" when the
+ * instance sets no quota. Counts every attachment the user uploaded that still exists.
+ */
+export function StorageUsage({ storage, locale }: { storage: MeStorage; locale: string }) {
+  const { t } = useTranslation('settings');
+  const used = formatBytes(storage.usedBytes, locale);
+  if (storage.quotaBytes === null) {
+    return (
+      <p className="text-sm" data-testid="storage-usage">
+        {t('data.storageUsed', { used })}
+      </p>
+    );
+  }
+  const quota = formatBytes(storage.quotaBytes, locale);
+  const label = t('data.storageUsedOf', { used, quota });
+  const share = Math.min(1, storage.usedBytes / storage.quotaBytes);
+  return (
+    // A progress bar rather than a meter: WebKit exposes `meter` as "meter progressbar", which
+    // axe rejects with these value attributes.
+    <ProgressBar
+      value={storage.usedBytes}
+      maxValue={storage.quotaBytes}
+      aria-label={t('data.storageTitle')}
+      valueLabel={label}
+      className="flex flex-col gap-2 tablet:max-w-80"
+      data-testid="storage-usage"
+    >
+      <span className="text-sm">{label}</span>
+      <span className="block h-2 overflow-hidden rounded-full bg-bg-muted">
+        <span
+          className={cn(
+            'block h-full rounded-full',
+            share >= storageWarnShare ? 'bg-bg-danger' : 'bg-bg-accent',
+          )}
+          style={{ width: `${share * 100}%` }}
+        />
+      </span>
+      {share >= 1 && <span className="text-sm text-text-danger">{t('data.storageFull')}</span>}
+    </ProgressBar>
   );
 }
 

@@ -3,7 +3,12 @@ import { create } from 'zustand';
 import type { MultipartUpload } from '../../data/attachments';
 import { ApiError } from '../../data/errors';
 import { onSessionDataCleared, reportUnauthenticated } from '../../data/session-events';
-import { problemLimitBytes, type UploadErrorKind, uploadErrorKind } from './model';
+import {
+  problemLimitBytes,
+  problemUsedBytes,
+  type UploadErrorKind,
+  uploadErrorKind,
+} from './model';
 
 /** One file on its way up, or one that failed (kept until dismissed or retried). */
 export interface PendingUpload {
@@ -17,6 +22,8 @@ export interface PendingUpload {
   error?: UploadErrorKind | undefined;
   /** The limit a 413 named, when the server sent it. */
   limitBytes?: number | undefined;
+  /** `storage_quota_exceeded`: what the user has stored already. */
+  usedBytes?: number | undefined;
 }
 
 interface UploadEntry extends PendingUpload {
@@ -84,6 +91,7 @@ function run(entry: UploadEntry, upload: Uploader, onDone: (attachment: Attachme
         error: uploadErrorKind(api),
         // Only a limit the 413 names: a proxy's bare 413 may enforce a lower one than `/meta`.
         limitBytes: problemLimitBytes(api?.problem),
+        usedBytes: problemUsedBytes(api?.problem),
       });
     }
   });
@@ -125,7 +133,13 @@ export function startUploads(
 export function retryUpload(id: string, upload: Uploader, onDone: (a: Attachment) => void): void {
   const entry = useUploadStore.getState().entries.find((e) => e.id === id);
   if (entry?.status !== 'failed') return;
-  patch(id, { status: 'queued', progress: 0, error: undefined, limitBytes: undefined });
+  patch(id, {
+    status: 'queued',
+    progress: 0,
+    error: undefined,
+    limitBytes: undefined,
+    usedBytes: undefined,
+  });
   run({ ...entry, status: 'queued' }, upload, onDone);
 }
 

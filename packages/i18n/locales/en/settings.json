@@ -208,7 +208,12 @@
     "deleted": "Deleted “{title}” for good",
     "cancel": "Cancel",
     "loadMore": "Show more",
-    "failed": "Couldn’t do that. Check your connection and try again."
+    "failed": "Couldn’t do that. Check your connection and try again.",
+    "storageTitle": "Storage",
+    "storageBody": "Files you’ve attached to tasks, including tasks in the Trash until they’re deleted for good.",
+    "storageUsedOf": "Attachments: {used} of {quota} used",
+    "storageUsed": "Attachments: {used} used",
+    "storageFull": "Your storage is full. Delete attachments you no longer need to add new ones."
   },
   "notifications": {
     "title": "Notifications",

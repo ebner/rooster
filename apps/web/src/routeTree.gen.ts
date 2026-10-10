@@ -20,6 +20,8 @@ import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as Char91_devChar93UiRouteImport } from './routes/[_dev]/ui'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as OauthConsentRouteImport } from './routes/oauth.consent'
+import { Route as AppHelpIndexRouteImport } from './routes/_app/help.index'
+import { Route as AppHelpSlugRouteImport } from './routes/_app/help.$slug'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings.index'
 import { Route as AppSettingsBehaviourRouteImport } from './routes/_app/settings.behaviour'
 import { Route as AppSettingsCalendarRouteImport } from './routes/_app/settings.calendar'
@@ -90,6 +92,16 @@ const OauthConsentRoute = OauthConsentRouteImport.update({
   id: '/oauth/consent',
   path: '/oauth/consent',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppHelpIndexRoute = AppHelpIndexRouteImport.update({
+  id: '/help/',
+  path: '/help/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppHelpSlugRoute = AppHelpSlugRouteImport.update({
+  id: '/help/$slug',
+  path: '/help/$slug',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
   id: '/',
@@ -185,12 +197,14 @@ export interface FileRoutesByFullPath {
   '/_dev/ui': typeof Char91_devChar93UiRoute
   '/invite/$token': typeof InviteTokenRoute
   '/oauth/consent': typeof OauthConsentRoute
+  '/help/$slug': typeof AppHelpSlugRoute
   '/settings/behaviour': typeof AppSettingsBehaviourRoute
   '/settings/calendar': typeof AppSettingsCalendarRoute
   '/settings/data': typeof AppSettingsDataRoute
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/security': typeof AppSettingsSecurityRoute
+  '/help/': typeof AppHelpIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
   '/o/$orgSlug': typeof AppOOrgSlugTasksRouteWithChildren
   '/o/$orgSlug/settings': typeof AppOOrgSlugSettingsRoute
@@ -212,12 +226,14 @@ export interface FileRoutesByTo {
   '/_dev/ui': typeof Char91_devChar93UiRoute
   '/invite/$token': typeof InviteTokenRoute
   '/oauth/consent': typeof OauthConsentRoute
+  '/help/$slug': typeof AppHelpSlugRoute
   '/settings/behaviour': typeof AppSettingsBehaviourRoute
   '/settings/calendar': typeof AppSettingsCalendarRoute
   '/settings/data': typeof AppSettingsDataRoute
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/security': typeof AppSettingsSecurityRoute
+  '/help': typeof AppHelpIndexRoute
   '/settings': typeof AppSettingsIndexRoute
   '/o/$orgSlug': typeof AppOOrgSlugTasksRouteWithChildren
   '/o/$orgSlug/settings': typeof AppOOrgSlugSettingsRoute
@@ -242,12 +258,14 @@ export interface FileRoutesById {
   '/_dev/ui': typeof Char91_devChar93UiRoute
   '/invite/$token': typeof InviteTokenRoute
   '/oauth/consent': typeof OauthConsentRoute
+  '/_app/help/$slug': typeof AppHelpSlugRoute
   '/_app/settings/behaviour': typeof AppSettingsBehaviourRoute
   '/_app/settings/calendar': typeof AppSettingsCalendarRoute
   '/_app/settings/data': typeof AppSettingsDataRoute
   '/_app/settings/notifications': typeof AppSettingsNotificationsRoute
   '/_app/settings/profile': typeof AppSettingsProfileRoute
   '/_app/settings/security': typeof AppSettingsSecurityRoute
+  '/_app/help/': typeof AppHelpIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
   '/_app/o/$orgSlug/_tasks': typeof AppOOrgSlugTasksRouteWithChildren
   '/_app/o/$orgSlug/settings': typeof AppOOrgSlugSettingsRoute
@@ -272,12 +290,14 @@ export interface FileRouteTypes {
     | '/_dev/ui'
     | '/invite/$token'
     | '/oauth/consent'
+    | '/help/$slug'
     | '/settings/behaviour'
     | '/settings/calendar'
     | '/settings/data'
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/security'
+    | '/help/'
     | '/settings/'
     | '/o/$orgSlug'
     | '/o/$orgSlug/settings'
@@ -299,12 +319,14 @@ export interface FileRouteTypes {
     | '/_dev/ui'
     | '/invite/$token'
     | '/oauth/consent'
+    | '/help/$slug'
     | '/settings/behaviour'
     | '/settings/calendar'
     | '/settings/data'
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/security'
+    | '/help'
     | '/settings'
     | '/o/$orgSlug'
     | '/o/$orgSlug/settings'
@@ -328,12 +350,14 @@ export interface FileRouteTypes {
     | '/_dev/ui'
     | '/invite/$token'
     | '/oauth/consent'
+    | '/_app/help/$slug'
     | '/_app/settings/behaviour'
     | '/_app/settings/calendar'
     | '/_app/settings/data'
     | '/_app/settings/notifications'
     | '/_app/settings/profile'
     | '/_app/settings/security'
+    | '/_app/help/'
     | '/_app/settings/'
     | '/_app/o/$orgSlug/_tasks'
     | '/_app/o/$orgSlug/settings'
@@ -435,6 +459,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/oauth/consent'
       preLoaderRoute: typeof OauthConsentRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/help/': {
+      id: '/_app/help/'
+      path: '/help'
+      fullPath: '/help/'
+      preLoaderRoute: typeof AppHelpIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/help/$slug': {
+      id: '/_app/help/$slug'
+      path: '/help/$slug'
+      fullPath: '/help/$slug'
+      preLoaderRoute: typeof AppHelpSlugRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/settings/': {
       id: '/_app/settings/'
@@ -602,6 +640,8 @@ interface AppRouteChildren {
   AppAdminRoute: typeof AppAdminRoute
   AppInboxRoute: typeof AppInboxRoute
   AppSettingsRoute: typeof AppSettingsRouteWithChildren
+  AppHelpSlugRoute: typeof AppHelpSlugRoute
+  AppHelpIndexRoute: typeof AppHelpIndexRoute
   AppOOrgSlugTasksRoute: typeof AppOOrgSlugTasksRouteWithChildren
   AppOOrgSlugSettingsRoute: typeof AppOOrgSlugSettingsRoute
 }
@@ -610,6 +650,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppAdminRoute: AppAdminRoute,
   AppInboxRoute: AppInboxRoute,
   AppSettingsRoute: AppSettingsRouteWithChildren,
+  AppHelpSlugRoute: AppHelpSlugRoute,
+  AppHelpIndexRoute: AppHelpIndexRoute,
   AppOOrgSlugTasksRoute: AppOOrgSlugTasksRouteWithChildren,
   AppOOrgSlugSettingsRoute: AppOOrgSlugSettingsRoute,
 }

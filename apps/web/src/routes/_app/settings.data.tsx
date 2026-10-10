@@ -76,6 +76,7 @@ function DataRoute() {
       pendingId={pendingId}
       prefs={prefs}
       now={now}
+      storage={me.storage}
       onRestore={(task) =>
         void run(task, () =>
           restore.mutateAsync({ orgId: org.id, taskId: task.id }).then(

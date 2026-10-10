@@ -31,6 +31,8 @@
   "error": {
     "tooLarge": "{name} är för stor. Filer får vara högst {limit}.",
     "tooLargeNoLimit": "{name} är större än vad som får laddas upp.",
+    "storageFull": "{name} laddades inte upp: dina bilagor skulle då ta mer än ditt lagringsutrymme på {limit} ({used} används). Ta bort bilagor som du inte längre behöver och försök igen.",
+    "storageFullNoLimit": "{name} laddades inte upp: ditt lagringsutrymme för bilagor är fullt.",
     "mimeMismatch": "{name} är inte det filnamnet säger, så den lades inte till.",
     "unsupported": "{name} kan inte laddas upp som bilaga.",
     "tooMany": "Uppgiften har redan så många bilagor som går ({max, number}).",

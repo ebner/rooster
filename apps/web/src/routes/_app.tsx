@@ -98,6 +98,9 @@ function AppLayout() {
     goSettings: () => {
       void navigate({ to: '/settings' });
     },
+    goHelp: () => {
+      void navigate({ href: paths.help });
+    },
     goToOrg: (event) => {
       const index = Number(event.code.replace('Digit', '') || event.key) - 1;
       const org = me.data?.orgs[index];

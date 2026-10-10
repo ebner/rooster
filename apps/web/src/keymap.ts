@@ -90,6 +90,8 @@ export const keymap = {
   goNoDate: { keys: ['G N'], scope: 'navigate', section: 'general', palette: 'navigation' },
   goEveryone: { keys: ['G E'], scope: 'navigate', section: 'general', palette: 'navigation' },
   goInbox: { keys: ['G I'], scope: 'navigate', section: 'general', palette: 'navigation' },
+  // P11 (ADR 0052 §2): the user guide at /help.
+  goHelp: { keys: ['G H'], scope: 'navigate', section: 'general', palette: 'navigation' },
   focusSearch: { keys: ['/'], scope: 'navigate', section: 'general' },
 
   // Navigate (single keys).
@@ -311,6 +313,32 @@ export function matchesSequence(event: KeyEventLike, id: ShortcutId): boolean {
       event.key.toLowerCase() === second.toLowerCase()
     );
   });
+}
+
+/** The order of the sections in the `?` cheat sheet and the generated keyboard page. */
+export const shortcutSections: readonly ShortcutSection[] = [
+  'general',
+  'navigation',
+  'editing',
+  'moving',
+  'groups',
+  'pane',
+  'editor',
+  'dates',
+  'inbox',
+];
+
+/**
+ * Registry entries per section, in registry order: what the `?` cheat sheet and the guide's
+ * keyboard page (`pnpm docs:keyboard`) document. Palette-only commands have no keys and are
+ * left out.
+ */
+export function keyedShortcutsBySection(): { section: ShortcutSection; ids: KeyedShortcutId[] }[] {
+  const keyed = shortcutIds.filter(isKeyed);
+  return shortcutSections.map((section) => ({
+    section,
+    ids: keyed.filter((id) => keymap[id].section === section),
+  }));
 }
 
 /** Ids whose scope is in `scopes`, in registry order. */

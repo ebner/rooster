@@ -114,6 +114,7 @@ export function splitAttachments(attachments: readonly Attachment[]): {
 
 export type UploadErrorKind =
   | 'tooLarge'
+  | 'storageFull'
   | 'mimeMismatch'
   | 'unsupported'
   | 'tooMany'
@@ -129,6 +130,8 @@ export type UploadErrorKind =
 export function uploadErrorKind(error: { code?: string; status?: number } | null): UploadErrorKind {
   const code = error?.code;
   const status = error?.status;
+  // ADR 0052 §6: past the user's storage quota, not the per-file limit.
+  if (code === 'storage_quota_exceeded') return 'storageFull';
   if (status === 413 || code === 'payload_too_large') return 'tooLarge';
   if (code === 'mime_mismatch') return 'mimeMismatch';
   if (status === 415) return 'unsupported';
@@ -143,6 +146,12 @@ export function uploadErrorKind(error: { code?: string; status?: number } | null
 export function problemLimitBytes(problem: Readonly<Record<string, unknown>> | undefined) {
   const value = problem?.limitBytes ?? problem?.maxBytes;
   return typeof value === 'number' && value > 0 ? value : undefined;
+}
+
+/** The storage the user has used, as a `storage_quota_exceeded` problem names it. */
+export function problemUsedBytes(problem: Readonly<Record<string, unknown>> | undefined) {
+  const value = problem?.usedBytes;
+  return typeof value === 'number' && value >= 0 ? value : undefined;
 }
 
 /** True when a drag carries files from outside the page (not text or the list's own drags). */

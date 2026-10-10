@@ -1,3 +1,44 @@
 {
-  "title": "Hjälp"
+  "title": "Hjälp",
+  "lead": "Så fungerar rooster, en sida i taget.",
+  "open": "Öppna guiden",
+  "pages": "Guidens sidor",
+  "previous": "Föregående",
+  "next": "Nästa",
+  "steps": "Föregående och nästa sida",
+  "fallback": "Sidan är inte översatt än, så den visas på engelska.",
+  "loading": "Läser in guiden…",
+  "loadFailed": "Det gick inte att läsa in guiden. Kontrollera anslutningen och försök igen.",
+  "retry": "Försök igen",
+  "notFound": {
+    "title": "Sidan finns inte i guiden",
+    "body": "Den kan ha flyttats eller bytt namn. Alla sidor finns listade i guiden.",
+    "back": "Gå till guiden"
+  },
+  "keyboardDoc": {
+    "intro": "Alla kortkommandon i rooster. Tryck på ? i appen för att se dem när som helst; den här sidan skapas från samma lista.",
+    "notation": {
+      "mod": "⌘ på en Mac motsvaras av Ctrl i Windows och Linux, och ⌥ av Alt.",
+      "tab": "⇥ (Tabb) före en tangent är ett Tabb-ackord: håll ned Tabb och tryck på tangenten. Ackorden fungerar även medan du redigerar en rubrik.",
+      "sequence": "Två tangenter i följd, som G och sedan M, trycks en i taget inom en sekund."
+    },
+    "column": {
+      "action": "Åtgärd",
+      "mac": "Mac",
+      "other": "Windows och Linux"
+    }
+  },
+  "dev": {
+    "section": "Guiden och systemstatus",
+    "article": "Guidesida med rubriker, tabell, kod, tangenter och en länk",
+    "fallback": "Guidesida som visas på engelska",
+    "notFound": "Okänd guidesida",
+    "index": "Guidens innehåll",
+    "system": "Administration → System",
+    "systemBare": "Administration → System: en ny instans som uppdateras",
+    "systemLoading": "Administration → System: läser in",
+    "systemError": "Administration → System: fel",
+    "storage": "Inställningar → Data: lagring",
+    "storageNoQuota": "Inställningar → Data: lagring utan gräns"
+  }
 }

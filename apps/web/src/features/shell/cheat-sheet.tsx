@@ -1,47 +1,19 @@
-import { X } from 'lucide-react';
-import { Fragment, useEffect, useRef } from 'react';
+import { BookOpen, X } from 'lucide-react';
+import { Fragment, useEffect, useId, useRef } from 'react';
+import { Link as AriaLink } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { create } from 'zustand';
-import {
-  isKeyed,
-  type KeyedShortcutId,
-  keymap,
-  type ShortcutDefinition,
-  type ShortcutSection,
-  shortcutIds,
-} from '../../keymap';
+import { keyedShortcutsBySection, keymap, type ShortcutDefinition } from '../../keymap';
 import { cn } from '../../lib/cn';
+import { iconStrokeWidth } from '../../ui/button';
 import { IconButton } from '../../ui/icon-button';
 import { Kbd } from '../../ui/kbd';
+import { paths } from './paths';
 
 export const useCheatSheet = create<{ open: boolean }>()(() => ({ open: false }));
 
 export function toggleCheatSheet(open?: boolean): void {
   useCheatSheet.setState((s) => ({ open: open ?? !s.open }));
-}
-
-const sections: readonly ShortcutSection[] = [
-  'general',
-  'navigation',
-  'editing',
-  'moving',
-  'groups',
-  'pane',
-  'editor',
-  'dates',
-  'inbox',
-];
-
-/**
- * Registry entries per section, in registry order (the docs are generated, 02 §6). Palette-only
- * commands have no keys and are left out.
- */
-export function cheatSheetSections(): { section: ShortcutSection; ids: KeyedShortcutId[] }[] {
-  const keyed = shortcutIds.filter(isKeyed);
-  return sections.map((section) => ({
-    section,
-    ids: keyed.filter((id) => keymap[id].section === section),
-  }));
 }
 
 function Keys({ definition }: { definition: ShortcutDefinition }) {
@@ -69,6 +41,8 @@ function Keys({ definition }: { definition: ShortcutDefinition }) {
  */
 export function CheatSheet() {
   const { t } = useTranslation('list');
+  const { t: th } = useTranslation('help');
+  const titleId = useId();
   const open = useCheatSheet((s) => s.open);
   const panel = useRef<HTMLElement>(null);
 
@@ -95,7 +69,9 @@ export function CheatSheet() {
       )}
     >
       <header className="flex h-toolbar shrink-0 items-center justify-between border-b border-border ps-4 pe-2">
-        <h2 className="text-base font-semibold">{t('cheatSheet.title')}</h2>
+        <h2 id={titleId} className="text-base font-semibold">
+          {t('cheatSheet.title')}
+        </h2>
         <IconButton
           icon={X}
           aria-label={t('cheatSheet.close')}
@@ -103,8 +79,14 @@ export function CheatSheet() {
           onPress={() => toggleCheatSheet(false)}
         />
       </header>
-      <div className="grid gap-x-8 gap-y-6 overflow-y-auto p-4 tablet:grid-cols-2">
-        {cheatSheetSections().map(({ section, ids }) => (
+      {/* Scrolls with the keyboard too (WCAG 2.1.1): the region takes focus. */}
+      <section
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region must be focusable to scroll by keyboard.
+        tabIndex={0}
+        aria-labelledby={titleId}
+        className="grid gap-x-8 gap-y-6 overflow-y-auto rounded-b-lg p-4 -outline-offset-2 outline-none focus-ring:outline-2 focus-ring:outline-border-focus tablet:grid-cols-2"
+      >
+        {keyedShortcutsBySection().map(({ section, ids }) => (
           <section key={section} className="flex flex-col gap-1">
             <h3 className="pb-1 text-xs font-semibold text-text-muted">
               {t(`keys.section.${section}`)}
@@ -124,7 +106,17 @@ export function CheatSheet() {
             </dl>
           </section>
         ))}
-      </div>
+      </section>
+      <footer className="flex shrink-0 items-center border-t border-border px-2 py-1">
+        <AriaLink
+          href={paths.help}
+          onPress={() => toggleCheatSheet(false)}
+          className="inline-flex h-control items-center gap-2 rounded-sm px-2 text-sm text-text-secondary outline-none hover:bg-bg-subtle hover:text-text focus-ring:outline-2 focus-ring:outline-border-focus"
+        >
+          <BookOpen className="size-4" strokeWidth={iconStrokeWidth} aria-hidden />
+          {th('open')}
+        </AriaLink>
+      </footer>
     </aside>
   );
 }

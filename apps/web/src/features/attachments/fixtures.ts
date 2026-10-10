@@ -113,6 +113,17 @@ export const fixtureUploads: PendingUpload[] = [
     status: 'failed',
     error: 'offline',
   },
+  {
+    id: 'u6',
+    taskId: fixtureTaskId,
+    name: 'site-plan.pdf',
+    size: 8_400_000,
+    progress: 0,
+    status: 'failed',
+    error: 'storageFull',
+    limitBytes: 1024 * 1024 * 1024,
+    usedBytes: 1_070_000_000,
+  },
 ];
 
 const palette = [tagPalette.amber, tagPalette.teal, tagPalette.pink, tagPalette.green];

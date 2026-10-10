@@ -1,3 +1,44 @@
 {
-  "title": "Help"
+  "title": "Help",
+  "lead": "How rooster works, one page at a time.",
+  "open": "Open the guide",
+  "pages": "Guide pages",
+  "previous": "Previous",
+  "next": "Next",
+  "steps": "Previous and next page",
+  "fallback": "This page isn’t translated yet, so it’s shown in English.",
+  "loading": "Loading the guide…",
+  "loadFailed": "Couldn’t load the guide. Check your connection and try again.",
+  "retry": "Try again",
+  "notFound": {
+    "title": "This page isn’t in the guide",
+    "body": "It may have moved or been renamed. Every page is listed in the guide.",
+    "back": "Go to the guide"
+  },
+  "keyboardDoc": {
+    "intro": "Every keyboard shortcut in rooster. Press ? in the app to see them at any time; this page is generated from the same list.",
+    "notation": {
+      "mod": "⌘ on a Mac is Ctrl on Windows and Linux, and ⌥ is Alt.",
+      "tab": "⇥ (Tab) before a key is a Tab chord: hold Tab and press the key. Chords also work while you edit a title.",
+      "sequence": "Two keys in a row, such as G then M, are pressed one after the other, within a second."
+    },
+    "column": {
+      "action": "Action",
+      "mac": "Mac",
+      "other": "Windows and Linux"
+    }
+  },
+  "dev": {
+    "section": "Guide and system status",
+    "article": "Guide page with headings, a table, code, keys and a link",
+    "fallback": "Guide page shown in English",
+    "notFound": "Unknown guide page",
+    "index": "Guide index",
+    "system": "Admin → System",
+    "systemBare": "Admin → System: a new instance, refreshing",
+    "systemLoading": "Admin → System: loading",
+    "systemError": "Admin → System: error",
+    "storage": "Settings → Data: storage",
+    "storageNoQuota": "Settings → Data: storage without a quota"
+  }
 }

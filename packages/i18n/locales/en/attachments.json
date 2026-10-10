@@ -31,6 +31,8 @@
   "error": {
     "tooLarge": "{name} is too large. Files can be at most {limit}.",
     "tooLargeNoLimit": "{name} is larger than the upload limit.",
+    "storageFull": "{name} wasn’t uploaded: it would take your attachments past your {limit} of storage ({used} used). Delete attachments you no longer need and try again.",
+    "storageFullNoLimit": "{name} wasn’t uploaded: your attachment storage is full.",
     "mimeMismatch": "{name} isn’t what its file name says it is, so it wasn’t added.",
     "unsupported": "{name} can’t be uploaded as an attachment.",
     "tooMany": "This task has the most attachments it can have ({max, number}).",

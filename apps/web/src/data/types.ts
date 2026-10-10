@@ -55,6 +55,14 @@ export interface Me {
   orgs: Org[];
   /** `user.prefs` with defaults applied (05 §2); absent in older fixtures. */
   prefs?: Prefs;
+  /** Attachment storage (ADR 0052 §6); absent from servers before 1.5. */
+  storage?: MeStorage;
+}
+
+/** `Me.storage`: the bytes of the user's attachments; `quotaBytes` null without a quota. */
+export interface MeStorage {
+  usedBytes: number;
+  quotaBytes: number | null;
 }
 
 export type ProfilePatch = Partial<UserSettings & { name: string }> & { prefs?: Partial<Prefs> };

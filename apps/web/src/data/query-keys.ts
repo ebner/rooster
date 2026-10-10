@@ -9,6 +9,8 @@ export const queryKeys = {
   allowlist: ['admin', 'allowlist'] as const,
   adminUsers: ['admin', 'users'] as const,
   adminBackups: ['admin', 'backups'] as const,
+  /** P11. Admin → System (08 §9). */
+  adminSystem: ['admin', 'system'] as const,
   /** `scope`: an org ID, or `all` for every org of the viewer. */
   search: (scope: string, q: string) => ['search', scope, q] as const,
   /** SSE invalidates `['trash', orgId]` (04 §4.5); the pages hang below it. */

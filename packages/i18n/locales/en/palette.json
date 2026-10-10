@@ -46,6 +46,7 @@
     "goNoDate": "Go to No date",
     "goEveryone": "Go to Everyone's tasks",
     "goInbox": "Go to Inbox",
+    "goHelp": "Open the guide",
     "toggleCompleted": "Show or hide completed tasks",
     "complete": "Complete or reopen task",
     "deleteTask": "Delete task",

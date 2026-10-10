@@ -172,6 +172,7 @@
     "goNoDate": "Gå till Utan datum",
     "goEveryone": "Gå till Allas uppgifter",
     "goInbox": "Gå till Inkorgen",
+    "goHelp": "Öppna guiden",
     "focusSearch": "Sök uppgifter",
     "selectPrevious": "Föregående rad",
     "selectNext": "Nästa rad",
@@ -298,5 +299,16 @@
     "this": "Ta bort den här uppgiften",
     "following": "Ta bort den här och kommande",
     "cancel": "Avbryt"
+  },
+  "a11y": {
+    "due": "förfaller {date}",
+    "overdue": "försenad, förföll {date}",
+    "open": "inte klar",
+    "done": "klar",
+    "subtasks": "{done} av {total} deluppgifter",
+    "group": "grupp",
+    "groupCount": "{count, plural, one {# uppgift} other {# uppgifter}}",
+    "expanded": "utfälld",
+    "collapsed": "hopfälld"
   }
 }

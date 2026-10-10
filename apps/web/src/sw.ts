@@ -1,9 +1,12 @@
+import type { WorkboxPlugin } from 'workbox-core/types';
+import { ExpirationPlugin } from 'workbox-expiration';
 import {
   cleanupOutdatedCaches,
   createHandlerBoundToURL,
   precacheAndRoute,
 } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
+import { CacheFirst } from 'workbox-strategies';
 import { resubscribeAfterChange, type SubscriptionChange } from './features/pwa/push-resubscribe';
 import { type PushData, pushTargetPath } from './features/pwa/push-target';
 
@@ -31,6 +34,25 @@ const serverPaths = [
 
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL('/index.html'), { denylist: serverPaths }),
+);
+
+/**
+ * The guide's screenshots (ADR 0052 §2) are not precached, which keeps the install small: each is
+ * cached the first time it is viewed. Their names carry a content hash, so cache-first is safe.
+ */
+registerRoute(
+  ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/assets/guide/'),
+  new CacheFirst({
+    cacheName: 'rooster-guide-images',
+    // Workbox's own types predate `exactOptionalPropertyTypes`.
+    plugins: [
+      new ExpirationPlugin({
+        maxEntries: 120,
+        maxAgeSeconds: 180 * 24 * 60 * 60,
+        purgeOnQuotaError: true,
+      }) as WorkboxPlugin,
+    ],
+  }),
 );
 
 self.addEventListener('message', (event) => {

@@ -447,7 +447,7 @@ function UploadRow({
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 export function uploadErrorText(
-  upload: Pick<PendingUpload, 'name' | 'error' | 'limitBytes'>,
+  upload: Pick<PendingUpload, 'name' | 'error' | 'limitBytes' | 'usedBytes'>,
   locale: string,
   maxAttachments: number,
   t: Translate,
@@ -458,6 +458,14 @@ export function uploadErrorText(
       return upload.limitBytes
         ? t('error.tooLarge', { name, limit: formatBytes(upload.limitBytes, locale) })
         : t('error.tooLargeNoLimit', { name });
+    case 'storageFull':
+      return upload.limitBytes
+        ? t('error.storageFull', {
+            name,
+            limit: formatBytes(upload.limitBytes, locale),
+            used: formatBytes(upload.usedBytes ?? upload.limitBytes, locale),
+          })
+        : t('error.storageFullNoLimit', { name });
     case 'mimeMismatch':
       return t('error.mimeMismatch', { name });
     case 'unsupported':

@@ -1,5 +1,5 @@
 import { isLocale, type Locale, supportedLocales } from '@rooster/i18n/core';
-import { ChevronsUpDown, Languages, LogOut, Settings, ShieldCheck } from 'lucide-react';
+import { BookOpen, ChevronsUpDown, Languages, LogOut, Settings, ShieldCheck } from 'lucide-react';
 import { Button as AriaButton } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import type { CurrentUser } from '../../data/types';
@@ -28,7 +28,10 @@ export interface UserMenuProps {
   defaultOpen?: boolean;
 }
 
-/** The account menu at the bottom of the sidebar (02 §2): settings, language, admin, sign out. */
+/**
+ * The account menu at the bottom of the sidebar (02 §2): settings, language, admin, the guide
+ * (ADR 0052 §2), sign out.
+ */
 export function UserMenu({
   user,
   locale,
@@ -39,6 +42,7 @@ export function UserMenu({
 }: UserMenuProps) {
   const { t } = useTranslation('shell');
   const { t: tc } = useTranslation();
+  const { t: th } = useTranslation('help');
   const trigger = (
     <AriaButton
       aria-label={t('user.menu', { name: user.name })}
@@ -106,6 +110,9 @@ export function UserMenu({
               {t('user.admin')}
             </MenuItem>
           )}
+          <MenuItem id="help" icon={BookOpen} href={paths.help}>
+            {th('title')}
+          </MenuItem>
           <MenuSeparator />
           <MenuItem id="signOut" icon={LogOut}>
             {t('user.signOut')}

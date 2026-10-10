@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Bell, CalendarDays, Database, Hand, Shield, UserRound } from 'lucide-react';
+import { Bell, BookOpen, CalendarDays, Database, Hand, Shield, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
@@ -32,6 +32,7 @@ export interface SettingsLayoutProps {
  */
 export function SettingsLayout({ active, children }: SettingsLayoutProps) {
   const { t } = useTranslation('settings');
+  const { t: th } = useTranslation('help');
   return (
     <div className="flex flex-col tablet:flex-row tablet:gap-12">
       <nav aria-label={t('nav.label')} className="shrink-0 max-tablet:hidden tablet:w-max">
@@ -47,6 +48,10 @@ export function SettingsLayout({ active, children }: SettingsLayoutProps) {
             </li>
           ))}
         </ul>
+        {/* The user guide (ADR 0052 §2), below the sections. */}
+        <div className="mt-4 border-t border-border pt-4">
+          <SidebarItem icon={BookOpen} label={th('open')} href={paths.help} />
+        </div>
         {/*
          * Sizes the column to its longest label set like the active item (medium weight), in
          * whatever language: nothing truncates, and the content does not shift between sections.
@@ -58,6 +63,10 @@ export function SettingsLayout({ active, children }: SettingsLayoutProps) {
               <span className="whitespace-nowrap">{t(`nav.${section.id}`)}</span>
             </span>
           ))}
+          <span className={cn(sidebarItemClass, sidebarItemActiveClass)}>
+            <span className="size-5 shrink-0" />
+            <span className="whitespace-nowrap">{th('open')}</span>
+          </span>
         </span>
       </nav>
       <div className="min-w-0 max-w-pane-max flex-1">{children}</div>
