@@ -30,7 +30,7 @@ export async function sharedOrg(page: Page, browser: Browser, name: string): Pro
   const bEmail = uniqueEmail(`${name}.bertil`);
   await signInAs(b, bEmail, displayNameOf(bEmail), {
     startAt: invitePath,
-    button: 'Accept and sign in',
+    button: 'Accept and sign in with Dev login',
     landing: new RegExp(`/o/${org.slug}/my$`),
   });
   const id = async (p: Page) =>
