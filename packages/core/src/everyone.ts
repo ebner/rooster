@@ -1,7 +1,12 @@
 import { type DueContext, dueState } from './dates/index.ts';
 import { compareKeys } from './ordering.ts';
-import { normalizeRule } from './recurrence.ts';
-import type { ApplyContext } from './reducers/apply.ts';
+import {
+  type ApplyContext,
+  applyRecurrence,
+  dueUnit,
+  recurrencePart,
+  touchesDue,
+} from './reducers/apply.ts';
 import type { ListOpSpec, TaskCreateBody } from './reducers/ops.ts';
 import type {
   BulkOp,
@@ -358,7 +363,7 @@ function createRow(
     createdAt: ctx.now,
     updatedAt: ctx.now,
   };
-  const row = withRecurrence(task, p);
+  const row = applyRecurrence(task, p);
   const withParent = parent
     ? mapRows(tasks, [parent.id], (t) => ({
         ...t,
@@ -367,41 +372,6 @@ function createRow(
     : tasks;
   return parent && parent.assigneeId === assigneeId ? withParent : [...withParent, row];
 }
-
-type RowPatch = Omit<TaskPatch, 'parentId'>;
-type RecurrenceFields = Pick<TaskPatch, 'recurrence' | 'recurrenceBasis'>;
-
-/**
- * The recurrence fields after a create or patch whose due unit `task` already has, as the My
- * tasks reducer and the server set them (ADR 0049 §1.8): no due date clears the rule and the
- * basis; `recurrence: null` stops the series; a rule without a basis means `due`; a basis alone
- * re-normalises the current rule; absent fields keep what the task has.
- */
-function withRecurrence(task: Task, p: RecurrenceFields): Task {
-  const current = task.recurrence ?? null;
-  const set = (recurrence: string | null, basis: 'due' | 'completion' | null): Task =>
-    recurrence === current && basis === (task.recurrenceBasis ?? null)
-      ? task
-      : { ...task, recurrence, recurrenceBasis: recurrence === null ? null : basis };
-  if (task.dueDate === null || p.recurrence === null) {
-    return current === null && (task.recurrenceBasis ?? null) === null ? task : set(null, null);
-  }
-  if (p.recurrence !== undefined) {
-    const basis = p.recurrenceBasis ?? 'due';
-    return set(normalizeRule(p.recurrence, task.dueDate, basis) ?? p.recurrence, basis);
-  }
-  if (p.recurrenceBasis && current !== null) {
-    const basis = p.recurrenceBasis;
-    return set(normalizeRule(current, task.dueDate, basis) ?? current, basis);
-  }
-  return task;
-}
-
-const touchesDue = (p: RowPatch) =>
-  p.dueDate !== undefined ||
-  p.dueTime !== undefined ||
-  p.dueTz !== undefined ||
-  p.startDate !== undefined;
 
 function patchRows(
   tasks: readonly Task[],
@@ -421,7 +391,7 @@ function patchRows(
     return tasks;
   }
   const patched = mapRows(tasks, ids, (task) =>
-    withRecurrence(
+    applyRecurrence(
       {
         ...task,
         ...(p.title === undefined ? {} : { title: p.title }),
@@ -429,14 +399,7 @@ function patchRows(
           ? {}
           : { description: p.description, hasDescription: p.description.trim() !== '' }),
         ...(p.assigneeId === undefined ? {} : { assigneeId: p.assigneeId }),
-        ...(due
-          ? {
-              dueDate: p.dueDate ?? null,
-              dueTime: p.dueTime ?? null,
-              dueTz: p.dueTz ?? null,
-              startDate: p.startDate ?? null,
-            }
-          : {}),
+        ...(due ? dueUnit(p) : {}),
         updatedAt: now,
       },
       p,
@@ -565,7 +528,8 @@ function bulkRows(tasks: readonly Task[], op: BulkOp, ctx: TaskListContext): rea
     case 'restore':
       return restoreRows(tasks, op.ids, ctx);
     case 'setDue':
-      return patchRows(tasks, op.ids, op.args, ctx.now);
+      // As the My tasks reducer and the server: the due unit is replaced as a whole.
+      return patchRows(tasks, op.ids, { ...dueUnit(op.args), ...recurrencePart(op.args) }, ctx.now);
     case 'assign':
       return patchRows(tasks, op.ids, { assigneeId: op.args.assigneeId }, ctx.now);
     case 'addTag':

@@ -303,6 +303,22 @@ describe('applyOpToTaskList (the everyone caches)', () => {
       ctx,
     );
     expect(byId(dated, 'q')?.dueDate).toBe('2026-12-24');
+    // The due unit is replaced as a whole, as in My tasks: a bulk "no date" clears the dates.
+    const timed = applyOpToTaskList(
+      dated,
+      listOps.bulk(ORG, {
+        op: 'setDue',
+        ids: ['q'],
+        args: { dueDate: '2026-12-24', dueTime: '09:00', dueTz: 'Europe/Stockholm' },
+      }),
+      ctx,
+    );
+    const cleared = applyOpToTaskList(
+      timed,
+      listOps.bulk(ORG, { op: 'setDue', ids: ['q'], args: {} }),
+      ctx,
+    );
+    expect(byId(cleared, 'q')).toMatchObject({ dueDate: null, dueTime: null, dueTz: null });
     const assigned = applyOpToTaskList(
       tasks,
       listOps.bulk(ORG, { op: 'assign', ids: ['q'], args: { assigneeId: null } }),

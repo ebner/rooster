@@ -441,7 +441,7 @@ type DueFields = Pick<TaskPatch, 'dueDate' | 'dueTime' | 'dueTz' | 'startDate'>;
 type RecurrenceFields = Pick<TaskPatch, 'recurrence' | 'recurrenceBasis'>;
 
 /** The due unit is replaced as a whole; absent members become null (taskPatchSchema). */
-function dueUnit(p: DueFields): Pick<Task, 'dueDate' | 'dueTime' | 'dueTz' | 'startDate'> {
+export function dueUnit(p: DueFields): Pick<Task, 'dueDate' | 'dueTime' | 'dueTz' | 'startDate'> {
   return {
     dueDate: p.dueDate ?? null,
     dueTime: p.dueTime ?? null,
@@ -466,7 +466,7 @@ export function touchesRecurrence(p: RecurrenceFields): boolean {
 }
 
 /** The recurrence fields actually given (for a bulk `setDue` that also sets a rule). */
-function recurrencePart(p: RecurrenceFields): RecurrenceFields {
+export function recurrencePart(p: RecurrenceFields): RecurrenceFields {
   return {
     ...(p.recurrence === undefined ? {} : { recurrence: p.recurrence }),
     ...(p.recurrenceBasis === undefined ? {} : { recurrenceBasis: p.recurrenceBasis }),
@@ -480,7 +480,7 @@ function recurrencePart(p: RecurrenceFields): RecurrenceFields {
  * fields keep what the task has. Rules are stored normalised against the due date. A task
  * that never had the fields (an older cache) only gains them when one is set.
  */
-function applyRecurrence(task: Task, p: RecurrenceFields): Task {
+export function applyRecurrence(task: Task, p: RecurrenceFields): Task {
   const current = task.recurrence ?? null;
   const set = (recurrence: string | null, basis: 'due' | 'completion' | null): Task =>
     recurrence === current && basis === (task.recurrenceBasis ?? null)
