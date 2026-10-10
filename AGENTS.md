@@ -91,7 +91,8 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
     - The config starts the mock IdP, the server (with a fresh temp data dir) and Vite.
     - PWA specs (`*.pwa.spec.ts`, project `pwa`) run against the production build: the config runs `vite build` and starts a second server on :3182 serving `apps/web/dist` (`ROOSTER_WEB_DIR`). `*.pwa-last.spec.ts` (project `pwa-update`, AC-4.7) rewrites `dist/sw.js` and runs after them.
     - Agents running Playwright in parallel serialise on a lock: `flock /tmp/rooster-e2e.lock pnpm --filter @rooster/web exec playwright test …` (the suites share ports).
-    - Phone specs (`*.mobile.spec.ts`) run in the `mobile` (iPhone 15, WebKit) and `mobile-android` (Pixel 8) projects; `e2e/support/touch.ts` has `swipe`, `longPress` and `showKeyboard` (visualViewport emulation).
+    - Phone specs (`*.mobile.spec.ts`) run in the `mobile` (iPhone 15, WebKit) and `mobile-android` (Pixel 8) projects; `e2e/support/touch.ts` has `swipe`, `longPress` and `showKeyboard` (visualViewport emulation). Reload with `reload(page)` from `support/test.ts`, never `page.reload()`: WebKit sometimes reports "Frame load interrupted".
+    - `ROOSTER_E2E_PERF=skip|only` leaves out or isolates the `perf` project (CI shards the rest). `expectAxeClean` re-checks a violation twice before failing, since axe can read a transition mid-way.
     - `e2e/support/` has `signInAs`, `newClient` and `apiCall`. The sign-in identity is chosen with `login_hint`, and each browser sends its own `X-Forwarded-For` so the per-IP auth rate limit isn't shared.
 - `apps/cli`: the `rooster` CLI (P8), its TUI and the stdio MCP server (P9). It uses only the public API, through `@rooster/api-client` (`src/api.ts`).
   - Source:
@@ -156,7 +157,8 @@ pnpm --filter @rooster/cli dev    # with no arguments on a terminal: the TUI; `-
 apps/cli/scripts/build-binaries.sh  # single-file binaries for 5 targets (needs Bun; run by the release workflow)
 pnpm db:generate               # drizzle-kit generate + STRICT post-processing
 pnpm run ci                    # full pipeline (scripts/ci.sh; plain `pnpm ci` is pnpm's own command); `--with-docker` adds image build, smoke and backup drill
-pnpm run ci unit e2e           # only the named stages (static | unit | build | e2e); CI runs each as a parallel job
+pnpm run ci unit e2e           # only the named stages (static | unit | build | e2e | e2e-perf); CI runs each as a parallel job
+ROOSTER_E2E_SHARD=1/3 pnpm run ci e2e   # one e2e shard without the timing budgets; `pnpm run ci e2e-perf` runs those alone (CI: 3 shards + e2e-perf)
 node apps/web/scripts/render-icons.mjs   # regenerate favicon, logo SVGs and app icons from src/ui/brand.ts
 pnpm docs:keyboard [--check]   # regenerate (or check) docs/guide/{en,sv}/keyboard.md from keymap.ts
 pnpm docs:screenshots          # seed the demo team and capture docs/screenshots (uses the e2e ports and lock; DOCS_SHOTS=a,b limits the shots)

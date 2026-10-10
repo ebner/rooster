@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Vendor-neutral CI pipeline (docs/spec/10-quality.md §7).
-# Usage: scripts/ci.sh [static] [unit] [build] [e2e] [--with-docker]
-# With no stage, every stage runs in order. CI runs each stage as its own parallel job, so one
-# run reports every failing stage; the stages share nothing but the install.
+# Usage: scripts/ci.sh [static] [unit] [build] [e2e] [e2e-perf] [--with-docker]
+# With no stage, static, unit, build and e2e run in order (e2e includes the timing budgets). CI
+# runs each stage as its own parallel job, so one run reports every failing stage; the stages
+# share nothing but the install. ROOSTER_E2E_SHARD=i/n makes `e2e` one shard without the timing
+# budgets, which then run alone in `e2e-perf`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -30,7 +32,15 @@ stage_build() {
 }
 
 stage_e2e() {
-  step "e2e";          pnpm e2e   # builds the web app itself for the PWA projects
+  if [[ -n "${ROOSTER_E2E_SHARD:-}" ]]; then
+    step "e2e shard ${ROOSTER_E2E_SHARD}"; ROOSTER_E2E_PERF=skip pnpm e2e --shard="${ROOSTER_E2E_SHARD}"
+  else
+    step "e2e";        pnpm e2e   # builds the web app itself for the PWA projects
+  fi
+}
+
+stage_e2e_perf() {
+  step "e2e perf";     ROOSTER_E2E_PERF=only pnpm e2e   # AC-2.12 / AC-11.4 budgets, alone
 }
 
 stage_docker() {
@@ -43,13 +53,13 @@ stages=()
 docker=false
 for arg in "$@"; do
   case "$arg" in
-    static | unit | build | e2e) stages+=("$arg") ;;
+    static | unit | build | e2e | e2e-perf) stages+=("$arg") ;;
     --with-docker) docker=true ;;
-    *) echo "ci.sh: unknown argument '$arg' (stages: static unit build e2e; --with-docker)" >&2; exit 2 ;;
+    *) echo "ci.sh: unknown argument '$arg' (stages: static unit build e2e e2e-perf; --with-docker)" >&2; exit 2 ;;
   esac
 done
 ((${#stages[@]})) || stages=(static unit build e2e)
 
 step "install";      pnpm install --frozen-lockfile
-for stage in "${stages[@]}"; do "stage_$stage"; done
+for stage in "${stages[@]}"; do "stage_${stage//-/_}"; done
 if $docker; then stage_docker; fi

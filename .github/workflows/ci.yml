@@ -32,22 +32,45 @@ jobs:
       - uses: ./.github/actions/setup
       - run: bash scripts/ci.sh build
 
+  # Playwright keeps a project and its dependencies in one shard, so the timing budgets (`perf`,
+  # after `chromium`) run alone in e2e-perf and the shards stay balanced.
   e2e:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # every shard reports
+      matrix:
+        shard: [1/3, 2/3, 3/3]
+    env:
+      ROOSTER_E2E_SHARD: ${{ matrix.shard }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: ./.github/actions/setup
       - run: pnpm --filter @rooster/web exec playwright install --with-deps chromium webkit
       - run: bash scripts/ci.sh e2e
+      # Also for a passing run: a flaky test's failed attempt keeps its trace.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-${{ strategy.job-index }}
+          path: apps/web/playwright-report
+          retention-days: 7
+
+  e2e-perf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: ./.github/actions/setup
+      - run: pnpm --filter @rooster/web exec playwright install --with-deps chromium
+      - run: bash scripts/ci.sh e2e-perf
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-perf
           path: apps/web/playwright-report
 
   docker:
     runs-on: ubuntu-latest
-    needs: [static, unit, build, e2e]
+    needs: [static, unit, build, e2e, e2e-perf]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1

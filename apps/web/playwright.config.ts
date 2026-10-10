@@ -64,6 +64,13 @@ const serverEnv = {
 };
 
 /**
+ * CI shards the suite and runs the timing budgets in a job of their own: `skip` leaves `perf` out,
+ * `only` runs just `perf`. Sharding keeps a project and its dependencies in one shard, so `perf`
+ * after `chromium` would put every chromium test in the same shard.
+ */
+const perfMode = process.env.ROOSTER_E2E_PERF as 'skip' | 'only' | undefined;
+
+/**
  * PWA specs (`*.pwa.spec.ts`, Phase 4) need a service worker, which `vite` dev does not serve:
  * they run against the production build (`vite build`) served by a second API server on its
  * own origin and data directory, exactly as in a deployment (strict CSP, SPA fallback, no
@@ -126,10 +133,10 @@ export default defineConfig({
       name: 'perf',
       use: { ...devices['Desktop Chrome'] },
       testMatch: /perf\.spec\.ts$/,
-      dependencies: ['chromium'],
+      dependencies: perfMode === 'only' ? [] : ['chromium'],
       fullyParallel: false,
     },
-  ],
+  ].filter((project) => (project.name === 'perf' ? perfMode !== 'skip' : perfMode !== 'only')),
   webServer: [
     {
       command: 'node scripts/dev-idp.mjs',
