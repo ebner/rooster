@@ -671,6 +671,95 @@ describe('sync engine (04 §6)', () => {
     expect(second.queryClient.getQueryData(myListKey(orgId))).toBeUndefined();
     expect(data.has(cacheStorageKey)).toBe(false);
   });
+
+  test('a clear posted by another tab while this one restores still clears and reloads', async () => {
+    let handler: ((m: SyncMessage) => void) | null = null;
+    const channel: SyncChannel = {
+      ...nullChannel(),
+      listen: (h) => {
+        handler = h;
+        return () => {
+          handler = null;
+        };
+      },
+    };
+    const outbox = createMemoryOutbox();
+    const load = outbox.load.bind(outbox);
+    let restoring = true;
+    outbox.load = async () => {
+      // Signed out (or another account signed in) in another tab during this tab's restore.
+      if (restoring) (handler as ((m: SyncMessage) => void) | null)?.({ type: 'cleared' });
+      restoring = false;
+      return load();
+    };
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...globalThis.location, reload });
+    try {
+      const queryClient = new QueryClient();
+      queryClient.setQueryData(myListKey(orgId), { private: true });
+      const { engine } = await boot(
+        {
+          storage: memoryStorage().storage,
+          outbox,
+          transport: createFixtureTransport({ userId }),
+          channel,
+        },
+        queryClient,
+      );
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+      expect(queryClient.getQueryData(myListKey(orgId))).toBeUndefined();
+      expect(engine.pipeline.pending).toBe(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test('a cache restore that outlasts the start-up wait is discarded, not hydrated later', async () => {
+    const { data, storage } = memoryStorage();
+    const transport = createFixtureTransport({ userId, tasks: { 1: ['Secret'] } });
+    localStorage.setItem('rooster.cacheOwner', userId);
+    const first = await boot({ storage, outbox: createMemoryOutbox(), transport });
+    first.persister.confirmed(Date.now());
+    await first.queryClient.fetchQuery({
+      queryKey: myListKey(orgId),
+      queryFn: () => first.engine.pipeline.fetch(orgId),
+    });
+    await vi.waitFor(() => expect(data.get(cacheStorageKey)).toContain('Secret'), {
+      timeout: 6000,
+    });
+    first.engine.stop();
+
+    // IndexedDB answers only after start-up gave up waiting.
+    let answer: () => void = () => {};
+    const slow: KeyValueStorage = {
+      ...storage,
+      get: (key) => {
+        const value = data.get(key);
+        return new Promise((resolve) => (answer = () => resolve(value)));
+      },
+    };
+    const queryClient = new QueryClient();
+    const persister = createCachePersister(() => undefined, slow);
+    const engine = await startSync({
+      queryClient,
+      transport,
+      outbox: createMemoryOutbox(),
+      channel: nullChannel(),
+      persister,
+      eventSource: quietSource,
+      locks: null,
+      listen: false,
+      restoreTimeoutMs: 10,
+    });
+    engines.push(engine);
+    // Another account signs in meanwhile.
+    const other = '01900000-0000-7000-8000-000000000002';
+    await fetchMe(queryClient, me(other));
+    answer();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(queryClient.getQueryData(myListKey(orgId))).toBeUndefined();
+    expect((queryClient.getQueryData(['me']) as Me).user.id).toBe(other);
+  });
 });
 
 /** BroadcastChannel stand-in: delivers to every other member; a member can freeze or drop. */

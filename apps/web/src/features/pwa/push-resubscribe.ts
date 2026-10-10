@@ -5,8 +5,10 @@
  * user removed elsewhere is never brought back: the server answers `410 push_gone` (or `409`
  * when the endpoint is another account's) and the new subscription is dropped here. Without
  * an old subscription there is nothing to renew from: no POST, and the new subscription is
- * dropped too (never left active and unregistered); the next app open turns push off. The
- * worker has no API client (bundle size), so this is a plain same-origin POST with the cookie.
+ * dropped too (never left active and unregistered); the next app open turns push off. A POST
+ * that fails (offline, 503) keeps the new subscription: the next app open registers it as a
+ * renewal of the endpoint the page last registered (`resyncPush`). The worker has no API
+ * client (bundle size), so this is a plain same-origin POST with the cookie.
  */
 
 export interface SubscriptionChange {

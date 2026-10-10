@@ -8,12 +8,15 @@ import {
   setUnreadCount,
   useMarkNotifications,
   useUnreadCount,
+  useUpdateDeliveryPrefs,
 } from './notifications';
 import { queryKeys } from './query-keys';
+import { sessionDataCleared } from './session-events';
+import type { Me } from './types';
 
 const items = fixtureNotifications(1_800_000_000_000);
 
-const api = vi.hoisted(() => ({ GET: vi.fn(), POST: vi.fn(), PUT: vi.fn() }));
+const api = vi.hoisted(() => ({ GET: vi.fn(), POST: vi.fn(), PUT: vi.fn(), PATCH: vi.fn() }));
 vi.mock('./http', async (original) => ({ ...(await original<typeof import('./http')>()), api }));
 
 const ok = (data: unknown) => ({ data, response: new Response(null, { status: 200 }) });
@@ -84,5 +87,46 @@ describe('notifications cache', () => {
     await act(async () => {
       await done;
     });
+  });
+});
+
+describe('delivery preferences across a session end (ADR 0051)', () => {
+  const cachedMe = {
+    user: { id: 'u1' },
+    orgs: [],
+    prefs: { reminderTime: '08:00' },
+  } as unknown as Me;
+
+  /** Starts the PATCH, then ends the session as the sync engine does on a 401 on `/me`. */
+  async function endSessionDuringPatch(answer: unknown) {
+    const { queryClient, wrapper } = setup();
+    queryClient.setQueryData(queryKeys.me, cachedMe);
+    let respond: (r: unknown) => void = () => undefined;
+    api.PATCH.mockReturnValueOnce(new Promise((r) => (respond = r)));
+    const { result } = renderHook(() => useUpdateDeliveryPrefs(), { wrapper });
+    let done: Promise<unknown> = Promise.resolve();
+    act(() => {
+      done = result.current.mutateAsync({ reminderTime: '09:00' }).catch(() => undefined);
+    });
+    await vi.waitFor(() => expect(api.PATCH).toHaveBeenCalled());
+    sessionDataCleared();
+    await queryClient.resetQueries({ queryKey: queryKeys.me });
+    respond(answer);
+    await act(async () => {
+      await done;
+    });
+    return queryClient;
+  }
+
+  test('a failure after the session ended does not bring the old profile back', async () => {
+    const queryClient = await endSessionDuringPatch(failed());
+    expect(queryClient.getQueryData(queryKeys.me)).toBeUndefined();
+  });
+
+  test('an answer after the session ended is not written to the cache', async () => {
+    const queryClient = await endSessionDuringPatch(
+      ok({ ...cachedMe, prefs: { reminderTime: '09:00' } }),
+    );
+    expect(queryClient.getQueryData(queryKeys.me)).toBeUndefined();
   });
 });

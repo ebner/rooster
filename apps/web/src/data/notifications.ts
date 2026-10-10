@@ -18,6 +18,7 @@ import { useEffect } from 'react';
 import { api, unwrap } from './http';
 import { toMe } from './mappers';
 import { queryKeys } from './query-keys';
+import { sessionScope } from './session-events';
 import { subscribeSseNotifications } from './sync/events';
 import type { Me, MutationResult, QueryResult } from './types';
 
@@ -152,6 +153,7 @@ export function useMarkNotifications(): MutationResult<
           : api.POST('/api/v1/notifications/unread', { body: mark }),
       ),
     onMutate: async (input) => {
+      const session = sessionScope();
       await queryClient.cancelQueries({ queryKey: ['notifications'] });
       const before = queryClient.getQueriesData<NotificationPages>({ queryKey: ['notifications'] });
       const now = Date.now();
@@ -175,10 +177,12 @@ export function useMarkNotifications(): MutationResult<
           })),
         };
       });
-      return { before };
+      return { before, session };
     },
     onError: (_error, _input, context) => {
-      for (const [key, data] of context?.before ?? []) queryClient.setQueryData(key, data);
+      // A sign-out or lost session meanwhile cleared the inbox: it must not come back.
+      if (!context || context.session.stale()) return;
+      for (const [key, data] of context.before) queryClient.setQueryData(key, data);
     },
     onSuccess: (result) => setUnreadCount(queryClient, result.unreadCount),
   });
@@ -202,6 +206,7 @@ export function useUpdateNotificationPrefs(): MutationResult<
     mutationFn: async (prefs: NotificationPref[]) =>
       (await unwrap(api.PUT('/api/v1/me/notification-prefs', { body: { prefs } }))).prefs,
     onMutate: async (cells) => {
+      const session = sessionScope();
       await queryClient.cancelQueries({ queryKey: queryKeys.notificationPrefs });
       const before = queryClient.getQueryData<NotificationPref[]>(queryKeys.notificationPrefs);
       queryClient.setQueryData<NotificationPref[]>(queryKeys.notificationPrefs, (current) =>
@@ -209,12 +214,15 @@ export function useUpdateNotificationPrefs(): MutationResult<
           (cell) => cells.find((c) => c.type === cell.type && c.channel === cell.channel) ?? cell,
         ),
       );
-      return { before };
+      return { before, session };
     },
     onError: (_error, _cells, context) => {
-      queryClient.setQueryData(queryKeys.notificationPrefs, context?.before);
+      if (!context || context.session.stale()) return;
+      queryClient.setQueryData(queryKeys.notificationPrefs, context.before);
     },
-    onSuccess: (prefs) => queryClient.setQueryData(queryKeys.notificationPrefs, prefs),
+    onSuccess: (prefs, _cells, context) => {
+      if (!context.session.stale()) queryClient.setQueryData(queryKeys.notificationPrefs, prefs);
+    },
   });
 }
 
@@ -232,10 +240,14 @@ export function useUpdateDeliveryPrefs(): MutationResult<Partial<DeliveryPrefs>>
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (prefs: Partial<DeliveryPrefs>) => {
+      const session = sessionScope();
       const me = await unwrap(api.PATCH('/api/v1/me', { body: { prefs } }));
-      queryClient.setQueryData(queryKeys.me, toMe(me));
+      // The session may have ended meanwhile (a 401, sign-out, another account): a profile
+      // written back now would count as signed in again (ADR 0051).
+      if (!session.stale()) queryClient.setQueryData(queryKeys.me, toMe(me));
     },
     onMutate: async (patch) => {
+      const session = sessionScope();
       await queryClient.cancelQueries({ queryKey: queryKeys.me });
       const before = queryClient.getQueryData<Me>(queryKeys.me);
       if (before?.prefs) {
@@ -244,10 +256,12 @@ export function useUpdateDeliveryPrefs(): MutationResult<Partial<DeliveryPrefs>>
           prefs: { ...before.prefs, ...patch },
         });
       }
-      return { before };
+      return { before, session };
     },
     onError: (_error, _patch, context) => {
-      if (context?.before) queryClient.setQueryData(queryKeys.me, context.before);
+      if (context?.before && !context.session.stale()) {
+        queryClient.setQueryData(queryKeys.me, context.before);
+      }
     },
   });
 }

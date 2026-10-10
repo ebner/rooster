@@ -23,6 +23,12 @@ export const pushKeys = {
 
 /** The id of this browser's subscription on the server, per user (swept on sign-out). */
 const deviceMarker = (userId: string) => userStorageKey(userId, 'pushDevice');
+/**
+ * The endpoint this page last registered for that device (canonical). The browser may replace
+ * its subscription while no page is open; when the worker's renewal POST failed, this is the
+ * endpoint the server still holds, and the next app open renews from it.
+ */
+const endpointMarker = (userId: string) => userStorageKey(userId, 'pushEndpoint');
 
 function readMarker(userId: string): string | null {
   try {
@@ -32,10 +38,21 @@ function readMarker(userId: string): string | null {
   }
 }
 
-function writeMarker(userId: string, id: string | null): void {
+function readEndpoint(userId: string): string | null {
+  try {
+    return localStorage.getItem(endpointMarker(userId));
+  } catch {
+    return null;
+  }
+}
+
+/** `endpoint` null drops the opt-in here (both markers). */
+function writeMarker(userId: string, id: string | null, endpoint: string | null = null): void {
   try {
     if (id === null) localStorage.removeItem(deviceMarker(userId));
     else localStorage.setItem(deviceMarker(userId), id);
+    if (endpoint === null) localStorage.removeItem(endpointMarker(userId));
+    else localStorage.setItem(endpointMarker(userId), endpoint);
   } catch {
     // Blocked storage: the device list still shows the subscription, only not as this one.
   }
@@ -218,7 +235,7 @@ async function subscribeAndRegister(
     }
     throw error;
   }
-  writeMarker(userId, device.id);
+  writeMarker(userId, device.id, body.endpoint);
   return device.id;
 }
 
@@ -309,30 +326,44 @@ export function useRemovePushDevice(userId: string | undefined): MutationResult<
 
 /**
  * On app start (`PwaRoot`): where this user turned push on and the permission still stands,
- * keep the subscription on the current key. After a key rotation this re-subscribes silently
- * (no prompt) as a renewal of the subscription it replaces, so a device the user removed
- * elsewhere never comes back: the server answers `410`/`409`, and push goes off here too.
+ * keep the subscription on the current key and registered. After a key rotation this
+ * re-subscribes silently (no prompt); after the browser replaced the subscription and the
+ * worker could not register it (offline, 503), it registers the one the browser holds. Either
+ * is a renewal of a subscription the server knows, so a device the user removed elsewhere
+ * never comes back: the server answers `410`/`409`, and push goes off here too. A failure
+ * (offline) leaves the markers, so the next open tries again.
  */
 export async function resyncPush(): Promise<void> {
   const [userId] = markedUsers();
   if (!userId || Notification.permission !== 'granted') return;
   const { publicKey } = await unwrap(api.GET('/api/v1/push/vapid-public-key'));
   const subscription = await (await registration()).pushManager.getSubscription();
-  if (sameApplicationServerKey(subscription?.options.applicationServerKey, publicKey)) return;
-  const replaced = subscription?.endpoint;
-  if (!replaced) {
+  const held = subscription?.endpoint ? canonicalEndpoint(subscription.endpoint) : null;
+  if (!held) {
     // Nothing to renew from (the browser or the worker dropped it): never subscribe anew
     // without the user's gesture.
     writeMarker(userId, null);
     return;
   }
-  try {
-    await subscribeAndRegister(userId, publicKey, replaced);
-  } catch (error) {
-    if (!isRenewalRefused(error)) throw error;
-    await unsubscribeThisBrowser();
-    writeMarker(userId, null);
+  const registered = readEndpoint(userId);
+  const sameKey = sameApplicationServerKey(subscription?.options.applicationServerKey, publicKey);
+  if (sameKey && registered === held) return;
+  // What the server may hold for this device: the endpoint the browser has (the worker
+  // registered it, or nothing changed since a marker from before endpoints were kept), then
+  // the one this page registered last (the worker's renewal never arrived).
+  const candidates = registered === null || registered === held ? [held] : [held, registered];
+  for (const renews of candidates) {
+    try {
+      await subscribeAndRegister(userId, publicKey, renews);
+      return;
+    } catch (error) {
+      if (!isRenewalRefused(error)) throw error;
+      // Taken by another account: no other candidate makes the endpoint this user's.
+      if (error instanceof ApiError && error.status === 409) break;
+    }
   }
+  await unsubscribeThisBrowser();
+  writeMarker(userId, null);
 }
 
 /**

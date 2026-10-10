@@ -156,12 +156,90 @@ describe('re-subscribing on open (key rotation)', () => {
 
   test('a current subscription, or no opt-in here, does nothing', async () => {
     localStorage.setItem('rooster.user.u1.pushDevice', 'device-0');
+    localStorage.setItem(
+      'rooster.user.u1.pushEndpoint',
+      'https://fcm.googleapis.com/fcm/send/same',
+    );
     current = fakeSubscription(key, 'https://fcm.googleapis.com/fcm/send/same');
     await resyncPush();
     localStorage.clear();
     await resyncPush();
     expect(subscribe).not.toHaveBeenCalled();
     expect(http.POST).not.toHaveBeenCalled();
+  });
+});
+
+describe('re-registering on open a subscription the browser replaced', () => {
+  const before = 'https://fcm.googleapis.com/fcm/send/before';
+  const after = 'https://fcm.googleapis.com/fcm/send/after';
+  /** The server holds `known` for device-0: a renewal from anything else is `410`. */
+  function serverHolds(known: string) {
+    http.POST.mockImplementation(
+      (_path: string, { body }: { body: { renewsEndpoint?: string } }) =>
+        body.renewsEndpoint === known
+          ? ok({ id: 'device-0', userAgent: null, createdAt: 1, lastOkAt: null })
+          : Promise.resolve({
+              error: { code: 'push_gone' },
+              response: new Response(null, { status: 410 }),
+            }),
+    );
+  }
+
+  beforeEach(() => {
+    localStorage.setItem('rooster.user.u1.pushDevice', 'device-0');
+    localStorage.setItem('rooster.user.u1.pushEndpoint', before);
+    current = fakeSubscription(key, after);
+  });
+
+  test("the worker's renewal failed (offline, 503): the next open renews from the registered endpoint", async () => {
+    serverHolds(before);
+    await resyncPush();
+    expect(http.POST).toHaveBeenLastCalledWith('/api/v1/me/push-subscriptions', {
+      body: expect.objectContaining({ endpoint: after, renewsEndpoint: before }),
+    });
+    expect(subscribe).not.toHaveBeenCalled();
+    expect(current?.unsubscribe).not.toHaveBeenCalled();
+    expect(localStorage.getItem('rooster.user.u1.pushEndpoint')).toBe(after);
+    expect(localStorage.getItem('rooster.user.u1.pushDevice')).toBe('device-0');
+    http.POST.mockClear();
+    await resyncPush();
+    expect(http.POST).not.toHaveBeenCalled();
+  });
+
+  test('a failed retry keeps everything for the next open', async () => {
+    http.POST.mockImplementation(() => Promise.reject(new TypeError('offline')));
+    await expect(resyncPush()).rejects.toThrow();
+    expect(localStorage.getItem('rooster.user.u1.pushEndpoint')).toBe(before);
+    expect(localStorage.getItem('rooster.user.u1.pushDevice')).toBe('device-0');
+    expect(current?.unsubscribe).not.toHaveBeenCalled();
+    serverHolds(before);
+    await resyncPush();
+    expect(localStorage.getItem('rooster.user.u1.pushEndpoint')).toBe(after);
+  });
+
+  test("the worker's renewal went through: one renewal in place, nothing dropped", async () => {
+    serverHolds(after);
+    await resyncPush();
+    expect(http.POST).toHaveBeenCalledTimes(1);
+    expect(current?.unsubscribe).not.toHaveBeenCalled();
+    expect(localStorage.getItem('rooster.user.u1.pushEndpoint')).toBe(after);
+  });
+
+  test('a marker from before endpoints were kept: the held endpoint is confirmed once', async () => {
+    localStorage.removeItem('rooster.user.u1.pushEndpoint');
+    serverHolds(after);
+    await resyncPush();
+    expect(http.POST).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem('rooster.user.u1.pushEndpoint')).toBe(after);
+  });
+
+  test('a device removed elsewhere still does not come back', async () => {
+    serverHolds('https://fcm.googleapis.com/fcm/send/neither');
+    const held = current;
+    await resyncPush();
+    expect(held?.unsubscribe).toHaveBeenCalled();
+    expect(localStorage.getItem('rooster.user.u1.pushDevice')).toBeNull();
+    expect(localStorage.getItem('rooster.user.u1.pushEndpoint')).toBeNull();
   });
 });
 

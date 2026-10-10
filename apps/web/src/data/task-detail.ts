@@ -1,4 +1,9 @@
-import { applyOpToDetail, type ListOp, type ReducerContext } from '@rooster/core/reducers';
+import {
+  applyOpToDetail,
+  type ListOp,
+  type ReducerContext,
+  touchesDue,
+} from '@rooster/core/reducers';
 import type { TaskDetail } from '@rooster/core/schemas';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useSyncExternalStore } from 'react';
@@ -20,17 +25,23 @@ export function overlayDetail(
   return view;
 }
 
-/** Ops that change what a detail shows, or (`descriptionOnly`) just its description. */
+/**
+ * Ops that change what a detail shows, or (`descriptionOnly`) what only the detail holds: its
+ * description and the viewer's reminders, which a due change re-resolves (`fireAt`, dormant
+ * without a date) and a patch's `reminders`/`clearReminders` add or drop.
+ */
 function touchesDetail(op: ListOp, taskId: string | null, descriptionOnly: boolean): boolean {
   // P10: the viewer's reminders live only in the detail (ADR 0049 §2.7).
   if ((op.kind === 'reminder.create' || op.kind === 'reminder.delete') && op.taskId === taskId) {
     return true;
   }
+  if (!descriptionOnly || op.kind !== 'task.patch' || op.entityId !== taskId) return false;
+  const p = op.payload;
   return (
-    descriptionOnly &&
-    op.kind === 'task.patch' &&
-    op.entityId === taskId &&
-    op.payload.description !== undefined
+    p.description !== undefined ||
+    touchesDue(p) ||
+    p.clearReminders !== undefined ||
+    p.reminders !== undefined
   );
 }
 

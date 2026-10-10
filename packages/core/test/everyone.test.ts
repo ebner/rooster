@@ -363,6 +363,83 @@ describe('applyOpToTaskList (the everyone caches)', () => {
   });
 });
 
+describe('applyOpToTaskList: recurrence (ADR 0049 §1.8, as the My tasks reducer)', () => {
+  const ctx: TaskListContext = { userId: ME, now: 500 };
+  const MONDAYS = 'FREQ=WEEKLY;BYDAY=MO';
+  const list = () => [
+    task('w', { dueDate: '2026-10-05', recurrence: MONDAYS, recurrenceBasis: 'due' }),
+    task('x', { dueDate: '2026-01-31', recurrence: null, recurrenceBasis: null }),
+    task('n'),
+  ];
+  const byId = (tasks: readonly Task[], id: string) => tasks.find((t) => t.id === id);
+
+  it('a recurrence-only patch sets the rule, normalised against the due date', () => {
+    const set = applyOpToTaskList(
+      list(),
+      listOps.patchTask('x', { recurrence: 'FREQ=MONTHLY' }),
+      ctx,
+    );
+    expect(byId(set, 'x')).toMatchObject({
+      recurrence: 'FREQ=MONTHLY;BYMONTHDAY=31',
+      recurrenceBasis: 'due',
+      updatedAt: 500,
+    });
+  });
+
+  it('stops the series, re-normalises on a basis alone, and keeps the rule on a new date', () => {
+    const tasks = list();
+    expect(
+      byId(applyOpToTaskList(tasks, listOps.patchTask('w', { recurrence: null }), ctx), 'w'),
+    ).toMatchObject({ dueDate: '2026-10-05', recurrence: null, recurrenceBasis: null });
+    const basis = applyOpToTaskList(
+      tasks,
+      listOps.patchTask('w', { recurrenceBasis: 'completion' }),
+      ctx,
+    );
+    expect(byId(basis, 'w')).toMatchObject({
+      recurrence: 'FREQ=WEEKLY',
+      recurrenceBasis: 'completion',
+    });
+    expect(
+      byId(applyOpToTaskList(tasks, listOps.patchTask('w', { dueDate: '2026-10-12' }), ctx), 'w'),
+    ).toMatchObject({ dueDate: '2026-10-12', recurrence: MONDAYS, recurrenceBasis: 'due' });
+  });
+
+  it('clearing the due date clears the rule; a rule without a date is ignored', () => {
+    const tasks = list();
+    const cleared = applyOpToTaskList(tasks, listOps.patchTask('w', { dueDate: null }), ctx);
+    expect(byId(cleared, 'w')).toMatchObject({ recurrence: null, recurrenceBasis: null });
+    const undated = applyOpToTaskList(
+      tasks,
+      listOps.patchTask('n', { recurrence: 'FREQ=DAILY' }),
+      ctx,
+    );
+    expect(byId(undated, 'n')).not.toHaveProperty('recurrence');
+  });
+
+  it('a create and a bulk setDue carry the rule too', () => {
+    const created = applyOpToTaskList(
+      list(),
+      listOps.createTask({ id: 'c', title: 'C', dueDate: '2026-10-05', recurrence: MONDAYS }),
+      ctx,
+    );
+    expect(byId(created, 'c')).toMatchObject({ recurrence: MONDAYS, recurrenceBasis: 'due' });
+    const bulk = applyOpToTaskList(
+      list(),
+      listOps.bulk(ORG, {
+        op: 'setDue',
+        ids: ['x'],
+        args: { dueDate: '2026-10-07', recurrence: 'FREQ=DAILY', recurrenceBasis: 'completion' },
+      }),
+      ctx,
+    );
+    expect(byId(bulk, 'x')).toMatchObject({
+      recurrence: 'FREQ=DAILY',
+      recurrenceBasis: 'completion',
+    });
+  });
+});
+
 describe('mergeTaskListResponse', () => {
   const tasks = [task('a'), task('p', { assigneeId: ANNA })];
 

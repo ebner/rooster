@@ -7,6 +7,7 @@ import { setLocale } from '../lib/i18n';
 import { api, unwrap } from './http';
 import { toMe } from './mappers';
 import { queryKeys } from './query-keys';
+import { sessionScope } from './session-events';
 import type { Me, MutationResult, OrgReorderIntent, ProfilePatch, QueryResult } from './types';
 
 /** `GET /me`; also the auth probe of the route guards (401 → `/login`). */
@@ -47,8 +48,10 @@ export function useUpdateProfile(): MutationResult<ProfilePatch> {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (patch: ProfilePatch) => {
+      const session = sessionScope();
       const me = await unwrap(api.PATCH('/api/v1/me', { body: patch }));
-      queryClient.setQueryData(queryKeys.me, toMe(me));
+      // A profile written back after the session ended would count as signed in (ADR 0051).
+      if (!session.stale()) queryClient.setQueryData(queryKeys.me, toMe(me));
     },
   });
 }
@@ -70,15 +73,26 @@ export function useChangeLocale(): MutationResult<Locale> {
   };
 }
 
-/** Applies `fn` to the cached `/me`; returns the previous value for rollback. */
+/**
+ * Applies `fn` to the cached `/me`; returns the previous value for rollback, which `rollback`
+ * writes back only while the session lasts: a profile restored after a 401 or a sign-out
+ * cleared it would count as signed in again (ADR 0051).
+ */
 function useOptimisticMe() {
   const queryClient = useQueryClient();
-  return async (fn: (me: Me) => Me) => {
+  const apply = async (fn: (me: Me) => Me) => {
+    const session = sessionScope();
     await queryClient.cancelQueries({ queryKey: queryKeys.me });
     const previous = queryClient.getQueryData<Me>(queryKeys.me);
     if (previous) queryClient.setQueryData(queryKeys.me, fn(previous));
-    return previous;
+    return { previous, session };
   };
+  const rollback = (context: Awaited<ReturnType<typeof apply>> | undefined) => {
+    if (context?.previous && !context.session.stale()) {
+      queryClient.setQueryData(queryKeys.me, context.previous);
+    }
+  };
+  return { apply, rollback };
 }
 
 /** `PUT /me/org-order`, optimistic, rolled back on failure. */
@@ -90,23 +104,20 @@ export function useReorderOrg(): MutationResult<OrgReorderIntent> {
       await unwrap(api.PUT('/api/v1/me/org-order', { body: intent }));
     },
     onMutate: ({ orgId, afterId }) =>
-      optimistic((me) => {
+      optimistic.apply((me) => {
         const moved = me.orgs.find((o) => o.id === orgId);
         if (!moved) return me;
         const rest = me.orgs.filter((o) => o.id !== orgId);
         rest.splice(afterId === null ? 0 : rest.findIndex((o) => o.id === afterId) + 1, 0, moved);
         return { ...me, orgs: rest };
       }),
-    onError: (_error, _intent, previous) => {
-      if (previous) queryClient.setQueryData(queryKeys.me, previous);
-    },
+    onError: (_error, _intent, context) => optimistic.rollback(context),
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.me }),
   });
 }
 
 /** `PATCH /me/orgs/:orgId` `{collapsed}`, optimistic. */
 export function useSetOrgCollapsed(): MutationResult<{ orgId: string; collapsed: boolean }> {
-  const queryClient = useQueryClient();
   const optimistic = useOptimisticMe();
   return useMutation({
     mutationFn: async ({ orgId, collapsed }: { orgId: string; collapsed: boolean }) => {
@@ -115,13 +126,11 @@ export function useSetOrgCollapsed(): MutationResult<{ orgId: string; collapsed:
       );
     },
     onMutate: ({ orgId, collapsed }) =>
-      optimistic((me) => ({
+      optimistic.apply((me) => ({
         ...me,
         orgs: me.orgs.map((o) => (o.id === orgId ? { ...o, collapsed } : o)),
       })),
-    onError: (_error, _vars, previous) => {
-      if (previous) queryClient.setQueryData(queryKeys.me, previous);
-    },
+    onError: (_error, _vars, context) => optimistic.rollback(context),
   });
 }
 

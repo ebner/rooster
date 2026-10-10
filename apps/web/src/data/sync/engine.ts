@@ -11,7 +11,12 @@ import { getClientId, registerListPipeline } from '../list';
 import { httpTransport } from '../pipeline/http-transport';
 import { ListPipeline, myListKey, tagsKey } from '../pipeline/pipeline';
 import type { ListTransport } from '../pipeline/transport';
-import { closeSessionForGood, isSessionClosed, sessionDataCleared } from '../session-events';
+import {
+  closeSessionForGood,
+  isSessionClosed,
+  sessionDataCleared,
+  sessionScope,
+} from '../session-events';
 import type { Me } from '../types';
 import { buildInfo, cacheBuster } from './build-info';
 import { createSyncChannel, type SyncChannel, type SyncMessage } from './channel';
@@ -69,6 +74,8 @@ export interface SyncEngineOptions {
   sharedOutbox?: boolean;
   /** Test seam: the leader watch's timings (default `leaderStallMs`, `leaderAnswerMs`). */
   leaderWatch?: { stallMs?: number; answerMs?: number; recheckMs?: number };
+  /** Test seam: how long the cold start waits for IndexedDB (default 3 s). */
+  restoreTimeoutMs?: number;
 }
 
 export interface SyncEngine {
@@ -177,11 +184,22 @@ function pageVisible(): boolean {
   return typeof document === 'undefined' || document.visibilityState !== 'hidden';
 }
 
-function withTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  fallback: T,
+  ms: number,
+  onTimeout?: () => void,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
     promise.catch(() => fallback),
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), restoreTimeoutMs)),
-  ]);
+    new Promise<T>((resolve) => {
+      timer = setTimeout(() => {
+        onTimeout?.();
+        resolve(fallback);
+      }, ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
 }
 
 /**
@@ -236,9 +254,29 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   // Reads (04 §6.1): the cache renders immediately, then revalidates.
   keepPersistedQueries(queryClient);
   const persister = options.persister ?? createCachePersister((org) => pipeline.baseOf(org));
-  const restoreOptions = { queryClient, persister, buster: cacheBuster, maxAge: cacheMaxAgeMs };
-  await withTimeout(persistQueryClientRestore(restoreOptions), undefined);
-  const records = withOwner(await withTimeout(outbox.load(), []));
+  const waitMs = options.restoreTimeoutMs ?? restoreTimeoutMs;
+  // A restore the start-up stopped waiting for must never hydrate later: by then another
+  // account may have signed in and wiped the cache. The check runs right before `hydrate`
+  // (nothing awaits between the read and it), and a wipe meanwhile discards the read too.
+  let restoreAbandoned = false;
+  const restoreScope = sessionScope();
+  const restoreOptions = {
+    queryClient,
+    persister: {
+      ...persister,
+      restoreClient: async () => {
+        const client = await persister.restoreClient();
+        return restoreAbandoned || restoreScope.stale() ? undefined : client;
+      },
+    },
+    buster: cacheBuster,
+    maxAge: cacheMaxAgeMs,
+  };
+  await withTimeout(persistQueryClientRestore(restoreOptions), undefined, waitMs, () => {
+    restoreAbandoned = true;
+  });
+  restoreScope.done();
+  const records = withOwner(await withTimeout(outbox.load(), [], waitMs));
   pipeline.restore(restoredBases(queryClient), records);
   // The restored data renders before a fresh `/me`: this page has run as that account too.
   ranAs = (queryClient.getQueryData<Me>(['me']) as Me | undefined)?.user?.id ?? null;
@@ -371,7 +409,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     options.locks === null ? undefined : (options.locks ?? undefined),
   );
 
-  onMessage = (message) => {
+  const handleMessage = (message: SyncMessage) => {
     switch (message.type) {
       case 'cleared':
         void onClearedElsewhere();
@@ -391,7 +429,6 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     }
     pipeline.receive(message);
   };
-  for (const message of early.splice(0)) onMessage(message);
 
   const unsubscribeWatch = pipeline.subscribe(() => watchLeader(stallMs));
 
@@ -659,10 +696,6 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     document.addEventListener('visibilitychange', onVisibility);
   }
 
-  // A `/me` already fetched during the restore wait.
-  const me = queryClient.getQueryCache().find({ queryKey: ['me'] });
-  if (me) onMeEvent({ type: 'updated', query: me } as QueryCacheNotifyEvent);
-
   const engine: SyncEngine = {
     pipeline,
     syncNow: () => {
@@ -705,6 +738,13 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     },
   };
   current = engine;
+  // Only now, with the engine and everything its cleanup stops in place: messages buffered
+  // during the restore (a `cleared` closes the session and stops the engine), then a `/me`
+  // already fetched during the restore wait, unless such a message closed the session.
+  onMessage = handleMessage;
+  for (const message of early.splice(0)) handleMessage(message);
+  const me = queryClient.getQueryCache().find({ queryKey: ['me'] });
+  if (me && !isSessionClosed()) onMeEvent({ type: 'updated', query: me } as QueryCacheNotifyEvent);
   return engine;
 }
 

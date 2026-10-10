@@ -1,5 +1,6 @@
 import { type DueContext, dueState } from './dates/index.ts';
 import { compareKeys } from './ordering.ts';
+import { normalizeRule } from './recurrence.ts';
 import type { ApplyContext } from './reducers/apply.ts';
 import type { ListOpSpec, TaskCreateBody } from './reducers/ops.ts';
 import type {
@@ -357,16 +358,44 @@ function createRow(
     createdAt: ctx.now,
     updatedAt: ctx.now,
   };
+  const row = withRecurrence(task, p);
   const withParent = parent
     ? mapRows(tasks, [parent.id], (t) => ({
         ...t,
         counts: { ...t.counts, subtasks: t.counts.subtasks + 1 },
       }))
     : tasks;
-  return parent && parent.assigneeId === assigneeId ? withParent : [...withParent, task];
+  return parent && parent.assigneeId === assigneeId ? withParent : [...withParent, row];
 }
 
 type RowPatch = Omit<TaskPatch, 'parentId'>;
+type RecurrenceFields = Pick<TaskPatch, 'recurrence' | 'recurrenceBasis'>;
+
+/**
+ * The recurrence fields after a create or patch whose due unit `task` already has, as the My
+ * tasks reducer and the server set them (ADR 0049 §1.8): no due date clears the rule and the
+ * basis; `recurrence: null` stops the series; a rule without a basis means `due`; a basis alone
+ * re-normalises the current rule; absent fields keep what the task has.
+ */
+function withRecurrence(task: Task, p: RecurrenceFields): Task {
+  const current = task.recurrence ?? null;
+  const set = (recurrence: string | null, basis: 'due' | 'completion' | null): Task =>
+    recurrence === current && basis === (task.recurrenceBasis ?? null)
+      ? task
+      : { ...task, recurrence, recurrenceBasis: recurrence === null ? null : basis };
+  if (task.dueDate === null || p.recurrence === null) {
+    return current === null && (task.recurrenceBasis ?? null) === null ? task : set(null, null);
+  }
+  if (p.recurrence !== undefined) {
+    const basis = p.recurrenceBasis ?? 'due';
+    return set(normalizeRule(p.recurrence, task.dueDate, basis) ?? p.recurrence, basis);
+  }
+  if (p.recurrenceBasis && current !== null) {
+    const basis = p.recurrenceBasis;
+    return set(normalizeRule(current, task.dueDate, basis) ?? current, basis);
+  }
+  return task;
+}
 
 const touchesDue = (p: RowPatch) =>
   p.dueDate !== undefined ||
@@ -381,26 +410,38 @@ function patchRows(
   now: number,
 ): readonly Task[] {
   const due = touchesDue(p);
-  if (p.title === undefined && p.description === undefined && p.assigneeId === undefined && !due) {
+  if (
+    p.title === undefined &&
+    p.description === undefined &&
+    p.assigneeId === undefined &&
+    !due &&
+    p.recurrence === undefined &&
+    p.recurrenceBasis === undefined
+  ) {
     return tasks;
   }
-  const patched = mapRows(tasks, ids, (task) => ({
-    ...task,
-    ...(p.title === undefined ? {} : { title: p.title }),
-    ...(p.description === undefined
-      ? {}
-      : { description: p.description, hasDescription: p.description.trim() !== '' }),
-    ...(p.assigneeId === undefined ? {} : { assigneeId: p.assigneeId }),
-    ...(due
-      ? {
-          dueDate: p.dueDate ?? null,
-          dueTime: p.dueTime ?? null,
-          dueTz: p.dueTz ?? null,
-          startDate: p.startDate ?? null,
-        }
-      : {}),
-    updatedAt: now,
-  }));
+  const patched = mapRows(tasks, ids, (task) =>
+    withRecurrence(
+      {
+        ...task,
+        ...(p.title === undefined ? {} : { title: p.title }),
+        ...(p.description === undefined
+          ? {}
+          : { description: p.description, hasDescription: p.description.trim() !== '' }),
+        ...(p.assigneeId === undefined ? {} : { assigneeId: p.assigneeId }),
+        ...(due
+          ? {
+              dueDate: p.dueDate ?? null,
+              dueTime: p.dueTime ?? null,
+              dueTz: p.dueTz ?? null,
+              startDate: p.startDate ?? null,
+            }
+          : {}),
+        updatedAt: now,
+      },
+      p,
+    ),
+  );
   if (p.assigneeId === undefined) return patched;
   // Children that now share their parent's assignee stop being rows (05 §4.1); the ones that
   // become rows the server sends on the refetch.
