@@ -9,10 +9,12 @@ import { eq } from 'drizzle-orm';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BlobStore } from '../src/blob/store.ts';
+import type { UploadSlots } from '../src/blob/upload-slots.ts';
 import { user } from '../src/db/schema/index.ts';
 import { fileForm, png, sendForm } from './blob-helpers.ts';
 import { tempDir } from './helpers.ts';
 import { type Caller, listCtx, sharedOrg } from './list-helpers.ts';
+import { until } from './sse-client.ts';
 
 const dirs: (() => void)[] = [];
 afterEach(() => {
@@ -130,6 +132,35 @@ describe('avatars (FR-SET-1)', () => {
     expect(served.headers.get('etag')).not.toBe(removedEtag);
     const cached = await ctx.b.call('GET', path, undefined, { 'if-none-match': removedEtag });
     expect(cached.status).toBe(200);
+  });
+
+  it('an upload keeps its slot while storage stalls: a fourth is 429', async () => {
+    const ctx = await team();
+    const slots = (ctx.app.services.avatars as unknown as { uploads: UploadSlots }).uploads;
+    const store = ctx.app.services.blobs.current;
+    const realPut = store.put.bind(store);
+    let open = () => {};
+    const stalled = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    let storing = 0;
+    store.put = async (...args: Parameters<typeof realPut>) => {
+      storing += 1;
+      await stalled;
+      return realPut(...args);
+    };
+    const image = await png(64, 64);
+    const held = [1, 2, 3].map(() => put(ctx, ctx.a, fileForm(image, 'me.png')));
+    // One is storing, two wait for the per-user lock: all three still hold their slot.
+    await until(() => storing === 1, 2_000, 'storage reached');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(slots.inFlight(ctx.a.userId).uploads).toBe(3);
+    const fourth = await put(ctx, ctx.a, fileForm(image, 'me.png'));
+    expect(fourth.status).toBe(429);
+    open();
+    expect((await Promise.all(held)).map((r) => r.status)).toEqual([200, 200, 200]);
+    expect(slots.inFlight(ctx.a.userId)).toEqual({ uploads: 0, bytes: 0 });
+    store.put = realPut;
   });
 
   it('serialises an upload and a removal: the blob always matches the row', async () => {

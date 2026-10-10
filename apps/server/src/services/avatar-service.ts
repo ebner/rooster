@@ -105,18 +105,25 @@ export class AvatarService {
   /** PUT /me/avatar: a raster image of at most 2 MB (browser session only, like PATCH /me). */
   async put(actor: Actor, request: UploadRequest): Promise<Me> {
     requireBrowserSession(actor);
+    // The slot is held until the avatar is stored and recorded: a stalled storage backend must
+    // not let a user pile up decoded images waiting for the per-user lock.
     const slot = this.uploads.acquire(actor.userId);
-    let image: Buffer | null = null;
     try {
       await mkdir(this.tmpDir, { recursive: true, mode: PRIVATE_DIR_MODE });
-      image = await this.decode(request);
+      const image = await this.decode(request);
+      if (image === null) throw notAnImage();
+      await this.store(actor, image);
     } finally {
       slot.release();
     }
-    if (image === null) throw notAnImage();
-    const avatar = image;
-    // Serialised with DELETE per user. The key is the upload's own id, never reused, so the
-    // blob GC can never reach a later avatar (keys of replaced ones are queued there).
+    return this.users.getMe(actor);
+  }
+
+  /**
+   * Serialised with DELETE per user. The key is the upload's own id, never reused, so the
+   * blob GC can never reach a later avatar (keys of replaced ones are queued there).
+   */
+  private async store(actor: Actor, avatar: Buffer): Promise<void> {
     await this.locks.run(actor.userId, async () => {
       const avatarId = uuidv7();
       const store = this.stores.current;
@@ -131,7 +138,6 @@ export class AvatarService {
       }
       await this.deleteLegacy(previous);
     });
-    return this.users.getMe(actor);
   }
 
   /** The upload as a 256 px WebP, or null when it is not a raster image. */
