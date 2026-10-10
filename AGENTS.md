@@ -226,9 +226,19 @@ This file is the entry point for every agent and must describe the repository **
 Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to them. A PR that changes any of the above without updating `AGENTS.md` is not done.
 
 ## Status
-- **Current phase:** Phase 11 (hardening, released as 1.5.0) is next (09). It includes a full security audit of every trust boundary (AC-11.1), on top of the per-phase reviews.
+- **Current phase:** none scheduled. Phase 11 was the last phase in 09; the next work is the backlog (09 §Backlog).
 - **Latest release:** 1.4.0 (Phase 10: recurrence, task reminders, attachments, avatars, calendar feeds; account-switch isolation, ADR 0051).
-- **Last completed phase:** Phase 10, recurrence, task reminders, attachments and iCal (2026-10-10; released in 1.4.0):
+- **Last completed phase:** Phase 11, hardening (2026-10-10; to be released as 1.5.0; under `[Unreleased]` in the CHANGELOG):
+  - the security audit of every trust boundary: 107 findings, 102 fixed, 5 accepted or refuted (`docs/security/security-review.md`, ADR 0056);
+  - the ASVS L2 map (`docs/security/asvs.md`); `pnpm audit` and gitleaks in CI;
+  - accessibility: axe on every screen, a keyboard-only journey, accessible list names, and a manual screen-reader checklist;
+  - 2,000-task performance (chunked rows, keyed row state); server budgets in their own CI step;
+  - operations: Admin → System, the storage quota, the backup drill and the release-fixture migration test in CI, the Litestream overlay, a slimmer image;
+  - the user guide at `/help` and in `docs/guide/`, the operator guide, CONTRIBUTING, the README with screenshots;
+  - the header ⋯ menu with print, and the Behaviour settings;
+  - removed sign-ins stay blocked; apps never see colleagues' emails; approvals are bound to the session that showed them.
+  - AC-11.1 to AC-11.7. ADRs 0052 to 0056. Migrations `0012` to `0015`.
+- **Before that:** Phase 10, recurrence, task reminders, attachments and iCal (2026-10-10; released in 1.4.0):
   - recurring tasks: the RRULE subset in core; the next instance is created on complete or skip, directly below; "this / this and following" on delete;
   - personal task reminders: `!15m` tokens, the picker section, the pane line and the row bell; the claim-then-send job; inbox, push and email;
   - attachments: local or S3, sniffed types, sharp thumbnails, lightbox, paste and drop, blob GC through a trigger;
@@ -236,12 +246,12 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
   - CLI `--remind`/`--repeat`, TUI and MCP support.
   - AC-10.1, AC-10.2 and AC-10.4 pass in tests. AC-10.3 is verified with ical.js; subscribing from Google Calendar is still a manual check.
   - ADRs 0049 and 0050; migration `0011_p10_reminders_attachments_ical`.
-- **Before that:** Phase 9, TUI, MCP and agent access (2026-10-09; released in 1.3.0): the OAuth 2.1 AS on better-auth (CIMD, consent screen with "Allow deleting tasks" and "This session only", audience-bound tokens, refresh reuse revokes the grant), the remote `/mcp` endpoint with scope step-up, discovery documents and the rooster skill, `packages/mcp` with `rooster mcp`/`mcp setup`/`skill`, the full-screen TUI, linked identities and the `admin` capability (`rooster admin reindex`). AC-9.1 to AC-9.6. ADRs 0041 to 0047. Migration `0010_oauth_provider`.
+- Phase 9, TUI, MCP and agent access (2026-10-09; released in 1.3.0): the OAuth 2.1 AS on better-auth (CIMD, consent screen with "Allow deleting tasks" and "This session only", audience-bound tokens, refresh reuse revokes the grant), the remote `/mcp` endpoint with scope step-up, discovery documents and the rooster skill, `packages/mcp` with `rooster mcp`/`mcp setup`/`skill`, the full-screen TUI, linked identities and the `admin` capability (`rooster admin reindex`). AC-9.1 to AC-9.6. ADRs 0041 to 0047. Migration `0010_oauth_provider`.
 - Phase 8, CLI, grants and API polish (2026-10-09; released in 1.2.0): one grant model for PATs and CLI devices (scopes plus user-chosen org and group constraints, enforced in services, `/api/auth` browser-only), the device flow with a consent page, Settings → Connected apps, the documented OpenAPI with contract tests and e2e response validation, and the `rooster` CLI with release binaries. AC-8.1 to AC-8.5 pass. ADRs 0036 to 0039. Migration `0007_agent_access`.
 - Phase 7, notification delivery (2026-10-09; released in 1.2.0): Web Push per device, SMTP email (invites, immediate or batched notifications, the daily digest, confirm-then-POST unsubscribe), the due reminder, and the full preference matrix. AC-7.1 to AC-7.3 pass. ADRs 0033 to 0035. Migration `0006_delivery`.
 - Phase 6, collaboration (2026-10-09; released in 1.2.0): assignment, Everyone's tasks, comments and activity, followers, the in-app inbox. AC-6.1 to AC-6.4 pass at the API level and in the e2e suite. ADRs 0028 to 0032. Migration `0005_collab`.
 - Phase 5, smart views, search, palette, export and Trash (2026-10-06), released as **v1.0.0**. AC-5.1 to AC-5.3 pass on desktop and the phone projects. ADRs 0012 to 0016 record the decisions; ADR 0016 relaxed the initial-bundle budget to 450 KB.
-- **Backlog:** `docs/spec/09-phases.md` §Backlog. Do not build an item unless it is scheduled.
+- **Backlog** (`docs/spec/09-phases.md` §Backlog): the dark theme, the open ASVS gaps, and the Phase 11 follow-ups. Do not build an item unless it is scheduled.
 - **E2E:** never run two Playwright suites at once; they share ports 9400, 3181, 5181 and 3182.
 - **Git:** commit locally; **do not push to origin unless the maintainer explicitly asks.**
 - **Deferred to later phases** (from ADRs 0003–0011; pick them up in the phase named):
@@ -249,7 +259,7 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
   - **Whenever touched:**
     - `UserService.reorderOrg` should move onto `OrderingService` (ADR 0005).
     - The retention purge job publishes no SSE events (ADR 0009).
-  - **P11:** a per-user attachment storage quota (only 100 per task and the rate limit bound it today; ADR 0049). The Docker image budget is 350 MB total and 100 MB for rooster's layers (ADR 0048; 1.3.0 is 248 MB, Phase 10 with sharp is 279 MB). Slimming the base image is still worth a look.
+  - **Image budget:** 350 MB total and 100 MB for rooster's layers (ADR 0048). Phase 11 is about 249 MB, of which rooster's layers are 40 MB.
 
 ## When you finish a WP
 - Run every gate in 10 §1.

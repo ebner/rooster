@@ -311,3 +311,25 @@ Work that is specified but not scheduled into a phase. Pick an item up by moving
 ### Dark theme (D-22, Q-03)
 
 Moved here on 2026-10-10 (ADR 0052). Every colour is already a semantic token, so dark mode redefines the semantic layer under `[data-theme="dark"]` (03 §1). The work: a contrast-tested dark token set, a System / Light / Dark choice in Settings → Profile, the PWA theme colour, the brand assets on dark grounds, axe in both themes, and the dark screenshots (the `docs:screenshots` dark projects are ready and skip themselves until then).
+
+### Security hardening (the open ASVS L2 gaps)
+
+These were accepted for 1.5.0 (ADR 0054 §10, `docs/security/asvs.md`):
+- malware scanning of uploads (12.4.2);
+- self-service account deletion (8.3.2);
+- an SBOM for release images (14.2.5), e.g. `buildx --sbom=true` in `release.yml`;
+- step-up re-authentication for sensitive actions, since sessions are 30-day rolling (3.3.2, 3.7.1);
+- a written threat model and data classification (1.1.2, 1.8.1).
+
+### Phase 11 follow-ups
+
+- **OAuth and MCP:**
+  - Refuse client redirect URIs on rooster's own origin at registration, for both CIMD and DCR. Today they are refused at consent (ADR 0056).
+  - Show the OAuth client's name in activity ("via Claude (MCP)", 11 §2.3).
+- **Web:**
+  - The Profile time-zone combobox opens its list on focus (`menuTrigger="focus"`). Revisit for screen readers.
+  - The 429 text for avatar removals reuses the upload message.
+- **CLI:** `rooster comment` sends `@Name` as plain text. Resolve mentions as the web does.
+- **Server, whenever touched:**
+  - `UserService.reorderOrg` moves onto `OrderingService` (ADR 0005).
+  - The retention purge publishes SSE events (ADR 0009).
