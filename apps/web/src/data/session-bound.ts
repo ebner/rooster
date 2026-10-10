@@ -1,6 +1,7 @@
 import { type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { onSessionDataCleared } from './session-events';
+import { ApiError } from './errors';
+import { onSessionDataCleared, sessionScope } from './session-events';
 
 /**
  * Fetches `queryKey` again whenever the session's data clears (sign-out, a lost session,
@@ -18,4 +19,16 @@ export function useRefetchWhenSessionClears(queryKey: QueryKey): void {
       }),
     [queryClient, serialized],
   );
+}
+
+/**
+ * Runs a request whose answer holds a secret shown once (a new token, a calendar feed URL, an
+ * invite link) for the session it started in: an answer that arrives after that session ended
+ * is dropped (`aborted`), never shown on the page or kept in the mutation cache (ADR 0051).
+ */
+export async function inSession<T>(run: () => Promise<T>): Promise<T> {
+  const scope = sessionScope();
+  const result = await run();
+  if (scope.stale()) throw new ApiError('aborted', 0);
+  return result;
 }

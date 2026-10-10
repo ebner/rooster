@@ -4,6 +4,7 @@ import { ApiError } from './errors';
 import { api, unwrap } from './http';
 import { notFoundPreview, toInvite, toInvitePreview, toOrg } from './mappers';
 import { queryKeys } from './query-keys';
+import { inSession } from './session-bound';
 import type {
   CreatedInvite,
   CreateInviteInput,
@@ -43,11 +44,13 @@ export function useCreateInvite(): MutationResult<CreateInviteInput, CreatedInvi
         input.kind === 'email'
           ? { email: input.email, role: input.role, expiresInDays: input.expiresInDays }
           : { role: input.role, multiUse: input.multiUse, expiresInDays: input.expiresInDays };
-      const created = await unwrap(
-        api.POST('/api/v1/orgs/{orgId}/invites', {
-          params: { path: { orgId: input.orgId } },
-          body,
-        }),
+      const created = await inSession(() =>
+        unwrap(
+          api.POST('/api/v1/orgs/{orgId}/invites', {
+            params: { path: { orgId: input.orgId } },
+            body,
+          }),
+        ),
       );
       return {
         id: created.id,

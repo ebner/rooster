@@ -2,6 +2,7 @@ import type { Schemas } from '@rooster/api-client';
 import type { IcalFeed, IcalFeedCreate, IcalFeedCreated } from '@rooster/core/schemas';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrap } from './http';
+import { inSession } from './session-bound';
 import type { MutationResult, QueryResult } from './types';
 
 /**
@@ -25,12 +26,14 @@ export function useIcalFeeds(): QueryResult<IcalFeed[]> {
 export function useCreateIcalFeed(): MutationResult<IcalFeedCreate, IcalFeedCreated> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: IcalFeedCreate) =>
-      await unwrap(
-        api.POST('/api/v1/me/ical-feeds', {
-          // The core DTO with `exactOptionalPropertyTypes`: callers never set `undefined`.
-          body: body as Schemas['IcalFeedCreate'],
-        }),
+    mutationFn: (body: IcalFeedCreate) =>
+      inSession(() =>
+        unwrap(
+          api.POST('/api/v1/me/ical-feeds', {
+            // The core DTO with `exactOptionalPropertyTypes`: callers never set `undefined`.
+            body: body as Schemas['IcalFeedCreate'],
+          }),
+        ),
       ),
     onSettled: () => queryClient.invalidateQueries({ queryKey: icalFeedKeys.all }),
   });

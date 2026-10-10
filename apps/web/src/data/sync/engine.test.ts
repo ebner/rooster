@@ -1,5 +1,6 @@
 import { type ListState, listOps, tasksInGroup } from '@rooster/core/reducers';
 import { QueryClient } from '@tanstack/react-query';
+import { persistQueryClientSave } from '@tanstack/react-query-persist-client';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { useSyncStore } from '../../state/sync-store';
 import { ApiError } from '../errors';
@@ -14,7 +15,12 @@ import type { EventSourceLike } from './events';
 import { fakeLocks } from './fake-locks';
 import { electLeader } from './leader';
 import { createMemoryOutbox } from './outbox';
-import { cacheStorageKey, createCachePersister, type KeyValueStorage } from './persist';
+import {
+  type CachePersister,
+  cacheStorageKey,
+  createCachePersister,
+  type KeyValueStorage,
+} from './persist';
 
 const userId = '01900000-0000-7000-8000-000000000001';
 const orgId = '01900000-0000-7000-8000-0000000000aa';
@@ -1126,6 +1132,83 @@ describe('sign-out across tabs (ADR 0051)', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('sign-out across tabs: cache snapshots (ADR 0051)', () => {
+  test("a snapshot another tab saved after the wipe is deleted with the account's session", async () => {
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...globalThis.location, reload });
+    try {
+      localStorage.setItem('rooster.cacheOwner', userId);
+      const { data, storage } = memoryStorage();
+      const net = bus();
+      const transport = createFixtureTransport({ userId });
+      const persisterB = createCachePersister(() => undefined, storage);
+      const start = (channel: SyncChannel, queryClient: QueryClient, persister: CachePersister) =>
+        startSync({
+          queryClient,
+          transport,
+          outbox: createMemoryOutbox(),
+          channel,
+          persister,
+          eventSource: quietSource,
+          locks: null,
+          listen: false,
+        });
+      const queriesA = new QueryClient();
+      const queriesB = new QueryClient();
+      const tabA = await start(
+        net.join().channel,
+        queriesA,
+        createCachePersister(() => undefined, storage),
+      );
+      const tabB = await start(net.join().channel, queriesB, persisterB);
+      engines.push(tabA, tabB);
+      await fetchMe(queriesA, me(userId));
+      await fetchMe(queriesB, me(userId));
+      const del = storage.del;
+      let wiped = false;
+      storage.del = async (key) => {
+        await del(key);
+        if (wiped) return;
+        wiped = true;
+        // Tab B saves its cache (the user's profile) after tab A deleted the stored one.
+        await persistQueryClientSave({ queryClient: queriesB, persister: persisterB });
+        expect(data.has(cacheStorageKey)).toBe(true);
+      };
+      await tabA.clear({ final: true });
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+      expect(data.has(cacheStorageKey)).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('secrets in mutation results (ADR 0051)', () => {
+  test('an online 401 on /me drops every mutation result', async () => {
+    const { engine, queryClient } = await boot({
+      storage: memoryStorage().storage,
+      outbox: createMemoryOutbox(),
+      transport: createFixtureTransport({ userId }),
+    });
+    void engine;
+    await fetchMe(queryClient, me(userId));
+    const mutation = queryClient
+      .getMutationCache()
+      .build(queryClient, { mutationFn: async () => ({ secret: 'rst_pat_x' }) });
+    await mutation.execute(undefined);
+    expect(queryClient.getMutationCache().getAll()).toHaveLength(1);
+    await queryClient
+      .fetchQuery({
+        queryKey: ['me'],
+        queryFn: () => Promise.reject(new ApiError('unauthenticated', 401)),
+        staleTime: 0,
+        retry: false,
+      })
+      .catch(() => {});
+    expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
   });
 });
 

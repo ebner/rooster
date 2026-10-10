@@ -82,6 +82,29 @@ describe('persisted query cache (04 §6.1)', () => {
     expect(await persister.restoreClient()).toBeUndefined();
   });
 
+  test("a sign-out elsewhere deletes the ending account's snapshot, never another's", async () => {
+    const data = new Map<string, string>();
+    const storage: KeyValueStorage = {
+      get: async (k) => data.get(k),
+      set: async (k, v) => void data.set(k, v),
+      del: async (k) => void data.delete(k),
+    };
+    const persister = createCachePersister(() => undefined, storage);
+    await persister.persistClient(client([query(['me'], { user: { id: 'u2' } })]));
+    await persister.suspend();
+    await persister.removeOwnedBy('u1');
+    expect(data.has(cacheStorageKey)).toBe(true);
+    await persister.removeOwnedBy('u2');
+    expect(data.has(cacheStorageKey)).toBe(false);
+    // A snapshot that names no one could be anyone's.
+    data.set(cacheStorageKey, '{"timestamp":0,"buster":"","queries":[]}');
+    await persister.removeOwnedBy('u1');
+    expect(data.has(cacheStorageKey)).toBe(false);
+    data.set(cacheStorageKey, 'not json');
+    await persister.removeOwnedBy('u1');
+    expect(data.has(cacheStorageKey)).toBe(false);
+  });
+
   describe('AC-1.0.1 a cache is restored only while its last confirmed /me is recent', () => {
     const day = 24 * 60 * 60 * 1000;
     const now = Date.UTC(2026, 9, 8);

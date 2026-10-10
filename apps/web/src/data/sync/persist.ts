@@ -105,6 +105,12 @@ export interface CachePersister extends Persister {
   suspend(): Promise<void>;
   /** A fresh `/me` succeeded at `at` (ms epoch): stored with the next save. */
   confirmed(at: number): void;
+  /**
+   * Deletes the stored snapshot when it is `userId`'s, or names no one: another tab may have
+   * saved it after that account's sign-out wiped storage. Another account's snapshot stays.
+   * Runs after the writes queued before it, also once suspended.
+   */
+  removeOwnedBy(userId: string): Promise<void>;
 }
 
 /** The stored shape: each query's data apart from its metadata (see `serialize`). */
@@ -215,7 +221,28 @@ export function createCachePersister(
     confirmed: (at) => {
       confirmedAt = Math.max(confirmedAt ?? 0, at);
     },
+    removeOwnedBy: (userId) =>
+      chain(async () => {
+        const raw = await storage.get(cacheStorageKey);
+        if (!raw) return;
+        if (snapshotOwner(raw) === userId || snapshotOwner(raw) === undefined) {
+          await storage.del(cacheStorageKey);
+        }
+      }),
   };
+}
+
+/** The user of a stored snapshot's `/me` (undefined: none, or unreadable). */
+function snapshotOwner(raw: string): string | undefined {
+  try {
+    const stored = JSON.parse(raw) as StoredClient;
+    const me = stored.queries?.find(({ q }) => q.queryKey[0] === 'me')?.d as
+      | { user?: { id?: unknown } }
+      | undefined;
+    return typeof me?.user?.id === 'string' ? me.user.id : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

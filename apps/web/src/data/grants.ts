@@ -8,6 +8,7 @@ import { api, unwrap } from './http';
 import { myListKey, useListPipeline } from './list';
 import { toMe } from './mappers';
 import { useMe } from './me';
+import { inSession } from './session-bound';
 import type { MutationResult, QueryResult } from './types';
 
 /**
@@ -58,8 +59,10 @@ export function useRevokeGrant(): MutationResult<{ id: string }> {
 export function useCreateToken(): MutationResult<TokenCreate, TokenCreated> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: TokenCreate) =>
-      await unwrap(api.POST('/api/v1/me/tokens', { body: body as Schemas['TokenCreate'] })),
+    mutationFn: (body: TokenCreate) =>
+      inSession(() =>
+        unwrap(api.POST('/api/v1/me/tokens', { body: body as Schemas['TokenCreate'] })),
+      ),
     onSettled: () => queryClient.invalidateQueries({ queryKey: grantKeys.all }),
   });
 }

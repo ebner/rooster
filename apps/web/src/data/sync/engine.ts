@@ -552,6 +552,8 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     // bring them back. The queued ops stay, in memory and in the outbox.
     pipeline.endSession();
     queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== 'me' });
+    // Mutation results too: some hold a secret shown once (a new token, a feed URL, an invite).
+    queryClient.getMutationCache().clear();
     sessionDataCleared();
     sweepUserStorage();
     // The cached profile must not count as signed in either (the /login guard reads it); its
@@ -639,6 +641,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
    */
   async function wipe({ keepMe, keepUser }: { keepMe: boolean; keepUser?: string }) {
     sessionDataCleared();
+    queryClient.getMutationCache().clear();
     pipeline.reset();
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = null;
@@ -677,6 +680,8 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
         .catch(() => {});
     }
     await persister.suspend();
+    // Likewise a cache snapshot this tab saved after the wipe (its last save has landed).
+    if (ending !== undefined) await persister.removeOwnedBy(ending).catch(() => {});
     queryClient.clear();
     // Signed out, or someone else signed in, in another tab: start over as whoever it is now.
     globalThis.location?.reload();
