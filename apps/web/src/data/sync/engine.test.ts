@@ -443,12 +443,28 @@ describe('sync engine (04 §6)', () => {
       // Restored from storage: confirmed long ago.
       queryClient.setQueryData(['me'], me(userId), { updatedAt: 1 });
       queryClient.setQueryData(['notifications', 'x'], { secret: true });
-      await boot(
-        { storage, outbox: createMemoryOutbox(), transport: createFixtureTransport({ userId }) },
-        queryClient,
-      );
+      const outbox = createMemoryOutbox();
+      await outbox.put([
+        {
+          op: { ...listOps.deleteTask('x'), opId: 'mine', editTime: 1, clientId: 'c' },
+          orgId,
+          ctx: { userId: other },
+          userId: other,
+        },
+      ]);
+      const transport = createFixtureTransport({ userId: other });
+      const send = vi.spyOn(transport, 'send');
+      await boot({ storage, outbox, transport }, queryClient);
       await fetchMe(queryClient, me(other));
       await vi.waitFor(() => expect(data.has(cacheStorageKey)).toBe(false));
+      // The new account's queued op stays, goes back into the queue and is sent.
+      await vi.waitFor(() =>
+        expect(send).toHaveBeenCalledWith(
+          expect.objectContaining({ opId: 'mine' }),
+          orgId,
+          expect.anything(),
+        ),
+      );
       expect(queryClient.getQueryData(['notifications', 'x'])).toBeUndefined();
       expect(reload).not.toHaveBeenCalled();
       // The guard is spent: the next switch closes the session again.

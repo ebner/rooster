@@ -11,7 +11,7 @@ import { getClientId, registerListPipeline } from '../list';
 import { httpTransport } from '../pipeline/http-transport';
 import { ListPipeline, myListKey, tagsKey } from '../pipeline/pipeline';
 import type { ListTransport } from '../pipeline/transport';
-import { closeSessionForGood, sessionDataCleared } from '../session-events';
+import { closeSessionForGood, isSessionClosed, sessionDataCleared } from '../session-events';
 import type { Me } from '../types';
 import { buildInfo, cacheBuster } from './build-info';
 import { createSyncChannel, type SyncChannel, type SyncMessage } from './channel';
@@ -612,6 +612,12 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
               outbox.remove(records.filter((r) => r.userId !== keepUser).map((r) => r.op.opId)),
             );
     await Promise.all([clearOutbox.catch(() => {}), persister.removeClient()]);
+    // The new account's records stayed in the outbox but left the queue with the reset: queue
+    // them again (a closing page sends nothing more, so it leaves them to the next one).
+    if (keepUser !== undefined && !isSessionClosed()) {
+      await readOutbox();
+      pipeline.resume();
+    }
   }
 
   async function onClearedElsewhere() {

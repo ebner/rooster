@@ -40,7 +40,7 @@ The reload alone left a window between detecting the switch and unloading the pa
 - **The pipeline closes for good** (`ListPipeline.close()`): ops enqueued after the switch are refused, so an editor flushing on unmount stores and announces nothing.
 - **better-auth requests** check the latch (`fetchOptions.onRequest`). Sign-out checks it again after its push cleanup, so it can't sign the next account out. A consent decision that finishes after the latch doesn't navigate to the client's redirect URI.
 - **The shared outbox is wiped by owner:** a takeover keeps the new account's records (`wipe({ keepUser })`). A slower tab of the old account re-reads the owner after its push cleanup and leaves the wipe to the tab that took over.
-- **The reload guard** is spent on the next confirmed `/me` that needs no reload. A page that already reloaded once for the account and still holds the old account's data wipes it in place.
+- **The reload guard** is spent on the next confirmed `/me` that needs no reload. A page that already reloaded once for the account and still holds the old account's data wipes it in place. After an in-place wipe, the new account's retained outbox records are read back into the queue and sent.
 
 ## Consequences
 - In-flight continuations die with the page, so stale writes, revealed secrets and replayed undo can't cross accounts.
