@@ -83,6 +83,7 @@
     - the outbox stays userId-scoped.
 
     The secrets shown once (a new PAT, a calendar feed URL, an invite link) go through `inSession()`. The mutation cache is cleared when a session ends.
+17b. **Description nesting is bounded.** Descriptions are parsed with at most 20 container levels per line and 80 columns of indentation. Anything past that is kept as literal text. If the editor still fails, the pane shows the raw description as editable plain text, so one member can't make a task unopenable for the org.
 18. **CLI:**
     - every diagnostic goes through `safeDiagnostic`, which redacts credentials and strips control characters;
     - bearer tokens are validated before a header is built;
