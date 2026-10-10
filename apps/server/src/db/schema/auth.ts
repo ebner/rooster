@@ -34,6 +34,12 @@ export const user = sqliteTable('user', {
    * replaced or removed) never comes back. Null for avatars from before this column.
    */
   avatarStorage: text('avatar_storage', { enum: ['local', 's3'] }),
+  /**
+   * P11: the current avatar's own id (a UUIDv7), part of its blob key
+   * (`avatars/<userId>.<avatar_id>`). Unique per upload, whatever the clock does, so a blob
+   * queued for deletion or left in another bucket never shares a key with a later avatar.
+   */
+  avatarId: text('avatar_id'),
   oidcImage: text('oidc_image'),
 });
 

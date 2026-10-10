@@ -1,4 +1,5 @@
 import { mkdir, rm } from 'node:fs/promises';
+import { uuidv7 } from '@rooster/core/ids';
 import { AVATAR_MAX_BYTES } from '@rooster/core/limits';
 import type { Me } from '@rooster/core/schemas';
 import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
@@ -35,23 +36,41 @@ export type AvatarDownload =
 interface StoredAvatar {
   userId: string;
   avatarAt: number;
-  /** Null: stored before generation keys, at the shared key. */
+  /** Null: stored before per-upload keys, at the shared key. */
   storage: StorageKind | null;
+  avatarId: string | null;
 }
 
 function storedAvatar(row: {
   id: string;
   avatarAt: number | null;
   avatarStorage: StorageKind | null;
+  avatarId: string | null;
 }): StoredAvatar | null {
   return row.avatarAt === null
     ? null
-    : { userId: row.id, avatarAt: row.avatarAt, storage: row.avatarStorage };
+    : {
+        userId: row.id,
+        avatarAt: row.avatarAt,
+        storage: row.avatarStorage,
+        avatarId: row.avatarId,
+      };
 }
 
-/** `avatar_at` of the next upload: now, and always after the previous one. */
-function nextGeneration(previous: number | null, now: number): number {
-  return Math.max(now, (previous ?? 0) + 1);
+/**
+ * The blob key of a stored avatar: its own id; the version for the few stored by an unreleased
+ * build keyed by `avatar_at`; the shared key for avatars from before (no recorded backend).
+ */
+function keyOf(stored: StoredAvatar): string {
+  if (stored.storage === null) return avatarKey(stored.userId);
+  return avatarKey(stored.userId, stored.avatarId ?? stored.avatarAt);
+}
+
+/** Strong, and different for every upload even when the clock repeats `avatar_at`. */
+function etagOf(stored: StoredAvatar): string {
+  return stored.avatarId === null
+    ? `"avatar-${stored.avatarAt}"`
+    : `"avatar-${stored.avatarAt}-${stored.avatarId}"`;
 }
 
 const avatarNotFound = () => new AppError('not_found', 404, 'Avatar not found.');
@@ -96,17 +115,16 @@ export class AvatarService {
     }
     if (image === null) throw notAnImage();
     const avatar = image;
-    // Serialised with DELETE per user, so the generation read here is the one recorded.
+    // Serialised with DELETE per user. The key is the upload's own id, never reused, so the
+    // blob GC can never reach a later avatar (keys of replaced ones are queued there).
     await this.locks.run(actor.userId, async () => {
-      const generation = readOnly(this.deps.db, (tx) =>
-        nextGeneration(this.requireUser(tx, actor.userId).avatarAt, this.deps.clock()),
-      );
+      const avatarId = uuidv7();
       const store = this.stores.current;
-      const key = avatarKey(actor.userId, generation);
+      const key = avatarKey(actor.userId, avatarId);
       await store.put(key, avatar, 'image/webp');
       let previous: StoredAvatar | null;
       try {
-        previous = this.recordUpload(actor, store.kind, generation);
+        previous = this.recordUpload(actor, store.kind, avatarId);
       } catch (err) {
         await store.delete(key).catch(() => {});
         throw err;
@@ -136,19 +154,22 @@ export class AvatarService {
   }
 
   /**
-   * Points the user at the new generation and queues the replaced one for the blob GC (keys are
-   * unique per upload now, so a late GC run cannot hit a newer avatar). Returns the replaced one.
+   * Points the user at the new upload and queues the replaced one for the blob GC (keys are
+   * unique per upload, so a late GC run cannot hit a newer avatar). Returns the replaced one.
    */
-  private recordUpload(actor: Actor, storage: StorageKind, avatarAt: number): StoredAvatar | null {
+  private recordUpload(actor: Actor, storage: StorageKind, avatarId: string): StoredAvatar | null {
     return immediate(this.deps.db, (tx) => {
       const row = this.requireUser(tx, actor.userId);
       const previous = storedAvatar(row);
-      this.queueForGc(tx, actor.userId, previous);
+      this.queueForGc(tx, previous);
+      // The version in the image URL (cache busting); the ETag also carries the id.
+      const avatarAt = Math.max(this.deps.clock(), (row.avatarAt ?? 0) + 1);
       tx.update(user)
         .set({
           image: avatarUrl(actor.userId, avatarAt),
           avatarAt,
           avatarStorage: storage,
+          avatarId,
           // The provider's picture is kept once, from before the first upload.
           oidcImage: row.avatarAt === null ? row.image : row.oidcImage,
           updatedAt: new Date(this.deps.clock()),
@@ -161,11 +182,11 @@ export class AvatarService {
   }
 
   /** A generation-keyed avatar goes through `blob_gc`, which retries an unreachable backend. */
-  private queueForGc(tx: Tx, userId: string, stored: StoredAvatar | null): void {
+  private queueForGc(tx: Tx, stored: StoredAvatar | null): void {
     if (stored === null || stored.storage === null) return;
     tx.insert(blobGc)
       .values({
-        key: avatarKey(userId, stored.avatarAt),
+        key: keyOf(stored),
         storage: stored.storage,
         queuedAt: this.deps.clock(),
       })
@@ -203,12 +224,13 @@ export class AvatarService {
       const row = this.requireUser(tx, actor.userId);
       const stored = storedAvatar(row);
       if (stored === null) return null;
-      this.queueForGc(tx, actor.userId, stored);
+      this.queueForGc(tx, stored);
       tx.update(user)
         .set({
           image: row.oidcImage,
           avatarAt: null,
           avatarStorage: null,
+          avatarId: null,
           oidcImage: null,
           updatedAt: new Date(this.deps.clock()),
         })
@@ -227,40 +249,40 @@ export class AvatarService {
   async get(actor: Actor, userId: string, ifNoneMatch?: string): Promise<AvatarDownload> {
     const current = readOnly(this.deps.db, (tx) => {
       const row = tx
-        .select({ avatarAt: user.avatarAt, storage: user.avatarStorage })
+        .select({
+          id: user.id,
+          avatarAt: user.avatarAt,
+          avatarStorage: user.avatarStorage,
+          avatarId: user.avatarId,
+        })
         .from(user)
         .where(eq(user.id, userId))
         .get();
-      if (row === undefined || row.avatarAt === null) return null;
+      if (row === undefined) return null;
       return userId === actor.userId || this.sharesOrg(tx, actor, userId)
-        ? { avatarAt: row.avatarAt, storage: row.storage }
+        ? storedAvatar(row)
         : null;
     });
     if (current === null) throw avatarNotFound();
-    const { avatarAt } = current;
-    // Strong: each upload has its own `avatar_at`. Only answered after the access check.
-    const etag = `"avatar-${avatarAt}"`;
+    // Only answered after the access check.
+    const etag = etagOf(current);
     if (matchesEtag(ifNoneMatch, etag)) return { kind: 'not-modified', etag };
-    const blob = await this.readBlob(userId, avatarAt, current.storage);
+    const blob = await this.readBlob(current);
     if (blob === null) throw avatarNotFound();
     return { kind: 'stream', blob, etag };
   }
 
   /**
-   * This upload's own object (its generation, in its backend), or null: a stale copy left in a
+   * This upload's own object (its key, in its backend), or null: a stale copy left in a
    * backend or bucket that was not configured when the avatar was replaced or removed has
-   * another key and is never served. Avatars from before generation keys (`avatar_storage`
+   * another key and is never served. Avatars from before per-upload keys (`avatar_storage`
    * null) are looked up at the shared key, in the current backend first, then the other one.
    */
-  private async readBlob(
-    userId: string,
-    avatarAt: number,
-    storage: StorageKind | null,
-  ): Promise<BlobObject | null> {
-    if (storage !== null) {
-      return (await this.stores.byKind(storage)?.get(avatarKey(userId, avatarAt))) ?? null;
+  private async readBlob(stored: StoredAvatar): Promise<BlobObject | null> {
+    const key = keyOf(stored);
+    if (stored.storage !== null) {
+      return (await this.stores.byKind(stored.storage)?.get(key)) ?? null;
     }
-    const key = avatarKey(userId);
     const current = this.stores.current;
     const other = this.stores.byKind(current.kind === 'local' ? 's3' : 'local');
     return (await current.get(key)) ?? (await other?.get(key)) ?? null;

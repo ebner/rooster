@@ -21,10 +21,10 @@ afterEach(() => {
 
 const PROVIDER_PICTURE = 'https://idp.example.com/ann.png';
 
-async function team() {
+async function team(clock?: () => number) {
   const dir = tempDir();
   dirs.push(dir.cleanup);
-  const ctx = listCtx({ env: { ROOSTER_DATA_DIR: dir.path } });
+  const ctx = listCtx({ env: { ROOSTER_DATA_DIR: dir.path }, ...(clock ? { clock } : {}) });
   const a = ctx.user('ann@example.com', 'Ann');
   const b = ctx.user('bo@example.com', 'Bo');
   const c = ctx.user('cy@example.com', 'Cy');
@@ -60,7 +60,7 @@ describe('avatars (FR-SET-1)', () => {
       expect(img.status).toBe(200);
       expect(img.headers.get('content-type')).toBe('image/webp');
       expect(img.headers.get('cache-control')).toBe('private, no-cache');
-      expect(img.headers.get('etag')).toBe(`"avatar-${stored?.avatarAt}"`);
+      expect(img.headers.get('etag')).toBe(`"avatar-${stored?.avatarAt}-${stored?.avatarId}"`);
       const meta = await sharp(Buffer.from(await img.arrayBuffer())).metadata();
       expect(meta).toMatchObject({ format: 'webp', width: 256, height: 256 });
     }
@@ -107,6 +107,31 @@ describe('avatars (FR-SET-1)', () => {
     expect((await ctx.a.ok<Me>('DELETE', '/api/v1/me/avatar')).image).toBe(PROVIDER_PICTURE);
   });
 
+  it('a clock that repeats after a removal never gives the new avatar the removed one’s key', async () => {
+    // Every upload, removal and GC run sees the same instant (a clock set back, say).
+    const ctx = await team(() => 1_791_600_000_000);
+    const path = `/api/v1/avatars/${ctx.a.userId}`;
+    const solid = (g: number) =>
+      sharp({ create: { width: 60, height: 60, channels: 3, background: { r: 0, g, b: 0 } } })
+        .png()
+        .toBuffer();
+    expect((await put(ctx, ctx.a, fileForm(await solid(20), 'a.png'))).status).toBe(200);
+    const first = await ctx.b.call('GET', path);
+    const removedEtag = first.headers.get('etag') ?? '';
+    await ctx.a.ok('DELETE', '/api/v1/me/avatar');
+    expect((await put(ctx, ctx.a, fileForm(await solid(220), 'b.png'))).status).toBe(200);
+    // The GC deletes A's blob, not B's.
+    await ctx.app.services.blobGc.drain();
+    const stored = row(ctx, ctx.a.userId);
+    expect(avatarFiles(ctx)).toEqual([`${ctx.a.userId}.${stored?.avatarId}`]);
+    const served = await ctx.b.call('GET', path);
+    expect(served.status).toBe(200);
+    // A copy of A cached under its ETag is not revalidated as B.
+    expect(served.headers.get('etag')).not.toBe(removedEtag);
+    const cached = await ctx.b.call('GET', path, undefined, { 'if-none-match': removedEtag });
+    expect(cached.status).toBe(200);
+  });
+
   it('serialises an upload and a removal: the blob always matches the row', async () => {
     const ctx = await team();
     await put(ctx, ctx.a, fileForm(await png(64, 64), 'one.png'));
@@ -116,7 +141,7 @@ describe('avatars (FR-SET-1)', () => {
       ctx.a.call('DELETE', '/api/v1/me/avatar'),
     ]);
     await ctx.app.services.blobGc.drain();
-    const stored = row(ctx, ctx.a.userId)?.avatarAt ?? null;
+    const stored = row(ctx, ctx.a.userId)?.avatarId ?? null;
     expect(avatarFiles(ctx)).toEqual(stored === null ? [] : [`${ctx.a.userId}.${stored}`]);
   });
 
@@ -207,7 +232,7 @@ describe('avatars across a storage switch', () => {
     expect((await put(ctx, ctx.a, fileForm(await png(40, 40), 'new.png'))).status).toBe(200);
     const stored = row(ctx, ctx.a.userId);
     expect(stored?.avatarStorage).toBe('local');
-    expect(avatarFiles(ctx)).toEqual([`${ctx.a.userId}.${stored?.avatarAt}`]);
+    expect(avatarFiles(ctx)).toEqual([`${ctx.a.userId}.${stored?.avatarId}`]);
     expect((await ctx.b.call('GET', path)).status).toBe(200);
   });
 

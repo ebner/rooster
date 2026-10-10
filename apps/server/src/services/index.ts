@@ -134,8 +134,8 @@ export function createServices(
       email: mail.enabled() && prefEnabled(tx, userId, type, 'email'),
     }),
     dispatch: (items) => {
-      push.sendNotifications(items.filter((i) => i.push).map((i) => i.id));
-      mail.sendImmediate(items.filter((i) => i.email).map((i) => i.id));
+      push.sendNotifications(items.filter((i) => i.push));
+      mail.sendImmediate(items.filter((i) => i.email));
     },
   });
   const orgs = new OrgService(deps, {

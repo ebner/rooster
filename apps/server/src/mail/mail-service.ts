@@ -50,6 +50,9 @@ export const DIGEST_SECTION_MAX = 10;
 
 export const DIGEST_JOB = 'digest';
 
+/** A user's email jobs share one delivery-queue key (lib/task-queue.ts). */
+const mailKey = (userId: string) => `mail:${userId}`;
+
 const DAY_MS = 86_400_000;
 
 /** The batch job's queue: the same predicate as the `notification_email_pending` index. */
@@ -172,25 +175,30 @@ export class MailService {
     const timezone = invitee?.timezone ?? inviter?.timezone ?? 'UTC';
     const inviterName = inviter?.name ?? null;
     afterCommitSend(tx, () =>
-      this.queue.run('mail-invite', async () => {
-        const t = mailT(locale);
-        await this.send({
-          to: invite.email,
-          subject:
-            inviterName === null
-              ? t('invite.subjectAnonymous', { org: org.name })
-              : t('invite.subject', { inviter: inviterName, org: org.name }),
-          element: InviteEmail({
-            locale,
-            t,
-            host: this.host,
-            inviter: inviterName,
-            org: org.name,
-            url: invite.url,
-            expires: instantDate(locale, invite.expiresAt, timezone),
-          }),
-        });
-      }),
+      this.queue.run(
+        'mail-invite',
+        async () => {
+          const t = mailT(locale);
+          await this.send({
+            to: invite.email,
+            subject:
+              inviterName === null
+                ? t('invite.subjectAnonymous', { org: org.name })
+                : t('invite.subject', { inviter: inviterName, org: org.name }),
+            element: InviteEmail({
+              locale,
+              t,
+              host: this.host,
+              inviter: inviterName,
+              org: org.name,
+              url: invite.url,
+              expires: instantDate(locale, invite.expiresAt, timezone),
+            }),
+          });
+        },
+        // Invites count against the inviter's email jobs.
+        mailKey(invite.inviterId),
+      ),
     );
     return true;
   }
@@ -202,9 +210,11 @@ export class MailService {
    * `emailMode: 'immediate'` get one email each now; batch recipients are left to the batch
    * job. A failed immediate send stays pending, so the batch job retries it.
    */
-  sendImmediate(ids: readonly string[]): void {
+  sendImmediate(items: readonly { id: string; userId: string }[]): void {
     if (!this.enabled()) return;
-    for (const id of ids) void this.queue.run('mail-notification', () => this.sendOne(id));
+    for (const { id, userId } of items) {
+      void this.queue.run('mail-notification', () => this.sendOne(id), mailKey(userId));
+    }
   }
 
   private async sendOne(id: string): Promise<void> {
@@ -277,7 +287,9 @@ export class MailService {
         .map((r) => r.userId),
     );
     const sent = await Promise.all(
-      users.map((userId) => this.queue.run('mail-batch', () => this.sendBatch(userId, now))),
+      users.map((userId) =>
+        this.queue.run('mail-batch', () => this.sendBatch(userId, now), mailKey(userId)),
+      ),
     );
     return sent.filter((s) => s === true).length;
   }
@@ -390,7 +402,11 @@ export class MailService {
     });
     const sent = await Promise.all(
       due.map((d) =>
-        this.queue.run('mail-digest', () => this.sendDigestOf(d.userId, d.date, d.since, now)),
+        this.queue.run(
+          'mail-digest',
+          () => this.sendDigestOf(d.userId, d.date, d.since, now),
+          mailKey(d.userId),
+        ),
       ),
     );
     return sent.filter((s) => s === true).length;

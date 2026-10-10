@@ -12,9 +12,11 @@ import { describe, expect, it } from 'vitest';
 import { pushSubscription } from '../src/db/schema/index.ts';
 import { logSafeError } from '../src/lib/log-safe-error.ts';
 import { loggablePath } from '../src/lib/request-log.ts';
+import { DELIVERY_LIMITS, TaskQueue } from '../src/lib/task-queue.ts';
 import { SmtpSendError, sanitizeSmtpError, smtpTransport } from '../src/mail/transport.ts';
 import { unsubscribeToken } from '../src/mail/unsubscribe-token.ts';
 import { canonicalPushEndpoint } from '../src/push/endpoint.ts';
+import { PUSH_DEVICES_MAX } from '../src/push/push-service.ts';
 import type { PushSender } from '../src/push/transport.ts';
 import { fcmEndpoint, SMTP_ENV, subscriptionBody } from './delivery-fakes.ts';
 import { captureLogger, createTestApp, TEST_ENV } from './helpers.ts';
@@ -706,5 +708,183 @@ describe('queued notification pushes recheck the push preference', () => {
     await Promise.all(blockers);
     await ctx.app.services.deliveries.idle();
     expect(ctx.push.sent).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Bounded push work: devices per user, endpoint aliases, and the delivery queue
+// ---------------------------------------------------------------------------------------------
+
+describe('push devices per user', () => {
+  it(`keeps at most ${PUSH_DEVICES_MAX}: the one reached least recently makes room`, async () => {
+    let now = 1_791_600_000_000;
+    const ctx = listCtx({ clock: () => now++ });
+    const ann = ctx.user('ann@example.com');
+    const ids: string[] = [];
+    for (let i = 0; i < PUSH_DEVICES_MAX; i++) {
+      const sub = await ann.ok<PushSubscriptionInfo>(
+        'POST',
+        '/api/v1/me/push-subscriptions',
+        subscriptionBody(`d${i}`),
+        201,
+      );
+      ids.push(sub.id);
+    }
+    // The oldest device was reached recently; the second oldest never was.
+    ctx.db.orm
+      .update(pushSubscription)
+      .set({ lastOkAt: now++ })
+      .where(eq(pushSubscription.id, ids[0] ?? ''))
+      .run();
+    const newest = await ann.ok<PushSubscriptionInfo>(
+      'POST',
+      '/api/v1/me/push-subscriptions',
+      subscriptionBody('newest'),
+      201,
+    );
+    const left = ctx.db.orm
+      .select()
+      .from(pushSubscription)
+      .all()
+      .map((r) => r.id);
+    expect(left).toHaveLength(PUSH_DEVICES_MAX);
+    expect(left).toContain(newest.id);
+    expect(left).toContain(ids[0]);
+    expect(left).not.toContain(ids[1]);
+    // Re-subscribing a device it already has adds nothing.
+    await ann.ok('POST', '/api/v1/me/push-subscriptions', subscriptionBody('newest'), 201);
+    expect(ctx.db.orm.select().from(pushSubscription).all()).toHaveLength(PUSH_DEVICES_MAX);
+  });
+
+  it('refuses fragment aliases of an endpoint (the fragment never reaches the push service)', async () => {
+    const ctx = listCtx();
+    const ann = ctx.user('ann@example.com');
+    for (const endpoint of [`${fcmEndpoint('x')}#1`, `${fcmEndpoint('x')}#`]) {
+      expect(canonicalPushEndpoint(endpoint)).toBeNull();
+      const res = await ann.call('POST', '/api/v1/me/push-subscriptions', {
+        ...subscriptionBody('x'),
+        endpoint,
+      });
+      expect(res.status).toBe(422);
+    }
+    expect(ctx.db.orm.select().from(pushSubscription).all()).toEqual([]);
+  });
+});
+
+describe('the delivery queue is bounded and fair', () => {
+  const gate = () => {
+    let open = () => {};
+    const opened = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    return { opened, open };
+  };
+
+  it('drops what one key has beyond its limit, logging once, while other keys still run', async () => {
+    const { logger, lines } = captureLogger();
+    const queue = new TaskQueue(1, logger, { perKey: 3, total: 100 });
+    const g = gate();
+    const ran: string[] = [];
+    const job = (name: string) => async () => {
+      await g.opened;
+      ran.push(name);
+      return name;
+    };
+    const flood = Array.from({ length: 10 }, (_, i) => queue.run('push', job(`a${i}`), 'push:a'));
+    const other = queue.run('mail', job('b0'), 'mail:b');
+    g.open();
+    const results = await Promise.all([...flood, other]);
+    expect(results.filter((r) => r !== undefined)).toHaveLength(4);
+    expect(ran).toEqual(['a0', 'a1', 'b0', 'a2']);
+    const drops = lines.filter((l) => l.msg === 'delivery tasks dropped for one key');
+    expect(drops).toHaveLength(1);
+    expect(drops[0]).toMatchObject({ key: 'push:a', task: 'push' });
+    // Once the key has emptied it may queue again (and a new drop would be logged again).
+    expect(await queue.run('push', async () => 'again', 'push:a')).toBe('again');
+  });
+
+  it('drops past the global limit, whatever the key', async () => {
+    const { logger, lines } = captureLogger();
+    const queue = new TaskQueue(1, logger, { perKey: 100, total: 5 });
+    const g = gate();
+    const all = Array.from({ length: 8 }, (_, i) =>
+      queue.run(
+        'push',
+        async () => {
+          await g.opened;
+          return i;
+        },
+        `push:u${i}`,
+      ),
+    );
+    g.open();
+    const results = await Promise.all(all);
+    expect(results.filter((r) => r !== undefined)).toEqual([0, 1, 2, 3, 4]);
+    expect(lines.filter((l) => l.msg === 'delivery queue full; tasks dropped')).toHaveLength(1);
+  });
+
+  it('takes waiting work round-robin across keys', async () => {
+    const queue = new TaskQueue(1, captureLogger().logger, { perKey: 100, total: 100 });
+    const g = gate();
+    const ran: string[] = [];
+    const job = (name: string) => async () => {
+      await g.opened;
+      ran.push(name);
+    };
+    const runs = [
+      ...['a1', 'a2', 'a3', 'a4'].map((n) => queue.run('push', job(n), 'a')),
+      ...['b1', 'b2'].map((n) => queue.run('push', job(n), 'b')),
+      queue.run('push', job('c1'), 'c'),
+    ];
+    g.open();
+    await Promise.all(runs);
+    expect(ran).toEqual(['a1', 'a2', 'b1', 'c1', 'a3', 'b2', 'a4']);
+  });
+
+  it('a user flooding push does not hold up another user’s notification', async () => {
+    const ctx = listCtx();
+    const ann = ctx.user('ann@example.com');
+    const bo = ctx.user('bo@example.com');
+    const org = await bo.ok<{ id: string }>('POST', '/api/v1/orgs', { name: 'Acme' }, 201);
+    const { url } = await bo.ok<{ url: string }>(
+      'POST',
+      `/api/v1/orgs/${org.id}/invites`,
+      { role: 'member' },
+      201,
+    );
+    await ann.ok('POST', `/api/v1/invites/${url.split('/invite/')[1]}/accept`);
+    await ann.ok('POST', '/api/v1/me/push-subscriptions', subscriptionBody('ann'), 201);
+    await bo.ok('POST', '/api/v1/me/push-subscriptions', subscriptionBody('bo'), 201);
+    const queue = ctx.app.services.deliveries;
+    const g = gate();
+    const order: string[] = [];
+    const record = ctx.push.sender;
+    const tracing: PushSender = async (...args) => {
+      order.push('bo');
+      await record(...args);
+    };
+    (ctx.app.services.push as unknown as { sender: PushSender }).sender = tracing;
+    // Ann's push has a large backlog waiting (all slots busy, more queued).
+    const flood = Array.from({ length: 300 }, () =>
+      queue.run(
+        'push',
+        async () => {
+          await g.opened;
+          order.push('ann');
+          return true;
+        },
+        `push:${ann.userId}`,
+      ),
+    );
+    // Ann assigns Bo a task: his push waits behind at most one of Ann's per turn.
+    await createTask(ann, { title: 'For Bo', assigneeId: bo.userId }, org.id);
+    g.open();
+    const done = await Promise.all(flood);
+    await queue.idle();
+    // Ann's backlog was cut at the per-key limit, and Bo's push went out early, not last.
+    expect(done.filter((r) => r === true)).toHaveLength(DELIVERY_LIMITS.perKey);
+    expect(order.indexOf('bo')).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf('bo')).toBeLessThan(10);
+    expect(ctx.push.sent.map((m) => m.endpoint)).toEqual([fcmEndpoint('bo')]);
   });
 });

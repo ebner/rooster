@@ -107,7 +107,7 @@ export interface NotificationDelivery {
   /** Inside the fan-out transaction. */
   channels(tx: Tx, userId: string, type: NotificationType): { push: boolean; email: boolean };
   /** After commit, with the new notifications that want push or email. */
-  dispatch(items: readonly { id: string; push: boolean; email: boolean }[]): void;
+  dispatch(items: readonly { id: string; userId: string; push: boolean; email: boolean }[]): void;
 }
 
 type NotificationRow = typeof notification.$inferSelect;
@@ -203,7 +203,7 @@ export class NotificationService {
   notify(tx: Tx, drafts: readonly NotificationDraft[]): void {
     const now = this.deps.clock();
     const created = new Map<string, { row: NotificationRow; preview: SseNotification }[]>();
-    const outbound: { id: string; push: boolean; email: boolean }[] = [];
+    const outbound: { id: string; userId: string; push: boolean; email: boolean }[] = [];
     for (const draft of drafts) {
       if (draft.userId === draft.actorId) continue;
       if (!isMember(tx, draft.userId, draft.orgId)) continue;
@@ -252,7 +252,7 @@ export class NotificationService {
         createdAt: now,
       };
       tx.insert(notification).values(row).run();
-      if (reach.push || reach.email) outbound.push({ id: row.id, ...reach });
+      if (reach.push || reach.email) outbound.push({ id: row.id, userId: row.userId, ...reach });
       if (!inapp) continue;
       const list = created.get(draft.userId) ?? [];
       list.push({

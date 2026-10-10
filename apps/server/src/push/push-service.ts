@@ -5,7 +5,7 @@ import type {
   PushSubscriptionInfo,
   VapidPublicKey,
 } from '@rooster/core/schemas';
-import { and, asc, desc, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { notification, pushSubscription } from '../db/schema/index.ts';
 import { AppError } from '../lib/errors.ts';
 import { logSafeError } from '../lib/log-safe-error.ts';
@@ -52,6 +52,12 @@ const BODY_MAX = 300;
 const REMINDER_TITLES = 3;
 
 export const DUE_REMINDER_JOB = 'due_reminder';
+
+/** Push devices per user (`subscribe` drops the least recently reached past it). */
+export const PUSH_DEVICES_MAX = 20;
+
+/** A user's push jobs share one delivery-queue key (lib/task-queue.ts). */
+const pushKey = (userId: string) => `push:${userId}`;
 
 function clip(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
@@ -185,8 +191,30 @@ export class PushService {
         .onConflictDoUpdate({ target: pushSubscription.endpoint, set: values })
         .returning()
         .get();
+      this.keepNewest(tx, actor.userId, row.id);
       return toInfo(row);
     });
+  }
+
+  /**
+   * At most `PUSH_DEVICES_MAX` devices per user: each one multiplies every notification into
+   * a send. Past it the device that has gone longest without an accepted push (never, first)
+   * makes room, rather than refusing the device the user is setting up right now.
+   */
+  private keepNewest(tx: Tx, userId: string, keep: string): void {
+    const rows = tx
+      .select({ id: pushSubscription.id })
+      .from(pushSubscription)
+      .where(eq(pushSubscription.userId, userId))
+      .orderBy(
+        desc(sql`coalesce(${pushSubscription.lastOkAt}, ${pushSubscription.createdAt})`),
+        desc(pushSubscription.id),
+      )
+      .all()
+      .filter((r) => r.id !== keep);
+    const extra = rows.slice(PUSH_DEVICES_MAX - 1).map((r) => r.id);
+    if (extra.length > 0)
+      tx.delete(pushSubscription).where(inArray(pushSubscription.id, extra)).run();
   }
 
   private renew(
@@ -273,14 +301,17 @@ export class PushService {
     const recipient = readOnly(this.deps.db, (tx) => loadRecipient(tx, actor.userId));
     const target: SubscriptionRef = { id: row.id, userId: actor.userId };
     const t = mailT(recipient?.locale ?? 'en');
-    const outcome = await this.queue.run('push-test', () =>
-      this.deliver(target, {
-        kind: 'test',
-        title: t('push.testTitle'),
-        body: t('push.testBody'),
-        url: '/settings/notifications',
-        tag: 'test',
-      }),
+    const outcome = await this.queue.run(
+      'push-test',
+      () =>
+        this.deliver(target, {
+          kind: 'test',
+          title: t('push.testTitle'),
+          body: t('push.testBody'),
+          url: '/settings/notifications',
+          tag: 'test',
+        }),
+      pushKey(actor.userId),
     );
     if (outcome === 'gone') {
       throw new AppError('push_gone', 410, 'This device is no longer subscribed; subscribe again.');
@@ -323,9 +354,13 @@ export class PushService {
    * After commit: pushes each new notification to its recipient's devices. `pushed_at` is
    * set once any device's push service accepted it.
    */
-  sendNotifications(ids: readonly string[]): void {
-    for (const id of ids) {
-      void this.queue.run('push-notification', async () => this.fanOutNotification(id));
+  sendNotifications(items: readonly { id: string; userId: string }[]): void {
+    for (const { id, userId } of items) {
+      void this.queue.run(
+        'push-notification',
+        async () => this.fanOutNotification(id),
+        pushKey(userId),
+      );
     }
   }
 
@@ -340,7 +375,11 @@ export class PushService {
       return found === null ? [] : this.subscriptionsOf(tx, found.row.userId);
     });
     for (const target of targets) {
-      void this.queue.run('push-notification', () => this.sendNotificationTo(id, target));
+      void this.queue.run(
+        'push-notification',
+        () => this.sendNotificationTo(id, target),
+        pushKey(target.userId),
+      );
     }
   }
 
@@ -505,7 +544,11 @@ export class PushService {
       due.map(async ({ date, rows }) => {
         const results = await Promise.all(
           rows.map((row) =>
-            this.queue.run('push-reminder', () => this.sendDueReminderTo(row, date, now)),
+            this.queue.run(
+              'push-reminder',
+              () => this.sendDueReminderTo(row, date, now),
+              pushKey(row.userId),
+            ),
           ),
         );
         return results.includes(true);

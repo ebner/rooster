@@ -15,7 +15,7 @@ import { createApp } from '../src/app.ts';
 import { isValidBlobKey } from '../src/blob/keys.ts';
 import { LocalBlobStore } from '../src/blob/store.ts';
 import { parseConfig } from '../src/config.ts';
-import { attachment, blobGc } from '../src/db/schema/index.ts';
+import { attachment, blobGc, user } from '../src/db/schema/index.ts';
 import { createLogger } from '../src/lib/logger.ts';
 import { fileForm, png, sendForm } from './blob-helpers.ts';
 import { createTestDb, createUserWithSession, tempDir, testConfig } from './helpers.ts';
@@ -187,8 +187,8 @@ describe('S3 blob storage', () => {
       fileForm(await png(300, 300), 'me.png'),
     );
     expect(put.status).toBe(200);
-    const avatarAt = ((await put.json()) as Me).image?.split('?v=')[1] ?? '';
-    const key = `avatars/${ctx.owner.userId}.${avatarAt}`;
+    const stored = ctx.db.orm.select().from(user).where(eq(user.id, ctx.owner.userId)).get();
+    const key = `avatars/${ctx.owner.userId}.${stored?.avatarId}`;
     expect(ctx.s3.objects.has(key)).toBe(true);
     const img = await ctx.app.request(`/api/v1/avatars/${ctx.owner.userId}`, {
       headers: { cookie: ctx.owner.jar.header() },
@@ -215,6 +215,7 @@ describe('blob keys', () => {
     expect(isValidBlobKey(`${id}/${id}.thumb.webp`)).toBe(true);
     expect(isValidBlobKey(`avatars/${id}`)).toBe(true);
     expect(isValidBlobKey(`avatars/${id}.1791628778737`)).toBe(true);
+    expect(isValidBlobKey(`avatars/${id}.${id}`)).toBe(true);
     for (const bad of [
       `../${id}`,
       `${id}/../${id}`,

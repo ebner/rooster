@@ -3,7 +3,7 @@
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const KEY_RE = new RegExp(
-  `^(?:${UUID}/${UUID}(?:\\.thumb\\.webp)?|avatars/${UUID}(?:\\.[0-9]{1,16})?)$`,
+  `^(?:${UUID}/${UUID}(?:\\.thumb\\.webp)?|avatars/${UUID}(?:\\.(?:${UUID}|[0-9]{1,16}))?)$`,
 );
 
 export function isValidBlobKey(key: string): boolean {
@@ -23,9 +23,10 @@ export const thumbKey = (orgId: string, attachmentId: string) =>
   assertBlobKey(`${orgId}/${attachmentId}.thumb.webp`);
 
 /**
- * An avatar: `avatars/<userId>.<avatar_at>` since P11, one object per upload, so a stale copy
- * (left in a backend or bucket that was not configured when it was replaced or removed) is
- * never read for a later upload. Without a generation: the key of avatars stored before.
+ * An avatar: `avatars/<userId>.<avatar_id>` since P11, one object per upload under an id that
+ * never repeats, so a blob queued for deletion or left in a backend or bucket that was not
+ * configured is never read for a later upload. A number instead of the id: an unreleased build
+ * keyed by `avatar_at`. Without either: the shared key of avatars stored before.
  */
-export const avatarKey = (userId: string, generation?: number) =>
+export const avatarKey = (userId: string, generation?: string | number) =>
   assertBlobKey(generation === undefined ? `avatars/${userId}` : `avatars/${userId}.${generation}`);
