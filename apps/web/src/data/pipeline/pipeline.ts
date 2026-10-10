@@ -655,6 +655,7 @@ export class ListPipeline {
         if (!this.isLeader()) useSyncStore.setState(message.status);
         return;
       case 'cleared':
+      case 'expired':
         return;
     }
   }

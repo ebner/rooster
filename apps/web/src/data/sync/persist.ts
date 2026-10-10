@@ -138,6 +138,11 @@ export interface CachePersister extends Persister {
   confirmed(at: number): void;
   /** Deletes one account's snapshot (its session ended). Also once suspended. */
   removeFor(userId: string): Promise<void>;
+  /**
+   * An account's session ended (`true`) or was confirmed again (`false`): no snapshot of an
+   * ended session is saved, whichever tab tries.
+   */
+  setExpired(userId: string, expired: boolean): void;
   /** Deletes every snapshot but `userId`'s (an account took over; null: all of them). */
   removeExcept(userId: string | null): Promise<void>;
   /**
@@ -188,6 +193,7 @@ export function createCachePersister(
   owner: () => string | null = readCacheOwner,
 ): CachePersister {
   let suspended = false;
+  const expiredAccounts = new Set<string>();
   let confirmedAt: number | null = null;
   let writing: Promise<void> = Promise.resolve();
   const chain = (run: () => Promise<void>) => {
@@ -228,7 +234,7 @@ export function createCachePersister(
     persistClient: (client) => {
       if (suspended) return writing;
       const account = accountOf(client.clientState.queries.find((q) => q.queryKey[0] === 'me'));
-      if (account === undefined) return writing;
+      if (account === undefined || expiredAccounts.has(account)) return writing;
       const value = serialize(prepareForPersist(client, baseOf));
       const key = cacheStorageKey(account);
       return chain(() => (suspended ? Promise.resolve() : storage.set(key, value)));
@@ -266,6 +272,10 @@ export function createCachePersister(
       confirmedAt = Math.max(confirmedAt ?? 0, at);
     },
     removeFor: (userId) => chain(() => storage.del(cacheStorageKey(userId))),
+    setExpired: (userId, expired) => {
+      if (expired) expiredAccounts.add(userId);
+      else expiredAccounts.delete(userId);
+    },
     removeExcept: (userId) => {
       const keep = userId === null ? null : cacheStorageKey(userId);
       return removeWhere((key) => key !== keep);

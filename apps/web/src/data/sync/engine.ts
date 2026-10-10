@@ -403,6 +403,14 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
       case 'cleared':
         void onClearedElsewhere(typeof message.userId === 'string' ? message.userId : undefined);
         return;
+      case 'expired':
+        if (typeof message.userId !== 'string') return;
+        // The cookie is shared: this tab's session for that account is gone too.
+        persister.setExpired(message.userId, true);
+        if (sessionAccount() === message.userId && (userId !== null || saving)) {
+          onSessionEnded({ announce: false });
+        }
+        return;
       case 'status':
       case 'applied':
       case 'dropped':
@@ -518,6 +526,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     writeOwner(me.user.id);
     userId = me.user.id;
     saving = true;
+    persister.setExpired(me.user.id, false);
     pipeline.retainUser();
     pruneOrgs(me);
     pipeline.resume();
@@ -535,11 +544,24 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
    * outbox stays, owned by the user id: it flushes after that user signs in again, and is
    * wiped if someone else does.
    */
-  function onSessionEnded() {
-    // Without a fresh or restored `/me` (the restore timed out), the account whose cache this
-    // browser holds: still the one from the start, unless another tab changed the owner since.
-    const ended =
-      userId ?? ranAs ?? (startOwner !== null && readOwner() === startOwner ? startOwner : null);
+  /**
+   * The account this page's session is for. Without a fresh or restored `/me` (the restore
+   * timed out), the one whose cache this browser holds: still the one from the start, unless
+   * another tab changed the owner since.
+   */
+  function sessionAccount(): string | null {
+    return (
+      userId ?? ranAs ?? (startOwner !== null && readOwner() === startOwner ? startOwner : null)
+    );
+  }
+
+  function onSessionEnded({ announce = true }: { announce?: boolean } = {}) {
+    const ended = sessionAccount();
+    if (ended !== null) {
+      persister.setExpired(ended, true);
+      // Every other tab of that account shares the expired cookie: they stop saving too.
+      if (announce) channel.post({ type: 'expired', userId: ended });
+    }
     userId = null;
     saving = false;
     if (saveTimer) clearTimeout(saveTimer);

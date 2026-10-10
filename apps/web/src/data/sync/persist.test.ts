@@ -170,6 +170,23 @@ describe('persisted query cache (04 §6.1)', () => {
       expect(data.size).toBe(0);
     });
 
+    test('no snapshot of an account whose session ended is saved until it is confirmed again', async () => {
+      const { data, storage } = memory();
+      const persister = createCachePersister(
+        () => undefined,
+        storage,
+        Date.now,
+        () => 'u1',
+      );
+      persister.setExpired('u1', true);
+      await persister.persistClient(snapshot('u1'));
+      await persister.persistClient(snapshot('u2'));
+      expect([...data.keys()]).toEqual([cacheStorageKey('u2')]);
+      persister.setExpired('u1', false);
+      await persister.persistClient(snapshot('u1'));
+      expect(data.has(cacheStorageKey('u1'))).toBe(true);
+    });
+
     test('start-up housekeeping stops once another tab changed the owner', async () => {
       const { data, storage } = memory();
       let owner: string | null = 'u1';

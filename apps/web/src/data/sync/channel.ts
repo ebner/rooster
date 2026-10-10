@@ -37,7 +37,12 @@ export type SyncMessage =
    * Signed out, or another user signed in: drop every local copy. `userId`: the account whose
    * session ended; every tab deletes that account's outbox records it may still have written.
    */
-  | { type: 'cleared'; userId?: string };
+  | { type: 'cleared'; userId?: string }
+  /**
+   * That account's session ended (an online 401 on `/me`): its tabs stop saving and drop their
+   * cache like the tab that saw it. Its outbox records stay, for when it signs in again.
+   */
+  | { type: 'expired'; userId: string };
 
 export interface SyncChannel {
   post(message: SyncMessage): void;

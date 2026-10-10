@@ -1,5 +1,5 @@
 import { type ListState, listOps, tasksInGroup } from '@rooster/core/reducers';
-import { QueryClient } from '@tanstack/react-query';
+import { dehydrate, QueryClient } from '@tanstack/react-query';
 import { persistQueryClientSave } from '@tanstack/react-query-persist-client';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { useSyncStore } from '../../state/sync-store';
@@ -20,6 +20,7 @@ import {
   cacheStorageKey,
   createCachePersister,
   type KeyValueStorage,
+  persistDehydrateOptions,
 } from './persist';
 
 const userId = '01900000-0000-7000-8000-000000000001';
@@ -1405,6 +1406,70 @@ describe('session expiry after a timed-out restore', () => {
       .catch(() => {});
     await vi.waitFor(() => expect(data.has(cacheStorageKey(userId))).toBe(false));
     expect(localStorage.getItem(recentsKey(userId))).toBeNull();
+  });
+});
+
+describe('session expiry across tabs (ADR 0051)', () => {
+  test('every tab of the account stops saving and drops its cache; the outbox stays', async () => {
+    localStorage.setItem('rooster.cacheOwner', userId);
+    const { data, storage } = memoryStorage();
+    const outbox = createMemoryOutbox();
+    const net = bus();
+    const transport = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const persisterB = createCachePersister(() => undefined, storage);
+    const start = (channel: SyncChannel, queryClient: QueryClient, persister: CachePersister) =>
+      startSync({
+        queryClient,
+        transport,
+        outbox,
+        channel,
+        persister,
+        eventSource: quietSource,
+        locks: null,
+        listen: false,
+      });
+    const queriesA = new QueryClient();
+    const queriesB = new QueryClient();
+    const tabA = await start(
+      net.join().channel,
+      queriesA,
+      createCachePersister(() => undefined, storage),
+    );
+    const tabB = await start(net.join().channel, queriesB, persisterB);
+    engines.push(tabA, tabB);
+    await fetchMe(queriesA, me(userId));
+    await fetchMe(queriesB, me(userId));
+    await queriesB.fetchQuery({
+      queryKey: myListKey(orgId),
+      queryFn: () => tabB.pipeline.fetch(orgId),
+    });
+    await outbox.put([
+      {
+        op: { ...listOps.deleteTask('x'), opId: 'mine', editTime: 1, clientId: 'c' },
+        orgId,
+        ctx: { userId },
+        userId,
+      },
+    ]);
+    // What tab B would save on pagehide, taken while its session still looked alive.
+    const late = {
+      timestamp: Date.now(),
+      buster: '',
+      clientState: dehydrate(queriesB, persistDehydrateOptions),
+    };
+    await queriesA
+      .fetchQuery({
+        queryKey: ['me'],
+        queryFn: () => Promise.reject(new ApiError('unauthenticated', 401)),
+        staleTime: 0,
+        retry: false,
+      })
+      .catch(() => {});
+    await vi.waitFor(() => expect(queriesB.getQueryData(myListKey(orgId))).toBeUndefined());
+    await persisterB.persistClient(late);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(data.has(cacheStorageKey(userId))).toBe(false);
+    expect([...outbox.records.keys()]).toEqual(['mine']);
   });
 });
 
