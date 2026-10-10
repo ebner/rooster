@@ -1562,6 +1562,9 @@ export class TaskService {
       }
       const now = this.now();
       const parent = source.parentId === null ? null : this.reload(tx, source.parentId);
+      // The copy becomes a subtask of the same parent: as for a create, the grant must be able
+      // to read and write that parent (11 §2.2).
+      if (parent !== null) authorizeTaskWrite(tx, actor, parent);
       const copies: [TaskRow, TaskRow | null][] = [];
       const copyOf = (
         from: TaskRow,

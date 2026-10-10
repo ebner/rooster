@@ -708,3 +708,78 @@ describe('systematic pass: ordering intents naming hidden neighbours', () => {
     expect(target).toBeDefined();
   });
 });
+
+describe('boundary 3, final', () => {
+  it('P2 duplicating a subtask needs the grant to read and write its parent', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const bob = ctx.user('bob@example.com');
+    const org = await sharedOrg(owner, [bob]);
+    const prio = await groupNamed(owner, 'Prio', org.id);
+    const today = await groupNamed(owner, 'Today', org.id);
+    const t = await owner.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'T', groupId: today.id },
+      201,
+    );
+    const s = await bob.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'S', parentId: t.id, assigneeId: bob.userId },
+      201,
+    );
+    const g = await owner.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'G', parentId: s.id, assigneeId: owner.userId },
+      201,
+    );
+    await owner.ok('POST', `/api/v1/tasks/${g.id}/move`, { groupId: prio.id });
+    const constraints = {
+      orgs: [{ orgId: org.id, read: { groups: [prio.id] }, write: 'all' as const }],
+    };
+    const api = bearer(ctx, (await pat(owner, ['tasks:write'], constraints)).token);
+    expect((await api.call('GET', `/api/v1/tasks/${s.id}`)).status).toBe(404);
+    const dup = await api.call('POST', `/api/v1/tasks/${g.id}/duplicate`, {});
+    expect(dup.status).toBe(404);
+    expect((await owner.ok<Task>('GET', `/api/v1/tasks/${s.id}`)).counts.subtasks).toBe(1);
+  });
+
+  it('P2 restoring a group brings a subtask back top-level when its parent is in Trash', async () => {
+    const ctx = listCtx();
+    const owner = ctx.user('owner@example.com');
+    const bob = ctx.user('bob@example.com');
+    const org = await sharedOrg(owner, [bob]);
+    const prio = await groupNamed(owner, 'Prio', org.id);
+    const upcoming = await groupNamed(owner, 'Upcoming', org.id);
+    const t = await owner.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'T', groupId: prio.id },
+      201,
+    );
+    const s = await bob.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'S', parentId: t.id, assigneeId: bob.userId },
+      201,
+    );
+    const g = await owner.ok<Task>(
+      'POST',
+      `/api/v1/orgs/${org.id}/tasks`,
+      { title: 'G', parentId: s.id, assigneeId: owner.userId },
+      201,
+    );
+    await owner.ok('POST', `/api/v1/tasks/${g.id}/move`, { groupId: upcoming.id });
+    await owner.ok('DELETE', `/api/v1/groups/${upcoming.id}`, { deleteTasks: true }, 204);
+    await bob.ok('DELETE', `/api/v1/tasks/${s.id}`, undefined, 204);
+    await owner.ok('POST', `/api/v1/groups/${upcoming.id}/restore`);
+    const restored = await owner.ok<Task>('GET', `/api/v1/tasks/${g.id}`);
+    expect(restored.deletedAt).toBeUndefined();
+    expect(restored.parentId).toBeNull();
+    // The purge of the Trash (30 days on) takes S and T's history, never the restored G.
+    ctx.app.services.retention.purge(Date.now() + 31 * 86_400_000);
+    expect((await owner.call('GET', `/api/v1/tasks/${g.id}`)).status).toBe(200);
+  });
+});

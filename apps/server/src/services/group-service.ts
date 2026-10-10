@@ -9,7 +9,8 @@ import type {
   GroupPatch,
   OrderingIntent,
 } from '@rooster/core/schemas';
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 import { placement, task, taskGroup } from '../db/schema/index.ts';
 import type { Audience, DomainEventType } from '../events/bus.ts';
 import { AppError } from '../lib/errors.ts';
@@ -415,13 +416,35 @@ export class GroupService {
         }
         indexTasks(tx, all);
       }
+      // As a task restore does: a restored task whose parent is (still or again) in Trash comes
+      // back top-level. Left under that parent, the retention purge would delete it with it.
+      const detached: string[] = [];
+      for (const chunk of chunked(ids)) {
+        for (const r of tx
+          .select({ id: task.id, fieldClock: task.fieldClock })
+          .from(task)
+          .innerJoin(parentTask, eq(parentTask.id, task.parentId))
+          .where(and(inArray(task.id, chunk), isNotNull(parentTask.deletedAt)))
+          .all()) {
+          const taskClock = parseClock(r.fieldClock);
+          taskClock.parent = editTime;
+          tx.update(task)
+            .set({ parentId: null, subtaskPosition: null, fieldClock: JSON.stringify(taskClock) })
+            .where(eq(task.id, r.id))
+            .run();
+          detached.push(r.id);
+        }
+      }
+      if (detached.length > 0) this.placements.reconcilePlacements(tx, detached);
       this.emit(tx, actor, 'group.restored', group, ids);
       return toGroupDto({ ...group, deletedAt: null, updatedAt: now, fieldClock });
     });
   }
 }
 
-/** A client intent as an ordering target; no intent at all means the end of the domain. */
+/** A parent row, for joins of a task with its parent. */
+const parentTask = alias(task, 'parent_task');
+
 /**
  * `intentOf` for a grant: a neighbour group it cannot read counts as unknown (the end), so the
  * resulting position never tells a hidden group from a missing one.
@@ -436,6 +459,7 @@ function readableIntent(actor: Actor, orgId: string, input: OrderingIntent): Ord
   return intentOf(input);
 }
 
+/** A client intent as an ordering target; no intent at all means the end of the domain. */
 function intentOf(input: OrderingIntent): OrderTarget {
   const intent: OrderingIntent = {};
   if (input.afterId !== undefined) intent.afterId = input.afterId;
