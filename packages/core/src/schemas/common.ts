@@ -41,6 +41,8 @@ export const problemSchema = z.object({
    * entity that already holds it, so an offline outbox can remap its own ID to it (04 §6.2).
    */
   existingId: z.string().optional(),
+  /** P10: on an upload's `413 payload_too_large`, the limit in bytes. */
+  limitBytes: z.int().positive().optional(),
 });
 
 /** GET /api/v1/meta (06). */
@@ -49,6 +51,11 @@ export const metaSchema = z.object({
   gitSha: z.string(),
   providers: z.array(z.object({ id: z.string(), name: z.string() })),
   features: z.object({ email: z.boolean(), push: z.boolean(), s3: z.boolean() }),
+  /**
+   * P10: the largest attachment upload in bytes (`ROOSTER_UPLOAD_MAX_MB`), for a client-side
+   * check before uploading. Optional so persisted caches of older servers still parse.
+   */
+  uploadMaxBytes: z.int().positive().optional(),
   /** The server's clock (ms epoch) when it answered, for client clock-skew estimation. */
   serverTime: timestampSchema,
 });

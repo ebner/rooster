@@ -3,6 +3,7 @@ import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi';
 import type { AppEnv } from '../lib/context.ts';
 import type { Services } from '../services/index.ts';
 import {
+  closingOnTooLarge,
   DOWNLOAD_CSP,
   multipartFile,
   PRIVATE_REVALIDATE,
@@ -66,9 +67,10 @@ const getAvatar = createRoute({
 
 /** Avatar upload and download (06 §2.1, FR-SET-1, ADR 0049 §3.7). */
 export function registerAvatarRoutes(app: OpenAPIHono<AppEnv>, { avatars }: Services): void {
-  app.openapi(putAvatar, async (c) =>
-    c.json(await avatars.put(actorOf(c), uploadRequestOf(c)), 200),
-  );
+  app.openapi(putAvatar, async (c) => {
+    const actor = actorOf(c);
+    return c.json(await closingOnTooLarge(c, () => avatars.put(actor, uploadRequestOf(c))), 200);
+  });
   app.openapi(deleteAvatar, async (c) => c.json(await avatars.remove(actorOf(c)), 200));
   app.openapi(getAvatar, async (c) => {
     const download = await avatars.get(

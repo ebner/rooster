@@ -461,6 +461,7 @@ export const COMPONENT_EXAMPLES: Record<string, unknown> = {
     gitSha: 'abc1234',
     providers: [{ id: 'google', name: 'Google' }],
     features: { email: true, push: true, s3: false },
+    uploadMaxBytes: 26_214_400,
     serverTime: T,
   },
 };

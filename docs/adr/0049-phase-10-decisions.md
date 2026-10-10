@@ -260,3 +260,6 @@ added below as an amendment.
   - A refused command line is reported in the output format it asked for (`--json`). Output switches count only where they stand as flags.
   - Only global flags may come before a subcommand name. `--org` must follow `login` and `token create`, which own it. Anything else there is refused (exit 2) instead of being silently dropped.
 - **MCP resources:** resource metadata (URI, name, title) uses only valid slugs; orgs without one are not listed.
+- **§3.1 (after the full CI run):**
+  - An oversized upload, by declared length or by the streamed count, is read and discarded up to 64 MB beyond the limit before `413 payload_too_large`. The 413 is sent with `Connection: close`, so proxies relay it instead of a 502. Past that cap the connection is cut, and nothing is buffered.
+  - Upload 413s carry `limitBytes`, and `/meta` carries `uploadMaxBytes`, so the web checks sizes before sending.

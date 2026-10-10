@@ -1158,6 +1158,11 @@
             "type": "string",
             "description": "`409 tag_name_taken`: the ID of the entity that already has the name, so an offline client can remap its own."
           },
+          "limitBytes": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "`413 payload_too_large` on an upload: the limit in bytes."
+          },
           "candidates": {
             "type": "array",
             "items": {
@@ -1255,6 +1260,10 @@
               "s3"
             ]
           },
+          "uploadMaxBytes": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
           "serverTime": {
             "type": "integer",
             "minimum": 0
@@ -1281,6 +1290,7 @@
             "push": true,
             "s3": false
           },
+          "uploadMaxBytes": 26214400,
           "serverTime": 1791532800000
         }
       },

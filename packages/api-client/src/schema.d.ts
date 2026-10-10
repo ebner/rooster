@@ -2152,6 +2152,8 @@ export interface components {
             }[];
             /** @description `409 tag_name_taken`: the ID of the entity that already has the name, so an offline client can remap its own. */
             existingId?: string;
+            /** @description `413 payload_too_large` on an upload: the limit in bytes. */
+            limitBytes?: number;
             /** @description `409 ambiguous_ref` (`GET /tasks/resolve`): the tasks the ref could mean, at most 10. */
             candidates?: {
                 id: string;
@@ -2175,6 +2177,7 @@ export interface components {
          *         "push": true,
          *         "s3": false
          *       },
+         *       "uploadMaxBytes": 26214400,
          *       "serverTime": 1791532800000
          *     }
          */
@@ -2190,6 +2193,7 @@ export interface components {
                 push: boolean;
                 s3: boolean;
             };
+            uploadMaxBytes?: number;
             serverTime: number;
         };
         /**

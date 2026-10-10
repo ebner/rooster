@@ -45,6 +45,7 @@ export function registerMetaRoutes(
       {
         ...body,
         features: { email: features.email(), push: features.push(), s3: config.s3 !== null },
+        uploadMaxBytes: config.uploadMaxMb * 1024 * 1024,
         serverTime: clock(),
       },
       200,

@@ -48,6 +48,8 @@ describe('GET /api/v1/meta', () => {
       providers: [{ id: 'google', name: 'Google' }],
       // Push is always on: VAPID keys are generated when the environment has none (P7).
       features: { email: false, push: true, s3: false },
+      // P10: ROOSTER_UPLOAD_MAX_MB (default 25), for a client-side check before uploading.
+      uploadMaxBytes: 25 * 1024 * 1024,
       serverTime: 1_767_225_600_000,
     });
     // Read per request, not at boot (P4 clock-skew estimation).

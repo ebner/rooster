@@ -4,6 +4,7 @@ import { attachmentSchema } from '@rooster/core/schemas';
 import type { Context } from 'hono';
 import type { UploadRequest } from '../blob/multipart.ts';
 import type { AppEnv } from '../lib/context.ts';
+import { AppError } from '../lib/errors.ts';
 import { named } from '../lib/openapi.ts';
 import type { AttachmentDownload } from '../services/attachment-service.ts';
 import type { Services } from '../services/index.ts';
@@ -24,6 +25,22 @@ export function uploadRequestOf(c: Context<AppEnv>): UploadRequest {
     contentLength: c.req.header('content-length'),
     body: c.req.raw.body,
   };
+}
+
+/**
+ * Runs an upload; a `413` also closes the connection (`Connection: close`), so nothing of an
+ * oversized body (drained up to a cap) is read as the next request.
+ */
+export async function closingOnTooLarge<T>(
+  c: Context<AppEnv>,
+  upload: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await upload();
+  } catch (err) {
+    if (err instanceof AppError && err.status === 413) c.header('Connection', 'close');
+    throw err;
+  }
 }
 
 /**
@@ -232,7 +249,10 @@ export function registerAttachmentRoutes(
   app.openapi(uploadAttachment, async (c) => {
     const actor = actorOf(c);
     const { id } = c.req.valid('param');
-    return c.json(await attachments.upload(actor, id, uploadRequestOf(c), metaOf(c)), 201);
+    const attachment = await closingOnTooLarge(c, () =>
+      attachments.upload(actor, id, uploadRequestOf(c), metaOf(c)),
+    );
+    return c.json(attachment, 201);
   });
   app.openapi(downloadAttachment, async (c) => {
     const actor = actorOf(c);

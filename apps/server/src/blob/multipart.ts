@@ -32,12 +32,61 @@ export interface ReceivedFile {
   declaredType: string;
 }
 
+/**
+ * How much of an oversized body is still read (and discarded) before the `413` goes out, on
+ * top of the limit. Answering while the client is still sending makes reverse proxies (Vite,
+ * Apache) see a broken upstream and answer `502` instead; past this the connection is cut.
+ */
+export const DRAIN_EXTRA_BYTES = 64 * 1024 * 1024;
+
+/** `413 payload_too_large` naming the limit (`limitBytes`, which clients show). */
 export const tooLarge = (maxBytes: number) =>
   new AppError(
     'payload_too_large',
     413,
     `The file exceeds the upload limit of ${formatMb(maxBytes)}.`,
+    undefined,
+    { limitBytes: maxBytes },
   );
+
+/**
+ * Reads and discards the rest of `source`, at most `budget` more bytes; constant memory.
+ * True when it ended within the budget; otherwise the stream is destroyed (the socket goes).
+ */
+function drain(source: Readable, budget: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    // A small body may have been read to its end before the limit was noticed.
+    if (source.readableEnded) {
+      resolve(true);
+      return;
+    }
+    if (source.destroyed) {
+      resolve(false);
+      return;
+    }
+    let left = budget;
+    const finish = (drained: boolean) => {
+      source.off('data', onData);
+      source.off('end', onEnd);
+      source.off('error', onError);
+      source.off('close', onClose);
+      if (!drained) source.destroy();
+      resolve(drained);
+    };
+    const onClose = () => finish(source.readableEnded);
+    const onData = (chunk: Buffer) => {
+      left -= chunk.length;
+      if (left < 0) finish(false);
+    };
+    const onEnd = () => finish(true);
+    const onError = () => finish(false);
+    source.on('data', onData);
+    source.once('end', onEnd);
+    source.once('error', onError);
+    source.once('close', onClose);
+    source.resume();
+  });
+}
 
 function formatMb(bytes: number): string {
   const mb = bytes / (1024 * 1024);
@@ -58,7 +107,9 @@ const noFile = (detail = 'Attach one file in the multipart field "file".') =>
  * Streams the multipart `file` field of an upload into a temp file (ADR 0049 §3.1): counted
  * while streaming and aborted above `maxBytes` with `413 payload_too_large`, so an oversized
  * body is never buffered or stored whole. A declared `Content-Length` that cannot fit is
- * refused before anything is read. Other parts are discarded; a second file is ignored.
+ * refused without storing anything. Either way the rest of an oversized body is drained (up
+ * to `DRAIN_EXTRA_BYTES` beyond the limit) before the `413`, which then closes the
+ * connection. Other parts are discarded; a second file is ignored.
  */
 export async function receiveFile(
   request: UploadRequest,
@@ -68,7 +119,14 @@ export async function receiveFile(
   if (!/^multipart\/form-data\s*;/i.test(contentType)) throw notMultipart();
   const rawMax = options.maxBytes + MULTIPART_OVERHEAD;
   const declared = request.contentLength === undefined ? Number.NaN : Number(request.contentLength);
-  if (Number.isFinite(declared) && declared > rawMax) throw tooLarge(options.maxBytes);
+  const drainCap = options.maxBytes + DRAIN_EXTRA_BYTES;
+  if (Number.isFinite(declared) && declared > rawMax) {
+    // Nothing is stored; the body is only read off the wire so the 413 arrives cleanly.
+    if (request.body !== null && declared <= drainCap) {
+      await drain(Readable.fromWeb(request.body as WebReadableStream<Uint8Array>), drainCap);
+    }
+    throw tooLarge(options.maxBytes);
+  }
   if (request.body === null) throw noFile();
 
   let parser: busboy.Busboy;
@@ -113,10 +171,19 @@ export async function receiveFile(
       const fail = (err: unknown) => {
         if (settled) return;
         settled = true;
-        // Stops reading the request: the rest of an oversized body is never pulled in.
-        source.destroy();
+        // Stop parsing and writing at once; the request itself is detached from the parser.
+        source.unpipe(counter);
+        counter.destroy();
+        parser.destroy();
         for (const stream of active) stream.destroy();
-        reject(err instanceof AppError ? err : noFile('The multipart body is malformed.'));
+        const error = err instanceof AppError ? err : noFile('The multipart body is malformed.');
+        if (error.status !== 413) {
+          source.destroy();
+          reject(error);
+          return;
+        }
+        // Oversized: read the rest off the wire (discarded) so the 413 reaches the client.
+        void drain(source, drainCap - rawBytes).then(() => reject(error));
       };
       parser.on('file', (name, file, info) => {
         if (name !== 'file' || settled) {
@@ -151,7 +218,10 @@ export async function receiveFile(
           else resolve(received);
         }, fail);
       });
-      pipeline(source, counter, parser).catch(fail);
+      // Not `pipeline`: an oversized body must stay readable for `drain` after the parser goes.
+      source.on('error', fail);
+      counter.on('error', fail);
+      source.pipe(counter).pipe(parser);
     });
   } catch (err) {
     await fileWritten.catch(() => null);

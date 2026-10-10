@@ -26,6 +26,7 @@ export const ProblemSchema = named(
         '`409 tag_name_taken`: the ID of the entity that already has the name, so an offline client can remap its own.',
       candidates:
         '`409 ambiguous_ref` (`GET /tasks/resolve`): the tasks the ref could mean, at most 10.',
+      limitBytes: '`413 payload_too_large` on an upload: the limit in bytes.',
     },
   ),
   'Problem',

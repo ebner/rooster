@@ -3,6 +3,7 @@
 
 import { once } from 'node:events';
 import { existsSync, readdirSync } from 'node:fs';
+import { createServer, request as httpRequest, type IncomingHttpHeaders } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { serve } from '@hono/node-server';
@@ -56,6 +57,69 @@ async function uploaded(ctx: Team, who: Caller, form: FormData, taskId = ctx.tas
 const blobPath = (ctx: Team, key: string) => join(ctx.dataDir, 'attachments', key);
 const tmpFiles = (ctx: Team) =>
   existsSync(join(ctx.dataDir, 'tmp')) ? readdirSync(join(ctx.dataDir, 'tmp')) : [];
+
+/**
+ * A browser-like multipart upload over HTTP/1.1 (`http.request`): `total` bytes of file content
+ * written with backpressure, with or without a declared Content-Length. Resolves with the
+ * response once it is complete; a write error after the response is ignored.
+ */
+function rawUpload(
+  port: number,
+  path: string,
+  options: { total: number; declareLength: boolean; cookie: string },
+): Promise<{ status: number; headers: IncomingHttpHeaders; body: string }> {
+  const boundary = `----rooster${Date.now()}`;
+  const head = Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="big.bin"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+  );
+  const tail = Buffer.from(`\r\n--${boundary}--\r\n`);
+  const length = head.length + options.total + tail.length;
+  return new Promise((resolve, reject) => {
+    const req = httpRequest({
+      host: '127.0.0.1',
+      port,
+      path,
+      method: 'POST',
+      headers: {
+        cookie: options.cookie,
+        origin: 'http://localhost:3000',
+        'content-type': `multipart/form-data; boundary=${boundary}`,
+        ...(options.declareLength ? { 'content-length': String(length) } : {}),
+      },
+    });
+    let answered = false;
+    req.on('response', (res) => {
+      answered = true;
+      const chunks: Buffer[] = [];
+      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('end', () =>
+        resolve({
+          status: res.statusCode ?? 0,
+          headers: res.headers,
+          body: Buffer.concat(chunks).toString('utf8'),
+        }),
+      );
+    });
+    req.on('error', (err) => {
+      if (!answered) reject(err);
+    });
+    const chunk = Buffer.alloc(64 * 1024, 0x61);
+    let sent = 0;
+    const write = () => {
+      if (sent === 0) req.write(head);
+      while (sent < options.total && !req.destroyed) {
+        const n = Math.min(chunk.length, options.total - sent);
+        sent += n;
+        if (!req.write(n === chunk.length ? chunk : chunk.subarray(0, n))) {
+          req.once('drain', write);
+          return;
+        }
+      }
+      if (!req.destroyed) req.end(tail);
+    };
+    write();
+  });
+}
 
 /**
  * A multipart body of `total` bytes of file content, produced on demand (64 KB per pull), and
@@ -171,9 +235,9 @@ describe('AC-10.2 attachments', () => {
     } as RequestInit);
     expect(res.status).toBe(413);
     expect(((await res.json()) as Problem).code).toBe('payload_too_large');
-    // Streaming stopped right after the limit: the rest of the body was never pulled in.
-    expect(counter.pulled).toBeGreaterThan(25 * 1024 * 1024);
-    expect(counter.pulled).toBeLessThan(27 * 1024 * 1024);
+    // Parsing stopped at the limit; the rest was read off the wire and discarded (the drain
+    // keeps proxies from answering 502), never written or buffered.
+    expect(counter.pulled).toBe(total);
     expect(tmpFiles(ctx)).toEqual([]);
     expect(ctx.db.orm.select().from(attachment).all()).toEqual([]);
     expect(existsSync(join(ctx.dataDir, 'attachments', ctx.org.id))).toBe(false);
@@ -197,8 +261,9 @@ describe('AC-10.2 attachments', () => {
         },
       } as RequestInit);
       expect(res.status).toBe(413);
+      expect(res.headers.get('connection')).toBe('close');
       expect(((await res.json()) as Problem).code).toBe('payload_too_large');
-      expect(counter.pulled).toBeLessThan(20 * 1024 * 1024);
+      expect(counter.pulled).toBe(20 * 1024 * 1024);
       // The server is fine afterwards.
       const ok = await fetch(`http://127.0.0.1:${port}/api/v1/meta`);
       expect(ok.status).toBe(200);
@@ -208,7 +273,92 @@ describe('AC-10.2 attachments', () => {
     }
   });
 
-  it('refuses a declared Content-Length over the limit before reading anything', async () => {
+  it('answers a clean 413 through a proxy while a browser still sends 30 MB', {
+    timeout: 30_000,
+  }, async () => {
+    const ctx = await team();
+    const server = serve({ fetch: ctx.app.fetch, port: 0, hostname: '127.0.0.1' });
+    await once(server, 'listening');
+    const upstream = (server.address() as AddressInfo).port;
+    // A plain reverse proxy, like Vite's or Apache's: a broken upstream connection is a 502.
+    const proxy = createServer((req, res) => {
+      const up = httpRequest(
+        {
+          host: '127.0.0.1',
+          port: upstream,
+          path: req.url,
+          method: req.method,
+          headers: req.headers,
+        },
+        (answer) => {
+          res.writeHead(answer.statusCode ?? 502, answer.headers);
+          answer.pipe(res);
+        },
+      );
+      up.on('error', () => {
+        if (!res.headersSent) res.writeHead(502);
+        res.end();
+      });
+      req.pipe(up);
+    });
+    proxy.listen(0, '127.0.0.1');
+    await once(proxy, 'listening');
+    const { port } = proxy.address() as AddressInfo;
+    try {
+      for (const declared of [true, false]) {
+        const result = await rawUpload(port, `/api/v1/tasks/${ctx.taskId}/attachments`, {
+          total: 30 * 1024 * 1024,
+          declareLength: declared,
+          cookie: ctx.a.jar.header(),
+        });
+        expect(result.status, `declared length: ${declared}`).toBe(413);
+        const problem = JSON.parse(result.body) as Problem & { limitBytes?: number };
+        expect(problem.code).toBe('payload_too_large');
+        expect(problem.limitBytes).toBe(25 * 1024 * 1024);
+        expect(result.headers.connection).toBe('close');
+      }
+      expect(tmpFiles(ctx)).toEqual([]);
+      expect(ctx.db.orm.select().from(attachment).all()).toEqual([]);
+    } finally {
+      await new Promise((resolve) => proxy.close(resolve));
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
+  it('stops reading a body more than 64 MB beyond the limit', async () => {
+    const ctx = await team({ ROOSTER_UPLOAD_MAX_MB: '1' });
+    const total = 80 * 1024 * 1024;
+    const { body, contentType, counter } = streamedUpload(total);
+    const res = await ctx.app.request(`/api/v1/tasks/${ctx.taskId}/attachments`, {
+      method: 'POST',
+      body,
+      duplex: 'half',
+      headers: {
+        cookie: ctx.a.jar.header(),
+        origin: 'http://localhost:3000',
+        'content-type': contentType,
+      },
+    } as RequestInit);
+    expect(res.status).toBe(413);
+    expect(counter.pulled).toBeGreaterThanOrEqual(65 * 1024 * 1024);
+    expect(counter.pulled).toBeLessThan(67 * 1024 * 1024);
+    expect(tmpFiles(ctx)).toEqual([]);
+  });
+
+  it('tells clients the upload limit in /meta', async () => {
+    for (const [env, bytes] of [
+      [{}, 25 * 1024 * 1024],
+      [{ ROOSTER_UPLOAD_MAX_MB: '3' }, 3 * 1024 * 1024],
+    ] as const) {
+      const ctx = await team(env);
+      const meta = (await (await ctx.app.request('/api/v1/meta')).json()) as {
+        uploadMaxBytes?: number;
+      };
+      expect(meta.uploadMaxBytes).toBe(bytes);
+    }
+  });
+
+  it('drains a declared over-limit body without storing it', async () => {
     const ctx = await team({ ROOSTER_UPLOAD_MAX_MB: '1' });
     const { body, contentType, counter } = streamedUpload(3 * 1024 * 1024);
     const res = await ctx.app.request(`/api/v1/tasks/${ctx.taskId}/attachments`, {
@@ -223,7 +373,11 @@ describe('AC-10.2 attachments', () => {
       },
     } as RequestInit);
     expect(res.status).toBe(413);
-    expect(counter.pulled).toBe(0);
+    expect(res.headers.get('connection')).toBe('close');
+    expect(((await res.json()) as { limitBytes?: number }).limitBytes).toBe(1024 * 1024);
+    // Read off the wire (so a proxy in front sees a clean answer), but nothing was kept.
+    expect(counter.pulled).toBe(3 * 1024 * 1024);
+    expect(tmpFiles(ctx)).toEqual([]);
   });
 
   it('accepts a file of exactly the limit', async () => {
