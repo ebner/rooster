@@ -1,6 +1,14 @@
 import { ADMIN_SCOPE, GRANT_SCOPES, type GrantScope } from '@rooster/core/grants';
 import { defineCommand } from 'citty';
-import { cliFetch, grantsApi, type Me, type Meta, RoosterApiError, unwrap } from '../api.ts';
+import {
+  cliFetch,
+  grantsApi,
+  isBearerToken,
+  type Me,
+  type Meta,
+  RoosterApiError,
+  unwrap,
+} from '../api.ts';
 import { normalizeServer, type Profile } from '../config.ts';
 import { CliError, EXIT } from '../errors.ts';
 import { constraintLines, currentGrant, parseScopes, scopeSummary } from '../grant-info.ts';
@@ -262,7 +270,11 @@ export const loginCommand = defineCommand({
 
     if (args['with-token'] === true) {
       const token = (await runtime.io.readStdin()).trim();
-      if (token === '') throw new CliError(EXIT.usage, t('login.tokenMissing'));
+      runtime.usedTokens.add(token);
+      // Refused before any request, and never quoted: a malformed paste may hold a secret.
+      if (token === '' || !isBearerToken(token)) {
+        throw new CliError(EXIT.usage, t('login.tokenMissing'));
+      }
       await fetchMeta(runtime, server);
       const me = await finishLogin(runtime, server, token, orgFlag);
       if (out.json) out.data({ server, profile: runtime.profileName, user: me.email });

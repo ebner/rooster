@@ -264,3 +264,61 @@ describe('[P2] an explicit --scope must name at least one capability', () => {
     expect(result.calls.some((c) => c.method === 'POST')).toBe(false);
   });
 });
+
+describe('[P2] diagnostics never carry escapes or credentials', () => {
+  it('--verbose prints an unexpected stack without control characters', async () => {
+    const result = await run(
+      {
+        'GET /api/v1/me': { ...ME, timezone: `UTC${OSC52}` },
+        'GET /api/v1/orgs/*/my-list': {
+          groups: [],
+          tasks: [],
+          expandedTaskIds: [],
+          serverTime: 0,
+        },
+        'GET /api/v1/orgs/*/tags': [],
+      },
+      ['ls', '--verbose'],
+    );
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('RangeError');
+    expectClean(result.stderr);
+  });
+
+  const SECRET = 'rooster_pat_SECRETsecretSECRETsecret';
+  const forged = `${SECRET}\nX-Evil: ${SECRET}`;
+
+  it('a malformed ROOSTER_TOKEN is refused without echoing it, with and without --verbose', async () => {
+    for (const extra of [[], ['--verbose'], ['--json']]) {
+      const api = fakeApi({ 'GET /api/v1/me': ME });
+      const cli = cliHarness({}, { fetch: api.fetch });
+      try {
+        const result = await cli.run(['ls', ...extra], {
+          env: { ...FAKE_ENV, ROOSTER_TOKEN: forged },
+        });
+        expect(result.code).toBe(3);
+        expect(result.stderr).not.toContain('SECRET');
+        expect(result.stdout).not.toContain('SECRET');
+        expect(api.calls).toEqual([]);
+      } finally {
+        cli.cleanup();
+      }
+    }
+  });
+
+  it('login --with-token refuses a malformed token from stdin without echoing it', async () => {
+    const api = fakeApi({ 'GET /api/v1/meta': { version: '1.3.0' }, 'GET /api/v1/me': ME });
+    const cli = cliHarness({}, { fetch: api.fetch });
+    try {
+      const result = await cli.run(
+        ['login', '--with-token', '--server', 'https://rooster.test', '--verbose'],
+        { stdin: forged },
+      );
+      expect(result.code).toBe(2);
+      expect(result.stderr).not.toContain('SECRET');
+      expect(api.calls).toEqual([]);
+    } finally {
+      cli.cleanup();
+    }
+  });
+});

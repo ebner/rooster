@@ -4,6 +4,7 @@ import { uuidv7 } from '@rooster/core/ids';
 import {
   createApi,
   type Group,
+  isBearerToken,
   type Me,
   type Member,
   type MyList,
@@ -79,6 +80,8 @@ export class Runtime {
   readonly cacheDir: string;
   /** `X-Rooster-Client-Id`: one per process (06 §1). */
   readonly clientId = uuidv7();
+  /** Every credential this invocation used, so diagnostics can redact them (`run.ts`). */
+  readonly usedTokens = new Set<string>();
   /** The capability the running command needs, for explaining `forbidden_scope`. */
   requiredScope: GrantScope | undefined;
   private client: RoosterClient | undefined;
@@ -203,7 +206,7 @@ export class Runtime {
    */
   async token(requestServer: string): Promise<string | undefined> {
     const env = this.io.env.ROOSTER_TOKEN;
-    if (env !== undefined && env !== '') return env.trim();
+    if (env !== undefined && env !== '') return this.wellFormed(env.trim());
     const stored = await this.storedLogin();
     if (stored === undefined) return undefined;
     const request = serverOrigin(requestServer);
@@ -213,7 +216,14 @@ export class Runtime {
         t('auth.otherServer', { stored: stored.login.server, server: request }),
       );
     }
-    return stored.login.token;
+    return this.wellFormed(stored.login.token);
+  }
+
+  /** `token` when it can be a bearer credential; exit 3 otherwise, without quoting it. */
+  private wellFormed(token: string): string {
+    this.usedTokens.add(token);
+    if (!isBearerToken(token)) throw new CliError(EXIT.auth, t('login.tokenRejected'));
+    return token;
   }
 
   tokenFromEnv(): boolean {
@@ -234,6 +244,7 @@ export class Runtime {
 
   /** A client for `server` with an explicit token (login) or none (public routes). */
   clientFor(server: string, token: string | undefined): RoosterClient {
+    if (token !== undefined) this.wellFormed(token);
     return createApi({
       server,
       token,

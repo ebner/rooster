@@ -5,6 +5,7 @@ import type { GrantScope } from '@rooster/core/grants';
 import { createRoosterMcpServer, listedTools } from '@rooster/mcp';
 import { defineCommand } from 'citty';
 import { cliFetch, grantsApi } from '../api.ts';
+import { safeDiagnostic } from '../diagnostics.ts';
 import { CliError, EXIT } from '../errors.ts';
 import { currentGrant } from '../grant-info.ts';
 import { t } from '../i18n.ts';
@@ -93,9 +94,11 @@ export async function mcpServerFactory(
       now: () => io.now(),
       onError: (error, tool) => {
         // stderr only: stdout belongs to the protocol.
-        io.stderr.write(`${clean(t('mcp.toolFailed', { tool, error: String(error) }))}\n`);
+        io.stderr.write(
+          `${clean(t('mcp.toolFailed', { tool, error: safeDiagnostic(String(error), runtime) }))}\n`,
+        );
         if (runtime.globals.verbose && error instanceof Error && error.stack) {
-          io.stderr.write(`${clean(error.stack)}\n`);
+          io.stderr.write(`${safeDiagnostic(error.stack, runtime)}\n`);
         }
       },
     });

@@ -104,3 +104,25 @@ describe('rooster without a server', () => {
     expect(down.stderr).toContain('127.0.0.1:9');
   });
 });
+
+describe('[P2] safeDiagnostic', () => {
+  it('redacts used credentials (line by line), PAT and Bearer shapes, and control characters', async () => {
+    const { safeDiagnostic } = await import('../src/diagnostics.ts');
+    const used = 'sessiontoken123\ninjected-line';
+    const runtime = {
+      io: { env: { ROOSTER_TOKEN: 'envtoken-abcdef' } },
+      usedTokens: new Set([used]),
+    } as unknown as Parameters<typeof safeDiagnostic>[1];
+    const text = safeDiagnostic(
+      `TypeError: Headers.set: "Bearer ${used}" is an invalid header value.\n` +
+        'envtoken-abcdef rooster_pat_ABCdef123 \u001b]52;c;QUJD\u0007 sessiontoken123',
+      runtime,
+    );
+    for (const secret of ['sessiontoken123', 'injected-line', 'envtoken-abcdef', 'ABCdef123']) {
+      expect(text).not.toContain(secret);
+    }
+    expect(text).toContain('[redacted]');
+    expect(text).not.toContain('\u001b');
+    expect(text).not.toContain('\u0007');
+  });
+});

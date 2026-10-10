@@ -10,6 +10,7 @@ import { uuidv7 } from '@rooster/core/ids';
 import { CliError, EXIT } from './errors.ts';
 import { currentLocale, t } from './i18n.ts';
 import type { Io } from './io.ts';
+import { clean } from './output/color.ts';
 import { CLI_VERSION, CLIENT_NAME } from './version.ts';
 
 const USER_AGENT = `rooster-cli/${CLI_VERSION} (${process.platform}; ${process.arch}; ${hostname()})`;
@@ -29,6 +30,16 @@ export type SearchHit = Schemas['SearchHit'];
 export type Grant = Schemas['Grant'];
 export type TokenCreate = Schemas['TokenCreate'];
 export type TokenCreated = Schemas['TokenCreated'];
+
+/**
+ * RFC 6750 §2.1 `b64token`, bounded. A credential of any other shape (an embedded newline from
+ * stdin or `ROOSTER_TOKEN`) never reaches `Headers.set`, whose error would quote it whole.
+ */
+const BEARER_TOKEN_RE = /^[A-Za-z0-9._~+/-]{1,4096}=*$/;
+
+export function isBearerToken(token: string): boolean {
+  return BEARER_TOKEN_RE.test(token);
+}
 
 /** A request that gets no response within this is reported as a network failure (exit 6). */
 export const REQUEST_TIMEOUT_MS = 30_000;
@@ -71,7 +82,9 @@ export function cliFetch(options: Pick<ApiOptions, 'io' | 'verbose' | 'server'>)
       }
       return response;
     } catch (error) {
-      if (options.verbose) io.stderr.write(`${request.method} ${request.url}: ${String(error)}\n`);
+      if (options.verbose) {
+        io.stderr.write(`${request.method} ${request.url}: ${clean(String(error))}\n`);
+      }
       throw new CliError(EXIT.network, t('error.network', { server: options.server }));
     }
   };

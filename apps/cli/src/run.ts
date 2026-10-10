@@ -2,6 +2,7 @@ import { RoosterApiError } from './api.ts';
 import { ArgvError } from './argv-check.ts';
 import { checkCommandLine, dispatch } from './cli.ts';
 import { ConfigLockedError } from './config.ts';
+import { safeDiagnostic } from './diagnostics.ts';
 import { CliError, EXIT, type ExitCode } from './errors.ts';
 import { extractGlobals } from './globals.ts';
 import { describeApiError } from './grant-info.ts';
@@ -96,17 +97,21 @@ async function report(runtime: Runtime, error: unknown): Promise<ExitCode> {
       `${stripAnsi((error as Error).message)}\n${t('usage.seeHelp')}`,
     );
   } else {
-    failure = new CliError(EXIT.unexpected, t('error.unexpected', { message: String(error) }));
+    failure = new CliError(
+      EXIT.unexpected,
+      t('error.unexpected', { message: safeDiagnostic(String(error), runtime) }),
+    );
     if (runtime.globals.verbose && error instanceof Error && error.stack) {
-      runtime.io.stderr.write(`${error.stack}\n`);
+      runtime.io.stderr.write(`${safeDiagnostic(error.stack, runtime)}\n`);
     }
   }
+  const message = safeDiagnostic(failure.message, runtime);
   if (runtime.globals.json) {
     runtime.io.stderr.write(
-      `${JSON.stringify({ error: { code: failure.code ?? null, exitCode: failure.exitCode, message: failure.message } })}\n`,
+      `${JSON.stringify({ error: { code: failure.code ?? null, exitCode: failure.exitCode, message } })}\n`,
     );
   } else {
-    runtime.out.error(failure.message);
+    runtime.out.error(message);
   }
   return failure.exitCode;
 }
