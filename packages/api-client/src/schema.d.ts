@@ -2260,6 +2260,10 @@ export interface components {
             prefs: components["schemas"]["Prefs"];
             isAdmin: boolean;
             orgs: components["schemas"]["Org"][];
+            storage?: {
+                usedBytes: number;
+                quotaBytes: number | null;
+            };
         };
         /**
          * @example {

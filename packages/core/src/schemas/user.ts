@@ -80,6 +80,16 @@ export const meSchema = z.object({
   prefs: prefsSchema,
   isAdmin: z.boolean(),
   orgs: z.array(orgSchema),
+  /**
+   * Attachment storage of this user (ADR 0052 §6): the bytes of every attachment they uploaded
+   * that still exists; `quotaBytes` is null without a quota. Optional for older servers.
+   */
+  storage: z
+    .object({
+      usedBytes: z.number().int().nonnegative(),
+      quotaBytes: z.number().int().positive().nullable(),
+    })
+    .optional(),
 });
 
 export const mePatchSchema = z.object({

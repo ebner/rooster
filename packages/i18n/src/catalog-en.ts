@@ -8,6 +8,7 @@ import enCommon from '../locales/en/common.json' with { type: 'json' };
 import enDates from '../locales/en/dates.json' with { type: 'json' };
 import enDev from '../locales/en/dev.json' with { type: 'json' };
 import enEditor from '../locales/en/editor.json' with { type: 'json' };
+import enHelp from '../locales/en/help.json' with { type: 'json' };
 import enInbox from '../locales/en/inbox.json' with { type: 'json' };
 import enList from '../locales/en/list.json' with { type: 'json' };
 import enMail from '../locales/en/mail.json' with { type: 'json' };
@@ -47,4 +48,5 @@ export const en = {
   mail: enMail,
   cli: enCli,
   tui: enTui,
+  help: enHelp,
 } as const;

@@ -40,6 +40,7 @@ export const namespaces = [
   'mail',
   'cli',
   'tui',
+  'help',
   'attachments',
   'calendar',
 ] as const;

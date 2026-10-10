@@ -51,3 +51,46 @@ export type AllowlistEntry = z.infer<typeof allowlistEntrySchema>;
 export type AllowlistCreate = z.infer<typeof allowlistCreateSchema>;
 export type AdminUser = z.infer<typeof adminUserSchema>;
 export type AdminUserPatch = z.infer<typeof adminUserPatchSchema>;
+
+/** One scheduled job's last run (`job_run`), as Admin → System shows it. */
+export const adminJobRunSchema = z.object({
+  job: z.string(),
+  lastRunAt: timestampSchema.nullable(),
+  lastStatus: z.enum(['ok', 'failed']).nullable(),
+  lastError: z.string().nullable(),
+});
+
+/** GET /admin/system (08 §9, ADR 0052 §7). Instance admins only. */
+export const adminSystemSchema = z.object({
+  version: z.string(),
+  gitSha: z.string().nullable(),
+  startedAt: timestampSchema,
+  database: z.object({
+    sizeBytes: z.number().int().nonnegative(),
+    walSizeBytes: z.number().int().nonnegative(),
+  }),
+  lastBackup: z
+    .object({ name: z.string(), createdAt: timestampSchema, sizeBytes: z.number().int() })
+    .nullable(),
+  jobs: z.array(adminJobRunSchema),
+  smtp: z.object({ configured: z.boolean() }),
+  push: z.object({
+    keySource: z.enum(['env', 'generated', 'none']),
+    subscriptions: z.number().int().nonnegative(),
+  }),
+  sse: z.object({ connections: z.number().int().nonnegative() }),
+  storage: z.object({
+    backend: z.enum(['local', 's3']),
+    attachmentBytes: z.number().int().nonnegative(),
+    attachmentCount: z.number().int().nonnegative(),
+    userQuotaBytes: z.number().int().positive().nullable(),
+  }),
+  counts: z.object({
+    users: z.number().int().nonnegative(),
+    orgs: z.number().int().nonnegative(),
+    tasks: z.number().int().nonnegative(),
+  }),
+});
+
+export type AdminJobRun = z.infer<typeof adminJobRunSchema>;
+export type AdminSystem = z.infer<typeof adminSystemSchema>;

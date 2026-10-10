@@ -34,6 +34,7 @@ import { AttachmentsKitchenSection } from '../attachments/kitchen-sink-section';
 import { CollabKitchenSection } from '../collab/kitchen-sink-section';
 import { DatesSection } from '../dates/kitchen-sink-section';
 import { EditorSection } from '../editor/kitchen-sink-section';
+import { HelpKitchenSection } from '../help/kitchen-sink-section';
 import { ListSection } from '../list/kitchen-sink-section';
 import { LanguageSwitch } from '../locale/language-switch';
 import { PaletteKitchenSection } from '../palette/kitchen-sink-section';
@@ -778,6 +779,7 @@ export function KitchenSink() {
         <AccessKitchenSection />
         <AttachmentsKitchenSection />
         <CalendarKitchenSection />
+        <HelpKitchenSection />
       </main>
     </div>
   );

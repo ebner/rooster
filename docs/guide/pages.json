@@ -1,0 +1,95 @@
+{
+  "pages": [
+    {
+      "slug": "getting-started",
+      "title": {
+        "en": "Getting started",
+        "sv": "Kom igång"
+      }
+    },
+    {
+      "slug": "my-tasks",
+      "title": {
+        "en": "My tasks",
+        "sv": "Mina uppgifter"
+      }
+    },
+    {
+      "slug": "dates-and-repeats",
+      "title": {
+        "en": "Dates and repeating tasks",
+        "sv": "Datum och återkommande uppgifter"
+      }
+    },
+    {
+      "slug": "reminders",
+      "title": {
+        "en": "Reminders",
+        "sv": "Påminnelser"
+      }
+    },
+    {
+      "slug": "views-and-search",
+      "title": {
+        "en": "Views and search",
+        "sv": "Vyer och sökning"
+      }
+    },
+    {
+      "slug": "keyboard",
+      "title": {
+        "en": "Keyboard shortcuts",
+        "sv": "Kortkommandon"
+      }
+    },
+    {
+      "slug": "collaboration",
+      "title": {
+        "en": "Working together",
+        "sv": "Samarbete"
+      }
+    },
+    {
+      "slug": "attachments",
+      "title": {
+        "en": "Attachments",
+        "sv": "Bilagor"
+      }
+    },
+    {
+      "slug": "notifications",
+      "title": {
+        "en": "Notifications",
+        "sv": "Aviseringar"
+      }
+    },
+    {
+      "slug": "phone-and-offline",
+      "title": {
+        "en": "Phone and offline",
+        "sv": "Mobil och offline"
+      }
+    },
+    {
+      "slug": "calendar-feeds",
+      "title": {
+        "en": "Calendar feeds",
+        "sv": "Kalenderflöden"
+      }
+    },
+    {
+      "slug": "cli-tui-mcp",
+      "title": {
+        "en": "Terminal and AI agents",
+        "sv": "Terminal och AI-agenter"
+      }
+    },
+    {
+      "slug": "settings-and-data",
+      "title": {
+        "en": "Settings and your data",
+        "sv": "Inställningar och dina data"
+      }
+    }
+  ]
+}

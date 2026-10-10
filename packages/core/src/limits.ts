@@ -31,6 +31,9 @@ export const REMINDER_OFFSET_MAX = 40_320;
 export const REMINDER_LATE_MAX_MS = 24 * 60 * 60 * 1000;
 /** P10 (FR-ATT-1): the default upload limit; the server's `ROOSTER_UPLOAD_MAX_MB` overrides it. */
 export const UPLOAD_MAX_MB_DEFAULT = 25;
+
+/** `ROOSTER_USER_STORAGE_MB`: attachment bytes per uploader; `0` = no quota (ADR 0052 §6). */
+export const USER_STORAGE_MB_DEFAULT = 1024;
 /** P10 (06 §2.1): the largest avatar upload. */
 export const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 /** P10. Attachment file names are stored as given (cleaned), up to this many characters. */

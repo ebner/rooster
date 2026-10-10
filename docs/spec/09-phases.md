@@ -11,7 +11,7 @@
 ```
 P0 Foundations ─► P1 Auth & orgs ─► P2 List core ─► P3 Detail pane & subtasks ─► P4 PWA/offline/realtime/mobile ─► P5 Views, search, palette ══► v1.0 (switch-over)
                                                                                                                                                   │
-   P6 Collaboration ─► P7 Notification delivery ─► P8 CLI & PATs & public API ─► P9 TUI & MCP ─► P10 Recurrence, attachments, iCal ─► P11 Hardening ══► v2.0
+   P6 Collaboration ─► P7 Notification delivery ─► P8 CLI & PATs & public API ─► P9 TUI & MCP ─► P10 Recurrence, attachments, iCal ─► P11 Hardening ══► 1.5.0
 ```
 
 P8 depends only on v1.0. It can start in parallel with P6 and P7 if capacity allows, because it is a separate app consuming a stable API.
@@ -260,9 +260,19 @@ An import from other task managers is on the [Backlog](#backlog); v1.0 ships wit
 
 ---
 
-## Phase 11: Hardening → v2.0
+## Phase 11: Hardening (released as 1.5.0)
 
-- Security review (OWASP ASVS L2 checklist subset), with the dependency audit clean.
+Phase 11 changes no API contract, so it is a minor release (ADR 0052). v2.0 waits for a real breaking change.
+
+| WP | Content |
+|---|---|
+| 11.1 Security | The OWASP ASVS L2 subset in `docs/security/asvs.md`: each chosen requirement, its status and its evidence (a test, a file or an ADR). CI runs `pnpm audit --prod` (a high or critical finding fails) and a gitleaks secret scan (10 §6); the 10 §6 security tests exist. A per-user attachment storage quota (`ROOSTER_USER_STORAGE_MB`, ADR 0052). |
+| 11.2 Security audit | See below (AC-11.1). Runs after 11.1 lands. |
+| 11.3 Accessibility | axe (WCAG 2.2 AA) on every screen, in light and dark, on desktop and phone; a keyboard-only e2e of the core journey; checks of the list's accessible names against 10 §5; fixes. `docs/accessibility-checklist.md` is the manual pass with VoiceOver (iOS, macOS) and NVDA + Firefox, run by the maintainer per release. |
+| 11.4 Performance | A seeded 2,000-task org. Server: `GET /my-list` time with 1,000 and 2,000 tasks, mutation p95 and idle RSS against 10 §4. Web: keypress → paint and scrolling with 2,000 open tasks in My tasks. The bundle budget holds. A look at slimming the Docker image (AGENTS.md Deferred). |
+| 11.5 Operations | `GET /admin/system` and the Admin → System page (08 §9: version, DB and WAL sizes, the last backup, job runs, SMTP and push status, SSE connections, attachment storage). The backup and restore drill (10 §3.6) and the migration test from the previous release's fixture DB, both in CI. `compose.litestream.yaml` and its documentation (08 §4). |
+| 11.6 Documentation | The user guide in `docs/guide/{en,sv}/` (Markdown, the single source), also rendered in the app at `/help` (lazy, offline, linked from the `?` cheat sheet, the user menu and settings). The keyboard page is generated from `keymap.ts`. The operator guide `docs/operator.md` and `CONTRIBUTING.md`. Screenshots from a seeded demo team (`pnpm docs:screenshots`: light and dark, desktop and phone, English) in the guide and the README. |
+
 - **Full security audit** of the whole codebase, not only the diffs reviewed phase by phase, by an independent reviewer with read-only access.
   - **One focused review per trust boundary.** Each brief names the files, the assets and the attacks to try. The boundaries are:
     1. sign-in, sessions and account linking;
@@ -278,15 +288,16 @@ An import from other task managers is on the [Backlog](#backlog); v1.0 ships wit
   - **One structured pass** over everything since 1.0.0.
   - **Findings:** each is either fixed with a test, or accepted as a risk in an ADR. Each one is mapped to the ASVS checklist item it falls under.
   - **Re-checks:** every boundary is re-reviewed until the review reports it clean.
-- Full accessibility audit (keyboard and screen reader passes with VoiceOver iOS and NVDA), with fixes.
-- Performance pass: 2,000-task org; bundle budget (10 §4).
-- Backup and restore drill automated in CI. The Admin → System page. The Litestream overlay documented.
-- Documentation: a user guide (keyboard cheat sheet, NL dates, CLI), an operator guide, and a contributing guide.
 
 **Acceptance criteria**
 - AC-11.1 The security audit is complete when both of these hold:
   - every trust boundary above has a final re-check reporting it clean;
   - `docs/security/security-review.md` lists each finding with its boundary, ASVS item, severity, and the fixing commit or the ADR that accepts it.
+- AC-11.2 CI fails on a high or critical `pnpm audit --prod` finding or a gitleaks hit, and both pass. `docs/security/asvs.md` gives evidence for every listed requirement. An upload that would take a user past their storage quota gets `413 storage_quota_exceeded`, and nothing is stored.
+- AC-11.3 axe reports no WCAG 2.2 AA violation on any screen, in either theme, on desktop or phone. A keyboard-only e2e signs in, creates a task with a natural-language date, adds a subtask, moves, completes and undoes, searches with the palette and changes a setting, without the pointer. A task row's accessible name matches 10 §5.
+- AC-11.4 With 2,000 tasks in one org: `GET /my-list` with 1,000 tasks takes ≤ 50 ms server time, the mutation p95 is ≤ 20 ms, and idle RSS is ≤ 150 MB. Keypress → paint stays at a p95 ≤ 50 ms with 2,000 open tasks in My tasks. The initial bundle stays ≤ 450 KB.
+- AC-11.5 CI restores a backup taken by the Docker image into a fresh container and finds the data, and migrates the 1.4.0 fixture DB to the current schema. Admin → System shows every item of 08 §9.
+- AC-11.6 `/help` shows the guide in English and Swedish, offline too. `pnpm docs:screenshots` regenerates every screenshot from the seeded demo team. CI fails when the keyboard page no longer matches the keymap. The README shows the screenshots.
 
 ---
 

@@ -1363,6 +1363,26 @@
             "items": {
               "$ref": "#/components/schemas/Org"
             }
+          },
+          "storage": {
+            "type": "object",
+            "properties": {
+              "usedBytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "quotaBytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": [
+              "usedBytes",
+              "quotaBytes"
+            ]
           }
         },
         "required": [
