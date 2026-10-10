@@ -217,6 +217,31 @@ describe('createCimdFetch (11 §4.2)', () => {
   });
 });
 
+describe('createCimdFetch: bodiless answers', () => {
+  it.each([204, 205, 304, 600])(
+    'closes the connection of a %i answer at once, even when a body never arrives',
+    async (status) => {
+      // `Content-Length: 1` and nothing sent: the response would stay open forever.
+      const server = fakeConnect({ status, headers: { 'content-length': '1' }, chunks: [null] });
+      let destroyed = false;
+      const connect: typeof server.connect = (url, options, callback) => {
+        const req = server.connect(url, options, (res) => {
+          res.once('close', () => {
+            destroyed = true;
+          });
+          callback(res);
+        });
+        return req;
+      };
+      const fetch = createCimdFetch({ lookup: lookupOf('8.8.8.8'), connect, timeoutMs: 5_000 });
+      const res = await fetch('https://app.example.com/client.json');
+      expect(res.status).toBe(status === 600 ? 502 : status);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(destroyed).toBe(true);
+    },
+  );
+});
+
 describe('CIMD through the provider (11 §4.2)', () => {
   const clientId = 'https://agent.example.org/client.json';
 

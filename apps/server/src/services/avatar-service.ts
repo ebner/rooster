@@ -10,7 +10,7 @@ import { receiveFile, type UploadRequest, uploadTmpDir } from '../blob/multipart
 import type { BlobObject, BlobStores, StorageKind } from '../blob/store.ts';
 import { UploadSlots } from '../blob/upload-slots.ts';
 import { PRIVATE_DIR_MODE } from '../db/boot.ts';
-import { member, organization, user } from '../db/schema/index.ts';
+import { blobGc, member, organization, user } from '../db/schema/index.ts';
 import type { Audience } from '../events/bus.ts';
 import { AppError } from '../lib/errors.ts';
 import { matchesEtag } from '../lib/etag.ts';
@@ -31,6 +31,28 @@ import type { UserService } from './user-service.ts';
 export type AvatarDownload =
   | { kind: 'stream'; blob: BlobObject; etag: string }
   | { kind: 'not-modified'; etag: string };
+
+interface StoredAvatar {
+  userId: string;
+  avatarAt: number;
+  /** Null: stored before generation keys, at the shared key. */
+  storage: StorageKind | null;
+}
+
+function storedAvatar(row: {
+  id: string;
+  avatarAt: number | null;
+  avatarStorage: StorageKind | null;
+}): StoredAvatar | null {
+  return row.avatarAt === null
+    ? null
+    : { userId: row.id, avatarAt: row.avatarAt, storage: row.avatarStorage };
+}
+
+/** `avatar_at` of the next upload: now, and always after the previous one. */
+function nextGeneration(previous: number | null, now: number): number {
+  return Math.max(now, (previous ?? 0) + 1);
+}
 
 const avatarNotFound = () => new AppError('not_found', 404, 'Avatar not found.');
 
@@ -74,11 +96,22 @@ export class AvatarService {
     }
     if (image === null) throw notAnImage();
     const avatar = image;
-    // Serialised with DELETE per user: a removal's blob delete must not hit this upload's blob.
+    // Serialised with DELETE per user, so the generation read here is the one recorded.
     await this.locks.run(actor.userId, async () => {
+      const generation = readOnly(this.deps.db, (tx) =>
+        nextGeneration(this.requireUser(tx, actor.userId).avatarAt, this.deps.clock()),
+      );
       const store = this.stores.current;
-      await store.put(avatarKey(actor.userId), avatar, 'image/webp');
-      this.recordUpload(actor, store.kind);
+      const key = avatarKey(actor.userId, generation);
+      await store.put(key, avatar, 'image/webp');
+      let previous: StoredAvatar | null;
+      try {
+        previous = this.recordUpload(actor, store.kind, generation);
+      } catch (err) {
+        await store.delete(key).catch(() => {});
+        throw err;
+      }
+      await this.deleteLegacy(previous);
     });
     return this.users.getMe(actor);
   }
@@ -102,10 +135,15 @@ export class AvatarService {
     }
   }
 
-  private recordUpload(actor: Actor, storage: StorageKind): void {
-    immediate(this.deps.db, (tx) => {
+  /**
+   * Points the user at the new generation and queues the replaced one for the blob GC (keys are
+   * unique per upload now, so a late GC run cannot hit a newer avatar). Returns the replaced one.
+   */
+  private recordUpload(actor: Actor, storage: StorageKind, avatarAt: number): StoredAvatar | null {
+    return immediate(this.deps.db, (tx) => {
       const row = this.requireUser(tx, actor.userId);
-      const avatarAt = Math.max(this.deps.clock(), (row.avatarAt ?? 0) + 1);
+      const previous = storedAvatar(row);
+      this.queueForGc(tx, actor.userId, previous);
       tx.update(user)
         .set({
           image: avatarUrl(actor.userId, avatarAt),
@@ -118,7 +156,39 @@ export class AvatarService {
         .where(eq(user.id, actor.userId))
         .run();
       this.emit(tx, actor.userId);
+      return previous;
     });
+  }
+
+  /** A generation-keyed avatar goes through `blob_gc`, which retries an unreachable backend. */
+  private queueForGc(tx: Tx, userId: string, stored: StoredAvatar | null): void {
+    if (stored === null || stored.storage === null) return;
+    tx.insert(blobGc)
+      .values({
+        key: avatarKey(userId, stored.avatarAt),
+        storage: stored.storage,
+        queuedAt: this.deps.clock(),
+      })
+      .onConflictDoNothing()
+      .run();
+  }
+
+  /**
+   * An avatar from before generation keys (`avatar_storage` null) sits at the shared key in
+   * either backend. Nothing writes that key any more, so deleting it late cannot hit a newer
+   * avatar. A failed delete is logged; such an object is never read for a later upload.
+   */
+  private async deleteLegacy(stored: StoredAvatar | null): Promise<void> {
+    if (stored === null || stored.storage !== null) return;
+    const key = avatarKey(stored.userId);
+    for (const kind of ['local', 's3'] as const) {
+      await this.stores
+        .byKind(kind)
+        ?.delete(key)
+        .catch((err: unknown) =>
+          this.deps.logger.warn({ err: logSafeError(err) }, 'avatar blob delete failed'),
+        );
+    }
   }
 
   /** DELETE /me/avatar: back to the sign-in provider's picture. A no-op without an upload. */
@@ -131,7 +201,9 @@ export class AvatarService {
   private async removeUpload(actor: Actor): Promise<void> {
     const removed = immediate(this.deps.db, (tx) => {
       const row = this.requireUser(tx, actor.userId);
-      if (row.avatarAt === null) return false;
+      const stored = storedAvatar(row);
+      if (stored === null) return null;
+      this.queueForGc(tx, actor.userId, stored);
       tx.update(user)
         .set({
           image: row.oidcImage,
@@ -143,21 +215,9 @@ export class AvatarService {
         .where(eq(user.id, actor.userId))
         .run();
       this.emit(tx, actor.userId);
-      return true;
+      return stored;
     });
-    if (removed) {
-      // Not queued in blob_gc: the key is reused by the next upload, which a late GC run
-      // would otherwise delete. A failed delete leaves a blob the next upload overwrites.
-      const key = avatarKey(actor.userId);
-      for (const kind of ['local', 's3'] as const) {
-        await this.stores
-          .byKind(kind)
-          ?.delete(key)
-          .catch((err: unknown) =>
-            this.deps.logger.warn({ err: logSafeError(err) }, 'avatar blob delete failed'),
-          );
-      }
-    }
+    await this.deleteLegacy(removed);
   }
 
   /**
@@ -181,19 +241,26 @@ export class AvatarService {
     // Strong: each upload has its own `avatar_at`. Only answered after the access check.
     const etag = `"avatar-${avatarAt}"`;
     if (matchesEtag(ifNoneMatch, etag)) return { kind: 'not-modified', etag };
-    const key = avatarKey(userId);
-    const blob = await this.readBlob(key, current.storage);
+    const blob = await this.readBlob(userId, avatarAt, current.storage);
     if (blob === null) throw avatarNotFound();
     return { kind: 'stream', blob, etag };
   }
 
   /**
-   * The upload's own backend only: the other one may still hold an avatar that was replaced or
-   * removed while it was not configured. Avatars from before `avatar_storage` was recorded are
-   * looked up in the current backend first, then in the other one.
+   * This upload's own object (its generation, in its backend), or null: a stale copy left in a
+   * backend or bucket that was not configured when the avatar was replaced or removed has
+   * another key and is never served. Avatars from before generation keys (`avatar_storage`
+   * null) are looked up at the shared key, in the current backend first, then the other one.
    */
-  private async readBlob(key: string, storage: StorageKind | null): Promise<BlobObject | null> {
-    if (storage !== null) return (await this.stores.byKind(storage)?.get(key)) ?? null;
+  private async readBlob(
+    userId: string,
+    avatarAt: number,
+    storage: StorageKind | null,
+  ): Promise<BlobObject | null> {
+    if (storage !== null) {
+      return (await this.stores.byKind(storage)?.get(avatarKey(userId, avatarAt))) ?? null;
+    }
+    const key = avatarKey(userId);
     const current = this.stores.current;
     const other = this.stores.byKind(current.kind === 'local' ? 's3' : 'local');
     return (await current.get(key)) ?? (await other?.get(key)) ?? null;

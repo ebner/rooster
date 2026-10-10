@@ -1,6 +1,6 @@
 // Phase 10 (FR-SET-1, ADR 0049 §3.7): uploaded avatars.
 
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -36,6 +36,12 @@ type Team = Awaited<ReturnType<typeof team>>;
 
 const put = (ctx: Team, who: Caller, form: FormData) =>
   sendForm(ctx, who, 'PUT', '/api/v1/me/avatar', form);
+
+/** The avatar blobs on disk (file names under `attachments/avatars`). */
+const avatarFiles = (ctx: Team) => {
+  const dir = join(ctx.dataDir, 'attachments', 'avatars');
+  return existsSync(dir) ? readdirSync(dir).sort() : [];
+};
 
 const row = (ctx: Team, id: string) => ctx.db.orm.select().from(user).where(eq(user.id, id)).get();
 
@@ -93,7 +99,9 @@ describe('avatars (FR-SET-1)', () => {
     const me = await ctx.a.ok<Me>('DELETE', '/api/v1/me/avatar');
     expect(me.image).toBe(PROVIDER_PICTURE);
     expect(row(ctx, ctx.a.userId)).toMatchObject({ avatarAt: null, oidcImage: null });
-    expect(existsSync(join(ctx.dataDir, 'attachments', 'avatars', ctx.a.userId))).toBe(false);
+    // Both uploads' blobs were queued for the GC, which deletes them.
+    await ctx.app.services.blobGc.drain();
+    expect(avatarFiles(ctx)).toEqual([]);
     expect((await ctx.b.call('GET', `/api/v1/avatars/${ctx.a.userId}`)).status).toBe(404);
     // Without an upload DELETE changes nothing.
     expect((await ctx.a.ok<Me>('DELETE', '/api/v1/me/avatar')).image).toBe(PROVIDER_PICTURE);
@@ -107,8 +115,9 @@ describe('avatars (FR-SET-1)', () => {
       put(ctx, ctx.a, fileForm(image, 'two.png')),
       ctx.a.call('DELETE', '/api/v1/me/avatar'),
     ]);
-    const blob = existsSync(join(ctx.dataDir, 'attachments', 'avatars', ctx.a.userId));
-    expect(blob).toBe(row(ctx, ctx.a.userId)?.avatarAt !== null);
+    await ctx.app.services.blobGc.drain();
+    const stored = row(ctx, ctx.a.userId)?.avatarAt ?? null;
+    expect(avatarFiles(ctx)).toEqual(stored === null ? [] : [`${ctx.a.userId}.${stored}`]);
   });
 
   it('a later profile update from sign-in never replaces the uploaded avatar', async () => {
@@ -176,6 +185,64 @@ describe('avatars across a storage switch', () => {
       },
     };
   }
+
+  it('an avatar stored before generation keys is still served, and goes when replaced', async () => {
+    const ctx = await team();
+    const local = ctx.app.services.blobs.byKind('local');
+    if (local === null) throw new Error('no local store');
+    // As 1.4 left it: the shared key, no recorded backend.
+    const legacy = await sharp(await png(256, 256))
+      .webp()
+      .toBuffer();
+    await local.put(`avatars/${ctx.a.userId}`, legacy, 'image/webp');
+    ctx.db.orm
+      .update(user)
+      .set({ avatarAt: 1_000, image: `/api/v1/avatars/${ctx.a.userId}?v=1000` })
+      .where(eq(user.id, ctx.a.userId))
+      .run();
+    const path = `/api/v1/avatars/${ctx.a.userId}`;
+    const old = await ctx.b.call('GET', path);
+    expect(old.status).toBe(200);
+    expect(Buffer.from(await old.arrayBuffer()).equals(legacy)).toBe(true);
+    expect((await put(ctx, ctx.a, fileForm(await png(40, 40), 'new.png'))).status).toBe(200);
+    const stored = row(ctx, ctx.a.userId);
+    expect(stored?.avatarStorage).toBe('local');
+    expect(avatarFiles(ctx)).toEqual([`${ctx.a.userId}.${stored?.avatarAt}`]);
+    expect((await ctx.b.call('GET', path)).status).toBe(200);
+  });
+
+  it('a removed avatar left in another bucket never comes back, not even with its key', async () => {
+    const ctx = await team();
+    const stores = ctx.app.services.blobs;
+    const local = stores.byKind('local');
+    if (local === null) throw new Error('no local store');
+    const bucket1 = memoryS3();
+    const bucket2 = memoryS3();
+    const configure = (bucket: BlobStore) => {
+      stores.current = bucket;
+      stores.byKind = (kind) => (kind === 'local' ? local : bucket);
+    };
+    const path = `/api/v1/avatars/${ctx.a.userId}`;
+    const solid = (g: number) =>
+      sharp({ create: { width: 60, height: 60, channels: 3, background: { r: 0, g, b: 0 } } })
+        .png()
+        .toBuffer();
+
+    configure(bucket1);
+    expect((await put(ctx, ctx.a, fileForm(await solid(20), 'a.png'))).status).toBe(200);
+    // The operator moves to another bucket; the removal cannot reach the first one.
+    configure(bucket2);
+    await ctx.a.ok('DELETE', '/api/v1/me/avatar');
+    await ctx.app.services.blobGc.drain();
+    expect(bucket1.objects.size).toBe(1);
+    expect((await put(ctx, ctx.a, fileForm(await solid(220), 'b.png'))).status).toBe(200);
+    const served = Buffer.from(await (await ctx.b.call('GET', path)).arrayBuffer());
+    expect(served.equals(bucket2.objects.values().next().value as Buffer)).toBe(true);
+
+    // The first bucket comes back: B is not there, and A is never served for it.
+    configure(bucket1);
+    expect((await ctx.b.call('GET', path)).status).toBe(404);
+  });
 
   it('a removed avatar left in an unconfigured backend never comes back', async () => {
     const ctx = await team();

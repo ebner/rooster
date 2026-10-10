@@ -156,7 +156,9 @@ export class AttachmentService {
         tmpDir: this.tmpDir,
         onFileBytes: (n) => slot.take(n),
       });
-      return await this.store(actor, taskId, orgId, file, meta);
+      const stored = await this.store(actor, taskId, orgId, file, meta);
+      slot.release(stored.size);
+      return stored;
     } finally {
       slot.release();
     }

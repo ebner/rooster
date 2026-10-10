@@ -250,7 +250,10 @@ export function createCimdFetch(deps: CimdFetchDeps = {}) {
           res.on('error', () => clearTimeout(timer));
           if (status < 200 || status > 599 || status === 204 || status === 205 || status === 304) {
             // No body to read (or not a usable status): the plugin answers anything but 200.
-            res.resume();
+            // The connection goes now: a server that declares a body it never sends must not
+            // hold the socket open once the deadline is no longer watching it.
+            res.destroy();
+            req.destroy();
             settled = true;
             clearTimeout(timer);
             resolve(

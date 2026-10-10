@@ -187,7 +187,9 @@ describe('S3 blob storage', () => {
       fileForm(await png(300, 300), 'me.png'),
     );
     expect(put.status).toBe(200);
-    expect(ctx.s3.objects.has(`avatars/${ctx.owner.userId}`)).toBe(true);
+    const avatarAt = ((await put.json()) as Me).image?.split('?v=')[1] ?? '';
+    const key = `avatars/${ctx.owner.userId}.${avatarAt}`;
+    expect(ctx.s3.objects.has(key)).toBe(true);
     const img = await ctx.app.request(`/api/v1/avatars/${ctx.owner.userId}`, {
       headers: { cookie: ctx.owner.jar.header() },
     });
@@ -200,22 +202,28 @@ describe('S3 blob storage', () => {
       })
     ).json()) as Me;
     expect(me.image).toBeNull();
-    expect(ctx.s3.objects.has(`avatars/${ctx.owner.userId}`)).toBe(false);
+    // Queued for the blob GC, which deletes it from the bucket.
+    await ctx.app.services.blobGc.drain();
+    expect(ctx.s3.objects.has(key)).toBe(false);
   });
 });
 
 describe('blob keys', () => {
-  it('accept only the three key schemes', () => {
+  it('accept only the known key schemes', () => {
     const id = '0199c5a2-d7e8-76f9-8a0b-7b8c9d0e1f01';
     expect(isValidBlobKey(`${id}/${id}`)).toBe(true);
     expect(isValidBlobKey(`${id}/${id}.thumb.webp`)).toBe(true);
     expect(isValidBlobKey(`avatars/${id}`)).toBe(true);
+    expect(isValidBlobKey(`avatars/${id}.1791628778737`)).toBe(true);
     for (const bad of [
       `../${id}`,
       `${id}/../${id}`,
       `${id}/${id}/x`,
       `/${id}/${id}`,
       `avatars/${id}.png`,
+      `avatars/${id}.`,
+      `avatars/${id}.12345678901234567`,
+      `avatars/${id}/1`,
       `${id}/${id}.thumb.png`,
       `${id.toUpperCase()}/${id}`,
       '',

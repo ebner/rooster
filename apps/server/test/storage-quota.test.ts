@@ -236,6 +236,62 @@ describe('WP 11.1 per-user attachment storage quota (ADR 0052 §6)', () => {
     await uploaded(ctx, ctx.a, 700 * 1024);
   });
 
+  it('an upload stored meanwhile counts against the uploads still streaming', async () => {
+    const ctx = await team('1');
+    const slots = ctx.app.services.attachments.uploads;
+    const boundary = '----rooster-stepped';
+    const chunks: Uint8Array[] = [
+      new TextEncoder().encode(
+        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="f.txt"\r\nContent-Type: text/plain\r\n\r\n`,
+      ),
+      bytes(1),
+    ];
+    let wake = () => {};
+    let ended = false;
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        while (chunks.length === 0 && !ended) {
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+          });
+        }
+        const next = chunks.shift();
+        if (next !== undefined) controller.enqueue(next);
+        else controller.close();
+      },
+    });
+    const send = (chunk: Uint8Array) => {
+      chunks.push(chunk);
+      wake();
+    };
+    const a = Promise.resolve(
+      ctx.app.request(
+        `/api/v1/tasks/${ctx.taskId}/attachments`,
+        asJar(ctx.a.jar, {
+          method: 'POST',
+          body,
+          headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+          duplex: 'half',
+        } as RequestInit),
+      ),
+    );
+    await until(() => slots.inFlight(ctx.a.userId).bytes === 1, 2_000, 'upload A started');
+    // B is stored while A is still open.
+    await uploaded(ctx, ctx.a, 700 * 1024);
+    // A goes on: 700 KB more would take stored plus in flight past the 1 MB quota.
+    send(bytes(700 * 1024));
+    // Cut off while it streams (its partial file goes), not only once the body has ended.
+    await until(() => tmpFiles(ctx).length === 0, 2_000, 'upload A cut off');
+    send(new TextEncoder().encode(`\r\n--${boundary}--\r\n`));
+    ended = true;
+    const res = await a;
+    expect(res.status).toBe(413);
+    expect(((await res.json()) as Problem).code).toBe('storage_quota_exceeded');
+    expect(slots.inFlight(ctx.a.userId)).toEqual({ uploads: 0, bytes: 0 });
+    expect(tmpFiles(ctx)).toEqual([]);
+    expect(ctx.db.orm.select().from(attachment).all()).toHaveLength(1);
+  });
+
   it('a user streams at most three uploads at once (429 with Retry-After)', async () => {
     const ctx = await team('0');
     const slots = ctx.app.services.attachments.uploads;

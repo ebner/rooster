@@ -346,8 +346,13 @@ export class PushService {
 
   /** The notification is read again when its send leaves the queue (it may be gone by then). */
   private async sendNotificationTo(id: string, target: SubscriptionRef): Promise<void> {
-    const loaded = readOnly(this.deps.db, (tx) => loadDeliverable(tx, id));
-    if (loaded === null || loaded.row.userId !== target.userId) return;
+    // The recipient may have turned this kind of push off while the send waited.
+    const loaded = readOnly(this.deps.db, (tx) => {
+      const found = loadDeliverable(tx, id);
+      if (found === null || found.row.userId !== target.userId) return null;
+      return prefEnabled(tx, target.userId, found.notification.type, 'push') ? found : null;
+    });
+    if (loaded === null) return;
     const t = mailT(loaded.recipient.locale);
     const described = describeNotification(
       loaded.notification,

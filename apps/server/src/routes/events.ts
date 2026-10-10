@@ -80,9 +80,19 @@ export function registerEventRoutes(
     }
     const env = c.env as Partial<HttpBindings> | undefined;
     const outgoing = env?.outgoing;
+    // Captured now: a finished response lets go of its socket, which may still hold frames
+    // the client never read.
+    const socket = outgoing?.socket ?? null;
     // A stalled or evicted stream is cut off at the socket, not left queued (sse-transport.ts).
     const transport = new SseTransport(
-      outgoing === undefined ? {} : { destroy: () => outgoing.destroy() },
+      outgoing === undefined || socket === null
+        ? {}
+        : {
+            // Not a socket that finished this response and flushed it: keep-alive may reuse it.
+            destroy: () => {
+              if (!outgoing.writableFinished || socket.writableLength > 0) socket.destroy();
+            },
+          },
     );
     const handle = hub.open({
       userId: actor.userId,

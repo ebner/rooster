@@ -2,7 +2,9 @@
 // against these shapes, so a key can never climb out of the store's root or bucket prefix.
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
-const KEY_RE = new RegExp(`^(?:${UUID}/${UUID}(?:\\.thumb\\.webp)?|avatars/${UUID})$`);
+const KEY_RE = new RegExp(
+  `^(?:${UUID}/${UUID}(?:\\.thumb\\.webp)?|avatars/${UUID}(?:\\.[0-9]{1,16})?)$`,
+);
 
 export function isValidBlobKey(key: string): boolean {
   return KEY_RE.test(key);
@@ -20,4 +22,10 @@ export const attachmentKey = (orgId: string, attachmentId: string) =>
 export const thumbKey = (orgId: string, attachmentId: string) =>
   assertBlobKey(`${orgId}/${attachmentId}.thumb.webp`);
 
-export const avatarKey = (userId: string) => assertBlobKey(`avatars/${userId}`);
+/**
+ * An avatar: `avatars/<userId>.<avatar_at>` since P11, one object per upload, so a stale copy
+ * (left in a backend or bucket that was not configured when it was replaced or removed) is
+ * never read for a later upload. Without a generation: the key of avatars stored before.
+ */
+export const avatarKey = (userId: string, generation?: number) =>
+  assertBlobKey(generation === undefined ? `avatars/${userId}` : `avatars/${userId}.${generation}`);

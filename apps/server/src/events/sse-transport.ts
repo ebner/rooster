@@ -7,10 +7,17 @@ import type { SseSink } from './hub.ts';
 export const SSE_MAX_BUFFERED_BYTES = 64 * 1024;
 /** A stream whose client takes nothing for this long while frames wait is cut off. */
 export const SSE_WRITE_DEADLINE_MS = 30_000;
+/**
+ * After `close()`, the transport has this long to finish the response; then it is destroyed.
+ * The frame queue may be empty while the socket is not: Node may hold the last frame, waiting
+ * for a client that stopped reading to drain it.
+ */
+export const SSE_CLOSE_GRACE_MS = 2_000;
 
 export interface SseTransportOptions {
   maxBufferedBytes?: number;
   writeDeadlineMs?: number;
+  closeGraceMs?: number;
   /** Tears down the underlying connection (the Node response), when there is one. */
   destroy?: () => void;
 }
@@ -22,14 +29,16 @@ export interface SseTransportOptions {
  * after the socket drains, so a client that stops reading leaves frames here, where they
  * are counted. Over `maxBufferedBytes`, or after `writeDeadlineMs` without progress, the
  * stream is aborted and the connection destroyed: the frames are dropped and the client's
- * `EventSource` reconnects and refetches. `close()` ends a caught-up stream cleanly and
- * aborts one that is behind, so a closed stream never lingers behind its own backlog.
+ * `EventSource` reconnects and refetches. `close()` ends a caught-up stream cleanly (and
+ * destroys it if the response has not finished `SSE_CLOSE_GRACE_MS` later) and aborts one
+ * that is behind, so a closed stream never lingers behind its own backlog.
  */
 export class SseTransport implements SseSink {
   readonly body: ReadableStream<Uint8Array>;
   private readonly encoder = new TextEncoder();
   private readonly maxBufferedBytes: number;
   private readonly writeDeadlineMs: number;
+  private readonly closeGraceMs: number;
   private readonly destroy: (() => void) | undefined;
   private controller: ReadableStreamDefaultController<Uint8Array> | undefined;
   private readonly queue: Uint8Array[] = [];
@@ -43,6 +52,7 @@ export class SseTransport implements SseSink {
   constructor(options: SseTransportOptions = {}) {
     this.maxBufferedBytes = options.maxBufferedBytes ?? SSE_MAX_BUFFERED_BYTES;
     this.writeDeadlineMs = options.writeDeadlineMs ?? SSE_WRITE_DEADLINE_MS;
+    this.closeGraceMs = options.closeGraceMs ?? SSE_CLOSE_GRACE_MS;
     this.destroy = options.destroy;
     this.body = new ReadableStream<Uint8Array>(
       {
@@ -100,6 +110,11 @@ export class SseTransport implements SseSink {
       return;
     }
     this.ending = true;
+    // The hub has forgotten the stream: nothing else would ever end a stalled transport.
+    if (this.destroy !== undefined) {
+      const destroy = this.destroy;
+      setTimeout(destroy, this.closeGraceMs).unref?.();
+    }
     const waiting = this.waiting;
     if (waiting !== undefined) {
       this.waiting = undefined;

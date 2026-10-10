@@ -3,6 +3,8 @@
 **/.env
 **/.env.*
 !**/.env.example
+# The Litestream overlay's credentials (compose.litestream.yaml)
+**/litestream.env
 .git
 .github
 .playwright-mcp

@@ -1,5 +1,6 @@
 // WP 4.3: domain events after commit, the SSE hub (targeting, coalescing, hello, heartbeat,
 // stream lifetime) and its graceful-shutdown integration.
+import type { ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { connect } from 'node:net';
 import { serve } from '@hono/node-server';
@@ -595,6 +596,73 @@ describe('SSE transport bounds (stalled clients)', () => {
     expect(aborted).toHaveBeenCalledTimes(1);
     expect(behind.buffered).toBe(0);
   });
+
+  it('close ends a caught-up stream and destroys it if the response has not finished', async () => {
+    vi.useFakeTimers();
+    const destroyed = vi.fn();
+    const t = new SseTransport({ destroy: destroyed, closeGraceMs: 1_000 });
+    const reader = t.body.getReader();
+    t.write(': hi\n\n');
+    await reader.read();
+    t.close();
+    expect((await reader.read()).done).toBe(true);
+    vi.advanceTimersByTime(999);
+    expect(destroyed).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(destroyed).toHaveBeenCalledTimes(1);
+  });
+
+  it('an evicted stream whose socket is stalled with an empty queue is destroyed', async () => {
+    const { app, a } = await trio();
+    const server = serve({ fetch: app.fetch, port: 0, hostname: '127.0.0.1' });
+    await new Promise<void>((resolve) => server.once('listening', () => resolve()));
+    const { port } = server.address() as AddressInfo;
+    let closed = false;
+    let response: ServerResponse | undefined;
+    server.on('connection', (s) => s.once('close', () => (closed = true)));
+    server.on('request', (_req, res: ServerResponse) => {
+      response = res;
+    });
+    try {
+      const socket = connect({ port, host: '127.0.0.1' });
+      await new Promise<void>((resolve) => socket.once('connect', () => resolve()));
+      socket.on('error', () => {});
+      socket.write(
+        `GET /api/v1/events HTTP/1.1\r\nhost: 127.0.0.1\r\ncookie: ${a.jar.header()}\r\n\r\n`,
+      );
+      await until(() => app.hub.size === 1, 2_000, 'stream open');
+      socket.pause();
+      const userId = (await a.ok<{ id: string }>('GET', '/api/v1/me')).id;
+      const small = 'x'.repeat(8 * 1024);
+      // Frame by frame, each taken by Node at once, until Node waits for a drain that does not
+      // come (the kernel buffers are full): the transport's own queue is empty at that point.
+      const stalled = async () => {
+        if (response?.writableNeedDrain !== true) return false;
+        await new Promise((r) => setTimeout(r, 300));
+        return response.writableNeedDrain;
+      };
+      for (let i = 0; i < 20_000 && !(await stalled()); i++) {
+        app.services.events.publish({
+          type: 'notification.created',
+          orgId: null,
+          actorId: null,
+          origin: null,
+          subjects: [],
+          audiences: [],
+          direct: [{ userId, event: 'notification', data: { small } }],
+        } as DomainEvent);
+        for (let j = 0; j < 3; j++) await new Promise((r) => setImmediate(r));
+      }
+      expect(response?.writableNeedDrain).toBe(true);
+      expect(app.hub.size).toBe(1);
+      // Four more streams of the same session evict the stalled one.
+      for (let i = 0; i < SSE_MAX_PER_SESSION; i++) await listen(a);
+      expect(app.hub.size).toBe(SSE_MAX_PER_SESSION);
+      await until(() => closed, 4_000, 'evicted socket destroyed');
+    } finally {
+      server.close();
+    }
+  }, 30_000);
 
   it('a client that stops reading is cut off at the socket and leaves the hub', async () => {
     const { app, a } = await trio();

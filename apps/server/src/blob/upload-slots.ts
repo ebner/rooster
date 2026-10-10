@@ -11,12 +11,18 @@ const UPLOAD_RETRY_AFTER_S = 5;
 export interface UploadSlot {
   /** Counts `n` more bytes of this upload's file; throws the budget's error once it is spent. */
   take(n: number): void;
-  /** Gives the slot and its bytes back; idempotent. */
-  release(): void;
+  /**
+   * Gives the slot and its bytes back; idempotent. `committed` is what the upload stored (its
+   * size), which now counts as used for the user's other uploads still in flight.
+   */
+  release(committed?: number): void;
 }
 
 export interface UploadBudget {
-  /** Bytes the user's uploads in flight may hold together. */
+  /**
+   * Bytes the user's uploads in flight may hold together: the rest of the quota when the
+   * upload started. Uploads that are stored meanwhile are taken off it (`release(committed)`).
+   */
   bytes: number;
   error: () => AppError;
 }
@@ -29,7 +35,8 @@ export interface UploadBudget {
  * budget given (the rest of the storage quota), checked as every chunk arrives.
  */
 export class UploadSlots {
-  private readonly users = new Map<string, { uploads: number; bytes: number }>();
+  /** `committed`: bytes stored by this user's uploads since the entry was created. */
+  private readonly users = new Map<string, { uploads: number; bytes: number; committed: number }>();
 
   constructor(private readonly perUser = UPLOADS_IN_FLIGHT_PER_USER) {}
 
@@ -46,11 +53,13 @@ export class UploadSlots {
     }
     if (budget !== undefined && (entry?.bytes ?? 0) > budget.bytes) throw budget.error();
     if (entry === undefined) {
-      entry = { uploads: 0, bytes: 0 };
+      entry = { uploads: 0, bytes: 0, committed: 0 };
       this.users.set(userId, entry);
     }
     const held = entry;
     held.uploads += 1;
+    // The budget was read from the database just now: only what is stored after this counts.
+    const base = held.committed;
     let mine = 0;
     let released = false;
     return {
@@ -58,13 +67,16 @@ export class UploadSlots {
         if (released) return;
         mine += n;
         held.bytes += n;
-        if (budget !== undefined && held.bytes > budget.bytes) throw budget.error();
+        if (budget !== undefined && held.bytes + (held.committed - base) > budget.bytes) {
+          throw budget.error();
+        }
       },
-      release: () => {
+      release: (committed = 0) => {
         if (released) return;
         released = true;
         held.uploads -= 1;
         held.bytes -= mine;
+        held.committed += committed;
         if (held.uploads === 0) this.users.delete(userId);
       },
     };

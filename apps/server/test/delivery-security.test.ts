@@ -678,3 +678,33 @@ describe('SMTP failures are logged without the server’s reply', () => {
     expect(error.command).toBeUndefined();
   });
 });
+
+describe('queued notification pushes recheck the push preference', () => {
+  it('a push waiting in the queue is dropped once the recipient turned that kind off', async () => {
+    const ctx = listCtx();
+    const ann = ctx.user('ann@example.com');
+    const bo = ctx.user('bo@example.com');
+    const org = await bo.ok<{ id: string }>('POST', '/api/v1/orgs', { name: 'Acme' }, 201);
+    const { url } = await bo.ok<{ url: string }>(
+      'POST',
+      `/api/v1/orgs/${org.id}/invites`,
+      { role: 'member' },
+      201,
+    );
+    await ann.ok('POST', `/api/v1/invites/${url.split('/invite/')[1]}/accept`);
+    await ann.ok('POST', '/api/v1/me/push-subscriptions', subscriptionBody('ann'), 201);
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const blockers = Array.from({ length: 4 }, () =>
+      ctx.app.services.deliveries.run('blocker', () => gate),
+    );
+    await createTask(bo, { title: 'Lock-screen secret', assigneeId: ann.userId }, org.id);
+    await setCells(ann, [{ type: 'assigned', channel: 'push', enabled: false }]);
+    release();
+    await Promise.all(blockers);
+    await ctx.app.services.deliveries.idle();
+    expect(ctx.push.sent).toEqual([]);
+  });
+});

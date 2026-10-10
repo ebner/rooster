@@ -7,6 +7,8 @@ coverage/
 .env
 .env.*
 !.env.example
+# The Litestream overlay's credentials (compose.litestream.yaml)
+litestream.env
 /data/
 apps/server/data/
 *.db
