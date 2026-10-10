@@ -5,12 +5,17 @@ import {
   type Weekday,
 } from '@rooster/core/recurrence';
 import { namespaceTranslator } from '../i18n.ts';
+import { clean } from './color.ts';
 import { type DateContext, dayLabel, instantLabel } from './format.ts';
 
 /**
  * Repeat rules, reminders and file sizes as text (P10), in the viewer's language. The sentences
  * are the web's (`dates:repeat.rule.*`, `dates:reminder.*`), so the terminal and the pane say
  * the same thing.
+ *
+ * API responses are only type-cast, so every server value is checked before it is used (whole
+ * minutes, finite instants and sizes) and every returned text goes through `clean()`: a hostile
+ * server cannot reach the terminal with control or bidi characters through these paths.
  */
 
 /** The weekday's name as the web writes it: `weekday.long.<n>` counts from Sunday. */
@@ -27,7 +32,12 @@ export function ruleText(
   basis: RecurrenceBasis | null | undefined,
   ctx: DateContext,
 ): string {
-  const d = describeRule(rule, basis ?? 'due');
+  if (typeof rule !== 'string') return '';
+  return clean(describe(rule, basis === 'completion' ? 'completion' : 'due', ctx));
+}
+
+function describe(rule: string, basis: RecurrenceBasis, ctx: DateContext): string {
+  const d = describeRule(rule, basis);
   if (d === null) return rule;
   const t = namespaceTranslator(ctx.locale, 'dates');
   const count = d.interval;
@@ -70,8 +80,19 @@ export function ruleText(
   return body;
 }
 
+/** A list from a response, or none when the server sent something else. */
+export function listOf<T>(value: readonly T[] | null | undefined): readonly T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+const isMinutes = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && (value as number) >= 0;
+const isInstant = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && (value as number) >= 0;
+
 /** "15 min before", "1 h before", "2 days before"; 0 is the due moment itself. */
 export function offsetText(offsetMinutes: number, allDay: boolean, ctx: DateContext): string {
+  if (!isMinutes(offsetMinutes)) return '?';
   const t = namespaceTranslator(ctx.locale, 'dates');
   if (offsetMinutes === 0) return t(allDay ? 'reminder.onTheDay' : 'reminder.atDue');
   if (offsetMinutes % 1440 === 0) return t('reminder.daysBefore', { count: offsetMinutes / 1440 });
@@ -96,21 +117,25 @@ export function reminderText(
   ctx: DateContext,
 ): { text: string; dormant: boolean; fired: boolean } {
   const t = namespaceTranslator(ctx.locale, 'dates');
-  const dormant = reminder.fireAt === null;
-  const when = dormant ? t('reminder.dormant') : instantLabel(reminder.fireAt as number, ctx);
+  // Anything but a real instant reads as dormant: it is not a time the reminder will fire at.
+  const dormant = !isInstant(reminder.fireAt);
+  const when = isInstant(reminder.fireAt)
+    ? instantLabel(reminder.fireAt, ctx)
+    : t('reminder.dormant');
   const offset =
     reminder.kind === 'relative' && reminder.offsetMinutes !== null
       ? offsetText(reminder.offsetMinutes, task.dueTime === null, ctx)
       : null;
   const text = offset === null ? when : t('reminder.chip', { offset, when });
-  const fired = reminder.firedAt !== null;
-  return { text: fired ? `${text} ${t('reminder.firedSr')}` : text, dormant, fired };
+  const fired = reminder.firedAt !== null && reminder.firedAt !== undefined;
+  return { text: clean(fired ? `${text} ${t('reminder.firedSr')}` : text), dormant, fired };
 }
 
 const UNITS = ['byte', 'kilobyte', 'megabyte', 'gigabyte'] as const;
 
 /** "512 byte", "12 kB", "3.4 MB" in the viewer's number format (1 kB = 1024 bytes, as the web). */
 export function sizeText(bytes: number, locale: string): string {
+  if (!Number.isSafeInteger(bytes) || bytes < 0) return '?';
   let value = bytes;
   let unit = 0;
   while (value >= 1024 && unit < UNITS.length - 1) {

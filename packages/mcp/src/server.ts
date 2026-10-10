@@ -21,7 +21,10 @@ import { formatReminderOffset } from '@rooster/core/reminders';
 import { z } from 'zod';
 import { CallContext, type Org, type Task, ToolError } from './context.ts';
 import {
+  canonical,
+  isoInstant,
   markdownText,
+  orgText,
   type RowContext,
   taskRef,
   taskRow,
@@ -254,7 +257,7 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
       }
       const { today, timezone } = await ctx.today();
       return toolResult(
-        `${tasks.length} task(s) in ${org.slug}, view ${args.view}${truncated ? ' (truncated; narrow with group or tag)' : ''}. Today is ${today} (${timezone}).`,
+        `${tasks.length} task(s) in ${orgText(org)}, view ${args.view}${truncated ? ' (truncated; narrow with group or tag)' : ''}. Today is ${canonical.date(today) ?? 'unknown'} (${canonical.zone(timezone) ?? 'unknown zone'}).`,
         {
           org: org.slug,
           view: args.view,
@@ -286,15 +289,17 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
       };
       if (task.parentChain.length > 0) detail.parents = task.parentChain.map((p) => p.title);
       if (task.subtasks.length > 0) detail.subtaskList = task.subtasks.map((s) => taskRow(s, rows));
-      if (task.reminders !== undefined && task.reminders.length > 0) {
+      if (Array.isArray(task.reminders) && task.reminders.length > 0) {
         detail.reminders = task.reminders.map((r) => ({
-          ...(r.offsetMinutes === null ? {} : { before: formatReminderOffset(r.offsetMinutes) }),
+          ...(Number.isSafeInteger(r.offsetMinutes) && (r.offsetMinutes as number) >= 0
+            ? { before: formatReminderOffset(r.offsetMinutes as number) }
+            : {}),
           // Null while the task has no due date: it fires again once one is set (ADR 0049 §2.2).
-          at: r.fireAt === null ? null : new Date(r.fireAt).toISOString(),
+          at: isoInstant(r.fireAt),
           ...(r.firedAt === null ? {} : { sent: true }),
         }));
       }
-      if (task.attachments !== undefined && task.attachments.length > 0) {
+      if (Array.isArray(task.attachments) && task.attachments.length > 0) {
         detail.attachments = task.attachments.map((a) => ({
           name: a.filename,
           type: a.mime,
@@ -368,7 +373,7 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
         if (task.placement === null || task.completedAt !== null) continue;
         open.set(task.placement.groupId, (open.get(task.placement.groupId) ?? 0) + 1);
       }
-      return toolResult(`${groups.length} group(s) in ${org.slug}.`, {
+      return toolResult(`${groups.length} group(s) in ${orgText(org)}.`, {
         org: org.slug,
         groups: groups.map((g) => ({
           name: g.name,
@@ -470,7 +475,7 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
           ? undefined
           : await ctx.parseRepeat(
               args.repeat,
-              due === undefined ? await ctx.titleHasDate(args.title) : due.dueDate !== null,
+              due === undefined ? await ctx.titleDate(args.title) : due.dueDate,
             );
       const assigneeId =
         args.assignee === undefined ? undefined : await ctx.resolveAssignee(org.id, args.assignee);
@@ -578,8 +583,8 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
         Object.assign(patch, due);
       }
       if (args.repeat !== undefined) {
-        const dueDate = 'dueDate' in patch ? patch.dueDate : found.dueDate;
-        Object.assign(patch, await ctx.parseRepeat(args.repeat, dueDate !== null));
+        const dueDate = 'dueDate' in patch ? (patch.dueDate as string | null) : found.dueDate;
+        Object.assign(patch, await ctx.parseRepeat(args.repeat, dueDate));
       }
       if (args.assignee !== undefined) {
         patch.assigneeId = await ctx.resolveAssignee(found.orgId, args.assignee);
@@ -600,7 +605,7 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
       const ignored =
         result.ignoredFields.length === 0
           ? ''
-          : ` A newer edit won for: ${result.ignoredFields.join(', ')}.`;
+          : ` A newer edit won for: ${result.ignoredFields.map((f) => canonical.word(f) ?? '?').join(', ')}.`;
       return toolResult(`Updated ${taskRef(result.task, org)}.${ignored}`, {
         task: taskRow(result.task, rows),
       });
@@ -631,10 +636,12 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
       const org = await ctx.orgById(found.orgId);
       const rows = await rowContext(ctx, org, false);
       const verb = args.completed ? 'Completed' : 'Reopened';
+      // Only canonical values in the summary; the next instance itself is in the data block.
+      const nextDue = result.next === undefined ? null : canonical.date(result.next.dueDate);
       const next =
         result.next === undefined
           ? ''
-          : ` Next occurrence: ${taskRef(result.next, org)}${result.next.dueDate === null ? '' : `, due ${result.next.dueDate}`}.`;
+          : ` Next occurrence: ${taskRef(result.next, org)}${nextDue === null ? '' : `, due ${nextDue}`}.`;
       return toolResult(`${verb} ${taskRef(result.task, org)}.${next}`, {
         task: taskRow(result.task, rows),
         ...(result.next === undefined ? {} : { next: taskRow(result.next, rows) }),
@@ -706,7 +713,7 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
           body: { name: args.name },
         }),
       );
-      return toolResult(`Created a group in ${org.slug}.`, {
+      return toolResult(`Created a group in ${orgText(org)}.`, {
         org: org.slug,
         group: { name: result.group.name },
       });
@@ -1068,7 +1075,10 @@ export function errorResult(
     );
   }
   if (error.status === 400 || error.status === 409 || error.status === 422) {
-    return toolError(`${error.code}: rooster rejected the request; see the details.`, details);
+    return toolError(
+      `${canonical.word(error.code) ?? 'rejected'}: rooster rejected the request; see the details.`,
+      details,
+    );
   }
   if (error.status === 401) {
     return toolError(
@@ -1076,11 +1086,16 @@ export function errorResult(
     );
   }
   if (error.status === 403) {
-    return toolError(`${error.code}: rooster does not allow this connection to do that.`, details);
+    return toolError(
+      `${canonical.word(error.code) ?? 'forbidden'}: rooster does not allow this connection to do that.`,
+      details,
+    );
   }
   if (error.status === 429) {
     return toolError('rate_limited: too many requests. Wait a minute before trying again.');
   }
   onError?.(error, tool);
-  return toolError(`rooster failed (HTTP ${error.status}). Try again later.`);
+  return toolError(
+    `rooster failed (HTTP ${Number.isSafeInteger(error.status) ? error.status : '?'}). Try again later.`,
+  );
 }

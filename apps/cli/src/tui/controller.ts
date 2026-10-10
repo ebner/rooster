@@ -802,13 +802,18 @@ export class TuiController {
     return created;
   }
 
+  /** Removes reminders; one that is already gone (removed on the web) counts as removed. */
   private async removeReminders(taskId: string, ids: readonly string[]): Promise<void> {
     for (const reminderId of ids) {
-      await unwrap(
-        this.api.DELETE('/api/v1/tasks/{id}/reminders/{reminderId}', {
-          params: { path: { id: taskId, reminderId } },
-        }),
-      );
+      try {
+        await unwrap(
+          this.api.DELETE('/api/v1/tasks/{id}/reminders/{reminderId}', {
+            params: { path: { id: taskId, reminderId } },
+          }),
+        );
+      } catch (error) {
+        if (!(error instanceof RoosterApiError && error.status === 404)) throw error;
+      }
     }
   }
 
@@ -1580,10 +1585,13 @@ export class TuiController {
       ...(shown === null ? {} : { local: this.localTask(task, shown) }),
       onSuccess: () =>
         this.pushUndo({
+          // The same writes in the same order on every attempt, so a retry (`r`) after a failed
+          // PATCH replays the DELETEs under their own keys (ADR 0047): `created` is forgotten
+          // only once the whole undo has gone through.
           undo: async () => {
             await this.removeReminders(id, created);
-            created = [];
             if (after !== null) await this.patchTask(id, { ...before });
+            created = [];
           },
           redo: send,
         }),

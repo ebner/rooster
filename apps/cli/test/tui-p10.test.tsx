@@ -44,8 +44,11 @@ async function setup(): Promise<{ user: TestUser; cli: CliHarness; day: string }
   return { user, cli, day: todayIn(data.timezone, Date.now()) };
 }
 
-async function tui(cli: CliHarness): Promise<TuiHarness> {
-  const harness = await openTui(cli);
+async function tui(
+  cli: CliHarness,
+  options: Parameters<typeof openTui>[1] = {},
+): Promise<TuiHarness> {
+  const harness = await openTui(cli, options);
   open.push(harness);
   return harness;
 }
@@ -163,5 +166,55 @@ describe('TUI: repeat and reminders (P10)', () => {
       (v) => typeof v.deletedAt === 'number',
     );
     expect(trashed.deletedAt).toEqual(expect.any(Number));
+  });
+
+  it('review finding 4: an undo whose PATCH fails is retried with r under the same keys', async () => {
+    const { user, cli } = await setup();
+    const task = await addTask(user, { title: 'Plan' });
+    let failNextPatch = false;
+    const writes: string[] = [];
+    const t = await tui(cli, {
+      io: {
+        fetch: (input, init) => {
+          const request = new Request(input as Request, init);
+          if (request.method !== 'GET') {
+            writes.push(`${request.method} ${request.headers.get('Idempotency-Key')}`);
+          }
+          if (failNextPatch && request.method === 'PATCH') {
+            failNextPatch = false;
+            return Promise.reject(new TypeError('fetch failed'));
+          }
+          return globalThis.fetch(request);
+        },
+      },
+    });
+    await t.waitFor((f) => f.includes('Plan') && f.includes('● synced'));
+    await t.press('d');
+    await t.type('fri !1h');
+    await t.press(KEY.enter);
+    await t.waitFor((f) => /Plan\s+🔔/.test(f));
+    expect(
+      await eventually(
+        () => offsets(user, task.id),
+        (v) => v.length === 1,
+      ),
+    ).toEqual([60]);
+
+    writes.length = 0;
+    failNextPatch = true;
+    await t.press('u');
+    await t.waitFor((f) => f.includes('Couldn’t save'));
+    await t.press('r');
+    await t.waitFor((f) => f.includes('Undone'));
+    // The retry sent the DELETE again under its own key, then the PATCH under a new one.
+    const [del1, patch1, del2, patch2] = writes;
+    expect(del1?.startsWith('DELETE ')).toBe(true);
+    expect(patch1?.startsWith('PATCH ')).toBe(true);
+    expect(del2).toBe(del1);
+    expect(patch2).toBe(patch1);
+    expect(patch2).not.toBe(`PATCH ${del1?.slice('DELETE '.length)}`);
+    const get = async () => (await user.api<TaskJson>('GET', `/api/v1/tasks/${task.id}`)).data;
+    expect((await eventually(get, (v) => v.dueDate === null)).dueDate).toBeNull();
+    expect(await offsets(user, task.id)).toEqual([]);
   });
 });

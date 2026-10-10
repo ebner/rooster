@@ -127,25 +127,36 @@ export function applyDueFlags(
 
 /**
  * `--repeat <phrase|none>` (P10, FR-REC-2): the rule of a recurrence phrase ("every mon",
- * "every 3 days after done", "varje månad"), read like `--due`, or `none` to stop repeating.
- * It never moves a due date the task will have anyway (`hasDueDate`: its own, `--due`'s or
- * one in the title); without one the phrase's first occurrence becomes the due date, since a
- * rule needs one.
+ * "every 3 days after done", "varje månad"), or `none` to stop repeating.
+ *
+ * `anchor` is the due date the task will have (its own, `--due`'s or the title's). It is kept,
+ * and the phrase is read as if on that day, so the anchors a phrase leaves implicit come from
+ * the due date: "monthly" on a task due Nov 1 is `BYMONTHDAY=1`, never today's day of the
+ * month. Without one, the phrase is read from today and its first occurrence becomes the due
+ * date, since a rule needs one.
  */
 export function applyRepeatFlag(
-  hasDueDate: boolean,
+  anchor: string | null,
   input: string,
   me: DateMe,
   nowMs: number,
 ): Partial<DueChange> {
   if (isNone(input)) return { recurrence: null, recurrenceBasis: null };
   const text = input.trim();
-  const parsed = isValidIsoDate(text) ? null : parseDateFlag(text, me, nowMs, '--repeat');
-  if (parsed?.recurrence === undefined) {
+  const today = anchor !== null && isValidIsoDate(anchor) ? anchor : todayIn(me.timezone, nowMs);
+  const parsed = isValidIsoDate(text)
+    ? null
+    : parseDatePhrase(text, {
+        today,
+        locale: me.locale,
+        weekStart: me.weekStart,
+        dateFormat: me.dateFormat,
+      });
+  if (parsed?.recurrence === undefined || (parsed.time !== null && !isValidTime(parsed.time))) {
     throw new CliError(EXIT.conflict, t('repeat.invalid', { value: input }));
   }
   const rule = { recurrence: parsed.recurrence.rule, recurrenceBasis: parsed.recurrence.basis };
-  if (hasDueDate) return rule;
+  if (anchor !== null) return rule;
   return {
     dueDate: parsed.date,
     dueTime: parsed.time,

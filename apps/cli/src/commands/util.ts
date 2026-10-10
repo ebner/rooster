@@ -6,24 +6,56 @@ import { currentLocale, t } from '../i18n.ts';
 import { type DateContext, dateContext, renderRows, toRow } from '../output/format.ts';
 import { type Runtime, rt } from '../runtime.ts';
 
-/** Every value of a repeatable flag (`--tag a --tag b`, `--tag=c`), in order. */
-export function multi(rawArgs: readonly string[], ...names: string[]): string[] {
-  const flags = new Set(names.map((n) => `--${n}`));
-  const out: string[] = [];
+/** A command's long options as given (07 §4), read with real option boundaries. */
+export interface GivenOptions {
+  /** Every value of each string option, in order (`--remind 1h --remind=due`). */
+  values: ReadonlyMap<string, readonly string[]>;
+  /** Long switches without a value (`--bottom`, `--no-remind`). */
+  switches: ReadonlySet<string>;
+}
+
+/** The names of a command's string options, from its citty args. */
+export function stringOptions(def: Record<string, { type?: string }>): string[] {
+  return Object.entries(def).flatMap(([name, arg]) => (arg.type === 'string' ? [name] : []));
+}
+
+/**
+ * Reads `rawArgs` (global flags already taken out) up to `--`. A string option takes the next
+ * word as its value; a value that is missing or is itself a long option (`--title --no-remind`,
+ * `--no-remind --remind`) is refused rather than guessed (exit 2): such a value is passed as
+ * `--title=--no-remind`. So a switch is never read out of an option's value, and no option
+ * silently loses its value, whatever citty made of the same words.
+ */
+export function readOptions(rawArgs: readonly string[], strings: readonly string[]): GivenOptions {
+  const values = new Map<string, string[]>();
+  const switches = new Set<string>();
+  const add = (name: string, value: string) => {
+    const list = values.get(name);
+    if (list) list.push(value);
+    else values.set(name, [value]);
+  };
   for (let i = 0; i < rawArgs.length; i++) {
     const arg = rawArgs[i] as string;
     if (arg === '--') break;
+    if (!arg.startsWith('--')) continue;
     const eq = arg.indexOf('=');
-    if (eq > 0 && flags.has(arg.slice(0, eq))) out.push(arg.slice(eq + 1));
-    else if (flags.has(arg) && i + 1 < rawArgs.length) out.push(rawArgs[++i] as string);
+    const name = arg.slice(2, eq > 0 ? eq : undefined);
+    if (!strings.includes(name)) {
+      if (eq < 0) switches.add(name);
+      continue;
+    }
+    if (eq > 0) {
+      add(name, arg.slice(eq + 1));
+      continue;
+    }
+    const value = rawArgs[i + 1];
+    if (value === undefined || value.startsWith('--')) {
+      throw new CliError(EXIT.usage, t('usage.missingValue', { flag: `--${name}` }));
+    }
+    add(name, value);
+    i += 1;
   }
-  return out;
-}
-
-/** Whether `--name` was given (before any `--`), e.g. a `--no-x` that citty folds into `x`. */
-export function flagGiven(rawArgs: readonly string[], name: string): boolean {
-  const end = rawArgs.indexOf('--');
-  return (end === -1 ? rawArgs : rawArgs.slice(0, end)).includes(`--${name}`);
+  return { values, switches };
 }
 
 /** Positional arguments as citty parsed them (everything after `--` included). */

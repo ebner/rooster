@@ -12,7 +12,7 @@ import { t } from '../i18n.ts';
 import { clean, paint } from '../output/color.ts';
 import { styles } from '../output/theme.ts';
 import { type Runtime, rt } from '../runtime.ts';
-import { confirmOrAbort, multi, positionals } from './util.ts';
+import { confirmOrAbort, positionals, readOptions, stringOptions } from './util.ts';
 
 /** 11 §2.4: PATs expire after 90 days unless asked otherwise. */
 export const TOKEN_DEFAULT_EXPIRY_DAYS = 90;
@@ -93,9 +93,8 @@ async function revoke(runtime: Runtime, id: string, kind?: Grant['kind']): Promi
   else runtime.out.notice(t('apps.revoked', { label: clean(grant.label) }));
 }
 
-const tokenCreate = defineCommand({
-  meta: () => ({ name: 'create', description: t('token.cmd.create') }),
-  args: () => ({
+const tokenCreateArgs = () =>
+  ({
     name: { type: 'positional', required: true, description: t('token.arg.name') },
     scope: { type: 'string', valueHint: 'tasks:read,…', description: t('token.arg.scope') },
     'read-only': { type: 'boolean', description: t('token.arg.readOnly') },
@@ -107,12 +106,20 @@ const tokenCreate = defineCommand({
       description: t('token.arg.writeGroup'),
     },
     expires: { type: 'string', valueHint: '90d|never', description: t('token.arg.expires') },
-  }),
+  }) as const;
+
+const tokenCreate = defineCommand({
+  meta: () => ({ name: 'create', description: t('token.cmd.create') }),
+  args: tokenCreateArgs,
   async run({ args, rawArgs }) {
+    // Scopes and constraints shape the grant: a value that looks like another option is
+    // refused, never read as one (`--scope --read-only` must not widen or narrow anything).
+    const given = readOptions(rawArgs, stringOptions(tokenCreateArgs()));
+    const all = (name: string) => [...(given.values.get(name) ?? [])];
     const runtime = rt();
     const name = positionals(args).join(' ').trim();
     if (name === '') throw new CliError(EXIT.usage, t('token.nameMissing'));
-    const requested = multi(rawArgs, 'scope');
+    const requested = all('scope');
     if (args['read-only'] === true && requested.length > 0) {
       throw new CliError(EXIT.usage, t('token.readOnlyAndScope'));
     }
@@ -120,9 +127,9 @@ const tokenCreate = defineCommand({
     const constraints = await buildConstraints(
       runtime,
       {
-        orgs: multi(rawArgs, 'org'),
-        readGroups: multi(rawArgs, 'group'),
-        writeGroups: multi(rawArgs, 'write-group'),
+        orgs: all('org'),
+        readGroups: all('group'),
+        writeGroups: all('write-group'),
       },
       [...scopes],
     );

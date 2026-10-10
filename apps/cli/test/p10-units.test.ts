@@ -9,6 +9,13 @@ import { stripAnsi } from '../src/output/color.ts';
 import { type DateContext, renderRows, toRow } from '../src/output/format.ts';
 import { reminderText, ruleText, sizeText } from '../src/output/schedule.ts';
 import { parseRemindFlag, parseRemindFlags, splitReminderTokens } from '../src/reminders.ts';
+import { FAKE_ENV, fakeApi, ME, ORG } from './support/fake-api.ts';
+import { cliHarness } from './support/fake-io.ts';
+
+// OSC 52 sets the clipboard; U+202E reverses what follows.
+const HOSTILE = '\u001b]52;c;Y3VybCBldmlsLnNoIHwgc2g=\u0007\u202e';
+// biome-ignore lint/suspicious/noControlCharactersInRegex: looking for them is the point.
+const UNSAFE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/;
 
 const me = {
   timezone: 'Europe/Stockholm',
@@ -97,11 +104,11 @@ describe('--due and --repeat with recurrence (P10, FR-REC-2)', () => {
   });
 
   it('--repeat keeps a due date, takes the first occurrence without one, and none stops', () => {
-    expect(applyRepeatFlag(true, 'every 3 days after done', me, now)).toEqual({
+    expect(applyRepeatFlag('2026-10-20', 'every 3 days after done', me, now)).toEqual({
       recurrence: 'FREQ=DAILY;INTERVAL=3',
       recurrenceBasis: 'completion',
     });
-    expect(applyRepeatFlag(false, 'every mon 9:00', me, now)).toEqual({
+    expect(applyRepeatFlag(null, 'every mon 9:00', me, now)).toEqual({
       dueDate: '2026-10-12',
       dueTime: '09:00',
       dueTz: 'Europe/Stockholm',
@@ -109,13 +116,30 @@ describe('--due and --repeat with recurrence (P10, FR-REC-2)', () => {
       recurrence: 'FREQ=WEEKLY;BYDAY=MO',
       recurrenceBasis: 'due',
     });
-    expect(applyRepeatFlag(true, 'none', me, now)).toEqual({
+    expect(applyRepeatFlag('2026-10-20', 'none', me, now)).toEqual({
       recurrence: null,
       recurrenceBasis: null,
     });
     for (const bad of ['tomorrow', '2026-10-12', 'banana']) {
-      expect(() => applyRepeatFlag(true, bad, me, now)).toThrow(/--repeat/);
+      expect(() => applyRepeatFlag('2026-10-20', bad, me, now)).toThrow(/--repeat/);
     }
+  });
+
+  it('implicit anchors come from the due date, not today (today is Oct 9)', () => {
+    expect(applyRepeatFlag('2026-11-01', 'monthly', me, now)).toEqual({
+      recurrence: 'FREQ=MONTHLY;BYMONTHDAY=1',
+      recurrenceBasis: 'due',
+    });
+    expect(applyRepeatFlag('2026-11-01', 'every 2 weeks', me, now).recurrence).toBe(
+      'FREQ=WEEKLY;INTERVAL=2;BYDAY=SU',
+    );
+    expect(applyRepeatFlag('2026-12-24', 'yearly', me, now).recurrence).toBe(
+      'FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=24',
+    );
+    // An explicit anchor stays as written.
+    expect(applyRepeatFlag('2026-11-01', 'every mon', me, now).recurrence).toBe(
+      'FREQ=WEEKLY;BYDAY=MO',
+    );
   });
 });
 
@@ -206,5 +230,176 @@ describe('completion (P10 flags)', () => {
     expect(flags('add')).not.toContain('--no-remind');
     expect(flags('edit')).toEqual(expect.arrayContaining(['--remind', '--no-remind', '--repeat']));
     expect(flags('rm')).toContain('--occurrence');
+  });
+});
+
+describe('review finding 1: hostile server values in P10 text', () => {
+  it('reminder, rule and size text never pass control or bidi characters through', () => {
+    const hostile = {
+      kind: 'relative' as const,
+      offsetMinutes: HOSTILE as unknown as number,
+      fireAt: HOSTILE as unknown as number,
+      firedAt: null,
+    };
+    const view = reminderText(hostile, { dueTime: null }, ctx());
+    expect(view.text).not.toMatch(UNSAFE);
+    expect(view.dormant).toBe(true);
+    expect(view.text).toBe('? · needs a due date');
+    const absolute = { ...hostile, kind: 'absolute' as const, fireAt: Number.NaN };
+    expect(reminderText(absolute, { dueTime: null }, ctx()).text).not.toMatch(UNSAFE);
+    expect(ruleText(`FREQ=${HOSTILE}`, 'due', ctx())).not.toMatch(UNSAFE);
+    expect(ruleText(HOSTILE as string, HOSTILE as never, ctx())).not.toMatch(UNSAFE);
+    expect(sizeText(HOSTILE as unknown as number, 'en')).toBe('?');
+  });
+
+  it('show prints a hostile reminder and attachment cleaned', async () => {
+    const id = '0192f3a0-0000-7000-8000-000000000001';
+    const base = taskDto({ id });
+    const api = fakeApi({
+      'GET /api/v1/me': ME,
+      'GET /api/v1/tasks/resolve': base,
+      'GET /api/v1/tasks/*': {
+        ...base,
+        recurrence: `FREQ=${HOSTILE}`,
+        recurrenceBasis: 'due',
+        description: '',
+        parentChain: [],
+        subtasks: [],
+        reminders: [
+          {
+            id: 'r',
+            taskId: id,
+            kind: 'relative',
+            offsetMinutes: HOSTILE,
+            remindAt: null,
+            fireAt: HOSTILE,
+            firedAt: null,
+            createdAt: 0,
+          },
+        ],
+        attachments: [{ id: 'a', taskId: id, filename: 12, mime: 'x', size: HOSTILE }],
+      },
+      'GET /api/v1/orgs/*/tags': [],
+    });
+    const cli = cliHarness({}, { fetch: api.fetch });
+    try {
+      const result = await cli.run(['show', '1'], { env: FAKE_ENV });
+      expect(result.code).toBe(0);
+      expect(result.stdout).toMatch(/Reminders\s+\? · needs a due date/);
+      expect(result.stdout).not.toMatch(UNSAFE);
+    } finally {
+      cli.cleanup();
+    }
+  });
+});
+
+function taskDto(fields: Record<string, unknown> = {}) {
+  return {
+    id: '0192f3a0-0000-7000-8000-000000000001',
+    orgId: ORG.id,
+    seq: 41,
+    parentId: null,
+    subtaskPosition: null,
+    title: 'Report',
+    hasDescription: false,
+    assigneeId: ME.id,
+    createdBy: ME.id,
+    dueDate: '2026-11-01',
+    dueTime: null,
+    dueTz: null,
+    startDate: null,
+    completedAt: null,
+    tagIds: [],
+    counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
+    placement: null,
+    createdAt: 0,
+    updatedAt: 0,
+    ...fields,
+  };
+}
+
+describe('review finding 3: edit options read with real boundaries', () => {
+  async function edit(argv: string[]) {
+    const api = fakeApi({
+      'GET /api/v1/me': ME,
+      'GET /api/v1/tasks/resolve': taskDto(),
+      'GET /api/v1/tasks/*': { ...taskDto(), description: '', parentChain: [], subtasks: [] },
+      'PATCH /api/v1/tasks/*': (call: { body: unknown }) => ({
+        task: taskDto(call.body as Record<string, unknown>),
+        ignoredFields: [],
+      }),
+      'GET /api/v1/orgs/*/tags': [],
+    });
+    const cli = cliHarness({}, { fetch: api.fetch });
+    try {
+      const result = await cli.run(['edit', '41', ...argv], { env: FAKE_ENV });
+      return { ...result, patches: api.calls.filter((c) => c.method === 'PATCH') };
+    } finally {
+      cli.cleanup();
+    }
+  }
+
+  it('--title --no-remind is refused, never read as "clear my reminders"', async () => {
+    const result = await edit(['--title', '--no-remind']);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('--title needs a value');
+    expect(result.patches).toEqual([]);
+  });
+
+  it('a value that looks like a switch is passed with =', async () => {
+    const result = await edit(['--title=--no-remind']);
+    expect(result.code).toBe(0);
+    expect(result.patches.map((c) => c.body)).toEqual([{ title: '--no-remind' }]);
+  });
+
+  it('--no-remind --remind (no value) is refused before anything is sent', async () => {
+    for (const argv of [
+      ['--no-remind', '--remind'],
+      ['--remind', '--no-remind'],
+    ]) {
+      const result = await edit(argv);
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain('--remind needs a value');
+      expect(result.patches).toEqual([]);
+    }
+  });
+
+  it('--no-remind with a value after it clears, then adds', async () => {
+    const result = await edit(['--no-remind', '--remind', '1h', '--remind=due']);
+    expect(result.code).toBe(0);
+    expect(result.patches.map((c) => c.body)).toEqual([
+      { clearReminders: true, reminders: [{ offsetMinutes: 60 }, { offsetMinutes: 0 }] },
+    ]);
+  });
+
+  it('after --, words are positional', async () => {
+    const result = await edit(['--title', 'x', '--', '--no-remind']);
+    expect(result.patches.map((c) => c.body)).toEqual([{ title: 'x' }]);
+  });
+});
+
+describe('review finding 5: --repeat anchors on the due date', () => {
+  it('edit --repeat monthly on a task due Nov 1 sends BYMONTHDAY=1 and keeps the date', async () => {
+    const api = fakeApi({
+      'GET /api/v1/me': { ...ME, timezone: 'Europe/Stockholm' },
+      'GET /api/v1/tasks/resolve': taskDto(),
+      'GET /api/v1/tasks/*': { ...taskDto(), description: '', parentChain: [], subtasks: [] },
+      'PATCH /api/v1/tasks/*': (call: { body: unknown }) => ({
+        task: taskDto(call.body as Record<string, unknown>),
+        ignoredFields: [],
+      }),
+      'GET /api/v1/orgs/*/tags': [],
+    });
+    const cli = cliHarness({}, { fetch: api.fetch, now: () => now });
+    try {
+      const result = await cli.run(['edit', '41', '--repeat', 'monthly'], { env: FAKE_ENV });
+      expect(result.code).toBe(0);
+      expect(api.calls.find((c) => c.method === 'PATCH')?.body).toEqual({
+        recurrence: 'FREQ=MONTHLY;BYMONTHDAY=1',
+        recurrenceBasis: 'due',
+      });
+    } finally {
+      cli.cleanup();
+    }
   });
 });

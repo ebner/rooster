@@ -265,19 +265,22 @@ export class CallContext {
     };
   }
 
-  /** The phrase in the user's language settings, or null (no exceptions: tools explain). */
-  private async phrase(text: string) {
+  /**
+   * The phrase in the user's language settings, read on `today` (default: the user's today),
+   * or null (no exceptions: tools explain).
+   */
+  private async phrase(text: string, today?: string) {
     const me = await this.me();
     return parseDatePhrase(text, {
-      today: todayIn(me.timezone, this.now()),
+      today: today ?? todayIn(me.timezone, this.now()),
       locale: me.locale,
       weekStart: me.weekStart,
       dateFormat: me.dateFormat,
     });
   }
 
-  /** Whether the server will find a due date in this title (`parse: true`). */
-  async titleHasDate(title: string): Promise<boolean> {
+  /** The due date the server will find in this title (`parse: true`), or null. */
+  async titleDate(title: string): Promise<string | null> {
     const me = await this.me();
     return (
       findDateInTitle(title, {
@@ -285,21 +288,25 @@ export class CallContext {
         locale: me.locale,
         weekStart: me.weekStart,
         dateFormat: me.dateFormat,
-      }) !== null
+      })?.date ?? null
     );
   }
 
   /**
    * `repeat` (P10, FR-REC-2): a recurrence phrase ("every mon", "every 3 days after done",
-   * "varje månad") as a rule, or a clearing word to stop repeating. It keeps a due date the
-   * task will have anyway (`hasDueDate`); otherwise the phrase's first occurrence becomes the
-   * due date, since a rule needs one.
+   * "varje månad") as a rule, or a clearing word to stop repeating.
+   *
+   * `anchor` is the due date the task will have anyway. It is kept, and the phrase is read as
+   * if on that day, so implicit anchors come from it ("monthly" on a task due Nov 1 is
+   * `BYMONTHDAY=1`, not today's day). Without one, the phrase's first occurrence from today
+   * becomes the due date, since a rule needs one.
    */
-  async parseRepeat(input: string, hasDueDate: boolean): Promise<RepeatFields> {
+  async parseRepeat(input: string, anchor: string | null): Promise<RepeatFields> {
     const text = input.trim();
     if (CLEAR_WORDS.includes(text.toLowerCase()))
       return { recurrence: null, recurrenceBasis: null };
-    const parsed = await this.phrase(text);
+    const hasDueDate = anchor !== null && isValidIsoDate(anchor);
+    const parsed = await this.phrase(text, hasDueDate ? anchor : undefined);
     if (parsed?.recurrence === undefined || (parsed.time !== null && !isValidTime(parsed.time))) {
       throw new ToolError(
         'The repeat was not understood. Use a phrase like "every mon", "every weekday", "every month", "every 2 weeks" or "every 3 days after done"; "none" stops repeating.',

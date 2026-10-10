@@ -188,6 +188,16 @@ describe('P10 CLI: repeating tasks', () => {
     expect(stopped.task.recurrence ?? null).toBeNull();
     expect(stopped.task.dueDate).toBe(due);
 
+    // Implicit anchors come from the due date, not from today (review finding 5).
+    const monthly = await json<{ task: TaskJson }>(cli, [
+      'edit',
+      String(dated.seq),
+      '--repeat',
+      'monthly',
+    ]);
+    expect(monthly.task.recurrence).toBe(`FREQ=MONTHLY;BYMONTHDAY=${Number(due.slice(8))}`);
+    expect(monthly.task.dueDate).toBe(due);
+
     const bad = await cli.run(['edit', String(dated.seq), '--repeat', 'tomorrow']);
     expect(bad.code).toBe(5);
     expect(bad.stderr).toContain('--repeat');

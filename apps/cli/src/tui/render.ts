@@ -5,7 +5,7 @@ import type { TaskDetail } from '../api.ts';
 import { type ColorLevel, clean, displayWidth, type Style } from '../output/color.ts';
 import { BELL_MARK, dueLabel, localDue, REPEAT_MARK, taskRef } from '../output/format.ts';
 import { renderMarkdown } from '../output/markdown.ts';
-import { offsetText, reminderText, ruleText, sizeText } from '../output/schedule.ts';
+import { listOf, offsetText, reminderText, ruleText, sizeText } from '../output/schedule.ts';
 import { dueStyle, styles, tagStyle, token } from '../output/theme.ts';
 import type {
   ActivityItem,
@@ -602,17 +602,20 @@ function detailLines(ctx: Ctx, detail: DetailState, width: number): string[] {
       ],
     ]);
   }
-  (detail.task?.reminders ?? []).forEach((reminder, i) => {
+  listOf(detail.task?.reminders).forEach((reminder, i) => {
     const view = reminderText(reminder, task, state.dates);
     rows.push([
       i === 0 ? t('detail.reminders') : '',
       [seg(`${BELL_MARK} ${view.text}`, view.dormant || view.fired ? muted : {})],
     ]);
   });
-  (detail.task?.attachments ?? []).forEach((file, i) => {
+  listOf(detail.task?.attachments).forEach((file, i) => {
     rows.push([
       i === 0 ? t('detail.attachments') : '',
-      [seg(clean(file.filename)), seg(`  ${sizeText(file.size, state.dates.locale)}`, muted)],
+      [
+        seg(clean(String(file.filename))),
+        seg(`  ${sizeText(file.size, state.dates.locale)}`, muted),
+      ],
     ]);
   });
   if (!state.org.isPersonal) {

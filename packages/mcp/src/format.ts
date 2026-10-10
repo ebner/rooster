@@ -1,5 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/server';
-import { dueState } from '@rooster/core/dates';
+import { dueState, isValidIsoDate } from '@rooster/core/dates';
+import { isValidSlug } from '@rooster/core/schemas/org';
 import type { Group, Member, Org, Tag, Task } from './context.ts';
 
 /**
@@ -75,13 +76,43 @@ export function toolError(message: string, data?: Record<string, unknown>): Call
   return { ...result, isError: true };
 }
 
-/** `acme#42`: a ref that names its org, so it works whatever the default org is. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Server values that may appear in a summary (rooster's own words, outside the data frame)
+ * only in canonical form. Responses are type-cast, not validated, so anything else is replaced:
+ * the summary can never carry text a hostile or broken server chose.
+ */
+export const canonical = {
+  /** `YYYY-MM-DD`, or null. */
+  date: (value: unknown): string | null => (isValidIsoDate(value) ? value : null),
+  slug: (value: unknown): string | null =>
+    typeof value === 'string' && isValidSlug(value) ? value : null,
+  /** An IANA zone name ("Europe/Stockholm", "UTC", "Etc/GMT+1"). */
+  zone: (value: unknown): string | null =>
+    typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_+\-/]{0,63}$/.test(value) ? value : null,
+  /** A problem `code` or a field name (`validation_failed`, `dueDate`). */
+  word: (value: unknown): string | null =>
+    typeof value === 'string' && /^[A-Za-z][A-Za-z_]{0,63}$/.test(value) ? value : null,
+};
+
+/** An org slug for a summary: the slug, or "the organisation" when it is not one. */
+export function orgText(org: Pick<Org, 'slug'> | undefined): string {
+  return canonical.slug(org?.slug) ?? 'the organisation';
+}
+
+/**
+ * `acme#42`: a ref that names its org, so it works whatever the default org is. Built only
+ * from a positive integer seq, a valid slug or a UUID, so it is safe in a summary.
+ */
 export function taskRef(
   task: Pick<Task, 'id' | 'seq'>,
   org: Pick<Org, 'slug'> | undefined,
 ): string {
-  if (task.seq === null) return task.id;
-  return org === undefined ? String(task.seq) : `${org.slug}#${task.seq}`;
+  const seq = Number.isSafeInteger(task.seq) && (task.seq as number) > 0 ? task.seq : null;
+  if (seq === null) return typeof task.id === 'string' && UUID_RE.test(task.id) ? task.id : '?';
+  const slug = canonical.slug(org?.slug);
+  return slug === null ? String(seq) : `${slug}#${seq}`;
 }
 
 export interface RowContext {
@@ -134,9 +165,8 @@ export function taskRow(task: Task, ctx: RowContext): Record<string, unknown> {
     row.repeat = task.recurrence;
     if (task.recurrenceBasis === 'completion') row.repeatFrom = 'completion';
   }
-  if (typeof task.nextReminderAt === 'number') {
-    row.nextReminder = new Date(task.nextReminderAt).toISOString();
-  }
+  const nextReminder = isoInstant(task.nextReminderAt);
+  if (nextReminder !== null) row.nextReminder = nextReminder;
   if (task.completedAt !== null) row.completed = true;
   if (task.counts.subtasks > 0)
     row.subtasks = `${task.counts.subtasksDone}/${task.counts.subtasks}`;
@@ -150,4 +180,11 @@ export function markdownText(text: string): string {
   return clean(text)
     .replace(/[\r\n]+/g, ' ')
     .replace(/([\\`*_[\]<>#|!])/g, '\\$1');
+}
+
+/** An ms epoch instant as ISO 8601, or null for anything else (never a RangeError). */
+export function isoInstant(value: unknown): string | null {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) return null;
+  const date = new Date(value as number);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }

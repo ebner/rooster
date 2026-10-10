@@ -17,7 +17,7 @@ import {
 } from '../output/format.ts';
 import { styles } from '../output/theme.ts';
 import { type Runtime, rt } from '../runtime.ts';
-import { dates, multi, needs, positionals, tagMap } from './util.ts';
+import { dates, needs, positionals, readOptions, stringOptions, tagMap } from './util.ts';
 
 export const VIEWS = ['my', 'today', 'week', 'overdue', 'nodate', 'everyone'] as const;
 export type View = (typeof VIEWS)[number];
@@ -337,9 +337,10 @@ function describeListArgs() {
 }
 
 function flagsOf(args: Record<string, unknown>, rawArgs: readonly string[]): ListFlags {
+  const given = readOptions(rawArgs, stringOptions(describeListArgs()));
   return {
     group: typeof args.group === 'string' && args.group !== '' ? args.group : undefined,
-    tags: multi(rawArgs, 'tag').map((tag) => tag.replace(/^#/, '')),
+    tags: (given.values.get('tag') ?? []).map((tag) => tag.replace(/^#/, '')),
     completed: args.completed === true,
     allOrgs: args['all-orgs'] === true || args.allOrgs === true,
     subtasks: args.subtasks === true,

@@ -11,7 +11,7 @@ import { styles } from '../output/theme.ts';
 import { credentialOf, type Runtime, rt } from '../runtime.ts';
 import { CredentialRemovalError, serverOrigin } from '../secrets.ts';
 import { CLI_VERSION, majorOf } from '../version.ts';
-import { multi } from './util.ts';
+import { readOptions, stringOptions } from './util.ts';
 
 /** The pre-registered client of the device flow (11 §4.2). */
 export const CLI_CLIENT_ID = 'rooster-cli';
@@ -219,21 +219,27 @@ export async function deviceLogin(runtime: Runtime, options: DeviceLoginOptions)
   });
 }
 
-export const loginCommand = defineCommand({
-  meta: () => ({ name: 'login', description: t('cmd.login') }),
-  args: () => ({
+const loginArgs = () =>
+  ({
     server: { type: 'string', valueHint: 'url', description: t('login.arg.server') },
     'with-token': { type: 'boolean', description: t('login.arg.withToken') },
     browser: { type: 'boolean', default: true, negativeDescription: t('login.arg.noBrowser') },
     scope: { type: 'string', valueHint: 'scope,…', description: t('login.arg.scope') },
     admin: { type: 'boolean', description: t('login.arg.admin') },
     org: { type: 'string', valueHint: 'slug', description: t('login.arg.org') },
-  }),
+  }) as const;
+
+export const loginCommand = defineCommand({
+  meta: () => ({ name: 'login', description: t('cmd.login') }),
+  args: loginArgs,
   async run({ args, rawArgs }) {
+    // The requested scopes shape the grant: a value that looks like another option is
+    // refused, never read as one.
+    const given = readOptions(rawArgs, stringOptions(loginArgs()));
     const runtime = rt();
     const { out } = runtime;
     const server = serverFrom(runtime, args.server);
-    const orgs = multi(rawArgs, 'org');
+    const orgs = given.values.get('org') ?? [];
     const orgFlag = orgs[0];
 
     if (args['with-token'] === true) {
@@ -249,7 +255,7 @@ export const loginCommand = defineCommand({
       return;
     }
 
-    const requested = multi(rawArgs, 'scope');
+    const requested = [...(given.values.get('scope') ?? [])];
     const scopes = requested.length === 0 ? [...DEFAULT_LOGIN_SCOPES] : parseScopes(requested);
     if (args.admin === true && !scopes.includes(ADMIN_SCOPE)) scopes.push(ADMIN_SCOPE);
     const me = await deviceLogin(runtime, {

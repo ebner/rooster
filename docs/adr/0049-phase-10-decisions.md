@@ -242,3 +242,11 @@ added below as an amendment.
 - **§3.5 and §3.7 (supersede the cache lifetimes above):**
   - Attachments, thumbnails and avatars are `Cache-Control: private, no-cache` with a strong ETag: the attachment id (`.thumb` for thumbnails), or `avatar-<avatar_at>`. A 304 is answered only after the access check, so a shared browser never reuses a private file after sign-out.
   - S3 redirects are `no-store`, and the presigned object response is `private, no-store`.
+
+## Amendments after the security review of the CLI and MCP (409f60a)
+- **Untrusted responses:** the CLI and MCP treat API responses as untrusted. P10 output uses only validated numbers and instants, and its text goes through `clean()`. MCP summaries carry only canonical values (ISO date, slug, UUID, integer seq, zone name, word-like code); everything else stays in the framed data block.
+- **Option parsing:**
+  - Every CLI command reads string and repeatable options with `readOptions`, which respects real option boundaries; `multi()` is gone.
+  - A missing value, or one that looks like a long option, is a usage error (exit 2) and sends nothing, so grant scopes and constraints are never taken from a misread flag. A value that starts with `--` is passed with `=`.
+- **`--repeat` / MCP `repeat`:** the phrase is read on the effective due date, so implicit anchors come from that date and never from today.
+- **TUI undo:** it keeps its write sequence and Idempotency-Keys until the whole undo succeeds (ADR 0047). A reminder that is already gone counts as removed.

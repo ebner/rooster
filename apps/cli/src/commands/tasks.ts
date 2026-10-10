@@ -10,7 +10,7 @@ import { t } from '../i18n.ts';
 import { clean, paint } from '../output/color.ts';
 import { REPEAT_MARK, renderRows, toRow } from '../output/format.ts';
 import { renderMarkdown } from '../output/markdown.ts';
-import { reminderText, ruleText, sizeText } from '../output/schedule.ts';
+import { listOf, reminderText, ruleText, sizeText } from '../output/schedule.ts';
 import { styles } from '../output/theme.ts';
 import { rememberLast, resolveRef, resolveRefs } from '../refs.ts';
 import { parseRemindFlags } from '../reminders.ts';
@@ -19,11 +19,12 @@ import { openInBrowser } from './browser.ts';
 import {
   confirmOrAbort,
   dates,
-  flagGiven,
-  multi,
+  type GivenOptions,
   needs,
   positionals,
   printTasks,
+  readOptions,
+  stringOptions,
   tagMap,
 } from './util.ts';
 
@@ -85,12 +86,13 @@ interface CreateOptions {
   title: string;
   parent?: Task;
   args: Record<string, unknown>;
-  rawArgs: readonly string[];
+  /** The options as given (`readOptions`), read before anything is sent. */
+  given: GivenOptions;
 }
 
 /** `add` and `sub` (07 §4): the title is NL-parsed server-side unless `--no-parse`. */
 async function createTask(runtime: Runtime, options: CreateOptions): Promise<void> {
-  const { args, rawArgs, parent } = options;
+  const { args, given, parent } = options;
   const title = options.title.trim();
   if (title === '') throw new CliError(EXIT.usage, t('task.titleMissing'));
   const org: Org =
@@ -111,25 +113,23 @@ async function createTask(runtime: Runtime, options: CreateOptions): Promise<voi
     me,
     now,
   );
-  const reminders = parseRemindFlags(multi(rawArgs, 'remind'), me, now);
+  const reminders = parseRemindFlags(given.values.get('remind') ?? [], me, now);
   const repeat = str(args.repeat);
   // `--repeat` keeps a date the title names ("Pay rent 1 nov --repeat monthly"): the server
   // reads it when the body carries no date, and applies the body's rule to it.
-  const titleDated =
-    due === null &&
-    args.parse !== false &&
-    findDateInTitle(title, {
-      today: todayIn(me.timezone, now),
-      locale: me.locale,
-      weekStart: me.weekStart,
-      dateFormat: me.dateFormat,
-    }) !== null;
+  const titleDate =
+    due !== null || args.parse === false
+      ? null
+      : (findDateInTitle(title, {
+          today: todayIn(me.timezone, now),
+          locale: me.locale,
+          weekStart: me.weekStart,
+          dateFormat: me.dateFormat,
+        })?.date ?? null);
   const repeatFields =
-    repeat === undefined
-      ? {}
-      : applyRepeatFlag((due?.dueDate ?? null) !== null || titleDated, repeat, me, now);
+    repeat === undefined ? {} : applyRepeatFlag(due?.dueDate ?? titleDate, repeat, me, now);
   const description = await readDescription(runtime, args.desc, args['desc-file']);
-  const tagNames = multi(rawArgs, 'tag').map((tag) => tag.replace(/^#/, ''));
+  const tagNames = (given.values.get('tag') ?? []).map((tag) => tag.replace(/^#/, ''));
   const bottom = args.bottom === true;
   const groupName = str(args.group);
   const group = groupName === undefined ? undefined : await findGroup(runtime, org.id, groupName);
@@ -209,17 +209,21 @@ const createArgs = () =>
     },
   }) as const;
 
-export const addCommand = defineCommand({
-  meta: () => ({ name: 'add', description: t('cmd.add') }),
-  args: () => ({
+const addArgs = () =>
+  ({
     title: { type: 'positional', required: true, description: t('add.arg.title') },
     ...createArgs(),
     group: { type: 'string', valueHint: 'name', description: t('add.arg.group') },
     top: { type: 'boolean', description: t('add.arg.top') },
     bottom: { type: 'boolean', description: t('add.arg.bottom') },
     parent: { type: 'string', valueHint: 'ref', description: t('add.arg.parent') },
-  }),
+  }) as const;
+
+export const addCommand = defineCommand({
+  meta: () => ({ name: 'add', description: t('cmd.add') }),
+  args: addArgs,
   async run({ args, rawArgs }) {
+    const given = readOptions(rawArgs, stringOptions(addArgs()));
     const runtime = rt();
     const parentRef = str(args.parent);
     const parent = parentRef === undefined ? undefined : await resolveRef(runtime, parentRef);
@@ -227,23 +231,27 @@ export const addCommand = defineCommand({
       title: positionals(args).join(' '),
       ...(parent === undefined ? {} : { parent }),
       args,
-      rawArgs,
+      given,
     });
   },
 });
 
-export const subCommand = defineCommand({
-  meta: () => ({ name: 'sub', description: t('cmd.sub') }),
-  args: () => ({
+const subArgs = () =>
+  ({
     parent: { type: 'positional', required: true, description: t('sub.arg.parent') },
     title: { type: 'positional', required: true, description: t('add.arg.title') },
     ...createArgs(),
-  }),
+  }) as const;
+
+export const subCommand = defineCommand({
+  meta: () => ({ name: 'sub', description: t('cmd.sub') }),
+  args: subArgs,
   async run({ args, rawArgs }) {
+    const given = readOptions(rawArgs, stringOptions(subArgs()));
     const runtime = rt();
     const [parentRef, ...words] = positionals(args);
     const parent = await resolveRef(runtime, parentRef ?? '');
-    await createTask(runtime, { title: words.join(' '), parent, args, rawArgs });
+    await createTask(runtime, { title: words.join(' '), parent, args, given });
   },
 });
 
@@ -345,15 +353,15 @@ export const showCommand = defineCommand({
         `${REPEAT_MARK} ${clean(ruleText(task.recurrence, task.recurrenceBasis, ctx))}`,
       ]);
     }
-    (task.reminders ?? []).forEach((reminder, i) => {
+    listOf(task.reminders).forEach((reminder, i) => {
       const view = reminderText(reminder, task, ctx);
       const style = view.dormant || view.fired ? styles.muted : {};
       fields.push([i === 0 ? t('show.reminders') : '', paint(view.text, style, out.level)]);
     });
-    (task.attachments ?? []).forEach((file, i) => {
+    listOf(task.attachments).forEach((file, i) => {
       fields.push([
         i === 0 ? t('show.attachments') : '',
-        `${clean(file.filename)} ${paint(`(${sizeText(file.size, ctx.locale)})`, styles.muted, out.level)}`,
+        `${clean(String(file.filename))} ${paint(`(${sizeText(file.size, ctx.locale)})`, styles.muted, out.level)}`,
       ]);
     });
     fields.push([t('show.id'), task.id]);
@@ -395,9 +403,8 @@ export const showCommand = defineCommand({
   },
 });
 
-export const editCommand = defineCommand({
-  meta: () => ({ name: 'edit', description: t('cmd.edit') }),
-  args: () => ({
+const editArgs = () =>
+  ({
     ref: { type: 'positional', required: true, description: t('arg.ref') },
     title: { type: 'string', valueHint: 'text', description: t('edit.arg.title') },
     due: { type: 'string', valueHint: 'phrase|none', description: t('edit.arg.due') },
@@ -410,8 +417,15 @@ export const editCommand = defineCommand({
     parent: { type: 'string', valueHint: 'ref|none', description: t('edit.arg.parent') },
     remind: { type: 'string', valueHint: '15m|1h|1d|due|time', description: t('edit.arg.remind') },
     repeat: { type: 'string', valueHint: 'phrase|none', description: t('edit.arg.repeat') },
-  }),
+  }) as const;
+
+export const editCommand = defineCommand({
+  meta: () => ({ name: 'edit', description: t('cmd.edit') }),
+  args: editArgs,
   async run({ args, rawArgs }) {
+    // Before anything is read or sent: `--no-remind` must be a switch the user typed, never
+    // a value (`--title --no-remind` is refused), and `--remind` must have its value.
+    const given = readOptions(rawArgs, stringOptions(editArgs()));
     const runtime = needs('tasks:write');
     const found = await resolveRef(runtime, positionals(args)[0] ?? '');
     const api = await runtime.api();
@@ -428,11 +442,11 @@ export const editCommand = defineCommand({
     if (due !== null) Object.assign(patch, due);
     const repeat = str(args.repeat);
     if (repeat !== undefined) {
-      Object.assign(patch, applyRepeatFlag((due ?? task).dueDate !== null, repeat, me, now));
+      Object.assign(patch, applyRepeatFlag((due ?? task).dueDate, repeat, me, now));
     }
     // Reminders are the caller's own (FR-REM): `--no-remind` clears them, then `--remind` adds.
-    const reminders = parseRemindFlags(multi(rawArgs, 'remind'), me, now);
-    if (flagGiven(rawArgs, 'no-remind')) patch.clearReminders = true;
+    const reminders = parseRemindFlags(given.values.get('remind') ?? [], me, now);
+    if (given.switches.has('no-remind')) patch.clearReminders = true;
     if (reminders.length > 0) patch.reminders = reminders;
     const description =
       args.editor === true
