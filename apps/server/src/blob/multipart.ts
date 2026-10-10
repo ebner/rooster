@@ -143,7 +143,16 @@ const noFile = (detail = 'Attach one file in the multipart field "file".') =>
  */
 export async function receiveFile(
   request: UploadRequest,
-  options: { maxBytes: number; tmpDir: string; drainTimeouts?: DrainTimeouts },
+  options: {
+    maxBytes: number;
+    tmpDir: string;
+    drainTimeouts?: DrainTimeouts;
+    /**
+     * Told of every file chunk before it is written (upload-slots.ts); a `413` it throws ends
+     * the upload like an oversized file, any other error like a malformed body.
+     */
+    onFileBytes?: (n: number) => void;
+  },
 ): Promise<ReceivedFile> {
   const contentType = request.contentType ?? '';
   if (!/^multipart\/form-data\s*;/i.test(contentType)) throw notMultipart();
@@ -233,8 +242,17 @@ export async function receiveFile(
         const count = new Transform({
           transform(chunk: Buffer, _enc, done) {
             size += chunk.length;
-            if (size > options.maxBytes) done(tooLarge(options.maxBytes));
-            else done(null, chunk);
+            if (size > options.maxBytes) {
+              done(tooLarge(options.maxBytes));
+              return;
+            }
+            try {
+              options.onFileBytes?.(chunk.length);
+            } catch (err) {
+              done(err as Error);
+              return;
+            }
+            done(null, chunk);
           },
         });
         file.on('limit', () => count.destroy(tooLarge(options.maxBytes)));

@@ -2,7 +2,7 @@ import { chmodSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { prepareDatabase } from '../src/db/boot.ts';
+import { prepareDatabase, restrictDatabaseFiles } from '../src/db/boot.ts';
 import { openDb } from '../src/db/client.ts';
 import { ensureInstanceId } from '../src/db/instance.ts';
 import { backupDatabase, hasPendingMigrations, runMigrations } from '../src/db/migrate.ts';
@@ -222,6 +222,22 @@ describe('prepareDatabase', () => {
     } finally {
       db.close();
     }
+  });
+
+  it('refuses to boot when a readable database cannot be made owner-only', () => {
+    boot(V1);
+    const dbFile = join(dir.path, 'rooster.db');
+    // A restore run as root: the server's user can open the file but not chmod it.
+    chmodSync(dbFile, 0o666);
+    const foreignOwner = () => {
+      throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+    };
+    expect(() => restrictDatabaseFiles(dbFile, foreignOwner)).toThrow(
+      /mode 0666.*\(EPERM\).*chown -R 65532:65532/,
+    );
+    // Already private: nothing to change, nothing refused.
+    chmodSync(dbFile, 0o600);
+    expect(() => restrictDatabaseFiles(dbFile, foreignOwner)).not.toThrow();
   });
 
   it('backs up an existing database before applying pending migrations', () => {

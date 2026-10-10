@@ -66,8 +66,12 @@ ENV NODE_ENV=production \
     ROOSTER_DATA_DIR=/data \
     ROOSTER_GIT_SHA=${ROOSTER_GIT_SHA} \
     PORT=3000
+# Root-owned and read-only for the server's user (the base image's default user is nonroot,
+# so /app is created as root here): a compromised process cannot rewrite or swap the server
+# code or the web assets it serves. Only /data is writable.
+USER 0:0
 WORKDIR /app
-COPY --from=build --chown=nonroot:nonroot /out /app
+COPY --from=build /out /app
 # Pre-create /data owned by the nonroot user (UID 65532) so a fresh named volume inherits it
 # (distroless has no shell, so we copy an empty directory instead of running mkdir).
 COPY --from=build --chown=nonroot:nonroot /out-data /data

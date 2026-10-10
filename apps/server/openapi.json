@@ -13293,7 +13293,7 @@
         ],
         "operationId": "listGrants",
         "summary": "Connected apps: every PAT, CLI device and app grant",
-        "description": "Unrevoked grants, newest first (expired ones too, until revoked). `current` marks the grant behind this request. Allowed for the browser session and for a CLI device or PAT (`rooster token ls`, `rooster apps ls`).",
+        "description": "Unrevoked grants, newest first (expired ones too, until revoked). `current` marks the grant behind this request. Allowed for the browser session and for a CLI device or PAT (`rooster token ls`, `rooster apps ls`); an OAuth app sees only its own grant.",
         "responses": {
           "200": {
             "description": "Grants, newest first",
@@ -28136,7 +28136,7 @@
         ],
         "operationId": "decideOAuthConsent",
         "summary": "Allow or deny an app",
-        "description": "Browser session only. Allow creates or updates my grant for the app (scopes no wider than requested; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Approving nothing at all is `422 nothing_approved`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.",
+        "description": "Browser session only, and only the session that loaded the request with `GET /oauth/consent` (another session, e.g. after switching accounts, gets `404`: load it again). Allow creates or updates my grant for the app (scopes no wider than requested; constraints no wider than the app’s `authorization_details`, else `422 widening_not_allowed`; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Approving nothing at all is `422 nothing_approved`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -28294,7 +28294,7 @@
             }
           },
           "422": {
-            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `nothing_approved`.",
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `nothing_approved`, `widening_not_allowed`.",
             "content": {
               "application/problem+json": {
                 "examples": {
@@ -28332,6 +28332,22 @@
                       "status": 422,
                       "detail": "Choose at least one thing the app may do, or deny it.",
                       "code": "nothing_approved",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "widening_not_allowed": {
+                    "summary": "An app's access can only be narrowed here; reconnect the app to widen it.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "An app's access can only be narrowed here; reconnect the app to widen it.",
+                      "code": "widening_not_allowed",
                       "errors": [
                         {
                           "path": "title",

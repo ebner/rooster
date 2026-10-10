@@ -1,3 +1,4 @@
+import type { HttpBindings } from '@hono/node-server';
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi';
 import {
   SSE_HEARTBEAT_MS,
@@ -5,8 +6,8 @@ import {
   sseInvalidateSchema,
   sseNotificationSchema,
 } from '@rooster/core/schemas';
-import { streamSSE } from 'hono/streaming';
 import { SSE_MAX_PER_SESSION, SSE_MAX_PER_USER, type SseHub } from '../events/hub.ts';
+import { SseTransport } from '../events/sse-transport.ts';
 import type { AppEnv } from '../lib/context.ts';
 import { AppError } from '../lib/errors.ts';
 import { named } from '../lib/openapi.ts';
@@ -77,28 +78,25 @@ export function registerEventRoutes(
     if (!hub.accepting) {
       throw new AppError('unavailable', 503, 'The server is shutting down; reconnect shortly.');
     }
-    const response = streamSSE(
-      c,
-      (stream) =>
-        new Promise<void>((resolve) => {
-          const handle = hub.open({
-            userId: actor.userId,
-            ...services.grants.streamAccess(actor),
-            // `write` issues the underlying writer call synchronously, so frames keep their
-            // order without a promise chain; `close` queues behind them.
-            sink: {
-              write: (text) => void stream.write(text),
-              close: () => void stream.close(),
-            },
-            onClose: resolve,
-          });
-          if (handle === null) resolve();
-          else stream.onAbort(() => handle.close());
-        }),
+    const env = c.env as Partial<HttpBindings> | undefined;
+    const outgoing = env?.outgoing;
+    // A stalled or evicted stream is cut off at the socket, not left queued (sse-transport.ts).
+    const transport = new SseTransport(
+      outgoing === undefined ? {} : { destroy: () => outgoing.destroy() },
     );
-    // Proxies must neither buffer nor transform the stream (08 §5).
-    response.headers.set('Cache-Control', 'no-cache, no-transform');
-    response.headers.set('X-Accel-Buffering', 'no');
-    return response;
+    const handle = hub.open({
+      userId: actor.userId,
+      ...services.grants.streamAccess(actor),
+      sink: transport,
+    });
+    if (handle === null) transport.close();
+    else transport.onAbort(() => handle.close());
+    return c.body(transport.body, 200, {
+      'Content-Type': 'text/event-stream',
+      // Proxies must neither buffer nor transform the stream (08 §5).
+      'Cache-Control': 'no-cache, no-transform',
+      'X-Accel-Buffering': 'no',
+      Connection: 'keep-alive',
+    });
   });
 }

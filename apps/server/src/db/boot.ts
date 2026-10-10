@@ -37,14 +37,24 @@ export const PRIVATE_FILE_MODE = 0o600;
 /**
  * A restored database (a copied snapshot, `litestream restore`) arrives with the mode of
  * whatever wrote it, often 0644; new files already get 0600 from the process umask (main.ts).
+ * When the mode cannot be fixed (the file belongs to another account, typically root after a
+ * restore run as root), boot stops: serving would leave every user's data readable to other
+ * local accounts. Exported for tests (`chmod` is injectable to simulate a foreign owner).
  */
-function restrictDatabaseFiles(dbFile: string, logger: Logger): void {
+export function restrictDatabaseFiles(dbFile: string, chmod = chmodSync): void {
   for (const file of [dbFile, `${dbFile}-wal`, `${dbFile}-shm`]) {
+    const stat = statSync(file, { throwIfNoEntry: false });
+    if (stat === undefined || (stat.mode & 0o077) === 0) continue;
     try {
-      const stat = statSync(file, { throwIfNoEntry: false });
-      if (stat !== undefined && (stat.mode & 0o077) !== 0) chmodSync(file, PRIVATE_FILE_MODE);
+      chmod(file, PRIVATE_FILE_MODE);
     } catch (err) {
-      logger.warn({ file, code: (err as NodeJS.ErrnoException).code }, 'cannot restrict file mode');
+      const code = (err as NodeJS.ErrnoException).code ?? 'unknown error';
+      const mode = (stat.mode & 0o777).toString(8).padStart(4, '0');
+      throw new Error(
+        `${file} is readable by other accounts (mode ${mode}) and cannot be restricted to 0600 ` +
+          `(${code}). Make the data directory and its files belong to the user the server runs ` +
+          `as (UID 65532 in the Docker image), e.g. chown -R 65532:65532 <data dir>, then start again.`,
+      );
     }
   }
 }
@@ -66,8 +76,8 @@ export function prepareDatabase(
   }
   const existed = existsSync(paths.dbFile) && statSync(paths.dbFile).size > 0;
   const db = openDb(paths.dbFile);
-  restrictDatabaseFiles(paths.dbFile, logger);
   try {
+    restrictDatabaseFiles(paths.dbFile);
     const migrations = hasPendingMigrations(db, migrationsDir);
     // A missing version on an existing database (booted before this was recorded) counts as
     // changed, so the first boot that records it also takes a backup.

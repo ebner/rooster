@@ -203,9 +203,10 @@ describe('P8 grant boundary', () => {
     await owner.ok('DELETE', `/api/v1/tasks/${t.id}`, undefined, 204);
     const restore = await api.call('POST', `/api/v1/tasks/${t.id}/restore`);
     expect(restore.status).toBe(403);
+    // Permanent deletion is the browser's alone (boundary 3 audit), whatever the subtree.
     const purge = await api.call('DELETE', `/api/v1/tasks/${t.id}/permanent`);
     expect(purge.status).toBe(403);
-    expect(await code(purge)).toBe('outside_grant');
+    expect(await code(purge)).toBe('forbidden_scope');
   });
 
   it('#7 notifications apply task readability to list, count, mark and SSE previews', async () => {
@@ -445,13 +446,13 @@ describe('P6 server fixes', () => {
         createdAt: Date.now(),
       })
       .run();
-    // Roll back 0008 (and the later 0009 to 0012; dropping `attachment` drops 0012's index) and let the migrator apply them again.
+    // Roll back 0008 (and the later 0009 to 0013; dropping `attachment` drops 0012's index) and let the migrator apply them again.
     ctx.db.sqlite.exec(
-      'DROP TABLE attachment; DROP TABLE blob_gc; DROP TABLE ical_feed; DROP TABLE task_reminder; DROP INDEX task_series_open; ALTER TABLE user DROP COLUMN avatar_at; ALTER TABLE user DROP COLUMN oidc_image; DROP TABLE oauthAccessToken; DROP TABLE oauthRefreshToken; DROP TABLE oauthConsent; DROP TABLE oauthClientResource; DROP TABLE oauthResource; DROP TABLE oauthClientAssertion; DROP TABLE oauthClient; ALTER TABLE access_grant DROP COLUMN idle_timeout_ms; DROP INDEX task_parent_any',
+      'ALTER TABLE user DROP COLUMN avatar_storage; ALTER TABLE push_subscription DROP COLUMN keys_rotated_at; DROP TABLE attachment; DROP TABLE blob_gc; DROP TABLE ical_feed; DROP TABLE task_reminder; DROP INDEX task_series_open; ALTER TABLE user DROP COLUMN avatar_at; ALTER TABLE user DROP COLUMN oidc_image; DROP TABLE oauthAccessToken; DROP TABLE oauthRefreshToken; DROP TABLE oauthConsent; DROP TABLE oauthClientResource; DROP TABLE oauthResource; DROP TABLE oauthClientAssertion; DROP TABLE oauthClient; ALTER TABLE access_grant DROP COLUMN idle_timeout_ms; DROP INDEX task_parent_any',
     );
     ctx.db.sqlite
       .prepare(
-        'DELETE FROM __drizzle_migrations WHERE created_at IN (SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 5)',
+        'DELETE FROM __drizzle_migrations WHERE created_at IN (SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 6)',
       )
       .run();
     runMigrations(ctx.db);

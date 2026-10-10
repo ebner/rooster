@@ -370,13 +370,10 @@ export class MailService {
   async runDigests(): Promise<number> {
     if (!this.enabled()) return 0;
     const now = this.deps.clock();
+    // Only who and which day are claimed here. The content is read when the send leaves the
+    // queue, which may be much later: membership, access and the account are as of then.
     const due = immediate(this.deps.db, (tx) => {
-      const out: {
-        recipient: Recipient;
-        date: string;
-        sections: DigestSection[];
-        todayPath: string;
-      }[] = [];
+      const out: { userId: string; date: string; since: number }[] = [];
       for (const recipient of recipientsWithPref(tx, 'digest', 'email')) {
         try {
           const slot = dueSlot(now, recipient.timezone, recipient.prefs.digestTime);
@@ -384,9 +381,7 @@ export class MailService {
           const scope = jobScope(recipient.id, slot.date);
           const since = lastUserRun(tx, DIGEST_JOB, recipient.id, scope) ?? now - DAY_MS;
           if (!claimJobRun(tx, DIGEST_JOB, scope, now)) continue;
-          const digest = this.digestOf(tx, recipient, now, since, slot.date);
-          if (digest === null) continue;
-          out.push({ recipient, date: slot.date, ...digest });
+          out.push({ userId: recipient.id, date: slot.date, since });
         } catch (err) {
           this.deps.logger.warn({ err: logSafeError(err), userId: recipient.id }, 'digest skipped');
         }
@@ -395,13 +390,28 @@ export class MailService {
     });
     const sent = await Promise.all(
       due.map((d) =>
-        this.queue.run('mail-digest', async () => {
-          await this.sendDigest(d.recipient, d.date, d.sections, d.todayPath);
-          return true;
-        }),
+        this.queue.run('mail-digest', () => this.sendDigestOf(d.userId, d.date, d.since, now)),
       ),
     );
     return sent.filter((s) => s === true).length;
+  }
+
+  /** Reads one claimed digest as of now and sends it; false when there is nothing to send. */
+  private async sendDigestOf(
+    userId: string,
+    date: string,
+    since: number,
+    now: number,
+  ): Promise<boolean> {
+    const digest = readOnly(this.deps.db, (tx) => {
+      const recipient = loadRecipient(tx, userId);
+      if (recipient === null || !prefEnabled(tx, userId, 'digest', 'email')) return null;
+      const content = this.digestOf(tx, recipient, now, since, date);
+      return content === null ? null : { recipient, ...content };
+    });
+    if (digest === null) return false;
+    await this.sendDigest(digest.recipient, date, digest.sections, digest.todayPath);
+    return true;
   }
 
   /** The digest's sections, or null when all are empty. */

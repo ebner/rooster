@@ -92,6 +92,13 @@
       "when": 1791622796260,
       "tag": "0012_p11_attachment_uploader",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1791629123545,
+      "tag": "0013_p11_avatar_storage_push_rotation",
+      "breakpoints": true
     }
   ]
 }

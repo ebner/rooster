@@ -8,6 +8,10 @@
 #   LITESTREAM_S3_PATH               prefix in the bucket (default: rooster)
 #   LITESTREAM_S3_REGION             default: us-east-1
 #   LITESTREAM_S3_ENDPOINT           for MinIO, R2, Garage, B2 …: https://s3.example.com (empty for AWS)
+#
+# The credentials go in their own file, litestream.env next to compose.yaml (mode 0600), never
+# in .env: compose.yaml hands every variable of .env to the rooster container, which has no
+# business holding the keys to the replicas.
 #   LITESTREAM_ACCESS_KEY_ID         required
 #   LITESTREAM_SECRET_ACCESS_KEY     required
 #
@@ -34,13 +38,14 @@ services:
     depends_on:
       rooster:
         condition: service_healthy
+    # Only this container gets the credentials (see above). Compose refuses to start without
+    # the file.
+    env_file: litestream.env
     environment:
       LITESTREAM_S3_BUCKET: ${LITESTREAM_S3_BUCKET:?set LITESTREAM_S3_BUCKET in .env}
       LITESTREAM_S3_PATH: ${LITESTREAM_S3_PATH:-rooster}
       LITESTREAM_S3_REGION: ${LITESTREAM_S3_REGION:-us-east-1}
       LITESTREAM_S3_ENDPOINT: ${LITESTREAM_S3_ENDPOINT:-}
-      LITESTREAM_ACCESS_KEY_ID: ${LITESTREAM_ACCESS_KEY_ID:?set LITESTREAM_ACCESS_KEY_ID in .env}
-      LITESTREAM_SECRET_ACCESS_KEY: ${LITESTREAM_SECRET_ACCESS_KEY:?set LITESTREAM_SECRET_ACCESS_KEY in .env}
     configs:
       - source: litestream
         target: /etc/litestream.yml

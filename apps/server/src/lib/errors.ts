@@ -41,6 +41,8 @@ export class AppError extends Error {
   readonly detail: string;
   readonly errors: FieldError[] | undefined;
   readonly extensions: ProblemExtensions | undefined;
+  /** Response headers that go with the problem, such as `Retry-After` on a `429`. */
+  headers: Record<string, string> | undefined;
 
   constructor(
     code: string,
@@ -56,6 +58,7 @@ export class AppError extends Error {
     this.detail = detail;
     this.errors = errors;
     this.extensions = extensions;
+    this.headers = undefined;
   }
 }
 
@@ -139,6 +142,7 @@ export const createErrorHandler =
   (baseLogger: Logger): ErrorHandler<AppEnv> =>
   (err, c) => {
     if (err instanceof AppError) {
+      for (const [name, value] of Object.entries(err.headers ?? {})) c.header(name, value);
       return problemResponse(c, err.status, err.code, err.detail, err.errors, err.extensions);
     }
     if (err instanceof ZodError) {

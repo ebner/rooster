@@ -501,7 +501,7 @@ export interface paths {
         };
         /**
          * Connected apps: every PAT, CLI device and app grant
-         * @description Unrevoked grants, newest first (expired ones too, until revoked). `current` marks the grant behind this request. Allowed for the browser session and for a CLI device or PAT (`rooster token ls`, `rooster apps ls`).
+         * @description Unrevoked grants, newest first (expired ones too, until revoked). `current` marks the grant behind this request. Allowed for the browser session and for a CLI device or PAT (`rooster token ls`, `rooster apps ls`); an OAuth app sees only its own grant.
          */
         get: operations["listGrants"];
         put?: never;
@@ -1520,7 +1520,7 @@ export interface paths {
         put?: never;
         /**
          * Allow or deny an app
-         * @description Browser session only. Allow creates or updates my grant for the app (scopes no wider than requested; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Approving nothing at all is `422 nothing_approved`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.
+         * @description Browser session only, and only the session that loaded the request with `GET /oauth/consent` (another session, e.g. after switching accounts, gets `404`: load it again). Allow creates or updates my grant for the app (scopes no wider than requested; constraints no wider than the app’s `authorization_details`, else `422 widening_not_allowed`; `tasks:delete` only when requested and approved; `sessionOnly` ends it after a day without use) and answers the authorization request; Deny answers `access_denied`. Approving nothing at all is `422 nothing_approved`. Either way `redirectTo` is where the browser goes next: the app’s redirect URI with `code` or `error`, `state` and `iss`.
          */
         post: operations["decideOAuthConsent"];
         delete?: never;
@@ -13492,7 +13492,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `nothing_approved`. */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `nothing_approved`, `widening_not_allowed`. */
             422: {
                 headers: {
                     [name: string]: unknown;

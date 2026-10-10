@@ -2,6 +2,7 @@
 // subscriptions that moved, device renewal, unsubscribe tokens in logs, timed tasks overdue
 // across timezones, and the catch-up digest's date.
 
+import { type AddressInfo, createServer as createNetServer } from 'node:net';
 import { parse as legacyParse } from 'node:url';
 import { uuidv7 } from '@rooster/core/ids';
 import { isAllowedPushEndpoint } from '@rooster/core/push-hosts';
@@ -9,9 +10,12 @@ import type { Problem, PushSubscriptionInfo } from '@rooster/core/schemas';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { pushSubscription } from '../src/db/schema/index.ts';
+import { logSafeError } from '../src/lib/log-safe-error.ts';
 import { loggablePath } from '../src/lib/request-log.ts';
+import { SmtpSendError, sanitizeSmtpError, smtpTransport } from '../src/mail/transport.ts';
 import { unsubscribeToken } from '../src/mail/unsubscribe-token.ts';
 import { canonicalPushEndpoint } from '../src/push/endpoint.ts';
+import type { PushSender } from '../src/push/transport.ts';
 import { fcmEndpoint, SMTP_ENV, subscriptionBody } from './delivery-fakes.ts';
 import { captureLogger, createTestApp, TEST_ENV } from './helpers.ts';
 import { type Caller, createTask, groupNamed, listCtx } from './list-helpers.ts';
@@ -266,6 +270,51 @@ describe('push subscription renewal', () => {
   });
 });
 
+describe('push key rotation keeps devices renewable', () => {
+  const renew = (c: Caller, from: string, to: string) =>
+    c.call('POST', '/api/v1/me/push-subscriptions', {
+      ...subscriptionBody(to),
+      renewsEndpoint: fcmEndpoint(from),
+    });
+
+  it('a device renews its old endpoint after a rotation; until then nothing is sent to it', async () => {
+    const ctx = listCtx();
+    const admin = ctx.user(TEST_ENV.ROOSTER_ADMIN_EMAILS);
+    const a = ctx.user('a@example.com');
+    const kept = await a.ok<PushSubscriptionInfo>(
+      'POST',
+      '/api/v1/me/push-subscriptions',
+      subscriptionBody('before'),
+      201,
+    );
+    const removed = await a.ok<PushSubscriptionInfo>(
+      'POST',
+      '/api/v1/me/push-subscriptions',
+      subscriptionBody('removed'),
+      201,
+    );
+    await admin.ok('POST', '/api/v1/admin/push-keys/regenerate');
+    // Unreachable with the new keys: the test push says so and nothing goes out.
+    const stale = await a.call('POST', `/api/v1/me/push-subscriptions/${kept.id}/test`);
+    expect(stale.status).toBe(410);
+    expect(ctx.push.sent).toEqual([]);
+    // A device the user removes after the rotation never comes back.
+    await a.ok('DELETE', `/api/v1/me/push-subscriptions/${removed.id}`, undefined, 204);
+    expect((await renew(a, 'removed', 'removed-new')).status).toBe(410);
+    // Nobody else can renew it.
+    const b = ctx.user('b@example.com');
+    expect((await renew(b, 'before', 'stolen')).status).toBe(410);
+    // The app opens: the browser subscribes with the new key and renews in place.
+    const res = await renew(a, 'before', 'after');
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as PushSubscriptionInfo).id).toBe(kept.id);
+    const rows = ctx.db.orm.select().from(pushSubscription).all();
+    expect(rows.map((r) => [r.endpoint, r.keysRotatedAt])).toEqual([[fcmEndpoint('after'), null]]);
+    await a.ok('POST', `/api/v1/me/push-subscriptions/${kept.id}/test`, undefined, 204);
+    expect(ctx.push.sent.map((m) => m.endpoint)).toEqual([fcmEndpoint('after')]);
+  });
+});
+
 describe('a send to an endpoint that was renewed meanwhile', () => {
   async function inFlight(answer: number | null) {
     const ctx = listCtx();
@@ -403,5 +452,229 @@ describe('catch-up digest date', () => {
     expect(text).not.toContain('Overdue');
     expect(text.indexOf('Due today')).toBeLessThan(text.indexOf('Fifteenth'));
     expect(text).not.toContain('Sixteenth');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Queued scheduled sends are read when they leave the queue, not when they were claimed
+// ---------------------------------------------------------------------------------------------
+
+describe('queued digests and due reminders are revalidated before sending', () => {
+  const at = Date.UTC(2026, 9, 15, 6, 0); // 08:00 CEST
+
+  /** Bo's org Acme with member Ann, who has a task due today there and one of her own. */
+  async function setup(env: Record<string, string> = {}) {
+    const time = manualClock(at - 60 * MIN);
+    const ctx = listCtx({ clock: time.clock, env });
+    const admin = ctx.user(TEST_ENV.ROOSTER_ADMIN_EMAILS);
+    const ann = ctx.user('ann@example.com');
+    const bo = ctx.user('bo@example.com');
+    const org = await bo.ok<{ id: string }>('POST', '/api/v1/orgs', { name: 'Acme' }, 201);
+    const { url } = await bo.ok<{ url: string }>(
+      'POST',
+      `/api/v1/orgs/${org.id}/invites`,
+      { role: 'member' },
+      201,
+    );
+    await ann.ok('POST', `/api/v1/invites/${url.split('/invite/')[1]}/accept`);
+    await ann.ok('PATCH', '/api/v1/me', {
+      timezone: 'Europe/Stockholm',
+      prefs: { reminderTime: '08:00', digestTime: '08:00' },
+    });
+    await createTask(
+      bo,
+      { title: 'Acme secret', assigneeId: ann.userId, dueDate: '2026-10-15' },
+      org.id,
+    );
+    await createTask(ann, { title: 'Own errand', dueDate: '2026-10-15' });
+    await ctx.app.services.deliveries.idle();
+    ctx.push.clear();
+    ctx.mail.clear();
+    /** Fills every delivery slot until `release()`. */
+    const block = () => {
+      let release = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const blockers = Array.from({ length: 4 }, () =>
+        ctx.app.services.deliveries.run('blocker', () => gate),
+      );
+      return async () => {
+        release();
+        await Promise.all(blockers);
+      };
+    };
+    return { ...ctx, time, admin, ann, bo, org, block };
+  }
+
+  it('a digest waiting in the queue leaves out an org the recipient was removed from', async () => {
+    const ctx = await setup(SMTP_ENV);
+    await setCells(ctx.ann, [{ type: 'digest', channel: 'email', enabled: true }]);
+    const release = ctx.block();
+    ctx.time.set(at);
+    const run = ctx.app.services.mail.runDigests();
+    await ctx.bo.ok(
+      'DELETE',
+      `/api/v1/orgs/${ctx.org.id}/members/${ctx.ann.userId}`,
+      undefined,
+      204,
+    );
+    await release();
+    expect(await run).toBe(1);
+    const text = ctx.mail.to('ann@example.com')[0]?.text ?? '';
+    expect(text).toContain('Own errand');
+    expect(text).not.toContain('Acme secret');
+  });
+
+  it('a digest waiting in the queue is not sent to a deactivated account', async () => {
+    const ctx = await setup(SMTP_ENV);
+    await setCells(ctx.ann, [{ type: 'digest', channel: 'email', enabled: true }]);
+    const release = ctx.block();
+    ctx.time.set(at);
+    const run = ctx.app.services.mail.runDigests();
+    await ctx.admin.ok('PATCH', `/api/v1/admin/users/${ctx.ann.userId}`, { disabled: true });
+    await release();
+    expect(await run).toBe(0);
+    expect(ctx.mail.sent).toEqual([]);
+  });
+
+  it('a due reminder waiting in the queue leaves out an org the recipient was removed from', async () => {
+    const ctx = await setup();
+    await setCells(ctx.ann, [{ type: 'due_reminder', channel: 'push', enabled: true }]);
+    await ctx.ann.ok('POST', '/api/v1/me/push-subscriptions', subscriptionBody('ann'), 201);
+    const release = ctx.block();
+    ctx.time.set(at);
+    const run = ctx.app.services.push.runDueReminders();
+    await ctx.bo.ok(
+      'DELETE',
+      `/api/v1/orgs/${ctx.org.id}/members/${ctx.ann.userId}`,
+      undefined,
+      204,
+    );
+    await release();
+    expect(await run).toBe(1);
+    expect(ctx.push.sent.map((m) => m.payload.body)).toEqual(['Own errand']);
+  });
+
+  it('a due reminder waiting in the queue is not sent to a deactivated account', async () => {
+    const ctx = await setup();
+    await setCells(ctx.ann, [{ type: 'due_reminder', channel: 'push', enabled: true }]);
+    await ctx.ann.ok('POST', '/api/v1/me/push-subscriptions', subscriptionBody('ann'), 201);
+    const release = ctx.block();
+    ctx.time.set(at);
+    const run = ctx.app.services.push.runDueReminders();
+    await ctx.admin.ok('PATCH', `/api/v1/admin/users/${ctx.ann.userId}`, { disabled: true });
+    await release();
+    expect(await run).toBe(0);
+    expect(ctx.push.sent).toEqual([]);
+  });
+});
+
+describe('push fan-out stays within the delivery concurrency', () => {
+  it('a notification to 12 devices never has more than 4 sends in flight', async () => {
+    const ctx = listCtx();
+    const ann = ctx.user('ann@example.com');
+    const bo = ctx.user('bo@example.com');
+    const org = await bo.ok<{ id: string }>('POST', '/api/v1/orgs', { name: 'Acme' }, 201);
+    const { url } = await bo.ok<{ url: string }>(
+      'POST',
+      `/api/v1/orgs/${org.id}/invites`,
+      { role: 'member' },
+      201,
+    );
+    await ann.ok('POST', `/api/v1/invites/${url.split('/invite/')[1]}/accept`);
+    for (let i = 0; i < 12; i++) {
+      await ann.ok('POST', '/api/v1/me/push-subscriptions', subscriptionBody(`d${i}`), 201);
+    }
+    let inFlight = 0;
+    let peak = 0;
+    const record = ctx.push.sender;
+    const counting: PushSender = async (...args) => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      try {
+        await record(...args);
+      } finally {
+        inFlight -= 1;
+      }
+    };
+    (ctx.app.services.push as unknown as { sender: PushSender }).sender = counting;
+    await createTask(bo, { title: 'Ship it', assigneeId: ann.userId }, org.id);
+    await ctx.app.services.deliveries.idle();
+    expect(ctx.push.sent).toHaveLength(12);
+    expect(peak).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('SMTP failures are logged without the server’s reply', () => {
+  /** An SMTP server that refuses every recipient, quoting the address (as real servers do). */
+  async function refusingSmtp() {
+    const server = createNetServer((socket) => {
+      socket.write('220 mail.test ESMTP\r\n');
+      let buffer = '';
+      socket.on('data', (chunk: Buffer) => {
+        buffer += chunk.toString('latin1');
+        for (;;) {
+          const end = buffer.indexOf('\r\n');
+          if (end === -1) return;
+          const line = buffer.slice(0, end);
+          buffer = buffer.slice(end + 2);
+          const verb = line.slice(0, 4).toUpperCase();
+          if (verb === 'EHLO' || verb === 'HELO') socket.write('250 mail.test\r\n');
+          else if (verb === 'MAIL') socket.write('250 2.1.0 Ok\r\n');
+          else if (verb === 'RCPT') {
+            socket.write('550 5.1.1 <private-person@example.com>: Recipient address rejected\r\n');
+          } else if (verb === 'RSET') socket.write('250 2.0.0 Ok\r\n');
+          else if (verb === 'QUIT') socket.end('221 2.0.0 Bye\r\n');
+          else socket.write('502 5.5.2 Error\r\n');
+        }
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    return { server, port: (server.address() as AddressInfo).port };
+  }
+
+  it('keeps the code, status and command, never the recipient or the reply text', async () => {
+    const { server, port } = await refusingSmtp();
+    try {
+      const transport = smtpTransport(`smtp://127.0.0.1:${port}?ignoreTLS=true`);
+      const error = await transport
+        .send({
+          from: 'rooster@example.com',
+          to: 'private-person@example.com',
+          subject: 'Hi',
+          html: '<p>Hi</p>',
+          text: 'Hi',
+          headers: {},
+        })
+        .then(
+          () => null,
+          (err: unknown) => err,
+        );
+      expect(error).toBeInstanceOf(SmtpSendError);
+      expect(error).toMatchObject({ code: 'EENVELOPE', responseCode: 550, command: 'RCPT TO' });
+      const logged = JSON.stringify({
+        safe: logSafeError(error),
+        own: { ...(error as object) },
+      });
+      expect(logged).not.toContain('private-person');
+      expect(logged).not.toContain('Recipient address rejected');
+      expect((error as Error).cause).toBeUndefined();
+    } finally {
+      server.close();
+    }
+  });
+
+  it('keeps nothing of an error that is not shaped like nodemailer’s', () => {
+    const error = sanitizeSmtpError(
+      Object.assign(new Error('550 <x@example.com>'), {
+        code: 'a@b',
+        command: 'RCPT TO:<x@example.com>',
+      }),
+    );
+    expect(error.message).toBe('SMTP send failed');
+    expect(error.code).toBeUndefined();
+    expect(error.command).toBeUndefined();
   });
 });

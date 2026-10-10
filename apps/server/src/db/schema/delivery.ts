@@ -16,6 +16,12 @@ export const pushSubscription = sqliteTable('push_subscription', {
   createdAt: integer('created_at').notNull(),
   /** The last push the push service accepted. */
   lastOkAt: integer('last_ok_at'),
+  /**
+   * P11: set when the server's VAPID keys were replaced after this subscription was made. It
+   * cannot be sent to any more, but the browser may still renew it in place
+   * (`renewsEndpoint`) when the app next opens; a device the user removed is deleted instead.
+   */
+  keysRotatedAt: integer('keys_rotated_at'),
 });
 
 /**

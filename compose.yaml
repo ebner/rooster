@@ -6,6 +6,8 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     restart: unless-stopped
+    # Every variable in .env reaches this container: keep other services' secrets (the
+    # Litestream credentials) in their own files.
     env_file: .env
     environment:
       ROOSTER_TRUST_PROXY: "true"

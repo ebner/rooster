@@ -8,8 +8,9 @@ import type { Attachment, Me, Problem } from '@rooster/core/schemas';
 import { afterEach, describe, expect, it } from 'vitest';
 import { attachment, blobGc } from '../src/db/schema/index.ts';
 import { fileForm, sendForm } from './blob-helpers.ts';
-import { tempDir } from './helpers.ts';
+import { asJar, tempDir } from './helpers.ts';
 import { type Caller, createTask, listCtx, sharedOrg } from './list-helpers.ts';
+import { until } from './sse-client.ts';
 
 const MB = 1024 * 1024;
 const dirs: (() => void)[] = [];
@@ -117,37 +118,146 @@ describe('WP 11.1 per-user attachment storage quota (ADR 0052 §6)', () => {
 
   it('two concurrent uploads that each fit cannot both pass; the loser stores nothing', async () => {
     const ctx = await team('1');
-    // Both uploads are held at the blob store until each has passed the early check, so the
-    // check inside the recording transaction is the one that decides.
-    const store = ctx.app.services.blobs.current;
-    const put = store.put.bind(store);
-    let arrived = 0;
-    let release!: () => void;
-    const bothThere = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    store.put = async (...args: Parameters<typeof put>) => {
-      arrived += 1;
-      if (arrived === 2) release();
-      await bothThere;
-      return put(...args);
-    };
+    // Bytes in flight count against the quota while they stream, so the second upload is
+    // refused before it is stored (the recording transaction checks once more).
     const results = await Promise.all([
       upload(ctx, ctx.a, 600 * 1024),
       upload(ctx, ctx.a, 600 * 1024),
     ]);
-    store.put = put;
-    expect(arrived).toBe(2);
     const statuses = results.map((r) => r.status).sort();
     expect(statuses).toEqual([201, 413]);
     const loser = results.find((r) => r.status === 413) as Response;
     expect(((await loser.json()) as Problem).code).toBe('storage_quota_exceeded');
     expect(ctx.db.orm.select().from(attachment).all()).toHaveLength(1);
     expect((await storageOf(ctx.a))?.usedBytes).toBe(600 * 1024);
-    // The loser's blob was queued for the GC; once it ran, only the winner's blob is left.
     await ctx.app.services.blobGc.drain();
     expect(ctx.db.orm.select().from(blobGc).all()).toEqual([]);
     expect(blobFiles(ctx)).toHaveLength(1);
+    expect(tmpFiles(ctx)).toEqual([]);
+    expect(ctx.app.services.attachments.uploads.inFlight(ctx.a.userId)).toEqual({
+      uploads: 0,
+      bytes: 0,
+    });
+  });
+
+  it('the recording transaction still checks the quota', async () => {
+    const ctx = await team('1');
+    // Another upload commits after this one's early check (here: a row written directly).
+    const store = ctx.app.services.blobs.current;
+    const put = store.put.bind(store);
+    store.put = async (...args: Parameters<typeof put>) => {
+      store.put = put;
+      ctx.db.orm
+        .insert(attachment)
+        .values({
+          id: '0199aaaa-0000-7000-8000-00000000a001',
+          taskId: ctx.taskId,
+          orgId: ctx.org.id,
+          uploaderId: ctx.a.userId,
+          filename: 'other.txt',
+          mime: 'text/plain',
+          size: 600 * 1024,
+          storage: 'local',
+          key: `attachments/${ctx.org.id}/0199aaaa-0000-7000-8000-00000000a001`,
+          createdAt: 0,
+        })
+        .run();
+      return put(...args);
+    };
+    const res = await upload(ctx, ctx.a, 600 * 1024);
+    expect(res.status).toBe(413);
+    expect(((await res.json()) as Problem).code).toBe('storage_quota_exceeded');
+    expect(ctx.db.orm.select().from(attachment).all()).toHaveLength(1);
+    expect(tmpFiles(ctx)).toEqual([]);
+  });
+
+  /**
+   * A multipart upload that sends its head and `size` file bytes, then neither the closing
+   * boundary nor anything else until `abort()` (the client goes away).
+   */
+  function heldUpload(ctx: Team, who: Caller, size: number) {
+    const boundary = '----rooster-held';
+    let abort!: () => void;
+    const aborted = new Promise<void>((resolve) => {
+      abort = resolve;
+    });
+    const parts = [
+      new TextEncoder().encode(
+        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="f.txt"\r\nContent-Type: text/plain\r\n\r\n`,
+      ),
+      bytes(size),
+    ];
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const next = parts.shift();
+        if (next !== undefined) {
+          controller.enqueue(next);
+          return;
+        }
+        await aborted;
+        controller.error(new Error('client went away'));
+      },
+    });
+    const response = Promise.resolve(
+      ctx.app.request(
+        `/api/v1/tasks/${ctx.taskId}/attachments`,
+        asJar(who.jar, {
+          method: 'POST',
+          body,
+          headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+          duplex: 'half',
+        } as RequestInit),
+      ),
+    );
+    return { response, abort };
+  }
+
+  it('unfinished uploads count against the quota while they stream', async () => {
+    const ctx = await team('1');
+    const slots = ctx.app.services.attachments.uploads;
+    const held = heldUpload(ctx, ctx.a, 700 * 1024);
+    await until(
+      () => slots.inFlight(ctx.a.userId).bytes === 700 * 1024 && tmpFiles(ctx).length === 1,
+      2_000,
+      'first upload',
+    );
+    // A second upload is cut off while it streams, once both together pass the quota.
+    const refused = await upload(ctx, ctx.a, 700 * 1024);
+    expect(refused.status).toBe(413);
+    expect(((await refused.json()) as Problem).code).toBe('storage_quota_exceeded');
+    expect(tmpFiles(ctx)).toHaveLength(1);
+    expect(slots.inFlight(ctx.a.userId)).toEqual({ uploads: 1, bytes: 700 * 1024 });
+    // Bo's room is his own.
+    await uploaded(ctx, ctx.b, 700 * 1024);
+    held.abort();
+    expect((await held.response).status).toBe(422);
+    expect(slots.inFlight(ctx.a.userId)).toEqual({ uploads: 0, bytes: 0 });
+    expect(tmpFiles(ctx)).toEqual([]);
+    await uploaded(ctx, ctx.a, 700 * 1024);
+  });
+
+  it('a user streams at most three uploads at once (429 with Retry-After)', async () => {
+    const ctx = await team('0');
+    const slots = ctx.app.services.attachments.uploads;
+    const held = [1, 2, 3].map(() => heldUpload(ctx, ctx.a, 10));
+    await until(
+      () => slots.inFlight(ctx.a.userId).bytes === 30 && tmpFiles(ctx).length === 3,
+      2_000,
+      'three uploads',
+    );
+    const busy = await upload(ctx, ctx.a, 10);
+    expect(busy.status).toBe(429);
+    expect(busy.headers.get('retry-after')).toBe('5');
+    expect(((await busy.json()) as Problem).code).toBe('rate_limited');
+    expect(tmpFiles(ctx)).toHaveLength(3);
+    // Others are not held up, and a slot frees up when an upload ends.
+    await uploaded(ctx, ctx.b, 10);
+    held[0]?.abort();
+    await held[0]?.response;
+    await uploaded(ctx, ctx.a, 10);
+    for (const h of held) h.abort();
+    await Promise.all(held.map((h) => h.response));
+    expect(slots.inFlight(ctx.a.userId)).toEqual({ uploads: 0, bytes: 0 });
     expect(tmpFiles(ctx)).toEqual([]);
   });
 

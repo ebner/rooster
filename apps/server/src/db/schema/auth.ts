@@ -28,6 +28,12 @@ export const user = sqliteTable('user', {
    * picture waits in `oidc_image` for DELETE /me/avatar.
    */
   avatarAt: integer('avatar_at'),
+  /**
+   * P11: the backend (`local` | `s3`) the current avatar was stored in. Reads go there only,
+   * so a stale copy left in the other backend (one that was not configured when the avatar was
+   * replaced or removed) never comes back. Null for avatars from before this column.
+   */
+  avatarStorage: text('avatar_storage', { enum: ['local', 's3'] }),
   oidcImage: text('oidc_image'),
 });
 

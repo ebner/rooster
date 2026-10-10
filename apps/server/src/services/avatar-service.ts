@@ -7,7 +7,8 @@ import { KeyedLock } from '../auth/keyed-lock.ts';
 import { avatarImage, isMimeMismatch, RASTER_TYPES, sniffFile } from '../blob/content.ts';
 import { avatarKey } from '../blob/keys.ts';
 import { receiveFile, type UploadRequest, uploadTmpDir } from '../blob/multipart.ts';
-import type { BlobObject, BlobStores } from '../blob/store.ts';
+import type { BlobObject, BlobStores, StorageKind } from '../blob/store.ts';
+import { UploadSlots } from '../blob/upload-slots.ts';
 import { PRIVATE_DIR_MODE } from '../db/boot.ts';
 import { member, organization, user } from '../db/schema/index.ts';
 import type { Audience } from '../events/bus.ts';
@@ -47,6 +48,8 @@ export function avatarUrl(userId: string, avatarAt: number): string {
 export class AvatarService {
   /** PUT and DELETE of one user's avatar run one at a time (same blob key). */
   private readonly locks = new KeyedLock();
+  /** Uploads in flight per user (each holds a temp file). */
+  private readonly uploads = new UploadSlots();
 
   constructor(
     private readonly deps: ServiceDeps,
@@ -61,9 +64,28 @@ export class AvatarService {
   /** PUT /me/avatar: a raster image of at most 2 MB (browser session only, like PATCH /me). */
   async put(actor: Actor, request: UploadRequest): Promise<Me> {
     requireBrowserSession(actor);
-    await mkdir(this.tmpDir, { recursive: true, mode: PRIVATE_DIR_MODE });
-    const file = await receiveFile(request, { maxBytes: AVATAR_MAX_BYTES, tmpDir: this.tmpDir });
+    const slot = this.uploads.acquire(actor.userId);
     let image: Buffer | null = null;
+    try {
+      await mkdir(this.tmpDir, { recursive: true, mode: PRIVATE_DIR_MODE });
+      image = await this.decode(request);
+    } finally {
+      slot.release();
+    }
+    if (image === null) throw notAnImage();
+    const avatar = image;
+    // Serialised with DELETE per user: a removal's blob delete must not hit this upload's blob.
+    await this.locks.run(actor.userId, async () => {
+      const store = this.stores.current;
+      await store.put(avatarKey(actor.userId), avatar, 'image/webp');
+      this.recordUpload(actor, store.kind);
+    });
+    return this.users.getMe(actor);
+  }
+
+  /** The upload as a 256 px WebP, or null when it is not a raster image. */
+  private async decode(request: UploadRequest): Promise<Buffer | null> {
+    const file = await receiveFile(request, { maxBytes: AVATAR_MAX_BYTES, tmpDir: this.tmpDir });
     try {
       const sniffed = await sniffFile(file.path);
       if (isMimeMismatch(file.declaredType, file.filename, sniffed.mime)) {
@@ -74,21 +96,13 @@ export class AvatarService {
         );
       }
       if (!RASTER_TYPES.has(sniffed.mime)) throw notAnImage();
-      image = await avatarImage(file.path);
+      return await avatarImage(file.path);
     } finally {
       await rm(file.path, { force: true });
     }
-    if (image === null) throw notAnImage();
-    const avatar = image;
-    // Serialised with DELETE per user: a removal's blob delete must not hit this upload's blob.
-    await this.locks.run(actor.userId, async () => {
-      await this.stores.current.put(avatarKey(actor.userId), avatar, 'image/webp');
-      this.recordUpload(actor);
-    });
-    return this.users.getMe(actor);
   }
 
-  private recordUpload(actor: Actor): void {
+  private recordUpload(actor: Actor, storage: StorageKind): void {
     immediate(this.deps.db, (tx) => {
       const row = this.requireUser(tx, actor.userId);
       const avatarAt = Math.max(this.deps.clock(), (row.avatarAt ?? 0) + 1);
@@ -96,6 +110,7 @@ export class AvatarService {
         .set({
           image: avatarUrl(actor.userId, avatarAt),
           avatarAt,
+          avatarStorage: storage,
           // The provider's picture is kept once, from before the first upload.
           oidcImage: row.avatarAt === null ? row.image : row.oidcImage,
           updatedAt: new Date(this.deps.clock()),
@@ -121,6 +136,7 @@ export class AvatarService {
         .set({
           image: row.oidcImage,
           avatarAt: null,
+          avatarStorage: null,
           oidcImage: null,
           updatedAt: new Date(this.deps.clock()),
         })
@@ -149,26 +165,38 @@ export class AvatarService {
    * included; a grant only through the orgs it reaches), otherwise `404`.
    */
   async get(actor: Actor, userId: string, ifNoneMatch?: string): Promise<AvatarDownload> {
-    const avatarAt = readOnly(this.deps.db, (tx) => {
+    const current = readOnly(this.deps.db, (tx) => {
       const row = tx
-        .select({ avatarAt: user.avatarAt })
+        .select({ avatarAt: user.avatarAt, storage: user.avatarStorage })
         .from(user)
         .where(eq(user.id, userId))
         .get();
       if (row === undefined || row.avatarAt === null) return null;
-      return userId === actor.userId || this.sharesOrg(tx, actor, userId) ? row.avatarAt : null;
+      return userId === actor.userId || this.sharesOrg(tx, actor, userId)
+        ? { avatarAt: row.avatarAt, storage: row.storage }
+        : null;
     });
-    if (avatarAt === null) throw avatarNotFound();
+    if (current === null) throw avatarNotFound();
+    const { avatarAt } = current;
     // Strong: each upload has its own `avatar_at`. Only answered after the access check.
     const etag = `"avatar-${avatarAt}"`;
     if (matchesEtag(ifNoneMatch, etag)) return { kind: 'not-modified', etag };
     const key = avatarKey(userId);
-    // The current backend first; the other one holds avatars from before a storage switch.
-    const current = this.stores.current;
-    const other = this.stores.byKind(current.kind === 'local' ? 's3' : 'local');
-    const blob = (await current.get(key)) ?? (await other?.get(key)) ?? null;
+    const blob = await this.readBlob(key, current.storage);
     if (blob === null) throw avatarNotFound();
     return { kind: 'stream', blob, etag };
+  }
+
+  /**
+   * The upload's own backend only: the other one may still hold an avatar that was replaced or
+   * removed while it was not configured. Avatars from before `avatar_storage` was recorded are
+   * looked up in the current backend first, then in the other one.
+   */
+  private async readBlob(key: string, storage: StorageKind | null): Promise<BlobObject | null> {
+    if (storage !== null) return (await this.stores.byKind(storage)?.get(key)) ?? null;
+    const current = this.stores.current;
+    const other = this.stores.byKind(current.kind === 'local' ? 's3' : 'local');
+    return (await current.get(key)) ?? (await other?.get(key)) ?? null;
   }
 
   /**

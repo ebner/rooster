@@ -297,7 +297,7 @@ describe('push subscriptions (06 §2.6)', () => {
     expect(((await res.json()) as Problem).code).toBe('push_keys_from_env');
   });
 
-  it('admin regenerate replaces the keys and drops every subscription', async () => {
+  it('admin regenerate replaces the keys; old subscriptions are never sent to, only renewed', async () => {
     const ctx = listCtx();
     const admin = ctx.user(TEST_ENV.ROOSTER_ADMIN_EMAILS);
     const a = ctx.user('a@example.com');
@@ -307,8 +307,13 @@ describe('push subscriptions (06 §2.6)', () => {
     const after = await admin.ok<VapidPublicKey>('POST', '/api/v1/admin/push-keys/regenerate');
     expect(after.publicKey).not.toBe(before.publicKey);
     expect(await a.ok('GET', '/api/v1/push/vapid-public-key')).toEqual(after);
-    expect(ctx.db.orm.select().from(pushSubscription).all()).toEqual([]);
+    const rows = ctx.db.orm.select().from(pushSubscription).all();
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.keysRotatedAt !== null)).toBe(true);
     expect((await a.call('POST', '/api/v1/admin/push-keys/regenerate')).status).toBe(403);
+    // A second rotation drops what the first left behind and nobody renewed.
+    await admin.ok('POST', '/api/v1/admin/push-keys/regenerate');
+    expect(ctx.db.orm.select().from(pushSubscription).all()).toEqual([]);
   });
 
   it('test push: 204 when accepted, 410 and deleted when gone, 502 otherwise', async () => {

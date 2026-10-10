@@ -5,7 +5,7 @@ import type {
   PushSubscriptionInfo,
   VapidPublicKey,
 } from '@rooster/core/schemas';
-import { and, asc, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { notification, pushSubscription } from '../db/schema/index.ts';
 import { AppError } from '../lib/errors.ts';
 import { logSafeError } from '../lib/log-safe-error.ts';
@@ -17,7 +17,7 @@ import { type Actor, immediate, readOnly, type ServiceDeps, type Tx } from '../s
 import { loadDeliverable } from '../services/deliverable.ts';
 import { requireBrowserSession } from '../services/grant-access.ts';
 import { claimJobRun, dueSlot, jobScope } from '../services/job-runs.ts';
-import { loadRecipient, type Recipient, recipientsWithPref } from '../services/pref-store.ts';
+import { loadRecipient, prefEnabled, recipientsWithPref } from '../services/pref-store.ts';
 import { canonicalPushEndpoint } from './endpoint.ts';
 import {
   generateVapidKeys,
@@ -117,7 +117,7 @@ export class PushService {
       tx
         .select({ id: pushSubscription.id })
         .from(pushSubscription)
-        .where(eq(pushSubscription.userId, userId))
+        .where(and(eq(pushSubscription.userId, userId), isNull(pushSubscription.keysRotatedAt)))
         .limit(1)
         .get() !== undefined
     );
@@ -159,6 +159,8 @@ export class PushService {
         p256dh: input.keys.p256dh,
         auth: input.keys.auth,
         userAgent,
+        // A (re)subscription is made with the current keys.
+        keysRotatedAt: null,
       };
       for (const path of ['endpoint', 'renewsEndpoint'] as const) {
         const raw = input[path];
@@ -192,7 +194,13 @@ export class PushService {
     actor: Actor,
     oldEndpoint: string,
     endpoint: string,
-    values: { userId: string; p256dh: string; auth: string; userAgent: string | null },
+    values: {
+      userId: string;
+      p256dh: string;
+      auth: string;
+      userAgent: string | null;
+      keysRotatedAt: null;
+    },
   ): PushSubscriptionInfo {
     const old = tx
       .select()
@@ -283,9 +291,11 @@ export class PushService {
   }
 
   /**
-   * POST /admin/push-keys/regenerate (08 §8): a new key pair, and every subscription goes,
-   * since none of them can be reached with the new keys. Devices subscribe again when the
-   * app next opens. Keys from the environment cannot be replaced here (`409`).
+   * POST /admin/push-keys/regenerate (08 §8): a new key pair. No subscription can be reached
+   * with the new keys, so none is sent to again, but each stays renewable: when the app next
+   * opens, the browser subscribes with the new key and renews its old endpoint in place
+   * (`renewsEndpoint`). Subscriptions left over from an earlier regeneration, never renewed,
+   * are deleted now. Keys from the environment cannot be replaced here (`409`).
    */
   regenerate(actor: Actor): VapidPublicKey {
     requireBrowserSession(actor);
@@ -298,10 +308,14 @@ export class PushService {
       );
     }
     this.keys = immediate(this.deps.db, (tx) => {
-      tx.delete(pushSubscription).run();
+      tx.delete(pushSubscription).where(isNotNull(pushSubscription.keysRotatedAt)).run();
+      tx.update(pushSubscription).set({ keysRotatedAt: this.deps.clock() }).run();
       return writeKeys(tx, generateVapidKeys());
     });
-    this.deps.logger.warn({ by: actor.userId }, 'push keys regenerated; subscriptions dropped');
+    this.deps.logger.warn(
+      { by: actor.userId },
+      'push keys regenerated; subscriptions wait for renewal',
+    );
     return { publicKey: this.keys.publicKey };
   }
 
@@ -311,18 +325,29 @@ export class PushService {
    */
   sendNotifications(ids: readonly string[]): void {
     for (const id of ids) {
-      void this.queue.run('push-notification', () => this.sendNotification(id));
+      void this.queue.run('push-notification', async () => this.fanOutNotification(id));
     }
   }
 
-  private async sendNotification(id: string): Promise<void> {
-    const loaded = readOnly(this.deps.db, (tx) => {
+  /**
+   * One queued send per device, so a user's devices together still count against the queue's
+   * concurrency (ADR 0035). The sends are not awaited here: a task that waits for tasks of
+   * its own queue could hold every slot.
+   */
+  private fanOutNotification(id: string): void {
+    const targets = readOnly(this.deps.db, (tx) => {
       const found = loadDeliverable(tx, id);
-      return found === null
-        ? null
-        : { ...found, subscriptions: this.subscriptionsOf(tx, found.row.userId) };
+      return found === null ? [] : this.subscriptionsOf(tx, found.row.userId);
     });
-    if (loaded === null || loaded.subscriptions.length === 0) return;
+    for (const target of targets) {
+      void this.queue.run('push-notification', () => this.sendNotificationTo(id, target));
+    }
+  }
+
+  /** The notification is read again when its send leaves the queue (it may be gone by then). */
+  private async sendNotificationTo(id: string, target: SubscriptionRef): Promise<void> {
+    const loaded = readOnly(this.deps.db, (tx) => loadDeliverable(tx, id));
+    if (loaded === null || loaded.row.userId !== target.userId) return;
     const t = mailT(loaded.recipient.locale);
     const described = describeNotification(
       loaded.notification,
@@ -352,22 +377,21 @@ export class PushService {
             url: described.path,
             tag: taskId === null ? `notification:${id}` : `task:${taskId}`,
           };
-    const outcomes = await Promise.all(loaded.subscriptions.map((s) => this.deliver(s, payload)));
-    if (outcomes.includes('ok')) {
-      immediate(this.deps.db, (tx) => {
-        tx.update(notification)
-          .set({ pushedAt: this.deps.clock() })
-          .where(and(eq(notification.id, id), isNull(notification.pushedAt)))
-          .run();
-      });
-    }
+    if ((await this.deliver(target, payload)) !== 'ok') return;
+    immediate(this.deps.db, (tx) => {
+      tx.update(notification)
+        .set({ pushedAt: this.deps.clock() })
+        .where(and(eq(notification.id, id), isNull(notification.pushedAt)))
+        .run();
+    });
   }
 
+  /** The user's devices that can be sent to (not waiting for renewal after a key change). */
   private subscriptionsOf(tx: Tx, userId: string): SubscriptionRef[] {
     return tx
       .select({ id: pushSubscription.id, userId: pushSubscription.userId })
       .from(pushSubscription)
-      .where(eq(pushSubscription.userId, userId))
+      .where(and(eq(pushSubscription.userId, userId), isNull(pushSubscription.keysRotatedAt)))
       .orderBy(asc(pushSubscription.createdAt))
       .all();
   }
@@ -390,6 +414,8 @@ export class PushService {
         .get(),
     );
     if (row === undefined) return 'gone';
+    // Made for the replaced keys: unreachable until the browser renews it (kept for that).
+    if (row.keysRotatedAt !== null) return 'gone';
     const endpoint = canonicalPushEndpoint(row.endpoint);
     if (endpoint === null) {
       this.remove(row);
@@ -447,8 +473,10 @@ export class PushService {
    */
   async runDueReminders(): Promise<number> {
     const now = this.deps.clock();
+    // Only who, which day and which devices are claimed here; the reminder itself is read
+    // when each send leaves the queue (membership, tasks and the account as of then).
     const due = immediate(this.deps.db, (tx) => {
-      const out: { recipient: Recipient; payload: PushPayload; rows: SubscriptionRef[] }[] = [];
+      const out: { date: string; rows: SubscriptionRef[] }[] = [];
       for (const recipient of recipientsWithPref(tx, 'due_reminder', 'push')) {
         const rows = this.subscriptionsOf(tx, recipient.id);
         if (rows.length === 0) continue;
@@ -456,30 +484,7 @@ export class PushService {
           const slot = dueSlot(now, recipient.timezone, recipient.prefs.reminderTime);
           if (slot === null) continue;
           if (!claimJobRun(tx, DUE_REMINDER_JOB, jobScope(recipient.id, slot.date), now)) continue;
-          const tasks = tasksDueByToday(
-            tx,
-            recipient.id,
-            dueContext(recipient.timezone, now, slot.date),
-          );
-          if (tasks.length === 0) continue;
-          const t = mailT(recipient.locale);
-          const titles = tasks.slice(0, REMINDER_TITLES).map((task) => task.title);
-          const rest = tasks.length - titles.length;
-          const org = todayOrg(tx, recipient.id, tasks);
-          out.push({
-            recipient,
-            rows,
-            payload: {
-              kind: 'due_reminder',
-              title: t('push.reminder', { count: tasks.length }),
-              body: [
-                ...titles,
-                ...(rest > 0 ? [t('push.reminderMore', { count: rest })] : []),
-              ].join('\n'),
-              url: org === null ? '/' : `/o/${org.slug}/today`,
-              tag: 'due_reminder',
-            },
-          });
+          out.push({ date: slot.date, rows });
         } catch (err) {
           // One user's bad timezone must not stop everyone else's reminder.
           this.deps.logger.warn(
@@ -490,11 +495,49 @@ export class PushService {
       }
       return out;
     });
-    await Promise.all(
-      due.flatMap(({ rows, payload }) =>
-        rows.map((row) => this.queue.run('push-reminder', () => this.deliver(row, payload))),
-      ),
+    // One queued send per device (ADR 0035's bounded concurrency); awaited here, outside the queue.
+    const sent = await Promise.all(
+      due.map(async ({ date, rows }) => {
+        const results = await Promise.all(
+          rows.map((row) =>
+            this.queue.run('push-reminder', () => this.sendDueReminderTo(row, date, now)),
+          ),
+        );
+        return results.includes(true);
+      }),
     );
-    return due.length;
+    return sent.filter(Boolean).length;
+  }
+
+  /** The due reminder for one device, as of now; false when nothing is due (none is sent). */
+  private async sendDueReminderTo(
+    target: SubscriptionRef,
+    date: string,
+    now: number,
+  ): Promise<boolean> {
+    const payload = readOnly(this.deps.db, (tx) =>
+      this.dueReminderOf(tx, target.userId, date, now),
+    );
+    if (payload === null) return false;
+    await this.deliver(target, payload);
+    return true;
+  }
+
+  private dueReminderOf(tx: Tx, userId: string, date: string, now: number): PushPayload | null {
+    const recipient = loadRecipient(tx, userId);
+    if (recipient === null || !prefEnabled(tx, userId, 'due_reminder', 'push')) return null;
+    const tasks = tasksDueByToday(tx, recipient.id, dueContext(recipient.timezone, now, date));
+    if (tasks.length === 0) return null;
+    const t = mailT(recipient.locale);
+    const titles = tasks.slice(0, REMINDER_TITLES).map((task) => task.title);
+    const rest = tasks.length - titles.length;
+    const org = todayOrg(tx, recipient.id, tasks);
+    return {
+      kind: 'due_reminder',
+      title: t('push.reminder', { count: tasks.length }),
+      body: [...titles, ...(rest > 0 ? [t('push.reminderMore', { count: rest })] : [])].join('\n'),
+      url: org === null ? '/' : `/o/${org.slug}/today`,
+      tag: 'due_reminder',
+    };
   }
 }

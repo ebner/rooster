@@ -1,6 +1,7 @@
 // WP 4.3: domain events after commit, the SSE hub (targeting, coalescing, hello, heartbeat,
 // stream lifetime) and its graceful-shutdown integration.
 import type { AddressInfo } from 'node:net';
+import { connect } from 'node:net';
 import { serve } from '@hono/node-server';
 import type { Problem, Tag, Task } from '@rooster/core/schemas';
 import { SSE_HEARTBEAT_MS } from '@rooster/core/schemas';
@@ -9,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../src/db/schema/index.ts';
 import type { DomainEvent } from '../src/events/bus.ts';
 import { compactKeys, SSE_MAX_PER_SESSION, SSE_MAX_PER_USER } from '../src/events/hub.ts';
+import { SseTransport } from '../src/events/sse-transport.ts';
 import { trackConnections } from '../src/lib/graceful-close.ts';
 import { afterCommit, immediate } from '../src/services/context.ts';
 import { addSession, BASE_URL, CookieJar, TEST_ENV } from './helpers.ts';
@@ -542,4 +544,95 @@ describe('offline-sync support', () => {
     const tag = await a.ok<Tag>('POST', `/api/v1/orgs/${org.id}/tags`, { name: 'T' }, 201, headers);
     await a.ok('PATCH', `/api/v1/tags/${tag.id}`, { name: 'U' }, 200, headers);
   });
+});
+
+describe('SSE transport bounds (stalled clients)', () => {
+  const frames = (n: number) => Array.from({ length: n }, (_, i) => `: ${i}\n\n`);
+
+  it('aborts a stream whose backlog passes the byte bound, and drops its frames', async () => {
+    const destroyed = vi.fn();
+    const aborted = vi.fn();
+    const t = new SseTransport({ maxBufferedBytes: 64, destroy: destroyed });
+    t.onAbort(aborted);
+    for (const f of frames(20)) t.write(f);
+    expect(t.closed).toBe(true);
+    expect(t.buffered).toBe(0);
+    expect(destroyed).toHaveBeenCalledTimes(1);
+    expect(aborted).toHaveBeenCalledTimes(1);
+    await expect(t.body.getReader().read()).rejects.toThrow('sse stream aborted');
+  });
+
+  it('aborts a stream that makes no progress within the write deadline', async () => {
+    vi.useFakeTimers();
+    const aborted = vi.fn();
+    const t = new SseTransport({ writeDeadlineMs: 1_000 });
+    t.onAbort(aborted);
+    t.write(': ping\n\n');
+    vi.advanceTimersByTime(999);
+    expect(aborted).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(aborted).toHaveBeenCalledTimes(1);
+  });
+
+  it('a reading client keeps the stream; close ends a caught-up stream cleanly and aborts one behind', async () => {
+    vi.useFakeTimers();
+    const caughtUp = new SseTransport({ maxBufferedBytes: 64, writeDeadlineMs: 1_000 });
+    const reader = caughtUp.body.getReader();
+    for (const f of frames(20)) {
+      caughtUp.write(f);
+      expect(new TextDecoder().decode((await reader.read()).value)).toBe(f);
+    }
+    vi.advanceTimersByTime(5_000);
+    expect(caughtUp.closed).toBe(false);
+    caughtUp.close();
+    expect((await reader.read()).done).toBe(true);
+
+    const behind = new SseTransport();
+    const aborted = vi.fn();
+    behind.onAbort(aborted);
+    behind.write(': late\n\n');
+    behind.close();
+    expect(aborted).toHaveBeenCalledTimes(1);
+    expect(behind.buffered).toBe(0);
+  });
+
+  it('a client that stops reading is cut off at the socket and leaves the hub', async () => {
+    const { app, a } = await trio();
+    const server = serve({ fetch: app.fetch, port: 0, hostname: '127.0.0.1' });
+    await new Promise<void>((resolve) => server.once('listening', () => resolve()));
+    const { port } = server.address() as AddressInfo;
+    let closed = false;
+    server.on('connection', (s) => s.once('close', () => (closed = true)));
+    try {
+      const socket = connect({ port, host: '127.0.0.1' });
+      await new Promise<void>((resolve) => socket.once('connect', () => resolve()));
+      socket.on('error', () => {});
+      socket.write(
+        `GET /api/v1/events HTTP/1.1\r\nhost: 127.0.0.1\r\ncookie: ${a.jar.header()}\r\n\r\n`,
+      );
+      await until(() => app.hub.size === 1, 2_000, 'stream open');
+      // The client reads nothing more: kernel buffers fill, then the server's queue.
+      socket.pause();
+      const userId = (await a.ok<{ id: string }>('GET', '/api/v1/me')).id;
+      const big = 'x'.repeat(64 * 1024);
+      let sent = 0;
+      while (app.hub.size > 0 && sent < 256 * 1024 * 1024) {
+        app.services.events.publish({
+          type: 'notification.created',
+          orgId: null,
+          actorId: null,
+          origin: null,
+          subjects: [],
+          audiences: [],
+          direct: [{ userId, event: 'notification', data: { big } }],
+        } as DomainEvent);
+        sent += big.length;
+        await new Promise((r) => setImmediate(r));
+      }
+      expect(app.hub.size).toBe(0);
+      await until(() => closed, 2_000, 'socket destroyed');
+    } finally {
+      server.close();
+    }
+  }, 30_000);
 });

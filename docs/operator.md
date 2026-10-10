@@ -34,10 +34,14 @@ rooster is **one container, one volume and one env file**. After `docker compose
 1. Get the compose file and the configuration template:
 
    ```sh
+   umask 077   # .env will hold the auth secret and provider credentials: owner-only
    mkdir rooster && cd rooster
    curl -fsSLO https://raw.githubusercontent.com/201works/rooster/main/compose.yaml
    curl -fsSL https://raw.githubusercontent.com/201works/rooster/main/apps/server/.env.example -o .env
+   chmod 600 .env
    ```
+
+   Keep `.env` readable by its owner only (`chmod 600 .env`, also for an existing install) before you put secrets in it: under a shared path such as `/srv`, another local account could otherwise read the auth secret and every credential added later.
 
    `compose.yaml` runs `ghcr.io/201works/rooster:1` (the major version is pinned), mounts the named volume `rooster-data` at `/data`, sets `ROOSTER_TRUST_PROXY=true`, and publishes port 3000 on `127.0.0.1` only. Your reverse proxy connects to it there, or you attach the service to the proxy's Docker network instead.
 
@@ -300,7 +304,7 @@ Copy `/data/backups` and `/data/attachments` off the host on a schedule with res
 
 For point-in-time restore, the optional overlay `compose.litestream.yaml` adds a [Litestream](https://litestream.io/) 0.5 sidecar. It shares the volume with rooster and replicates the database continuously to S3 or another supported target, so you lose at most seconds of changes instead of up to a day. It replicates the database only: keep backing up `attachments/` (or use S3 storage for them).
 
-Set these in the same `.env` that Compose reads. Litestream expands them at runtime, so they never appear in the generated config.
+Set the bucket settings in the same `.env` that Compose reads. Put the two credentials in a separate file, `litestream.env` next to `compose.yaml` (`chmod 600 litestream.env`), never in `.env`: `compose.yaml` hands every variable of `.env` to the rooster container, and only the sidecar needs the keys to the replicas. Litestream expands all of them at runtime, so they never appear in the generated config. Compose refuses to start the overlay without `litestream.env`.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -308,8 +312,8 @@ Set these in the same `.env` that Compose reads. Litestream expands them at runt
 | `LITESTREAM_S3_PATH` | `rooster` | The path inside the bucket. |
 | `LITESTREAM_S3_REGION` | `us-east-1` | The bucket's region. |
 | `LITESTREAM_S3_ENDPOINT` | empty | Empty for AWS. Set it for MinIO, Cloudflare R2, Garage and other S3-compatible stores; this also switches to path-style URLs. |
-| `LITESTREAM_ACCESS_KEY_ID` | required | The access key. |
-| `LITESTREAM_SECRET_ACCESS_KEY` | required | The secret key. |
+| `LITESTREAM_ACCESS_KEY_ID` | required | The access key, in `litestream.env`. |
+| `LITESTREAM_SECRET_ACCESS_KEY` | required | The secret key, in `litestream.env`. |
 
 Litestream takes a snapshot every 24 hours and keeps them for 7 days, so you can restore any point in the last week. The sidecar (`litestream/litestream:0.5.17`, pinned by digest) runs as the same unprivileged user as rooster and starts once rooster is healthy.
 
@@ -331,7 +335,7 @@ docker compose -f compose.yaml -f compose.litestream.yaml run --rm --no-deps --e
 docker compose -f compose.yaml -f compose.litestream.yaml up -d
 ```
 
-For a point in time, add `-timestamp 2026-10-09T12:00:00Z` after `litestream restore`. When rooster starts, its migrations bring an older snapshot forward, and it makes the restored file readable only by itself (0600).
+For a point in time, add `-timestamp 2026-10-09T12:00:00Z` after `litestream restore`. When rooster starts, its migrations bring an older snapshot forward, and it makes the restored file readable only by itself (0600). If it cannot (the file belongs to another account, for example after a restore run as root), it refuses to start and says so in the log: give the files back to the server's user with `chown -R 65532:65532` on the volume's directory, then start again.
 
 rooster needs no setting change for Litestream. It already uses WAL mode, `busy_timeout=5000` and `synchronous=NORMAL`, and keeps SQLite's automatic checkpoints, which Litestream 0.5 detects. Turning automatic checkpoints off is only worth it under heavy write load, and it would let the WAL grow without bound if the sidecar stopped.
 
@@ -373,7 +377,7 @@ Don't run other tools that checkpoint the database while Litestream replicates. 
 Changing `ROOSTER_AUTH_SECRET` and restarting **signs everyone out** (all browser sessions end). Links in emails already sent (invites and unsubscribe links) and sign-ins or consents in progress stop working too. Weak secrets are refused at boot with exit code 78.
 
 ### Regenerating the push keys
-If the Web Push keys may have leaked, use **Admin → Push keys → Regenerate push keys**. This removes every push subscription of every user: push stops on all devices until each person turns it on again in Settings → Notifications (devices deliberately don't re-subscribe by themselves, so a device someone removed never comes back; ADR 0040). Keys set with `ROOSTER_VAPID_*` can't be regenerated from Admin: replace them in the environment instead, with the same effect.
+If the Web Push keys may have leaked, use **Admin → Push keys → Regenerate push keys**. No device is sent anything with the old keys again. Each device where push was on re-subscribes with the new keys the next time the app opens there, by renewing its old subscription; until then it gets no push. A device someone removed never comes back (ADR 0040). Subscriptions still not renewed by the next regeneration are deleted then. Keys set with `ROOSTER_VAPID_*` can't be regenerated from Admin: replace them in the environment instead; that drops nothing on the server, but devices only recover the same way once the app opens.
 
 ### Admin access from the command line
 CLI logins and personal access tokens never get admin rights by default. An instance admin can give one the `admin` capability (`rooster login --admin`), which is re-checked against `ROOSTER_ADMIN_EMAILS` on every request; OAuth apps and MCP clients can never get it. Review and revoke credentials in **Settings → Security → Connected apps**.
@@ -408,7 +412,7 @@ Each user may store up to `ROOSTER_USER_STORAGE_MB` (default 1024 MB) of attachm
 | "You're not on the list" | The address isn't allowed: add it to `ROOSTER_ALLOWED_EMAILS`, the allowlist in Admin, or invite the person. |
 | Changes from other devices only appear after a reload | The proxy buffers `/api/v1/events`. Turn buffering and compression off for it and allow long timeouts ([Reverse proxy](#reverse-proxy)). |
 | Uploads fail with "413 Request Entity Too Large" from the proxy | The proxy's body limit is below the upload limit. Allow at least 30 MB (`client_max_body_size`, `LimitRequestBody`). A 413 from rooster itself names the limit or the storage quota. |
-| Push notifications don't arrive | Push needs https. On iPhone and iPad, the app must be added to the Home Screen first. Check that push is on for that device in Settings → Notifications and use its test button. After regenerating the push keys, everyone has to turn push on again. |
+| Push notifications don't arrive | Push needs https. On iPhone and iPad, the app must be added to the Home Screen first. Check that push is on for that device in Settings → Notifications and use its test button. After regenerating the push keys, a device gets push again once the app has been opened on it. |
 | No emails | Check `ROOSTER_SMTP_URL` and `ROOSTER_MAIL_FROM`, and the log for SMTP errors. Admin → System shows whether SMTP is configured. Each user chooses which emails they get in Settings → Notifications. |
 | A calendar app can't load the feed (404) | The proxy doesn't forward `/ical/` to rooster, or the link was replaced or revoked in Settings → Calendar feed. Calendar apps refresh on their own schedule (often hours). |
 | An MCP client can't connect or can't sign in | The proxy must forward `/mcp`, `/.well-known/*` (OAuth metadata at `/.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-authorization-server/api/auth`) and `/api/auth/*`, and must not buffer `/mcp`. Older clients without Client ID Metadata Document support need `ROOSTER_OAUTH_DCR=on`. |

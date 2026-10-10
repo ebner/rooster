@@ -20,6 +20,7 @@ import {
   uploadTmpDir,
 } from '../blob/multipart.ts';
 import type { BlobStore, BlobStores } from '../blob/store.ts';
+import { UploadSlots } from '../blob/upload-slots.ts';
 import { PRIVATE_DIR_MODE } from '../db/boot.ts';
 import { attachment, blobGc } from '../db/schema/index.ts';
 import { AppError } from '../lib/errors.ts';
@@ -53,6 +54,17 @@ export const SIGNED_URL_TTL_S = 60;
 function formatMb(bytes: number): string {
   const mb = Math.floor(bytes / (1024 * 1024));
   return mb % 1024 === 0 ? `${mb / 1024} GB` : `${mb} MB`;
+}
+
+/** `413 storage_quota_exceeded` with the quota and what the user's attachments already use. */
+function quotaExceeded(quota: number, used: number): AppError {
+  return new AppError(
+    'storage_quota_exceeded',
+    413,
+    `This file would take your attachments past your storage quota of ${formatMb(quota)}; delete some attachments first.`,
+    undefined,
+    { limitBytes: quota, usedBytes: used },
+  );
 }
 
 const attachmentNotFound = () => new AppError('not_found', 404, 'Attachment not found.');
@@ -97,6 +109,9 @@ export function contentDisposition(kind: 'inline' | 'attachment', filename: stri
  * Blobs are written before the row, and removed through the `blob_gc` queue.
  */
 export class AttachmentService {
+  /** Uploads in flight per user, and their bytes against the rest of the quota. */
+  readonly uploads = new UploadSlots();
+
   constructor(
     private readonly deps: ServiceDeps,
     private readonly stores: BlobStores,
@@ -125,8 +140,35 @@ export class AttachmentService {
     meta?: OpMeta,
   ): Promise<Attachment> {
     const orgId = readOnly(this.deps.db, (tx) => this.writableTask(tx, actor, taskId).orgId);
-    await mkdir(this.tmpDir, { recursive: true, mode: PRIVATE_DIR_MODE });
-    const file = await receiveFile(request, { maxBytes: this.maxBytes, tmpDir: this.tmpDir });
+    // The temp file counts against the quota while it streams, together with the user's other
+    // uploads in flight, so unfinished uploads cannot fill `<dataDir>/tmp` past it.
+    const quota = this.deps.config.userStorageQuotaBytes;
+    const used =
+      quota === null ? 0 : readOnly(this.deps.db, (tx) => userStorageUsed(tx, actor.userId));
+    const slot = this.uploads.acquire(
+      actor.userId,
+      quota === null ? undefined : { bytes: quota - used, error: () => quotaExceeded(quota, used) },
+    );
+    try {
+      await mkdir(this.tmpDir, { recursive: true, mode: PRIVATE_DIR_MODE });
+      const file = await receiveFile(request, {
+        maxBytes: this.maxBytes,
+        tmpDir: this.tmpDir,
+        onFileBytes: (n) => slot.take(n),
+      });
+      return await this.store(actor, taskId, orgId, file, meta);
+    } finally {
+      slot.release();
+    }
+  }
+
+  private async store(
+    actor: Actor,
+    taskId: string,
+    orgId: string,
+    file: ReceivedFile,
+    meta: OpMeta | undefined,
+  ): Promise<Attachment> {
     const store = this.stores.current;
     const written: string[] = [];
     let recorded = false;
@@ -169,13 +211,7 @@ export class AttachmentService {
     if (quota === null) return;
     const used = userStorageUsed(tx, userId);
     if (used + size <= quota) return;
-    throw new AppError(
-      'storage_quota_exceeded',
-      413,
-      `This file would take your attachments past your storage quota of ${formatMb(quota)}; delete some attachments first.`,
-      undefined,
-      { limitBytes: quota, usedBytes: used },
-    );
+    throw quotaExceeded(quota, used);
   }
 
   /** Sniffs, checks and stores the upload's blobs; the row to insert (without task and uploader). */

@@ -1,6 +1,12 @@
+import type { AddressInfo } from 'node:net';
+import { connect } from 'node:net';
+import { serve } from '@hono/node-server';
 import { createRoute, z } from '@hono/zod-openapi';
+import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../src/db/client.ts';
+import { bodyLimitFor } from '../src/lib/body-limit.ts';
+import type { AppEnv } from '../src/lib/context.ts';
 import { AppError } from '../src/lib/errors.ts';
 import { BASE_URL, captureLogger, createTestApp, createUserWithSession } from './helpers.ts';
 
@@ -347,4 +353,98 @@ describe('request body limits', () => {
     });
     expect(ok.status).toBe(201);
   });
+});
+
+describe('request body limits: memory per request', () => {
+  /** A body of `count` one-byte chunks, each a view into its own 64 KB buffer (as socket reads are). */
+  function dribbled(count: number) {
+    let sent = 0;
+    return new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent >= count) {
+          controller.close();
+          return;
+        }
+        sent += 1;
+        controller.enqueue(new Uint8Array(new ArrayBuffer(64 * 1024), 0, 1).fill(0x20));
+      },
+    });
+  }
+
+  it('coalesces a dribbled body into one bounded buffer instead of holding every chunk', async () => {
+    const limit = 16 * 1024;
+    const app = new Hono<AppEnv>();
+    app.use(bodyLimitFor(limit));
+    app.post('/', async (c) => {
+      const reader = c.req.raw.body?.getReader();
+      let chunks = 0;
+      let retained = 0;
+      let bytes = 0;
+      for (;;) {
+        const next = await reader?.read();
+        if (next === undefined || next.done) break;
+        chunks += 1;
+        retained += next.value.buffer.byteLength;
+        bytes += next.value.byteLength;
+      }
+      return c.json({ chunks, retained, bytes });
+    });
+    const res = await app.request('/', {
+      method: 'POST',
+      body: dribbled(8 * 1024),
+      duplex: 'half',
+    } as RequestInit);
+    expect(res.status).toBe(200);
+    const seen = (await res.json()) as { chunks: number; retained: number; bytes: number };
+    expect(seen.bytes).toBe(8 * 1024);
+    // Without coalescing: 8,192 chunks pinning 512 MB of backing stores.
+    expect(seen.chunks).toBe(1);
+    expect(seen.retained).toBeLessThanOrEqual(limit);
+  });
+
+  it('over a socket, a dribbled declared body is read and a dribbled chunked one is cut off', async () => {
+    const { app } = createTestApp();
+    const server = serve({ fetch: app.fetch, port: 0, hostname: '127.0.0.1' });
+    await new Promise<void>((resolve) => server.once('listening', () => resolve()));
+    const { port } = server.address() as AddressInfo;
+    /** Sends the head, then `body` one byte per write with Nagle off; resolves with the status line. */
+    const probe = (head: string, body: string[]) =>
+      new Promise<string>((resolve, reject) => {
+        const socket = connect({ port, host: '127.0.0.1', noDelay: true }, async () => {
+          socket.write(head);
+          for (const piece of body) {
+            if (socket.destroyed) break;
+            socket.write(piece);
+            await new Promise((r) => setImmediate(r));
+          }
+        });
+        let reply = '';
+        socket.on('data', (d: Buffer) => {
+          reply += d.toString('latin1');
+          if (reply.includes('\r\n')) {
+            resolve(reply.slice(0, reply.indexOf('\r\n')));
+            socket.destroy();
+          }
+        });
+        socket.on('error', reject);
+      });
+    try {
+      const json = JSON.stringify({ provider: 'google', callbackURL: '/', pad: 'x'.repeat(2_000) });
+      const declared = await probe(
+        `POST /api/auth/sign-in/social HTTP/1.1\r\nhost: 127.0.0.1\r\norigin: ${BASE_URL}\r\n` +
+          `content-type: application/json\r\ncontent-length: ${json.length}\r\n\r\n`,
+        [...json],
+      );
+      expect(declared).toBe('HTTP/1.1 200 OK');
+      const oneByteChunk = '1\r\n \r\n';
+      const chunked = await probe(
+        `POST /api/auth/sign-in/social HTTP/1.1\r\nhost: 127.0.0.1\r\norigin: ${BASE_URL}\r\n` +
+          'content-type: application/json\r\ntransfer-encoding: chunked\r\n\r\n',
+        Array.from({ length: 64 * 1024 + 16 }, () => oneByteChunk),
+      );
+      expect(chunked).toBe('HTTP/1.1 413 Payload Too Large');
+    } finally {
+      server.close();
+    }
+  }, 30_000);
 });
