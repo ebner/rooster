@@ -14,7 +14,7 @@ import {
   seed,
 } from './support/p5-palette';
 import { viewerToday } from './support/p5-views';
-import { expect, test } from './support/test';
+import { expect, openKitchenSink, test } from './support/test';
 
 /** Phase 5 command palette, Trash and export (WP 5.3, 5.4; AC-5.2, AC-5.3) on the desktop. */
 
@@ -250,7 +250,7 @@ test('Export downloads JSON and Markdown for the org', async ({ page }) => {
 test('kitchen sink: the palette and Trash states render without axe violations', async ({
   page,
 }) => {
-  await page.goto('/_dev/ui#palette');
+  await openKitchenSink(page, '#palette');
   const section = page.getByTestId('section-palette');
   await expect(section.getByRole('heading', { level: 2, name: 'Command palette' })).toBeVisible();
   await expect(section.getByTestId('palette-empty')).toHaveText(/No matching actions/);

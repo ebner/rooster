@@ -1,6 +1,6 @@
-import { test as base, type Page } from '@playwright/test';
+import { test as base, expect, type Page } from '@playwright/test';
 
-export { expect } from '@playwright/test';
+export { expect };
 
 /** A random private address, so each test's default context is its own client. */
 export function randomClientIp(): string {
@@ -32,4 +32,17 @@ export async function reload(page: Page): Promise<void> {
     if (!String(error).includes('Frame load interrupted')) throw error;
     await page.goto(url);
   }
+}
+
+/**
+ * Opens the kitchen sink (`/_dev/ui`, optionally at a section's `#hash`) and waits for its title.
+ * It is the heaviest page in the app: a cold load, or any load on a 2-vCPU CI runner, can take
+ * well over the default 5 s.
+ */
+export async function openKitchenSink(page: Page, hash = ''): Promise<void> {
+  await page.goto(`/_dev/ui${hash}`);
+  // The embedded sign-in screens bring their own h1s, so match the page title by name.
+  await expect(page.getByRole('heading', { level: 1, name: 'Kitchen sink' })).toBeVisible({
+    timeout: 30_000,
+  });
 }

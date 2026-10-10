@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, type Page, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { openKitchenSink } from './support/test';
 
 const sections = [
   ['foundations', 'Foundations', 'Grunder'],
@@ -30,16 +31,6 @@ const sections = [
   ['tags', 'Tags', 'Taggar'],
   ['mobile', 'Phone layout', 'Mobillayout'],
 ] as const;
-
-async function openKitchenSink(page: Page) {
-  await page.goto('/_dev/ui');
-  // The embedded sign-in screens bring their own h1s, so match the page title by name.
-  // The kitchen sink is the heaviest page in the app: a cold load with every worker busy can
-  // take well over the default 5 s.
-  await expect(page.getByRole('heading', { level: 1, name: 'Kitchen sink' })).toBeVisible({
-    timeout: 30_000,
-  });
-}
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {

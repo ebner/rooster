@@ -3,7 +3,7 @@ import type { Browser, Page } from '@playwright/test';
 import type { ActivityPage, Task } from '@rooster/core/schemas';
 import { apiCall, displayNameOf, newClient, signInAs, uniqueEmail } from './support/auth';
 import { createTask, mod, personalOrg, waitForSync } from './support/p3';
-import { expect, test } from './support/test';
+import { expect, openKitchenSink, test } from './support/test';
 
 /** Phase 6 comments, mentions and the inbox (WP 6.3–6.5; AC-6.1, AC-6.3). */
 
@@ -235,7 +235,7 @@ test('a comment written offline shows at once and syncs when back online', async
 
 test('the kitchen sink shows the collaboration pieces, axe-clean', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/_dev/ui');
+  await openKitchenSink(page);
   const section = page.getByTestId('section-collab');
   await section.scrollIntoViewIfNeeded();
   await expect(section.getByTestId('activity-feed').first()).toBeVisible();

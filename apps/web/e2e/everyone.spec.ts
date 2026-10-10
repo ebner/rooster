@@ -4,7 +4,7 @@ import type { Task } from '@rooster/core/schemas';
 import { apiCall } from './support/auth';
 import { createTask, waitForSync } from './support/p3';
 import { sharedOrg } from './support/p6-people';
-import { expect, test } from './support/test';
+import { expect, openKitchenSink, test } from './support/test';
 
 /** Phase 6, WP 6.2 (FR-VIEW-2, 02 §11): Everyone's tasks on desktop. */
 
@@ -173,7 +173,7 @@ test('02 §11 the A key reassigns in Everyone’s tasks; @name assigns a new tas
 });
 
 test('kitchen sink: assignment and Everyone’s tasks render and are axe-clean', async ({ page }) => {
-  await page.goto('/_dev/ui');
+  await openKitchenSink(page);
   const section = page.getByTestId('section-people');
   await expect(section.locator('#people-title')).toHaveText('Assignment and Everyone’s tasks');
   await expect(section.getByTestId('assignee-picker-preview').getByRole('option')).toHaveCount(5);
