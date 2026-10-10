@@ -15,6 +15,11 @@ const apiPort = 3181;
 const baseURL = `http://localhost:${webPort}`;
 const { idpIssuer, idpPort } = e2eEnv;
 
+// One zone for the runner, its workers, the servers and the browsers, as on the UTC CI runners,
+// so a local run in another zone can't hide (or invent) a date bug.
+const timezone = 'UTC';
+process.env.TZ = timezone;
+
 // Workers re-evaluate this file; the env var keeps one data directory per run.
 process.env.ROOSTER_E2E_DATA_DIR ??= mkdtempSync(join(tmpdir(), 'rooster-e2e-'));
 
@@ -55,6 +60,7 @@ const serverEnv = {
   // spec registers its app dynamically.
   ROOSTER_OAUTH_DCR: 'on',
   PORT: String(apiPort),
+  TZ: timezone,
 };
 
 /**
@@ -85,6 +91,7 @@ export default defineConfig({
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL,
+    timezoneId: timezone,
     trace: 'retain-on-failure',
   },
   projects: [

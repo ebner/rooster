@@ -7,5 +7,7 @@ export default defineProject({
     environment: 'node',
     include: ['test/**/*.perf.test.ts'],
     fileParallelism: false,
+    // CI runners are UTC; pin it so a local run in another zone can't hide a host-zone bug.
+    env: { TZ: 'UTC' },
   },
 });

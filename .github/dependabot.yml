@@ -3,7 +3,7 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directory: /
+    directories: [/, /.github/actions/*] # workflows and the local composite actions
     schedule:
       interval: weekly
     ignore:

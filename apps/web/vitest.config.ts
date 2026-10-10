@@ -16,5 +16,7 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],
     setupFiles: ['./src/test/setup.ts'],
+    // CI runners are UTC; pin it so a local run in another zone can't hide a host-zone bug.
+    env: { TZ: 'UTC' },
   },
 });

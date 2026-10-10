@@ -93,7 +93,16 @@ flock /tmp/rooster-e2e.lock pnpm --filter @rooster/web exec playwright test e2e/
 
 The projects are `chromium` (desktop), `mobile` (iPhone 15, WebKit) and `mobile-android` (Pixel 8) for `*.mobile.spec.ts`, and `pwa` / `pwa-update` for `*.pwa.spec.ts`, which run against the production build.
 
-**The whole pipeline** is `pnpm run ci` ([`scripts/ci.sh`](scripts/ci.sh)). Note `pnpm run ci`: plain `pnpm ci` is pnpm's own command. It runs, in order: a frozen-lockfile install, lint, typecheck, `pnpm audit --prod --audit-level high` (a high or critical advisory fails), the gitleaks secret scan (`scripts/secret-scan.sh`, using the binary or its container), the i18n check, unit tests with coverage, the API client freshness check, the build, the bundle budget, the CLI smoke test and e2e. `pnpm run ci --with-docker` also builds the image and smoke-tests it (`scripts/docker-smoke.sh`).
+**The whole pipeline** is `pnpm run ci` ([`scripts/ci.sh`](scripts/ci.sh)). Note `pnpm run ci`: plain `pnpm ci` is pnpm's own command. After a frozen-lockfile install it runs four stages, in order:
+
+- `static`: lint, typecheck, `pnpm audit --prod --audit-level high` (a high or critical advisory fails), the gitleaks secret scan (`scripts/secret-scan.sh`, using the binary or its container; it needs the full history and refuses a shallow clone), the i18n check, the keyboard page check and the API client freshness check;
+- `unit`: unit tests with coverage, then the server timing budgets on their own;
+- `build`: the build, the bundle budget and the CLI smoke test;
+- `e2e`: the Playwright suite.
+
+`pnpm run ci unit e2e` runs only the stages you name; GitHub Actions runs each stage as its own parallel job. `pnpm run ci --with-docker` also builds the image, smoke-tests it (`scripts/docker-smoke.sh`) and runs the backup drill.
+
+Every test runs in UTC, as on the CI runners: the vitest projects set `TZ`, and the Playwright config pins the runner, the servers and the browsers. A test that needs another zone passes it explicitly.
 
 ## Conventions
 
