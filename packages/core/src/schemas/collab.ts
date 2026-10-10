@@ -172,6 +172,8 @@ export const NOTIFICATION_TYPES = [
   'completed',
   'due_changed',
   'invite_accepted',
+  /** P10 (FR-REM-3): one of the user's own task reminders fired. */
+  'reminder',
 ] as const;
 export const notificationTypeSchema = z.enum(NOTIFICATION_TYPES);
 
@@ -200,6 +202,10 @@ export const notificationSchema = z.object({
     to: dueSnapshotSchema.optional(),
     /** invite_accepted: the member who joined. */
     userId: idSchema.optional(),
+    /** P10 reminder: the reminder, when it was due to fire, and whether it fired late (FR-REM-3). */
+    reminderId: idSchema.optional(),
+    fireAt: timestampSchema.optional(),
+    late: z.boolean().optional(),
   }),
   readAt: timestampSchema.nullable(),
   createdAt: timestampSchema,

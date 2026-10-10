@@ -95,6 +95,14 @@ catalog:
   '@fontsource-variable/geist-mono': 5.3.0
   '@testing-library/react': 16.3.3
   jsdom: 30.1.2
+  # attachments (P10)
+  sharp: 0.35.5
+  file-type: 22.1.1
+  busboy: 1.6.0
+  '@types/busboy': 1.5.4
+  '@aws-sdk/client-s3': 3.1140.0
+  '@aws-sdk/s3-request-presigner': 3.1140.0
+  ical.js: 2.2.1
   # api client
   openapi-fetch: 0.17.0
   openapi-typescript: 7.13.0
@@ -109,5 +117,6 @@ minimumReleaseAgeExclude:
 
 allowBuilds:
   better-sqlite3: true
+  sharp: true
   esbuild: true
   vue-demi: false

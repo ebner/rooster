@@ -22,7 +22,7 @@ import { useIsMobile } from '../../ui/use-media';
 import { SettingsSection } from './settings-section';
 
 /**
- * The six event rows, in `NOTIFICATION_TYPES` order. Spelled out here because the value lives
+ * The seven event rows, in `NOTIFICATION_TYPES` order. Spelled out here because the value lives
  * in the zod schemas module, which this lazy route would otherwise pull in whole.
  */
 export const notificationTypes = [
@@ -32,6 +32,7 @@ export const notificationTypes = [
   'completed',
   'due_changed',
   'invite_accepted',
+  'reminder',
 ] as const satisfies readonly NotificationType[];
 
 /** The channels this server delivers (`/meta` features); in-app always exists. */

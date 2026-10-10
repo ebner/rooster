@@ -99,6 +99,7 @@ export const UNSUBSCRIBE_CATEGORIES = [
   'completed',
   'due_changed',
   'invite_accepted',
+  'reminder',
   'digest',
 ] as const;
 export const unsubscribeCategorySchema = z.enum(UNSUBSCRIBE_CATEGORIES);

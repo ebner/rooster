@@ -1385,6 +1385,7 @@
             "swipeLeft": "date",
             "swipeRight": "complete",
             "reminderTime": "08:00",
+            "allDayReminderTime": "09:00",
             "digestTime": "07:00",
             "emailMode": "batch"
           },
@@ -1449,6 +1450,9 @@
           "reminderTime": {
             "type": "string"
           },
+          "allDayReminderTime": {
+            "type": "string"
+          },
           "digestTime": {
             "type": "string"
           },
@@ -1466,6 +1470,7 @@
           "swipeLeft",
           "swipeRight",
           "reminderTime",
+          "allDayReminderTime",
           "digestTime",
           "emailMode"
         ],
@@ -1475,6 +1480,7 @@
           "swipeLeft": "date",
           "swipeRight": "complete",
           "reminderTime": "08:00",
+          "allDayReminderTime": "09:00",
           "digestTime": "07:00",
           "emailMode": "batch"
         }
@@ -1643,6 +1649,9 @@
                 ]
               },
               "reminderTime": {
+                "type": "string"
+              },
+              "allDayReminderTime": {
                 "type": "string"
               },
               "digestTime": {
@@ -2668,6 +2677,31 @@
             ],
             "description": "Start of a date range ending at `dueDate`; only with a due date, never after it."
           },
+          "recurrence": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "recurrenceBasis": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "due",
+              "completion",
+              null
+            ]
+          },
+          "nextReminderAt": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
           "completedAt": {
             "type": [
               "integer",
@@ -3101,6 +3135,24 @@
               "null"
             ]
           },
+          "recurrence": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "recurrenceBasis": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "due",
+              "completion",
+              null
+            ]
+          },
           "groupId": {
             "type": "string",
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
@@ -3137,6 +3189,41 @@
             ],
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
             "description": "Default: me (a subtask: its parent’s assignee). Another member gets it at the top of their Inbox; null creates it unassigned."
+          },
+          "reminders": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "offsetMinutes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 40320
+                    }
+                  },
+                  "required": [
+                    "offsetMinutes"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "at": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "at"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "maxItems": 5
           },
           "parse": {
             "type": "boolean",
@@ -3248,6 +3335,24 @@
               "null"
             ]
           },
+          "recurrence": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "recurrenceBasis": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "due",
+              "completion",
+              null
+            ]
+          },
           "parentId": {
             "type": [
               "string",
@@ -3263,6 +3368,47 @@
             ],
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
             "description": "An org member, or null (unassigned). A new assignee gets the task at the top of their Inbox."
+          },
+          "reminders": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "offsetMinutes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 40320
+                    }
+                  },
+                  "required": [
+                    "offsetMinutes"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "at": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "at"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "maxItems": 5
+          },
+          "clearReminders": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
           }
         },
         "example": {
@@ -3373,6 +3519,10 @@
         "properties": {
           "completed": {
             "type": "boolean"
+          },
+          "nextId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
           }
         },
         "required": [
@@ -3695,6 +3845,24 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "recurrence": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "recurrenceBasis": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "due",
+                      "completion",
+                      null
+                    ]
                   }
                 }
               }
@@ -3837,6 +4005,31 @@
               "null"
             ]
           },
+          "recurrence": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "recurrenceBasis": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "due",
+              "completion",
+              null
+            ]
+          },
+          "nextReminderAt": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
           "completedAt": {
             "type": [
               "integer",
@@ -3927,6 +4120,142 @@
             "items": {
               "type": "string",
               "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "taskId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "filename": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                },
+                "mime": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "uploaderId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "image": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "width": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    },
+                    "height": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    },
+                    "thumb": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "width",
+                    "height",
+                    "thumb"
+                  ]
+                },
+                "createdAt": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "id",
+                "taskId",
+                "filename",
+                "mime",
+                "size",
+                "uploaderId",
+                "image",
+                "createdAt"
+              ]
+            }
+          },
+          "reminders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "taskId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "relative",
+                    "absolute"
+                  ]
+                },
+                "offsetMinutes": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 40320
+                },
+                "remindAt": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "fireAt": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "firedAt": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "createdAt": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "id",
+                "taskId",
+                "kind",
+                "offsetMinutes",
+                "remindAt",
+                "fireAt",
+                "firedAt",
+                "createdAt"
+              ]
             }
           }
         },
@@ -4625,6 +4954,31 @@
               "string",
               "null"
             ]
+          },
+          "recurrence": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "recurrenceBasis": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "due",
+              "completion",
+              null
+            ]
+          },
+          "nextReminderAt": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
           },
           "completedAt": {
             "type": [
@@ -5839,7 +6193,8 @@
               "mention",
               "completed",
               "due_changed",
-              "invite_accepted"
+              "invite_accepted",
+              "reminder"
             ]
           },
           "task": {
@@ -5956,6 +6311,17 @@
               "userId": {
                 "type": "string",
                 "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "reminderId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "fireAt": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "late": {
+                "type": "boolean"
               }
             }
           },
@@ -6078,6 +6444,7 @@
                     "completed",
                     "due_changed",
                     "invite_accepted",
+                    "reminder",
                     "digest",
                     "due_reminder"
                   ]
@@ -6142,6 +6509,7 @@
                     "completed",
                     "due_changed",
                     "invite_accepted",
+                    "reminder",
                     "digest",
                     "due_reminder"
                   ]
@@ -6165,7 +6533,7 @@
               ]
             },
             "minItems": 1,
-            "maxItems": 20
+            "maxItems": 23
           }
         },
         "required": [

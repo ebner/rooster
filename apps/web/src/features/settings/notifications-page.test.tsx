@@ -73,7 +73,7 @@ describe('Settings → Notifications', () => {
     expect(screen.queryByText('Due reminder')).toBeNull();
     expect(screen.queryByText('push section')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Timing' })).toBeNull();
-    expect(screen.getAllByRole('switch')).toHaveLength(6);
+    expect(screen.getAllByRole('switch')).toHaveLength(7);
   });
 
   test('a switch reports its type and channel', () => {

@@ -22,6 +22,13 @@ export const user = sqliteTable('user', {
   prefs: text('prefs').notNull().default('{}'),
   /** ms epoch; a disabled user cannot sign in and has no sessions. */
   disabledAt: integer('disabled_at'),
+  /**
+   * P10 (FR-SET-1): set while an uploaded avatar (BlobStore `avatars/<userId>`) is the picture.
+   * `image` then points at `/api/v1/avatars/<userId>?v=<avatar_at>`, and the sign-in provider's
+   * picture waits in `oidc_image` for DELETE /me/avatar.
+   */
+  avatarAt: integer('avatar_at'),
+  oidcImage: text('oidc_image'),
 });
 
 export const session = sqliteTable(

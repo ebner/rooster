@@ -5,12 +5,14 @@
     "profile": "Profile",
     "behaviour": "Behaviour",
     "notifications": "Notifications",
+    "calendar": "Calendar feed",
     "security": "Security",
     "data": "Data",
     "hint": {
       "profile": "Name, language, timezone and date format",
       "behaviour": "Swipe actions on phones",
-      "notifications": "In app, push, email and the daily digest",
+      "notifications": "In app, push, email, task reminders and the daily digest",
+      "calendar": "Your due dates in a calendar app",
       "security": "Signed-in devices, sign-in and connected apps",
       "data": "Export and the trash"
     }
@@ -210,7 +212,8 @@
       "due_changed": "Someone changes the due date of my task",
       "invite_accepted": "Someone accepts my invite",
       "digest": "Daily digest",
-      "due_reminder": "Due reminder"
+      "due_reminder": "Due reminder",
+      "reminder": "Task reminders"
     },
     "push": "Push",
     "email": "Email",

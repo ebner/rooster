@@ -632,7 +632,7 @@ describe('notifications (WP 6.5, FR-NOT-1/4)', () => {
   it('an in-app pref switched off creates nothing when no other channel reaches the user', async () => {
     const { a, b, org, db } = await team();
     const prefs = await b.ok<NotificationPrefs>('GET', '/api/v1/me/notification-prefs');
-    expect(prefs.prefs).toHaveLength(20);
+    expect(prefs.prefs).toHaveLength(23);
     const put = await b.ok<NotificationPrefs>('PUT', '/api/v1/me/notification-prefs', {
       prefs: [{ type: 'assigned', channel: 'inapp', enabled: false }],
     });

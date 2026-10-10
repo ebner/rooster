@@ -51,6 +51,7 @@ import {
   type ShortcutHandlers,
   useKeymapHandlers,
 } from '../../use-keymap';
+import { AttachmentsSection } from '../attachments/attachments-section';
 import { useActivityFilter } from '../collab/activity-filter';
 import { CommentComposer, type CommentComposerHandle } from '../collab/comment-composer';
 import { FollowerStack, FollowToggle } from '../collab/followers';
@@ -803,6 +804,15 @@ function PaneContent({
             onEscapeOut={leavePane}
           />
         </section>
+
+        <AttachmentsSection
+          orgId={orgId}
+          taskId={taskId}
+          userId={userId}
+          assigneeId={task.assigneeId}
+          attachments={detail.data?.attachments}
+          paneRef={bodyRef}
+        />
 
         <section aria-labelledby="pane-activity-heading" className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">

@@ -56,6 +56,8 @@ export interface Services {
   deliveries: TaskQueue;
   /** Domain events, published after commit (04 §4.5). */
   events: EventBus;
+  // P10 services (tasks): recurrence, reminders.
+  // P10 services (files): blobs, attachments, avatars, calendar feeds.
 }
 
 /** Outbound transports; tests inject fakes. */
@@ -117,6 +119,8 @@ export function createServices(
   });
   const search = new SearchService(deps);
   const users = new UserService(deps);
+  // P10 construction (tasks).
+  // P10 construction (files).
   return {
     orgs,
     users,
@@ -150,6 +154,8 @@ export function createServices(
     mail,
     deliveries,
     events: deps.events,
+    // P10 (tasks).
+    // P10 (files).
   };
 }
 

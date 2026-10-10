@@ -24,6 +24,10 @@ export const EX = {
   session: '0199c5a2-93a4-72b5-86c7-3d4e5f6a7b01',
   allowlist: '0199c5a2-a4b5-73c6-97d8-4e5f6a7b8c01',
   push: '0199c5a2-b5c6-74d7-a8e9-5f6a7b8c9d01',
+  reminder: '0199c5a2-c6d7-75e8-b9fa-6a7b8c9d0e01',
+  attachment: '0199c5a2-d7e8-76f9-8a0b-7b8c9d0e1f01',
+  icalFeed: '0199c5a2-e8f9-770a-9b1c-8c9d0e1f2a01',
+  nextTask: '0199c5a1-4e5f-7d60-b172-8d9e0a1b2c04',
 } as const;
 
 /** 2026-10-09T08:00:00Z. */
@@ -59,6 +63,7 @@ export const prefsExample = {
   swipeLeft: 'date',
   swipeRight: 'complete',
   reminderTime: '08:00',
+  allDayReminderTime: '09:00',
   digestTime: '07:00',
   emailMode: 'batch',
 };
@@ -264,7 +269,44 @@ export const searchHitExample = {
 };
 
 /** Every component example, by component name. */
+const reminderExample = {
+  id: EX.reminder,
+  taskId: EX.task,
+  kind: 'relative',
+  offsetMinutes: 60,
+  remindAt: null,
+  fireAt: T + 4 * 3_600_000,
+  firedAt: null,
+  createdAt: T,
+};
+const icalFeedExample = { id: EX.icalFeed, orgId: null, createdAt: T, lastUsedAt: T + DAY };
+
 export const COMPONENT_EXAMPLES: Record<string, unknown> = {
+  // Phase 10.
+  TaskSkip: { nextId: EX.nextTask },
+  TaskSkipResult: {
+    next: { ...taskExample, id: EX.nextTask, seq: 43, dueDate: '2026-10-16' },
+  },
+  Reminder: reminderExample,
+  ReminderCreate: { offsetMinutes: 60 },
+  ReminderList: [reminderExample],
+  Attachment: {
+    id: EX.attachment,
+    taskId: EX.task,
+    filename: 'receipt.png',
+    mime: 'image/png',
+    size: 182_340,
+    uploaderId: EX.user,
+    image: { width: 1200, height: 800, thumb: true },
+    createdAt: T,
+  },
+  IcalFeed: icalFeedExample,
+  IcalFeedCreate: { orgId: null },
+  IcalFeedCreated: {
+    feed: icalFeedExample,
+    url: 'https://rooster.example.com/ical/rcal_8Kx1q0ZpVb3mT2yWc9dLr5nA7fGh4jE6sUo0iQ1zXk.ics',
+  },
+  IcalFeedList: [icalFeedExample],
   Org: orgExample,
   OrgCreate: { name: 'Acme', avatarEmoji: '🚀', color: 'blue' },
   OrgPatch: { name: 'Acme Inc.' },

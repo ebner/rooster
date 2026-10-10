@@ -70,6 +70,12 @@ export interface DateParseResult {
   date: string;
   /** `HH:MM` or null. */
   time: string | null;
+  /**
+   * P10 (FR-REC-2): set when the phrase is a recurrence ("every mon", "varannan vecka"). The
+   * rule is normalised (`normalizeRule`) against `date`, the series' first due date: the first
+   * occurrence on or after today.
+   */
+  recurrence?: { rule: string; basis: 'due' | 'completion' };
 }
 
 export interface TitleDateMatch extends DateParseResult {

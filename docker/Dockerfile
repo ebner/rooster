@@ -31,12 +31,14 @@ COPY . .
 RUN pnpm --filter @rooster/web build \
  && pnpm --filter @rooster/server build
 # Runtime folder: the bundled server (all JS deps inlined by tsdown), the web build, and a
-# node_modules containing only the native modules that cannot be bundled (better-sqlite3).
+# node_modules containing only the native modules that cannot be bundled (better-sqlite3, and
+# sharp with its prebuilt libvips for the target platform).
 RUN mkdir -p /out /out-data \
  && cp -r apps/server/dist /out/dist \
  && cp -r apps/web/dist /out/public \
  && SQLITE_VERSION="$(node -p "require('./apps/server/node_modules/better-sqlite3/package.json').version")" \
- && printf '{"name":"rooster-server","private":true,"type":"module","dependencies":{"better-sqlite3":"%s"}}\n' "$SQLITE_VERSION" > /out/package.json \
+ && SHARP_VERSION="$(node -p "require('./apps/server/node_modules/sharp/package.json').version")" \
+ && printf '{"name":"rooster-server","private":true,"type":"module","dependencies":{"better-sqlite3":"%s","sharp":"%s"}}\n' "$SQLITE_VERSION" "$SHARP_VERSION" > /out/package.json \
  && cd /out && npm install --omit=dev --no-audit --no-fund --no-package-lock \
  && rm -rf /out/node_modules/better-sqlite3/deps /out/node_modules/better-sqlite3/src
 

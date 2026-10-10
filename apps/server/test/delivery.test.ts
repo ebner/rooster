@@ -818,11 +818,11 @@ describe('unsubscribe links', () => {
 });
 
 describe('preference matrix (FR-NOT-4, ADR 0033)', () => {
-  it('GET has all 20 cells with defaults; PUT takes any valid cell and rejects others', async () => {
+  it('GET has all 23 cells with defaults; PUT takes any valid cell and rejects others', async () => {
     const ctx = listCtx();
     const a = ctx.user('a@example.com');
     const matrix = await prefs(a);
-    expect(matrix.prefs).toHaveLength(20);
+    expect(matrix.prefs).toHaveLength(23);
     const on = (type: string, channel: string) =>
       matrix.prefs.find((p) => p.type === type && p.channel === channel)?.enabled;
     expect(on('comment', 'inapp')).toBe(true);

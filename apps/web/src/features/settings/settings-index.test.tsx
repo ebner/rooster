@@ -16,7 +16,9 @@ describe('Settings on phones: the index and a drilled-in section', () => {
       '/settings/data',
     ]);
     expect(within(nav).getAllByRole('listitem')).toHaveLength(5);
-    expect(links[2]?.textContent).toBe('NotificationsIn app, push, email and the daily digest');
+    expect(links[2]?.textContent).toBe(
+      'NotificationsIn app, push, email, task reminders and the daily digest',
+    );
   });
 
   test('a section header has "‹ Settings" back to the index and focuses its title', () => {

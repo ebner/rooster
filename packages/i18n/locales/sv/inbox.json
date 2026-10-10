@@ -26,6 +26,7 @@
     "completed": "slutförde en uppgift du skapade",
     "due_changed": "ändrade förfallodatum för din uppgift till",
     "due_removed": "tog bort förfallodatumet för din uppgift",
-    "invite_accepted": "gick med i {org}"
+    "invite_accepted": "gick med i {org}",
+    "reminder": "Påminnelse"
   }
 }

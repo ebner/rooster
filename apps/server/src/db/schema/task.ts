@@ -59,6 +59,10 @@ export const task = sqliteTable(
       .on(t.orgId, t.dueDate)
       .where(sql`deleted_at IS NULL AND completed_at IS NULL`),
     index('task_trash').on(t.orgId, t.deletedAt).where(sql`deleted_at IS NOT NULL`),
+    // P10: the open instance of a series ("at most one open instance", ADR 0049).
+    index('task_series_open')
+      .on(t.seriesId)
+      .where(sql`series_id IS NOT NULL AND deleted_at IS NULL AND completed_at IS NULL`),
     check('task_title', sql`length(title) BETWEEN 1 AND 500`),
     check(
       'task_recurrence_basis',

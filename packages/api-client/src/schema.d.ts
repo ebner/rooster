@@ -1973,6 +1973,7 @@ export interface components {
          *         "swipeLeft": "date",
          *         "swipeRight": "complete",
          *         "reminderTime": "08:00",
+         *         "allDayReminderTime": "09:00",
          *         "digestTime": "07:00",
          *         "emailMode": "batch"
          *       },
@@ -2027,6 +2028,7 @@ export interface components {
          *       "swipeLeft": "date",
          *       "swipeRight": "complete",
          *       "reminderTime": "08:00",
+         *       "allDayReminderTime": "09:00",
          *       "digestTime": "07:00",
          *       "emailMode": "batch"
          *     }
@@ -2039,6 +2041,7 @@ export interface components {
             /** @enum {string} */
             swipeRight: "complete" | "date" | "move" | "delete" | "none";
             reminderTime: string;
+            allDayReminderTime: string;
             digestTime: string;
             /** @enum {string} */
             emailMode: "immediate" | "batch";
@@ -2105,6 +2108,7 @@ export interface components {
                 /** @enum {string} */
                 swipeRight?: "complete" | "date" | "move" | "delete" | "none";
                 reminderTime?: string;
+                allDayReminderTime?: string;
                 digestTime?: string;
                 /** @enum {string} */
                 emailMode?: "immediate" | "batch";
@@ -2580,6 +2584,10 @@ export interface components {
             dueTz: string | null;
             /** @description Start of a date range ending at `dueDate`; only with a due date, never after it. */
             startDate: string | null;
+            recurrence?: string | null;
+            /** @enum {string|null} */
+            recurrenceBasis?: "due" | "completion" | null;
+            nextReminderAt?: number | null;
             /** @description Null while open. */
             completedAt: number | null;
             /** @description Org tag IDs, in the order they were added. */
@@ -2761,6 +2769,9 @@ export interface components {
             dueTime?: string | null;
             dueTz?: string | null;
             startDate?: string | null;
+            recurrence?: string | null;
+            /** @enum {string|null} */
+            recurrenceBasis?: "due" | "completion" | null;
             /** @description Target group in my list (default: the Inbox). Ignored for subtasks. */
             groupId?: string;
             /** @description Creates a subtask (same org, at most 5 levels). Intents then refer to sibling subtasks. */
@@ -2771,6 +2782,11 @@ export interface components {
             tagNames?: string[];
             /** @description Default: me (a subtask: its parent’s assignee). Another member gets it at the top of their Inbox; null creates it unassigned. */
             assigneeId?: string | null;
+            reminders?: ({
+                offsetMinutes: number;
+            } | {
+                at: number;
+            })[];
             /** @description Run the natural-language parser on the title, in my locale and timezone: a date phrase ("tomorrow", "fri 14:00") and a trailing `>Group` token are taken out of the title. */
             parse?: boolean;
         };
@@ -2828,10 +2844,20 @@ export interface components {
             dueTime?: string | null;
             dueTz?: string | null;
             startDate?: string | null;
+            recurrence?: string | null;
+            /** @enum {string|null} */
+            recurrenceBasis?: "due" | "completion" | null;
             /** @description Re-parent: an ID makes it a subtask (appended to the parent’s subtasks), null makes it top-level (top of the assignee’s Inbox). */
             parentId?: string | null;
             /** @description An org member, or null (unassigned). A new assignee gets the task at the top of their Inbox. */
             assigneeId?: string | null;
+            reminders?: ({
+                offsetMinutes: number;
+            } | {
+                at: number;
+            })[];
+            /** @enum {boolean} */
+            clearReminders?: true;
         };
         /**
          * @example {
@@ -2905,6 +2931,7 @@ export interface components {
          */
         TaskComplete: {
             completed: boolean;
+            nextId?: string;
         };
         /**
          * @description One result per ID, in request order. A failed task carries the problem `code` it would have got on its own (e.g. `not_found`).
@@ -2990,6 +3017,9 @@ export interface components {
                 dueTime?: string | null;
                 dueTz?: string | null;
                 startDate?: string | null;
+                recurrence?: string | null;
+                /** @enum {string|null} */
+                recurrenceBasis?: "due" | "completion" | null;
             };
         } | {
             /** @enum {string} */
@@ -3080,6 +3110,10 @@ export interface components {
             dueTime: string | null;
             dueTz: string | null;
             startDate: string | null;
+            recurrence?: string | null;
+            /** @enum {string|null} */
+            recurrenceBasis?: "due" | "completion" | null;
+            nextReminderAt?: number | null;
             completedAt: number | null;
             tagIds: string[];
             counts: {
@@ -3099,6 +3133,31 @@ export interface components {
                 title: string;
             }[];
             followers: string[];
+            attachments?: {
+                id: string;
+                taskId: string;
+                filename: string;
+                mime: string;
+                size: number;
+                uploaderId: string;
+                image: {
+                    width: number;
+                    height: number;
+                    thumb: boolean;
+                } | null;
+                createdAt: number;
+            }[];
+            reminders?: {
+                id: string;
+                taskId: string;
+                /** @enum {string} */
+                kind: "relative" | "absolute";
+                offsetMinutes: number | null;
+                remindAt: number | null;
+                fireAt: number | null;
+                firedAt: number | null;
+                createdAt: number;
+            }[];
         };
         /**
          * @example {
@@ -3469,6 +3528,10 @@ export interface components {
             dueTime: string | null;
             dueTz: string | null;
             startDate: string | null;
+            recurrence?: string | null;
+            /** @enum {string|null} */
+            recurrenceBasis?: "due" | "completion" | null;
+            nextReminderAt?: number | null;
             completedAt: number | null;
             tagIds: string[];
             counts: {
@@ -3816,7 +3879,7 @@ export interface components {
             orgId: string;
             orgSlug: string;
             /** @enum {string} */
-            type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted";
+            type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted" | "reminder";
             task: {
                 id: string;
                 seq: number | null;
@@ -3839,6 +3902,9 @@ export interface components {
                     dueTime: string | null;
                 } | null;
                 userId?: string;
+                reminderId?: string;
+                fireAt?: number;
+                late?: boolean;
             };
             readAt: number | null;
             createdAt: number;
@@ -3889,7 +3955,7 @@ export interface components {
         NotificationPrefs: {
             prefs: {
                 /** @enum {string} */
-                type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted" | "digest" | "due_reminder";
+                type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted" | "reminder" | "digest" | "due_reminder";
                 /** @enum {string} */
                 channel: "inapp" | "push" | "email";
                 enabled: boolean;
@@ -3909,7 +3975,7 @@ export interface components {
         NotificationPrefsPut: {
             prefs: {
                 /** @enum {string} */
-                type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted" | "digest" | "due_reminder";
+                type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted" | "reminder" | "digest" | "due_reminder";
                 /** @enum {string} */
                 channel: "inapp" | "push" | "email";
                 enabled: boolean;

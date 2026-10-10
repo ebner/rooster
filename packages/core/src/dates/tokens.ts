@@ -180,3 +180,20 @@ export function assigneeTokenAt(
   while (end < text.length && /\S/u.test(text[end] as string)) end += 1;
   return { start, end, query: text.slice(start + 1, end) };
 }
+
+/** P10 (02 §8.1): a reminder token in a title, `!15m`/`!2h`/`!1d`/`!due`. */
+export interface ReminderTokenMatch {
+  start: number;
+  end: number;
+  text: string;
+  /** Minutes before the due moment (0 = `!due`). */
+  offsetMinutes: number;
+}
+
+/**
+ * Reminder tokens at the end of the title (in any order with `#tag`, `>Group`, `@name` and the
+ * date phrase), left to right. A bare `!`, or `!` followed by anything else, is plain text.
+ */
+export function findReminderTokens(_title: string): ReminderTokenMatch[] {
+  return [];
+}

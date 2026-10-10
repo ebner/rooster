@@ -1,5 +1,7 @@
 import svAdmin from '../locales/sv/admin.json' with { type: 'json' };
+import svAttachments from '../locales/sv/attachments.json' with { type: 'json' };
 import svAuth from '../locales/sv/auth.json' with { type: 'json' };
+import svCalendar from '../locales/sv/calendar.json' with { type: 'json' };
 import svCli from '../locales/sv/cli.json' with { type: 'json' };
 import svCollab from '../locales/sv/collab.json' with { type: 'json' };
 import svCommon from '../locales/sv/common.json' with { type: 'json' };
@@ -40,6 +42,8 @@ export const sv = {
   people: svPeople,
   collab: svCollab,
   inbox: svInbox,
+  attachments: svAttachments,
+  calendar: svCalendar,
   mail: svMail,
   cli: svCli,
   tui: svTui,

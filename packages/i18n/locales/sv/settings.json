@@ -5,12 +5,14 @@
     "profile": "Profil",
     "behaviour": "Beteende",
     "notifications": "Aviseringar",
+    "calendar": "Kalenderflöde",
     "security": "Säkerhet",
     "data": "Data",
     "hint": {
       "profile": "Namn, språk, tidszon och datumformat",
       "behaviour": "Svepgester på mobilen",
-      "notifications": "I appen, push, e-post och den dagliga sammanfattningen",
+      "notifications": "I appen, push, e-post, påminnelser och den dagliga sammanfattningen",
+      "calendar": "Dina förfallodatum i en kalenderapp",
       "security": "Inloggade enheter, inloggning och anslutna appar",
       "data": "Export och papperskorgen"
     }
@@ -210,7 +212,8 @@
       "due_changed": "Någon ändrar förfallodatum för min uppgift",
       "invite_accepted": "Någon tackar ja till min inbjudan",
       "digest": "Daglig sammanfattning",
-      "due_reminder": "Påminnelse om dagens uppgifter"
+      "due_reminder": "Påminnelse om dagens uppgifter",
+      "reminder": "Påminnelser om uppgifter"
     },
     "push": "Push",
     "email": "E-post",

@@ -33,6 +33,8 @@ export function registerJobs(scheduler: Scheduler, deps: JobDeps): void {
   scheduler.register('email-batch', '*/5 * * * *', async () => {
     await services.mail.runBatches();
   });
+  // P10 jobs (tasks): task reminders.
+  // P10 jobs (files): blob GC.
   const cron = config?.backup.cron ?? null;
   if (cron !== null) {
     scheduler.register('backup', cron, () => {

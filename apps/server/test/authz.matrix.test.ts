@@ -146,6 +146,8 @@ interface Fixture {
   oauthQuery: string;
   /** One of the owner's two linked sign-in identities. */
   identityId: string;
+  // P10 fixtures (tasks): reminders.
+  // P10 fixtures (files): attachments, avatars, calendar feeds.
   jars: Record<CookieActor, CookieJar>;
   sessions: Record<CookieActor, string>;
   /** Bearer credentials of the token actors. */
@@ -626,6 +628,8 @@ const ROWS: Record<string, Row> = {
     request: (f) => ({ path: `/api/v1/tasks/resolve?ref=${f.taskId}` }),
     expect: { ...orgScoped(200, 200), ...grants(200, 200, 404, 200) },
   },
+  // Phase 10 rows (tasks): skip, reminders.
+  // Phase 10 rows (files): attachments, avatars, calendar feeds.
 };
 
 const dataDirs: (() => void)[] = [];
@@ -838,6 +842,10 @@ async function fixture(): Promise<Fixture> {
   identity('google');
   const identityId = identity('dev');
 
+  // P10 setup (tasks): reminders.
+
+  // P10 setup (files): attachments, avatars, calendar feeds.
+
   // A disabled user whose session somehow survived must still be rejected.
   db.orm.update(user).set({ disabledAt: Date.now() }).where(eq(user.id, disabled.userId)).run();
   const disabledJar = new CookieJar();
@@ -872,6 +880,8 @@ async function fixture(): Promise<Fixture> {
     userCode,
     oauthQuery: consentPage.search.slice(1),
     identityId,
+    // P10 fixtures (tasks).
+    // P10 fixtures (files).
     tokens: {
       readOnlyPat: readOnlyPat.token,
       writeInGroupPat: writeInGroupPat.token,

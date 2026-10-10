@@ -90,8 +90,11 @@ describe('migrations', () => {
       'access_grant',
       'activity',
       'allowlist_entry',
+      'attachment',
+      'blob_gc',
       'comment',
       'follower',
+      'ical_feed',
       'idempotency',
       'instance_setting',
       'invitation',
@@ -108,6 +111,7 @@ describe('migrations', () => {
       'task',
       'task_expansion',
       'task_group',
+      'task_reminder',
       'task_tag',
     ]);
     expect(tables.map((t) => t.name)).toEqual(

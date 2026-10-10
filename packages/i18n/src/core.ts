@@ -40,6 +40,8 @@ export const namespaces = [
   'mail',
   'cli',
   'tui',
+  'attachments',
+  'calendar',
 ] as const;
 export type Namespace = (typeof namespaces)[number];
 export const defaultNamespace: Namespace = 'common';

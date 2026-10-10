@@ -12,7 +12,10 @@ import { nameSchema } from './text.ts';
  * only `afterId` null with a `beforeId` = top.
  */
 
-import { BULK_MAX, GROUP_NAME_MAX, TASK_TITLE_MAX } from '../limits.ts';
+import { BULK_MAX, GROUP_NAME_MAX, RECURRENCE_RULE_MAX, TASK_TITLE_MAX } from '../limits.ts';
+import { isValidRule } from '../recurrence.ts';
+import { attachmentSchema } from './attachments.ts';
+import { REMINDERS_MAX, reminderSchema, reminderSpecSchema } from './reminders.ts';
 
 export { BULK_MAX, GROUP_NAME_MAX, SUBTASK_DEPTH_MAX, TASK_TITLE_MAX } from '../limits.ts';
 
@@ -24,6 +27,17 @@ export const descriptionSchema = z.string().max(100_000);
 export const timezoneNameSchema = z.string().min(1).max(64);
 /** Fractional-index key (04 §7). Opaque to clients except for ordering. */
 export const positionSchema = z.string().min(1).max(256);
+
+/**
+ * P10 (05 §6): an RRULE subset without the `RRULE:` prefix, e.g. `FREQ=WEEKLY;BYDAY=MO`. The
+ * server stores it normalised (`normalizeRule`), so a read may differ from what was sent.
+ */
+export const recurrenceRuleSchema = z
+  .string()
+  .max(RECURRENCE_RULE_MAX)
+  .refine(isValidRule, { error: 'Expected an RRULE subset such as FREQ=WEEKLY;BYDAY=MO' });
+/** `due`: the next date follows the rule; `completion`: it counts from the completion date. */
+export const recurrenceBasisSchema = z.enum(['due', 'completion']);
 
 export const orderingIntentSchema = z.object({
   afterId: idSchema.nullable().optional(),
@@ -114,6 +128,18 @@ export const taskSchema = z.object({
   dueTz: timezoneNameSchema.nullable(),
   /** P3. Part of the due unit; only set together with a due date, and ≤ dueDate. */
   startDate: isoDateSchema.nullable(),
+  /**
+   * P10 (FR-REC). Part of the due unit; only set together with a due date. Always present in
+   * server responses; optional so that caches persisted by older clients still parse.
+   */
+  recurrence: recurrenceRuleSchema.nullable().optional(),
+  /** P10. Non-null exactly when `recurrence` is. */
+  recurrenceBasis: recurrenceBasisSchema.nullable().optional(),
+  /**
+   * P10 (FR-REM-4): the requesting user's next pending reminder (ms epoch), the row's bell.
+   * Null when they have none, or only fired or dormant ones. Optional like `recurrence`.
+   */
+  nextReminderAt: timestampSchema.nullable().optional(),
   completedAt: timestampSchema.nullable(),
   /** P3. Tag ids (org tags); order = the order they were added. */
   tagIds: z.array(idSchema),
@@ -146,6 +172,13 @@ const dueFields = {
   dueTime: timeSchema.nullable().optional(),
   dueTz: timezoneNameSchema.nullable().optional(),
   startDate: isoDateSchema.nullable().optional(),
+  /**
+   * P10. Unlike the other members, absent recurrence fields are KEPT when the due unit is
+   * replaced; clearing the due date (`dueDate: null`) clears them too (FR-REC-4). `recurrence`
+   * without `recurrenceBasis` means basis `due`; `recurrence: null` stops the series.
+   */
+  recurrence: recurrenceRuleSchema.nullable().optional(),
+  recurrenceBasis: recurrenceBasisSchema.nullable().optional(),
 };
 
 function dueConsistent(v: {
@@ -153,14 +186,21 @@ function dueConsistent(v: {
   dueTime?: string | null | undefined;
   dueTz?: string | null | undefined;
   startDate?: string | null | undefined;
+  recurrence?: string | null | undefined;
+  recurrenceBasis?: string | null | undefined;
 }): boolean {
   // A time needs a date and a timezone.
   if (v.dueTime && !(v.dueDate && v.dueTz)) return false;
+  // A series needs a due date; one cleared in the same request cannot get a rule.
+  if (v.recurrence && v.dueDate === null) return false;
+  // A basis without a rule is meaningless, unless the rule is being cleared with it.
+  if (v.recurrenceBasis && v.recurrence === null) return false;
   // A start date needs a due date and must not be after it (ISO strings compare correctly).
   if (v.startDate) return Boolean(v.dueDate) && v.startDate <= (v.dueDate as string);
   return true;
 }
-const DUE_ERROR = 'dueTime requires dueDate and dueTz; startDate requires dueDate and must be ≤ it';
+const DUE_ERROR =
+  'dueTime requires dueDate and dueTz; startDate requires dueDate and must be ≤ it; recurrence requires dueDate';
 
 export const taskCreateSchema = orderingIntentSchema
   .extend({
@@ -185,7 +225,12 @@ export const taskCreateSchema = orderingIntentSchema
      * it unassigned (no placement). Personal orgs accept only the actor.
      */
     assigneeId: idSchema.nullable().optional(),
-    /** CLI/MCP: run the NL parser on the title server-side (06 §2.4). */
+    /** P10 (FR-REM): the actor's reminders; relative ones need a due date (`422 reminder_needs_due`). */
+    reminders: z.array(reminderSpecSchema).max(REMINDERS_MAX).optional(),
+    /**
+     * CLI/MCP: run the NL parser on the title server-side (06 §2.4). P10: it also reads a
+     * recurrence phrase ("every mon") and reminder tokens (`!1h`).
+     */
     parse: z.boolean().optional(),
   })
   .refine(dueConsistent, { error: DUE_ERROR, path: ['dueTime'] });
@@ -209,6 +254,13 @@ export const taskPatchSchema = z
      * assignee moves the placement to the top of the new assignee's Inbox (05 §4.1).
      */
     assigneeId: idSchema.nullable().optional(),
+    /**
+     * P10 (FR-REM). Not LWW fields: they act on the actor's own reminders after the patch is
+     * applied. `clearReminders` removes them all first; `reminders` then adds these (an
+     * existing identical reminder is kept, not duplicated).
+     */
+    reminders: z.array(reminderSpecSchema).max(REMINDERS_MAX).optional(),
+    clearReminders: z.literal(true).optional(),
   })
   .refine(dueConsistent, { error: DUE_ERROR, path: ['dueTime'] })
   .refine((v) => Object.values(v).some((x) => x !== undefined), { error: 'Nothing to update' });
@@ -222,11 +274,30 @@ export const taskPatchResultSchema = z.object({
 export const taskMoveSchema = orderingIntentSchema.extend({ groupId: idSchema });
 export const taskMoveResultSchema = z.object({ placement: placementSchema });
 
-export const taskCompleteSchema = z.object({ completed: z.boolean() });
+export const taskCompleteSchema = z.object({
+  completed: z.boolean(),
+  /**
+   * P10 (FR-REC-3): the id for the next instance when completing a recurring task, so that an
+   * optimistic client (and its undo) can refer to it before the response. Ignored otherwise.
+   * A series has at most one open instance: completing again after a reopen creates none.
+   */
+  nextId: idSchema.optional(),
+});
 export const taskCompleteResultSchema = z.object({
   task: taskSchema,
   /** The next recurring instance (P10). */
   next: taskSchema.optional(),
+});
+
+/**
+ * P10 (FR-REC-4) POST /tasks/:id/skip: "delete this occurrence". The task goes to Trash like a
+ * delete, and the series continues with the next instance (as if it had been completed today).
+ * A plain DELETE is "this and following": it ends the series.
+ */
+export const taskSkipSchema = z.object({ nextId: idSchema.optional() });
+export const taskSkipResultSchema = z.object({
+  /** Null when the series ended with this occurrence (COUNT/UNTIL) or the task does not repeat. */
+  next: taskSchema.nullable(),
 });
 
 const bulkIds = z.array(idSchema).min(1).max(BULK_MAX);
@@ -270,6 +341,10 @@ export const taskDetailSchema = taskSchema.extend({
   parentChain: z.array(z.object({ id: idSchema, title: z.string() })),
   /** P6. Active (unmuted) followers, in follow order (FR-COL-4). Empty in personal orgs. */
   followers: z.array(idSchema),
+  /** P10. Live attachments, oldest first. Optional for caches persisted by older clients. */
+  attachments: z.array(attachmentSchema).optional(),
+  /** P10. The requesting user's reminders (pending, fired and dormant), by `fireAt`. */
+  reminders: z.array(reminderSchema).optional(),
 });
 
 /** P3. POST /tasks/:id/reorder — among subtask siblings. */
@@ -305,6 +380,9 @@ export type TaskPatchResult = z.infer<typeof taskPatchResultSchema>;
 export type TaskMove = z.infer<typeof taskMoveSchema>;
 export type TaskMoveResult = z.infer<typeof taskMoveResultSchema>;
 export type TaskComplete = z.infer<typeof taskCompleteSchema>;
+export type TaskSkip = z.infer<typeof taskSkipSchema>;
+export type TaskSkipResult = z.infer<typeof taskSkipResultSchema>;
+export type RecurrenceBasisValue = z.infer<typeof recurrenceBasisSchema>;
 export type TaskCompleteResult = z.infer<typeof taskCompleteResultSchema>;
 export type BulkOp = z.infer<typeof bulkOpSchema>;
 export type BulkResult = z.infer<typeof bulkResultSchema>;

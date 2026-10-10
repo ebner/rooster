@@ -8,7 +8,7 @@ import { notificationPrefSchema } from '../src/schemas/collab.ts';
 
 describe('notification preference matrix (FR-NOT-4, ADR 0033)', () => {
   it('has every event on every channel, the digest by email and the reminder by push', () => {
-    expect(NOTIFICATION_PREF_CELLS).toHaveLength(6 * 3 + 2);
+    expect(NOTIFICATION_PREF_CELLS).toHaveLength(7 * 3 + 2);
     expect(isPrefCell('digest', 'email')).toBe(true);
     expect(isPrefCell('digest', 'push')).toBe(false);
     expect(isPrefCell('due_reminder', 'push')).toBe(true);

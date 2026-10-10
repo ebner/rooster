@@ -42,6 +42,11 @@ export const prefsSchema = z.object({
   swipeLeft: swipeActionSchema,
   swipeRight: swipeActionSchema,
   reminderTime: timeSchema,
+  /**
+   * P10 (FR-REM-2): the due moment of an all-day task, for its reminders. Changing it (or the
+   * timezone) re-resolves the user's pending relative reminders.
+   */
+  allDayReminderTime: timeSchema,
   digestTime: timeSchema,
   /** P7 (FR-NOT-3): notification emails at once, or batched every 15 minutes. */
   emailMode: z.enum(['immediate', 'batch']),

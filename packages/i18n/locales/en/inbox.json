@@ -26,6 +26,7 @@
     "completed": "completed a task you created",
     "due_changed": "changed the due date of your task to",
     "due_removed": "removed the due date of your task",
-    "invite_accepted": "joined {org}"
+    "invite_accepted": "joined {org}",
+    "reminder": "Reminder"
   }
 }

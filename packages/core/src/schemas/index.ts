@@ -1,4 +1,5 @@
 export * from './admin.ts';
+export * from './attachments.ts';
 export * from './backup.ts';
 export * from './collab.ts';
 export * from './common.ts';
@@ -6,8 +7,10 @@ export * from './delivery.ts';
 export * from './events.ts';
 export * from './export.ts';
 export * from './grants.ts';
+export * from './ical.ts';
 export * from './list.ts';
 export * from './org.ts';
+export * from './reminders.ts';
 export * from './search.ts';
 export * from './tags.ts';
 export * from './task-query.ts';

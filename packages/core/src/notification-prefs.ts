@@ -11,6 +11,8 @@ export const NOTIFICATION_EVENT_TYPES = [
   'completed',
   'due_changed',
   'invite_accepted',
+  /** P10 (FR-REM-3): "Task reminders". The one type sent for the user's own actions. */
+  'reminder',
 ] as const;
 export type NotificationEventType = (typeof NOTIFICATION_EVENT_TYPES)[number];
 

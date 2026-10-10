@@ -12,7 +12,7 @@ const scalarBundle = join(
 // Native modules cannot be bundled; they are installed into the runtime image separately
 // (see docker/Dockerfile). Everything else — including the TypeScript-source workspace
 // packages — is inlined so the image needs no node_modules beyond these.
-export const NATIVE_DEPS = ['better-sqlite3'];
+export const NATIVE_DEPS = ['better-sqlite3', 'sharp'];
 
 // `@react-email/render` imports prettier for its `pretty` option, which is never used
 // (src/mail/render.ts); a throwing stub keeps prettier out of the bundle.
