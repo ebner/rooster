@@ -100,7 +100,7 @@ export function ChipGroup({ label, items, onRemove, className }: ChipGroupProps)
                   <AriaButton
                     slot="remove"
                     aria-label={t('tag.remove', { name: item.name })}
-                    className="inline-flex size-4 items-center justify-center rounded-2xs opacity-0 transition-opacity duration-(--dur-fade) group-hover:opacity-100 group-focus-ring:opacity-100 focus-ring:opacity-100 hover:bg-bg-app/50"
+                    className="inline-flex size-4 items-center justify-center rounded-2xs opacity-0 transition-opacity duration-(--dur-fade) group-hover:opacity-100 group-focus-ring:opacity-100 focus-ring:opacity-100 pointer-coarse:opacity-100 hover:bg-bg-app/50"
                   >
                     <X className="size-3" strokeWidth={iconStrokeWidth} aria-hidden />
                   </AriaButton>

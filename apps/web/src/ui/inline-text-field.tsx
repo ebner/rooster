@@ -79,7 +79,7 @@ export function InlineTextField({
         <span className="truncate">{value}</span>
         {!isDisabled && (
           <Pencil
-            className="size-4 shrink-0 text-icon-subtle opacity-0 transition-opacity duration-(--dur-fade) group-hover:opacity-100 group-focus-ring:opacity-100"
+            className="size-4 shrink-0 text-icon-subtle opacity-0 transition-opacity duration-(--dur-fade) group-hover:opacity-100 group-focus-ring:opacity-100 pointer-coarse:opacity-100"
             strokeWidth={iconStrokeWidth}
             aria-hidden
           />

@@ -160,6 +160,8 @@ export function DateCell({
               strokeWidth={iconStrokeWidth}
               className={cn(
                 'size-4 opacity-0 transition-opacity duration-(--dur-fast) ease-standard',
+                // Touch has no hover to reveal it, so a phone always shows where a date goes.
+                'pointer-coarse:opacity-60',
                 'group-hover/row:opacity-60 group-focus-within/row:opacity-60',
                 'group-hover/cell:opacity-60 group-focus-visible/cell:opacity-60',
                 'group-data-[force~=focus]/cell:opacity-60',

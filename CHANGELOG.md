@@ -7,6 +7,7 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 ## [Unreleased]
 
 ### Changed
+- On phones and tablets, rows without a due date show a faint calendar where the date goes, and tag chips show their remove button.
 - Pull to refresh on phones shows its spinner for at least half a second, so a quick refresh is visible.
 
 ## [1.5.1] - 2026-10-11
