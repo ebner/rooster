@@ -52,7 +52,7 @@ export const markSmallTransform = 'translate(-4.5 -2.5) scale(1.13)';
 export const markSmallBelow = 24;
 
 /** Translation that centres the drawing optically in a square (app icons, tiles). */
-export const markCentre = 'translate(-4 -1.2)';
+export const markCentre = 'translate(-3.4 -1.8)';
 
 /** The same horizontal shift as a share of the mark's size (the stacked logo). */
 export const markOpticalShift = 4 / 48;

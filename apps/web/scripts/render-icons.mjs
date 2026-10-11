@@ -90,7 +90,9 @@ write(
 const icons = [
   { file: 'icon-192.png', size: 192, rounded: true, mark: 0.66 },
   { file: 'icon-512.png', size: 512, rounded: true, mark: 0.66 },
-  { file: 'maskable-512.png', size: 512, rounded: false, mark: 0.56 },
+  // Android masks to a circle (or squircle) inside the image: at 0.68 the farthest point of the
+  // drawing is at 0.35 of the size from the centre, inside the 0.4 safe zone.
+  { file: 'maskable-512.png', size: 512, rounded: false, mark: 0.68 },
   { file: 'apple-touch-icon-180.png', size: 180, rounded: false, mark: 0.66 },
 ];
 

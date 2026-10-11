@@ -115,7 +115,7 @@ export function MobileHeader({
       ) : (
         <div className="flex h-sheet-header items-center gap-1 ps-2 pe-1">
           {/* 03 §2.10: the mark heads every phone screen; the title or org switcher names it. */}
-          <LogoMark className="mx-1" />
+          <LogoMark size={28} className="mx-1" />
           {org ? (
             <>
               <h1 className="sr-only">{context ? `${title} · ${context}` : title}</h1>

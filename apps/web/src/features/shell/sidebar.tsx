@@ -141,7 +141,7 @@ export function Sidebar({
           rail ? 'justify-center' : 'justify-between ps-5 pe-3',
         )}
       >
-        {rail ? <LogoMark size={28} label={t('app.name', { ns: 'common' })} /> : <Logo size={28} />}
+        {rail ? <LogoMark size={32} label={t('app.name', { ns: 'common' })} /> : <Logo size={32} />}
         {!rail && onToggleCollapsed && !inDrawer && (
           <IconButton
             icon={PanelLeftClose}
