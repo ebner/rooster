@@ -3,25 +3,29 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
+// The screenshot tools write what the guide reads: test the pair together.
+import { writeShotMeta } from '../../../../../scripts/docs/png-meta.mjs';
 import {
   buildGuide,
   checkAnchors,
   guideImage,
   guidePlugin,
   headingId,
-  pngSize,
+  pngInfo,
   type RenderContext,
   renderGuideMarkdown,
 } from './guide-build';
 
-/** A 1×1 PNG header with a 640×300 IHDR (enough for `pngSize`). */
+/** A PNG's signature and IHDR with the given size, then IEND (enough for `pngInfo`). */
 function png(width: number, height: number): Buffer {
-  const bytes = Buffer.alloc(33);
+  const bytes = Buffer.alloc(45);
   Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes, 0);
   bytes.writeUInt32BE(13, 8);
   bytes.write('IHDR', 12, 'ascii');
   bytes.writeUInt32BE(width, 16);
   bytes.writeUInt32BE(height, 20);
+  bytes.writeUInt32BE(0, 33);
+  bytes.write('IEND', 37, 'ascii');
   return bytes;
 }
 
@@ -109,6 +113,36 @@ describe('the guide build (ADR 0052 §2)', () => {
     );
     expect(html).toMatch(
       /<img src="\/assets\/guide\/today-desktop-light-[0-9a-f]{10}\.png" alt="Today" width="640" height="300" loading="lazy" decoding="async">/,
+    );
+  });
+
+  test('a screenshot shows at its real size, a crop at the scale of its whole window', () => {
+    const { root, guideDir } = fixtureRepo();
+    const shots = join(root, 'docs/screenshots');
+    writeFileSync(
+      join(shots, 'a.phone.light.png'),
+      writeShotMeta(png(786, 1318), { scale: 2, viewport: 393 }),
+    );
+    writeFileSync(
+      join(shots, 'b.desktop.light.png'),
+      writeShotMeta(png(2880, 1800), { scale: 2, viewport: 1440 }),
+    );
+    writeFileSync(
+      join(shots, 'c.desktop.light.png'),
+      writeShotMeta(png(2272, 2198), { scale: 2, viewport: 1440 }),
+    );
+    const md = ['a.phone', 'b.desktop', 'c.desktop']
+      .map((n) => `![${n}](../../screenshots/${n}.light.png)`)
+      .join('\n\n');
+    const { html } = renderGuideMarkdown(md, context(root, guideDir));
+    expect(html).toContain(
+      'alt="a.phone" width="393" height="659" style="width: min(100%, 24.56rem)"',
+    );
+    expect(html).toContain(
+      'alt="b.desktop" width="1440" height="900" style="width: min(100%, 90rem)"',
+    );
+    expect(html).toContain(
+      'alt="c.desktop" width="1136" height="1099" style="width: min(78.9%, 71rem)"',
     );
   });
 
@@ -249,7 +283,13 @@ describe('the guide build (ADR 0052 §2)', () => {
 
   test('helpers: heading anchors keep Swedish letters, PNG sizes need a PNG', () => {
     expect(headingId('Återkommande uppgifter', new Map())).toBe('återkommande-uppgifter');
-    expect(pngSize(png(1440, 900))).toEqual({ width: 1440, height: 900 });
-    expect(pngSize(new Uint8Array(40))).toBeNull();
+    expect(pngInfo(png(1440, 900))).toEqual({ width: 1440, height: 900, scale: 1, viewport: null });
+    expect(pngInfo(writeShotMeta(png(786, 1318), { scale: 2, viewport: 393 }))).toEqual({
+      width: 786,
+      height: 1318,
+      scale: 2,
+      viewport: 393,
+    });
+    expect(pngInfo(new Uint8Array(40))).toBeNull();
   });
 });

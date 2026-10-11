@@ -101,12 +101,65 @@ export function headingId(text: string, used: Map<string, number>): string {
   return count === 0 ? base : `${base}-${count}`;
 }
 
-/** Width and height of a PNG (IHDR) so the page doesn't jump while an image loads. */
-export function pngSize(bytes: Uint8Array): { width: number; height: number } | null {
+export interface PngInfo {
+  width: number;
+  height: number;
+  /** Device pixels per CSS pixel (pHYs; 2 for a 2× screenshot), 1 when not recorded. */
+  scale: number;
+  /** The window width (CSS px) a screenshot was taken in, when recorded: below it, a crop. */
+  viewport: number | null;
+}
+
+/** Pixels per metre at 72 dpi, the PNG convention for 1×. */
+const PPM_1X = 72 / 0.0254;
+const VIEWPORT_KEY = 'rooster:viewport\0';
+
+/**
+ * A PNG's size, and what scripts/docs/png-meta.mjs recorded in it, so the page doesn't jump
+ * while an image loads and each screenshot shows at its real size.
+ */
+export function pngInfo(bytes: Uint8Array): PngInfo | null {
   const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
   if (bytes.length < 24 || signature.some((b, i) => bytes[i] !== b)) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  return { width: view.getUint32(16), height: view.getUint32(20) };
+  const latin1 = (from: number, to: number) => String.fromCharCode(...bytes.subarray(from, to));
+  const info: PngInfo = {
+    width: view.getUint32(16),
+    height: view.getUint32(20),
+    scale: 1,
+    viewport: null,
+  };
+  for (let at = 8; at + 12 <= bytes.length; ) {
+    const length = view.getUint32(at);
+    const type = latin1(at + 4, at + 8);
+    const data = at + 8;
+    if (type === 'IDAT' || data + length > bytes.length) break;
+    if (type === 'pHYs' && length === 9 && bytes[data + 8] === 1) {
+      info.scale = Math.max(1, Math.round((view.getUint32(data) / PPM_1X) * 100) / 100);
+    } else if (type === 'tEXt' && latin1(data, data + VIEWPORT_KEY.length) === VIEWPORT_KEY) {
+      const viewport = Number(latin1(data + VIEWPORT_KEY.length, data + length));
+      if (Number.isFinite(viewport) && viewport > 0) info.viewport = viewport;
+    }
+    at = data + length + 4;
+  }
+  return info;
+}
+
+/**
+ * An image's size attributes and, for a screenshot, its displayed width: its real size in
+ * rem (the UI scale applies, ADR 0027), never wider than the column, and a crop at the scale a
+ * whole screen of that window would have, so a page's pictures share one zoom level.
+ */
+function imageSize(info: PngInfo | null): string {
+  if (!info) return '';
+  const width = Math.round(info.width / info.scale);
+  const height = Math.round(info.height / info.scale);
+  const dims = ` width="${width}" height="${height}"`;
+  if (info.scale === 1 && info.viewport === null) return dims;
+  const share = info.viewport ? Math.min(1, width / info.viewport) : 1;
+  const percent = Math.round(share * 1000) / 10;
+  const rem = Math.round((width / 16) * 100) / 100;
+  return `${dims} style="width: min(${percent}%, ${rem}rem)"`;
 }
 
 const unsafeHtml = /<\s*(script|iframe|object|embed|form|style)\b|\son[a-z]+\s*=|javascript:/i;
@@ -193,8 +246,8 @@ export function renderGuideMarkdown(markdown: string, ctx: RenderContext): Rende
           return alt;
         }
         const image = ctx.image(file);
-        const size = file.toLowerCase().endsWith('.png') ? pngSize(readFileSync(file)) : null;
-        const dims = size ? ` width="${size.width}" height="${size.height}"` : '';
+        const info = file.toLowerCase().endsWith('.png') ? pngInfo(readFileSync(file)) : null;
+        const dims = imageSize(info);
         const titleAttr = imageTitle ? ` title="${escapeHtml(imageTitle)}"` : '';
         return `<img src="${escapeHtml(image.url)}" alt="${alt}"${dims}${titleAttr} loading="lazy" decoding="async">`;
       },

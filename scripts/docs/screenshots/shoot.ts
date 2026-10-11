@@ -1,8 +1,9 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Page, TestInfo } from '@playwright/test';
 import { signInAs } from '../../../apps/web/e2e/support/auth';
 import { test as base, expect } from '../../../apps/web/e2e/support/test';
+import { writeShotMeta } from '../png-meta.mjs';
 import { type DemoState, loadState } from './demo-api';
 import { DEMO } from './demo-env';
 
@@ -149,6 +150,10 @@ export async function shot(
     ...(options.fullPage ? { fullPage: true } : {}),
   });
   await style.evaluate((el) => el.remove());
+  // The guide shows each picture at its real size, and a crop at the scale of a whole screen.
+  const scale = testInfo.project.use.deviceScaleFactor ?? 1;
+  const viewport = page.viewportSize()?.width ?? 0;
+  writeFileSync(path, writeShotMeta(readFileSync(path), { scale, viewport }));
   console.log(`  ✓ ${name}.${form}.${theme}`);
 }
 

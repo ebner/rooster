@@ -172,6 +172,19 @@
     background-color: var(--color-bg-subtle);
   }
 
+  /* Pictures written next to each other in the Markdown (one paragraph) sit side by side. */
+  .guide-prose p:has(> img + img) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--space-4);
+  }
+
+  .guide-prose p:has(> img + img) > img {
+    min-width: 0;
+    max-width: calc(50% - var(--space-2));
+  }
+
   /* Wide tables scroll inside their frame, never the page (phones). */
   .guide-prose .guide-table {
     overflow-x: auto;

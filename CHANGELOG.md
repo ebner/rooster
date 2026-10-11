@@ -6,6 +6,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Fixed
+- Screenshots in the guide show at their real size: phone screens are no longer blown up to the full column, and a cropped picture has the same zoom as the full-screen ones beside it. On wide screens the two phone-layout pictures sit side by side.
+
 ## [1.5.2] - 2026-10-11
 
 ### Added
