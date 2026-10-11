@@ -6,8 +6,13 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-10-11
+
 ### Changed
 - The Android app icon shows the rooster larger and centred. The logo is a bit bigger in the sidebar and the phone header.
+
+### Migrations
+- None.
 
 ## [1.5.0] - 2026-10-10
 
