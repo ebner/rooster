@@ -126,7 +126,7 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
 - `packages/tokens`: Coop tokens. `src/tokens.css` and `src/index.ts` must agree. A contrast test guards every allowed pair.
 - `docker/`: `Dockerfile` (distroless, nonroot) and `proxy/` snippets. `compose.yaml` sits at the root.
 - `scripts/`:
-  - `ci.sh` (the whole pipeline, in stages `static`, `unit`, `build`, `e2e`; `.github/workflows/ci.yml` runs one job per stage over the `.github/actions/setup` composite action), `docker-smoke.sh`, `i18n-check.mjs`, `bundle-budget.mjs`, and `dev-idp.mjs` (a mock OIDC provider for local dev and tests).
+  - `ci.sh` (the whole pipeline, in stages `static`, `unit`, `build`, `e2e`; `.github/workflows/ci.yml` runs one job per stage over the `.github/actions/setup` composite action), `release.sh` (cuts a release locally: refuses a stale migration fixture, missing notes or an unlisted migration before bumping, then runs the pipeline; push main, wait for CI, then push the tag), `docker-smoke.sh`, `i18n-check.mjs`, `bundle-budget.mjs`, and `dev-idp.mjs` (a mock OIDC provider for local dev and tests).
   - P11:
     - `secret-scan.sh`: gitleaks over the history. Reviewed fixtures are pinned in `.gitleaksignore`.
     - `backup-drill.sh <image>`: backup, restore and verify, including an upload.
@@ -159,6 +159,7 @@ pnpm db:generate               # drizzle-kit generate + STRICT post-processing
 pnpm run ci                    # full pipeline (scripts/ci.sh; plain `pnpm ci` is pnpm's own command); `--with-docker` adds image build, smoke and backup drill
 pnpm run ci unit e2e           # only the named stages (static | unit | build | e2e | e2e-perf); CI runs each as a parallel job
 ROOSTER_E2E_SHARD=1/3 pnpm run ci e2e   # one e2e shard without the timing budgets; `pnpm run ci e2e-perf` runs those alone (CI: 3 shards + e2e-perf)
+pnpm release X.Y.Z [--check]  # write the CHANGELOG [Unreleased] notes and the AGENTS.md "Latest release" line first; preflight, bump, the whole pipeline with the image and no e2e retries, then a local commit and tag (never pushes)
 node apps/web/scripts/render-icons.mjs   # regenerate favicon, logo SVGs and app icons from src/ui/brand.ts
 pnpm docs:keyboard [--check]   # regenerate (or check) docs/guide/{en,sv}/keyboard.md from keymap.ts
 pnpm docs:screenshots          # seed the demo team and capture docs/screenshots (uses the e2e ports and lock; DOCS_SHOTS=a,b limits the shots)
