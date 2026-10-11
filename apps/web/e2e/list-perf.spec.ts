@@ -17,6 +17,11 @@ function rows(page: Page) {
   return page.getByTestId('task-row');
 }
 
+/** By exact title: a parent's text runs into its subtask count ("Task 20" + "0/5"). */
+function rowTitled(page: Page, title: string) {
+  return rows(page).filter({ has: page.getByText(title, { exact: true }) });
+}
+
 test('AC-2.12 with 500 tasks and 100 subtasks, keypress to paint for create, complete and move stays under 50 ms (p95)', async ({
   page,
 }) => {
@@ -34,18 +39,29 @@ test('AC-2.12 with 500 tasks and 100 subtasks, keypress to paint for create, com
   // Seed 500 tasks through the API (under the 600/min rate limit).
   await page.evaluate(
     async ({ orgId: org, groupId }) => {
+      // A create that fails (a busy CI runner, a 429) is retried, so the counts below hold.
+      const post = async (url: string, body: unknown, method = 'POST') => {
+        for (let attempt = 0; ; attempt++) {
+          const res = await fetch(url, {
+            method,
+            ...(body === undefined
+              ? {}
+              : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+          });
+          if (res.ok) return;
+          if (attempt === 5) throw new Error(`${method} ${url}: ${res.status}`);
+          const wait = Number(res.headers.get('Retry-After') ?? '1');
+          await new Promise((resolve) => setTimeout(resolve, Math.min(wait, 65) * 1000));
+        }
+      };
       for (let start = 0; start < 500; start += 25) {
         await Promise.all(
           Array.from({ length: 25 }, (_, i) =>
-            fetch(`/api/v1/orgs/${org}/tasks`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                title: `Task ${start + i}`,
-                groupId,
-                afterId: null,
-                beforeId: null,
-              }),
+            post(`/api/v1/orgs/${org}/tasks`, {
+              title: `Task ${start + i}`,
+              groupId,
+              afterId: null,
+              beforeId: null,
             }),
           ),
         );
@@ -57,6 +73,21 @@ test('AC-2.12 with 500 tasks and 100 subtasks, keypress to paint for create, com
   // most of the per-user budget (600/min), so wait for the next window first.
   await page.waitForTimeout(61_000);
   await page.evaluate(async (org) => {
+    // A create that fails (a busy CI runner, a 429) is retried, so the counts below hold.
+    const post = async (url: string, body: unknown, method = 'POST') => {
+      for (let attempt = 0; ; attempt++) {
+        const res = await fetch(url, {
+          method,
+          ...(body === undefined
+            ? {}
+            : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+        });
+        if (res.ok) return;
+        if (attempt === 5) throw new Error(`${method} ${url}: ${res.status}`);
+        const wait = Number(res.headers.get('Retry-After') ?? '1');
+        await new Promise((resolve) => setTimeout(resolve, Math.min(wait, 65) * 1000));
+      }
+    };
     const list = (await (await fetch(`/api/v1/orgs/${org}/my-list`)).json()) as {
       tasks: { id: string; title: string }[];
     };
@@ -64,13 +95,12 @@ test('AC-2.12 with 500 tasks and 100 subtasks, keypress to paint for create, com
     await Promise.all(
       parents.map(async (parent) => {
         for (let i = 0; i < 5; i++) {
-          await fetch(`/api/v1/orgs/${org}/tasks`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: `Sub ${i} of ${parent.title}`, parentId: parent.id }),
+          await post(`/api/v1/orgs/${org}/tasks`, {
+            title: `Sub ${i} of ${parent.title}`,
+            parentId: parent.id,
           });
         }
-        await fetch(`/api/v1/tasks/${parent.id}/expanded`, { method: 'PUT' });
+        await post(`/api/v1/tasks/${parent.id}/expanded`, undefined, 'PUT');
       }),
     );
   }, orgId);
@@ -113,11 +143,7 @@ test('AC-2.12 with 500 tasks and 100 subtasks, keypress to paint for create, com
   };
 
   // Create: Enter in Edit on a typed title (each Enter commits and opens the next draft).
-  await rows(page)
-    .filter({ hasText: 'Task 310' })
-    .first()
-    .getByText('Task 310', { exact: true })
-    .click();
+  await rowTitled(page, 'Task 310').getByText('Task 310', { exact: true }).click();
   await page.keyboard.press('End');
   await measure('create', async () => {
     await page.keyboard.press('Enter');
@@ -126,7 +152,7 @@ test('AC-2.12 with 500 tasks and 100 subtasks, keypress to paint for create, com
   await page.keyboard.press('Escape');
 
   // Move: Ctrl+↓ on the selected row.
-  await rows(page).filter({ hasText: 'Task 200' }).first().locator('[data-drag-handle]').click();
+  await rowTitled(page, 'Task 200').locator('[data-drag-handle]').click();
   await measure('move', async () => {
     await page.keyboard.press(`${mod}+ArrowDown`);
   });
