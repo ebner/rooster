@@ -94,7 +94,8 @@ export async function touchDrag(cdp: CDPSession, x: number, fromY: number, toY: 
  * Pulls the list down by `distance` px from (x, y) and releases (pull to refresh). One
  * in-page sequence, so a slow test machine cannot hold the finger still past the 350 ms
  * long-press (which would start a drag instead). WebKit has no Touch constructor: plain events
- * carry the fields the listeners read.
+ * carry the fields the listeners read. dnd-kit reads clientX/Y off a non-TouchEvent: without
+ * them it never sees the finger move, and a pull slower than 350 ms becomes a drag.
  */
 export async function pullDown(page: Page, x: number, y: number, distance: number) {
   await page.evaluate(
@@ -109,6 +110,8 @@ export async function pullDown(page: Page, x: number, y: number, distance: numbe
           touches: { value: active },
           targetTouches: { value: active },
           changedTouches: { value: [point] },
+          clientX: { value: x },
+          clientY: { value: clientY },
         });
         target.dispatchEvent(event);
       };
