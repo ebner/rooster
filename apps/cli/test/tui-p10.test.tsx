@@ -144,8 +144,10 @@ describe('TUI: repeat and reminders (P10)', () => {
     const t = await tui(cli);
     await t.waitFor((f) => f.includes('Standup'));
     await t.press('x');
-    const frame = await t.waitFor((f) => f.includes('Completed “Standup”; next: Tomorrow'));
-    expect(frame).toMatch(/○ Standup/);
+    // The hint and the next instance's row can render in separate frames.
+    await t.waitFor(
+      (f) => f.includes('Completed “Standup”; next: Tomorrow') && /○ Standup/.test(f),
+    );
     const list = async () =>
       (
         await user.api<{ tasks: TaskJson[] }>('GET', '/api/v1/orgs/personal/my-list')

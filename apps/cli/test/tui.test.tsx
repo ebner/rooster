@@ -297,8 +297,10 @@ describe('TUI: editing', () => {
     const t = await tui(cli);
     await t.waitFor((f) => f.includes('Book dentist'));
     await t.press('x');
-    const frame = await t.waitFor((f) => f.includes('✓ Book dentist'));
-    expect(frame).toMatch(/Completed “Book dentist” {2}u undo/);
+    // The tick is optimistic; the undo hint can arrive a frame later.
+    await t.waitFor(
+      (f) => f.includes('✓ Book dentist') && /Completed “Book dentist” {2}u undo/.test(f),
+    );
     const completedAt = async () =>
       (await user.api<TaskJson>('GET', `/api/v1/tasks/${task.id}`)).data.completedAt;
     expect(await eventually(completedAt, (v) => v !== null)).not.toBeNull();
