@@ -71,9 +71,20 @@ export async function signInAs(
   options: SignInOptions = {},
 ): Promise<void> {
   await useIdentity(page.context(), email);
-  await page.goto(options.startAt ?? '/login');
-  await page.getByRole('button', { name: options.button ?? 'Continue with Dev login' }).click();
-  await page.waitForURL(options.landing ?? /\/o\/[^/]+\/my$/);
+  const landing = options.landing ?? /\/o\/[^/]+\/my$/;
+  // A shared account (the admin) is created by whichever spec signs it in first: two first
+  // sign-ins at once make one of them fail with unable_to_create_user. The second try finds
+  // the account.
+  for (let attempt = 0; ; attempt++) {
+    await page.goto(options.startAt ?? '/login');
+    await page.getByRole('button', { name: options.button ?? 'Continue with Dev login' }).click();
+    await page.waitForURL(
+      (url) =>
+        landing.test(url.href) ||
+        (attempt === 0 && url.searchParams.get('error') === 'unable_to_create_user'),
+    );
+    if (landing.test(page.url())) break;
+  }
   const me = await apiCall(page, 'GET', '/api/v1/me');
   expect(me.status()).toBe(200);
   expect(await me.json()).toMatchObject({ email, name });
