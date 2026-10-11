@@ -34,8 +34,12 @@ export function SettingsLayout({ active, children }: SettingsLayoutProps) {
   const { t } = useTranslation('settings');
   const { t: th } = useTranslation('help');
   return (
-    <div className="flex flex-col tablet:flex-row tablet:gap-12">
-      <nav aria-label={t('nav.label')} className="shrink-0 max-tablet:hidden tablet:w-max">
+    <div className="flex flex-col tablet:flex-row tablet:items-start tablet:gap-12">
+      {/* Pinned below the header while the section scrolls, like the guide's page list. */}
+      <nav
+        aria-label={t('nav.label')}
+        className="shrink-0 max-tablet:hidden tablet:sticky tablet:top-(--space-16) tablet:w-max"
+      >
         <ul className="flex flex-col gap-1">
           {settingsSections.map((section) => (
             <li key={section.id}>

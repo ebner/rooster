@@ -3,6 +3,7 @@ import { createRouter } from '@tanstack/react-router';
 import { ApiError } from './data/errors';
 import { queryKeys } from './data/query-keys';
 import { onUnauthenticatedRequest } from './data/session-events';
+import { scrollToTopSelectors, trackScrollResets } from './features/shell/scroll-reset';
 import { safeRedirectPath } from './lib/safe-redirect';
 import { routeTree } from './routeTree.gen';
 
@@ -54,7 +55,9 @@ export const router = createRouter({
   context: { queryClient },
   defaultPreload: 'intent',
   scrollRestoration: true,
+  scrollToTopSelectors: ['window', ...scrollToTopSelectors],
 });
+trackScrollResets(router);
 
 // Uploads go through XHR, outside the caches above.
 onUnauthenticatedRequest((error) => onUnauthenticated(error));

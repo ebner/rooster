@@ -128,7 +128,10 @@ export function AppShell({ renderSidebar, children, navKey, mobile }: AppShellPr
              * (React Aria's visually hidden inputs). Otherwise that content escapes it, and
              * focusing it scrolls the frame itself off screen.
              */}
-            <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-y-none">
+            <main
+              data-scroll-main
+              className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-y-none"
+            >
               {children}
             </main>
             {/* The keyboard and selection mode's bulk bar take the nav's place (02 §13). */}
@@ -190,8 +193,17 @@ export function AppShell({ renderSidebar, children, navKey, mobile }: AppShellPr
               </div>
             )}
           </div>
-          {/* Relative, as on phones: absolutely positioned content must not grow the document. */}
-          <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto">{children}</main>
+          {/*
+           * Relative, as on phones: absolutely positioned content must not grow the document.
+           * The scrollbar's room is kept on short pages too, so the centred column does not
+           * shift between a page that scrolls and one that doesn't.
+           */}
+          <main
+            data-scroll-main
+            className="relative flex min-w-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]"
+          >
+            {children}
+          </main>
           <CheatSheet />
           <PaletteHost />
         </div>

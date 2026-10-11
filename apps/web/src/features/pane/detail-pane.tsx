@@ -617,6 +617,7 @@ function PaneContent({
       )}
       <div
         ref={bodyRef}
+        data-pane-scroller
         className="flex min-h-0 flex-1 animate-fade-in flex-col gap-6 overflow-y-auto p-6 max-tablet:px-4 max-tablet:pt-4"
       >
         {mobile && (

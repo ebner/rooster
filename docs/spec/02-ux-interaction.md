@@ -55,6 +55,7 @@ This document defines **exact behaviour**. Visual styling (sizes, colours, type)
   - `/settings/...`
   - `/admin`
 - Ctrl/Cmd+1…9 switches to My tasks of org number N in sidebar order.
+- **Scroll position.** Another page, settings section, guide page or list view opens at its top; Back and Forward return to where each page was left. The list keeps its place while the pane opens, follows the cursor and closes over it, and another task opens the pane at its top. Side menus (settings sections, the guide's pages) stay pinned below the header while the page scrolls, and the content column keeps the scrollbar's room on short pages, so it does not shift between sections.
 
 ### Breakpoints
 
