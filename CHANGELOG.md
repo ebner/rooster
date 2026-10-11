@@ -6,6 +6,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Changed
+- Pull to refresh on phones shows its spinner for at least half a second, so a quick refresh is visible.
+
 ## [1.5.1] - 2026-10-11
 
 ### Changed

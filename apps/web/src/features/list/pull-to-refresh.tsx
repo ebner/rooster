@@ -8,6 +8,8 @@ import { announce } from './announcer';
 /** Pulled this far (after resistance), a release refreshes. */
 export const pullThresholdPx = 64;
 const maxPullPx = 96;
+/** The spinner turns at least this long: a refetch that returns in a few ms still reads as one. */
+export const minRefreshMs = 500;
 const resistance = 0.5;
 
 function scrollParent(el: Element | null): HTMLElement | null {
@@ -28,7 +30,8 @@ export interface PullToRefreshProps {
 
 /**
  * Pull to refresh (02 §13.2): pulling the list down from the very top shows a spinner that
- * follows the finger; past 64 px a release refetches the list and flushes the outbox. Uses
+ * follows the finger; past 64 px a release refetches the list and flushes the outbox, with the
+ * spinner turning for at least `minRefreshMs`. Uses
  * passive touch listeners on the list's scroll container, so native scrolling is untouched.
  */
 export function PullToRefresh({ enabled, onRefresh, isBlocked }: PullToRefreshProps) {
@@ -77,13 +80,13 @@ export function PullToRefresh({ enabled, onRefresh, isBlocked }: PullToRefreshPr
       if (!reached) return;
       setRefreshing(true);
       announce(t('refresh.refreshing'));
-      void live.current
-        .onRefresh()
-        .catch(() => undefined)
-        .finally(() => {
-          setRefreshing(false);
-          announce(t('refresh.done'));
-        });
+      void Promise.all([
+        live.current.onRefresh().catch(() => undefined),
+        new Promise((resolve) => setTimeout(resolve, minRefreshMs)),
+      ]).finally(() => {
+        setRefreshing(false);
+        announce(t('refresh.done'));
+      });
     };
 
     scroller.addEventListener('touchstart', onStart, { passive: true });

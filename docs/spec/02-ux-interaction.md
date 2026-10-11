@@ -420,7 +420,7 @@ A tiny status label sits in the toolbar's left area:
 - The swipe actions can be configured in Settings: each direction is Complete / Date / Move / Delete.
 - **Long-press 350 ms:** lifts the row for dragging (with haptics). Dragging near the top or bottom auto-scrolls. Dropping commits.
 - Long-press then release without moving enters **selection mode**: checkboxes turn into selection circles and a bulk action bar replaces the bottom nav.
-- Pull to refresh: refetch plus outbox flush.
+- Pull to refresh: refetch plus outbox flush. The spinner turns until both settle, and for at least 0.5 s, so a fast refetch still reads as a refresh.
 
 ### 13.3 Inline creation on mobile
 - Tapping the FAB inserts a draft row **at the top of the first visible group** (or of the current smart view section), focuses it, and opens the keyboard.
