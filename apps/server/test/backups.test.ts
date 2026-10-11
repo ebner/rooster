@@ -81,7 +81,8 @@ describe('WP 2.9 backups', () => {
 
   it('creates a missing backup directory private (0700)', () => {
     const fresh = join(dir.path, 'fresh');
-    const ctx = listCtx({ env: { ROOSTER_DATA_DIR: fresh } });
+    // A Monday: on a Sunday (UTC) the scheduled snapshot is a weekly one.
+    const ctx = listCtx({ clock: () => Date.UTC(2026, 9, 5, 3), env: { ROOSTER_DATA_DIR: fresh } });
     expect(ctx.app.services.backups.runScheduled()?.kind).toBe('daily');
     expect(statSync(join(fresh, 'backups')).mode & 0o777).toBe(0o700);
   });
