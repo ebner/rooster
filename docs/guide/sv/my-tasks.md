@@ -24,6 +24,7 @@ Grupperna är personliga. Två personer i samma organisation har var sina gruppe
 
 - **Enter** medan du redigerar lägger till en uppgift nedanför, **Skift+Enter** en ovanför. När en rad bara är markerad gör **N** och **Skift+N** samma sak, och **Q** (eller Tab+Q) lägger till en uppgift högst upp i den första gruppen.
 - **Lägg till uppgift** sist i varje grupp lägger till en där.
+- **Ge en ny uppgift ett datum** medan du skriver namnet: klicka på kalendern till höger på raden, eller tryck på **Tab+D**. Välj ett datum, skriv vidare och tryck på Enter. Du kan också skriva datumet i namnet, till exempel `fre` ([Datum och upprepningar](./dates-and-repeats.md)).
 - Klicka på ett namn för att redigera det. Ändringen sparas när du trycker på Enter eller Esc, går till en annan rad eller klickar någon annanstans.
 - **Klistra in flera rader** i ett tomt namn, så erbjuder en etikett att skapa en uppgift per rad. Tryck på Enter för att godkänna, eller Esc för att klistra in texten som en enda rad.
 - **Backsteg i ett tomt namn** tar bort raden, så länge uppgiften saknar beskrivning, deluppgifter, kommentarer och bilagor. Annars använder du Tab+Delete.

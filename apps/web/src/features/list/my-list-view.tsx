@@ -110,7 +110,7 @@ export function draftPlaceholder(orgId: string, userId: string, draft: Draft): T
     dueDate: draft.due?.dueDate ?? null,
     dueTime: draft.due?.dueTime ?? null,
     dueTz: draft.due?.dueTz ?? null,
-    startDate: null,
+    startDate: draft.due?.startDate ?? null,
     tagIds: [],
     completedAt: null,
     hasDescription: false,
@@ -225,7 +225,9 @@ const ListRows = memo(function ListRows({
         !task ||
         task.placement?.groupId !== (draft.parentId ? undefined : draft.groupId) ||
         task.parentId !== (draft.parentId ?? null) ||
-        task.dueDate !== (draft.due?.dueDate ?? null)
+        task.dueDate !== (draft.due?.dueDate ?? null) ||
+        task.dueTime !== (draft.due?.dueTime ?? null) ||
+        task.startDate !== (draft.due?.startDate ?? null)
       ) {
         task = draftPlaceholder(orgId, userId, draft);
         draftTasks.current.set(draft.id, task);
@@ -649,12 +651,20 @@ export function MyListView({
         if (!row) return false;
         useListStore.getState().set({ popover: { kind: 'date', rowId: row.id } });
       },
-      datePicker: () =>
-        withTitle(() => {
+      datePicker: () => {
+        // In a draft, the picker sets the date it is created with; the title stays in edit.
+        const store = useListStore.getState();
+        const editing = store.editing?.rowId;
+        if (!mobile && editing && store.drafts.some((d) => d.id === editing)) {
+          store.set({ suspendedEdit: editing, popover: { kind: 'date', rowId: editing } });
+          return;
+        }
+        return withTitle(() => {
           const row = cursorTask() ?? controller.cursorRow();
           if (row?.kind !== 'task') return false;
           useListStore.getState().set({ popover: { kind: 'date', rowId: row.id } });
-        }),
+        });
+      },
       moveToNavigate: () => {
         // Everyone's tasks has no groups of mine to move other people's tasks into.
         if (everyone || controller.selectedTaskIds().length === 0) return false;

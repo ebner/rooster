@@ -6,6 +6,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+- A new task can get its due date while you type its name: click the calendar on the right of the row, or press Tab+D. The name stays open for typing, and Enter creates the task with that date.
+
 ### Changed
 - On phones and tablets, rows without a due date show a faint calendar where the date goes, and tag chips show their remove button.
 - Pull to refresh on phones shows its spinner for at least half a second, so a quick refresh is visible.

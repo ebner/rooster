@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Locator, Page } from '@playwright/test';
-import { nextWeekday, todayIn } from '@rooster/core/dates';
+import { addDays, nextWeekday, todayIn } from '@rooster/core/dates';
 import type { Group, MyList, Task } from '@rooster/core/schemas';
 import { apiCall, newClient, signInAs, uniqueEmail } from './support/auth';
 import { expect, test } from './support/test';
@@ -132,6 +132,67 @@ test('AC-2.1 typing two tasks with Enter creates them in order; "fri" becomes th
 
   await page.reload();
   await expect.poll(() => visibleTitles(page, 'Today')).toEqual(['Buy milk', 'Call Bob']);
+});
+
+test('a new row takes a date from its calendar or Tab+D, and keeps the title in edit', async ({
+  page,
+}) => {
+  const { orgId, timezone } = await openList(page, 'list.draftdate');
+  const today = todayIn(timezone, Date.now());
+  await page.getByRole('button', { name: 'Add task' }).first().click();
+  await page.keyboard.type('Water plants');
+  const draft = rows(page).filter({ has: page.locator('input[data-list-input]') });
+  const picker = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('button', { name: /Tomorrow/ }) });
+
+  // The pointer: the draft's calendar opens the picker, and the title is still being typed.
+  await draft.getByRole('button', { name: 'Set due date' }).click();
+  await picker.getByRole('button', { name: /Tomorrow/ }).click();
+  await expect(picker).toHaveCount(0);
+  await expect(draft.locator('input[data-list-input]')).toBeFocused();
+  await expect(draft).toContainText('Tomorrow');
+  await page.keyboard.type(' and ferns');
+  await page.keyboard.press('Enter');
+
+  // The keyboard: Tab+D in the next draft, then Enter creates it with that date.
+  await page.keyboard.type('Pay rent');
+  await page.keyboard.down('Tab');
+  await page.keyboard.press('d');
+  await page.keyboard.up('Tab');
+  await expect(picker).toBeVisible();
+  await page.keyboard.press('Alt+E');
+  await expect(picker).toHaveCount(0);
+  await expect(page.locator('input[data-list-input]')).toBeFocused();
+  await page.keyboard.press('Enter');
+
+  // Esc, or a click outside, closes only the picker; the next Esc commits the title.
+  await page.keyboard.type('Read');
+  await draft.getByRole('button', { name: 'Set due date' }).click();
+  await expect(picker).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(picker).toHaveCount(0);
+  await expect(draft.locator('input[data-list-input]')).toHaveValue('Read');
+  await expect(draft.locator('input[data-list-input]')).toBeFocused();
+  await draft.getByRole('button', { name: 'Set due date' }).click();
+  await expect(picker).toBeVisible();
+  const outside = await page.getByRole('heading', { name: /My tasks/ }).boundingBox();
+  await page.mouse.click((outside?.x ?? 0) + 4, (outside?.y ?? 0) + 4);
+  await expect(picker).toHaveCount(0);
+  await expect(draft.locator('input[data-list-input]')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('input[data-list-input]')).toHaveCount(0);
+  await expect
+    .poll(() => visibleTitles(page, 'Today'))
+    .toEqual(['Water plants and ferns', 'Pay rent', 'Read']);
+  await waitForSync(page);
+
+  const tasks = (await myList(page, orgId)).tasks;
+  expect(tasks.find((t) => t.title === 'Water plants and ferns')?.dueDate).toBe(addDays(today, 1));
+  expect(tasks.find((t) => t.title === 'Pay rent')?.dueDate).toBe(
+    nextWeekday(today, 6, { includeToday: true }),
+  );
+  expect(tasks.find((t) => t.title === 'Read')?.dueDate).toBeNull();
 });
 
 test('AC-2.2 Shift+Enter inserts above; Ctrl+↑/↓ and Ctrl+Shift+↓ reorder, the same everywhere', async ({

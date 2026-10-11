@@ -23,7 +23,7 @@ import {
   RowTagChips,
   SubtaskCounter,
 } from './task-meta';
-import { TitleInput } from './title-input';
+import { TitleInput, titleInputHandle } from './title-input';
 import { useKeyboardDragHandle } from './use-list-dnd';
 
 /** Clicks and drags on these never select the row or start a drag. */
@@ -177,6 +177,46 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
   );
 
   const onDueChange = (next: DueValue | null) => controller.setDue([id], next);
+  // A draft's date applies when it is created. Its title stays in edit while the picker is
+  // open: the press, and then the picker, take focus, and a blur would commit the draft.
+  const resumeDraftEdit = (frames = 0) => {
+    // After the picker has closed and handed focus back (its exit can take a few frames).
+    requestAnimationFrame(() => {
+      if (controller.ui().suspendedEdit !== id) return;
+      const active = document.activeElement;
+      if (active?.closest('[role="dialog"]') && frames < 30) {
+        resumeDraftEdit(frames + 1);
+        return;
+      }
+      controller.ui().set({ suspendedEdit: null });
+      const title = titleInputHandle(id);
+      const row = document.querySelector(`[data-row-id="${CSS.escape(id)}"]`);
+      if (!active || active === document.body || row?.contains(active)) title?.focus();
+      // A click elsewhere closed it: that ends the edit like any blur.
+      else title?.blur();
+    });
+  };
+  const holdDraftEdit = () => {
+    if (controller.ui().editing?.rowId !== id) return;
+    controller.ui().set({ suspendedEdit: id });
+    // A press that opens nothing (dragged off the cell) hands the caret back.
+    const done = new AbortController();
+    const settle = () => {
+      done.abort();
+      setTimeout(() => {
+        if (controller.ui().popover?.rowId !== id) resumeDraftEdit();
+      });
+    };
+    window.addEventListener('pointerup', settle, { capture: true, signal: done.signal });
+    window.addEventListener('pointercancel', settle, { capture: true, signal: done.signal });
+  };
+  const onDraftDateOpen = (open: boolean) => {
+    if (open) controller.ui().set({ popover: { kind: 'date', rowId: id } });
+    else {
+      controller.ui().set({ popover: null });
+      resumeDraftEdit();
+    }
+  };
   // P10: the picker's reminder section; it loads (and fetches the reminders) when shown.
   const renderReminders = useCallback(
     (slot: ReminderSlotProps) => (
@@ -357,9 +397,28 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
           </span>
         )}
       </GridCell>
-      <GridCell data-no-row-press className="shrink-0">
-        {draft ? (
+      <GridCell
+        data-no-row-press
+        className="shrink-0"
+        {...(draft && !mobile ? { onPointerDownCapture: holdDraftEdit } : {})}
+      >
+        {draft && mobile ? (
+          // Phones pick a draft's date from the accessory bar (02 §13.3).
           <span className="block w-date-cell" />
+        ) : draft ? (
+          <DateCell
+            value={{
+              dueDate: task.dueDate,
+              dueTime: task.dueTime,
+              dueTz: task.dueTz,
+              startDate: task.startDate,
+            }}
+            startDate={task.startDate}
+            onChange={(next) => controller.setDraftDue(id, next)}
+            ctx={dateCtx}
+            isOpen={dateOpen}
+            onOpenChange={onDraftDateOpen}
+          />
         ) : (
           <DateCell
             value={{

@@ -44,8 +44,8 @@ const platform = detectPlatform();
 let backspaceLatch = false;
 
 /**
- * What the phone's accessory bar (02 §13.3) can do to the title being edited: it lives
- * outside the row, so the input registers these while it is mounted.
+ * What the phone's accessory bar (02 §13.3) and a draft's date picker can do to the title
+ * being edited: they live outside the input, so it registers these while it is mounted.
  */
 export interface TitleInputHandle {
   /** "↵ Next": the same as Enter (commit, then a new draft below). */
@@ -53,6 +53,8 @@ export interface TitleInputHandle {
   /** Inserts text at the caret, e.g. `#` to start a tag token. */
   insert: (text: string) => void;
   focus: () => void;
+  /** Commits as a blur would, for a suspended edit whose focus went elsewhere. */
+  blur: () => void;
 }
 
 const handles = new Map<string, TitleInputHandle>();
@@ -320,6 +322,9 @@ export function TitleInput({
         onInput();
       },
       focus: () => input.current?.focus({ preventScroll: true }),
+      blur: () => {
+        if (!committed.current) apply(controller.blurEdit(rowId, value(), spans()));
+      },
     };
     handles.set(rowId, handle);
     return () => {
