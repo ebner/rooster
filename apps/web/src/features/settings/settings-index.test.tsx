@@ -4,7 +4,7 @@ import { MobileHeader } from '../shell/mobile-header';
 import { SettingsIndex } from './settings-index';
 
 describe('Settings on phones: the index and a drilled-in section', () => {
-  test('the index is a list of links, one per section, each with what it holds, then the guide', () => {
+  test('the index is a list of links, one per section, each with what it holds, then the guide and What’s new', () => {
     render(<SettingsIndex />);
     const nav = screen.getByRole('navigation', { name: 'Settings sections' });
     const links = within(nav).getAllByRole('link');
@@ -16,9 +16,11 @@ describe('Settings on phones: the index and a drilled-in section', () => {
       '/settings/security',
       '/settings/data',
       '/help',
+      '/help/whats-new',
     ]);
-    expect(within(nav).getAllByRole('listitem')).toHaveLength(7);
+    expect(within(nav).getAllByRole('listitem')).toHaveLength(8);
     expect(links[6]?.textContent).toBe('HelpHow rooster works, one page at a time.');
+    expect(links[7]?.textContent).toBe('What’s newWhat changed in each version');
     expect(links[2]?.textContent).toBe(
       'NotificationsIn app, push, email, task reminders and the daily digest',
     );

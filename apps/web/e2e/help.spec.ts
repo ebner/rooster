@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { apiCall, signInAs, uniqueEmail } from './support/auth';
-import { expect, test } from './support/test';
+import { expect, reload, test } from './support/test';
 
 /** ADR 0052 §2, AC-11.6: the user guide in the app, in the viewer's language. */
 
@@ -93,4 +93,42 @@ test('AC-11.6 an unknown page says so; the cheat sheet and the user menu open th
   await sheet.getByRole('link', { name: 'Open the guide' }).click();
   await expect(sheet).toBeHidden();
   await expect(page).toHaveURL(/\/help$/);
+});
+
+test("What's new: after an update a toast opens the version's section, once; Settings links to it", async ({
+  page,
+}) => {
+  const { version } = JSON.parse(
+    readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+  ) as { version: string };
+  await signInAs(page, uniqueEmail('help.whatsnew'));
+  const me = (await (await apiCall(page, 'GET', '/api/v1/me')).json()) as { id: string };
+  const seenKey = `rooster.user.${me.id}.whatsNew.seen`;
+  const updated = page.getByRole('status').filter({ hasText: 'rooster was updated' });
+  // A first visit only records the version.
+  await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), seenKey)).toBe(version);
+  await expect(updated).toHaveCount(0);
+
+  // An older version was seen here: this load is an update.
+  await page.evaluate((key) => localStorage.setItem(key, '1.0.0'), seenKey);
+  await reload(page);
+  await expect(updated).toHaveText(new RegExp(`rooster was updated to ${version}\\.`));
+  await updated.getByRole('button', { name: 'What’s new' }).click();
+  await expect(page).toHaveURL(new RegExp(`/help/whats-new#${version.replaceAll('.', '')}$`));
+  await expect(page.getByRole('heading', { level: 1, name: 'What’s new' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 2, name: version, exact: true }),
+  ).toBeInViewport();
+
+  // Once: the next load says nothing.
+  await page.goto('/settings/profile');
+  await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+  await page.waitForTimeout(1_000);
+  await expect(updated).toHaveCount(0);
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('link', { name: 'What’s new' })
+    .click();
+  await expect(page).toHaveURL(/\/help\/whats-new$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'What’s new' })).toBeVisible();
 });

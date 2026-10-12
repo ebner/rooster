@@ -15,6 +15,7 @@ import {
   type RenderContext,
   renderGuideMarkdown,
 } from './guide-build';
+import { versionAnchor, whatsNewSlug } from './guide-model';
 
 /** A PNG's signature and IHDR with the given size, then IEND (enough for `pngInfo`). */
 function png(width: number, height: number): Buffer {
@@ -280,6 +281,29 @@ describe('the guide build (ADR 0052 §2)', () => {
       expect(guide.pages.every((page) => page.lang === locale)).toBe(true);
     },
   );
+
+  test("What's new: both languages list the same releases, newest first, at the app's anchors", () => {
+    const root = join(import.meta.dirname, '../../../../..');
+    const versions = (locale: string) => {
+      const guide = buildGuide({ guideDir: join(root, 'docs/guide'), repoRoot: root, locale });
+      const page = guide.pages.find((p) => p.slug === whatsNewSlug);
+      return [...(page?.html ?? '').matchAll(/<h2 id="([^"]+)">([^<]+)<\/h2>/g)]
+        .map(([, id = '', text = '']) => ({ id, text }))
+        .filter(({ text }) => text !== 'Unreleased');
+    };
+    const en = versions('en');
+    expect(en.length).toBeGreaterThan(0);
+    expect(versions('sv')).toEqual(en);
+    for (const { id, text } of en) {
+      expect(text).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(id).toBe(versionAnchor(text));
+      expect(headingId(text, new Map())).toBe(versionAnchor(text));
+    }
+    const rank = (version: string) =>
+      version.split('.').reduce((sum, part) => sum * 1000 + Number(part), 0);
+    const ranks = en.map(({ text }) => rank(text));
+    expect(ranks).toEqual([...ranks].sort((a, b) => b - a));
+  });
 
   test('helpers: heading anchors keep Swedish letters, PNG sizes need a PNG', () => {
     expect(headingId('Återkommande uppgifter', new Map())).toBe('återkommande-uppgifter');

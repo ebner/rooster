@@ -21,6 +21,7 @@ import {
   useSetOrgCollapsed,
   useSignOut,
 } from '../data';
+import { useWhatsNewNotice } from '../features/help/whats-new';
 import { AppShell } from '../features/shell/app-shell';
 import { MobileNav } from '../features/shell/mobile-nav';
 import { type OrgViewId, orgUrlSlug, paths } from '../features/shell/paths';
@@ -76,6 +77,9 @@ function AppLayout() {
   useEffect(() => {
     if (isLocale(storedLocale) && storedLocale !== i18n.language) void setLocale(storedLocale);
   }, [storedLocale, i18n.language]);
+
+  // After an update: "Updated to X.Y.Z · What's new", once (ADR 0057).
+  useWhatsNewNotice(me.data?.user.id, isLocale(i18n.language) ? i18n.language : 'en');
 
   /** G then M / T / W / O / N (02 §6): a view of the current org (or the first one). */
   const goTo = (view: OrgViewId) => {

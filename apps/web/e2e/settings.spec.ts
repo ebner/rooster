@@ -24,9 +24,13 @@ for (const viewport of [
     await page.goto('/settings');
     await expect(page).toHaveURL(/\/settings\/profile$/);
     const menu = page.getByRole('navigation', { name: 'Settings sections' });
-    // Six sections, plus the guide (ADR 0053).
-    await expect(menu.getByRole('link')).toHaveCount(7);
+    // Six sections, plus the guide (ADR 0053) and What's new (ADR 0057).
+    await expect(menu.getByRole('link')).toHaveCount(8);
     await expect(menu.getByRole('link', { name: /guide/i })).toHaveAttribute('href', '/help');
+    await expect(menu.getByRole('link', { name: 'What’s new' })).toHaveAttribute(
+      'href',
+      '/help/whats-new',
+    );
     await expect(menu.getByRole('link', { name: 'Profile' })).toHaveAttribute(
       'aria-current',
       'page',

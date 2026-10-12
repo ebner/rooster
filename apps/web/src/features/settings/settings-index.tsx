@@ -1,8 +1,9 @@
-import { BookOpen, ChevronRight, type LucideIcon } from 'lucide-react';
+import { BookOpen, ChevronRight, type LucideIcon, Sparkles } from 'lucide-react';
 import { Link as AriaLink } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
 import { iconStrokeWidth } from '../../ui/button';
+import { whatsNewPath } from '../help/whats-new';
 import { paths } from '../shell/paths';
 import { settingsSections } from './settings-layout';
 
@@ -27,9 +28,17 @@ export function SettingsIndex() {
             />
           </li>
         ))}
-        {/* The user guide (ADR 0052 §2): phones reach it from here. */}
+        {/* The user guide (ADR 0052 §2) and "What's new" (ADR 0057): phones reach them here. */}
         <li>
           <IndexRow href={paths.help} icon={BookOpen} title={th('title')} hint={th('lead')} />
+        </li>
+        <li>
+          <IndexRow
+            href={whatsNewPath}
+            icon={Sparkles}
+            title={th('whatsNew.link')}
+            hint={th('whatsNew.hint')}
+          />
         </li>
       </ul>
     </nav>

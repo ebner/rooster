@@ -10,6 +10,12 @@
   "loading": "Loading the guide…",
   "loadFailed": "Couldn’t load the guide. Check your connection and try again.",
   "retry": "Try again",
+  "whatsNew": {
+    "toast": "rooster was updated to {version}.",
+    "action": "What’s new",
+    "link": "What’s new",
+    "hint": "What changed in each version"
+  },
   "notFound": {
     "title": "This page isn’t in the guide",
     "body": "It may have moved or been renamed. Every page is listed in the guide.",

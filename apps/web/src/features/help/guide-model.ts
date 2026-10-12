@@ -17,3 +17,11 @@ export function neighbours(
   if (index < 0) return { previous: undefined, next: undefined };
   return { previous: pages[index - 1], next: pages[index + 1] };
 }
+
+/** The "What's new" page: a `## X.Y.Z` section per release (ADR 0057). */
+export const whatsNewSlug = 'whats-new';
+
+/** The heading id of a version's section (`## 1.5.3` → `153`), as the guide build makes it. */
+export function versionAnchor(version: string): string {
+  return version.toLowerCase().replace(/[^\p{L}\p{N}_-]/gu, '');
+}

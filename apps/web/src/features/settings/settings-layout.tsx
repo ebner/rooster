@@ -1,8 +1,18 @@
 import type { LucideIcon } from 'lucide-react';
-import { Bell, BookOpen, CalendarDays, Database, Hand, Shield, UserRound } from 'lucide-react';
+import {
+  Bell,
+  BookOpen,
+  CalendarDays,
+  Database,
+  Hand,
+  Shield,
+  Sparkles,
+  UserRound,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
+import { whatsNewPath } from '../help/whats-new';
 import { paths, type SettingsSection as SectionId } from '../shell/paths';
 import { SidebarItem, sidebarItemActiveClass, sidebarItemClass } from '../shell/sidebar-item';
 
@@ -52,10 +62,15 @@ export function SettingsLayout({ active, children }: SettingsLayoutProps) {
             </li>
           ))}
         </ul>
-        {/* The user guide (ADR 0052 §2), below the sections. */}
-        <div className="mt-4 border-t border-border pt-4">
-          <SidebarItem icon={BookOpen} label={th('open')} href={paths.help} />
-        </div>
+        {/* The user guide (ADR 0052 §2) and what each version changed (ADR 0057). */}
+        <ul className="mt-4 flex flex-col gap-1 border-t border-border pt-4">
+          <li>
+            <SidebarItem icon={BookOpen} label={th('open')} href={paths.help} />
+          </li>
+          <li>
+            <SidebarItem icon={Sparkles} label={th('whatsNew.link')} href={whatsNewPath} />
+          </li>
+        </ul>
         {/*
          * Sizes the column to its longest label set like the active item (medium weight), in
          * whatever language: nothing truncates, and the content does not shift between sections.
@@ -67,10 +82,12 @@ export function SettingsLayout({ active, children }: SettingsLayoutProps) {
               <span className="whitespace-nowrap">{t(`nav.${section.id}`)}</span>
             </span>
           ))}
-          <span className={cn(sidebarItemClass, sidebarItemActiveClass)}>
-            <span className="size-5 shrink-0" />
-            <span className="whitespace-nowrap">{th('open')}</span>
-          </span>
+          {[th('open'), th('whatsNew.link')].map((label) => (
+            <span key={label} className={cn(sidebarItemClass, sidebarItemActiveClass)}>
+              <span className="size-5 shrink-0" />
+              <span className="whitespace-nowrap">{label}</span>
+            </span>
+          ))}
         </span>
       </nav>
       <div className="min-w-0 max-w-pane-max flex-1">{children}</div>

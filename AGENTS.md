@@ -78,7 +78,7 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - `src/state/`: Zustand stores for list, undo and sync. **Per-row UI state goes through `useRowUi`, with its fields listed in `changedRowIds`** (`list-store.ts`), so a change re-renders only the rows it touches (ADR 0055).
   - **List rendering (ADR 0055):** task rows are rendered in sticky chunks (`features/list/row-chunks.tsx`), and `content-visibility` applies to whole chunks on screen only. The list root is block layout. There is no virtualisation: the DOM stays complete for keyboard, drag and drop, screen readers and print.
   - **P11 web:**
-    - **The guide:** `features/help/` (ADR 0053). `guide-build.ts` is a Vite plugin that turns `docs/guide/**` into `virtual:rooster-guide/<locale>` at build time, with GitHub-style heading ids; it is registered in `vite.config.ts` and `vitest.config.ts`. `guide-view.tsx` renders `/help` and `/help/<slug>`. `keyboard-doc.ts` generates the keyboard page.
+    - **The guide:** `features/help/` (ADR 0053). `guide-build.ts` is a Vite plugin that turns `docs/guide/**` into `virtual:rooster-guide/<locale>` at build time, with GitHub-style heading ids; it is registered in `vite.config.ts` and `vitest.config.ts`. `guide-view.tsx` renders `/help` and `/help/<slug>`. `keyboard-doc.ts` generates the keyboard page. `whats-new.ts` (ADR 0057): after an update, a toast offers the version's section of the What's new page once per account and browser; Settings links to the page.
     - **Admin:** `features/admin/system-section.tsx` (Admin → System, with search reindex) over `data/system.ts`.
     - **The list header:** `features/list/header-actions.tsx` holds the ⋯ menu. `styles/print.css` prints only the list (`<html data-print="list">`). `hide-delay.ts` holds the until-reload value, 10000.
     - **Accessible names:** `features/list/row-name.ts`.
@@ -126,7 +126,7 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
 - `packages/tokens`: Coop tokens. `src/tokens.css` and `src/index.ts` must agree. A contrast test guards every allowed pair.
 - `docker/`: `Dockerfile` (distroless, nonroot) and `proxy/` snippets. `compose.yaml` sits at the root.
 - `scripts/`:
-  - `ci.sh` (the whole pipeline, in stages `static`, `unit`, `build`, `e2e`; `.github/workflows/ci.yml` runs one job per stage over the `.github/actions/setup` composite action), `release.sh` (cuts a release locally: refuses a stale migration fixture, missing notes or an unlisted migration before bumping, then runs the pipeline; push main, wait for CI, then push the tag), `docker-smoke.sh`, `i18n-check.mjs`, `bundle-budget.mjs`, and `dev-idp.mjs` (a mock OIDC provider for local dev and tests).
+  - `ci.sh` (the whole pipeline, in stages `static`, `unit`, `build`, `e2e`; `.github/workflows/ci.yml` runs one job per stage over the `.github/actions/setup` composite action), `release.sh` (cuts a release locally: refuses a stale migration fixture, missing notes (CHANGELOG or What's new) or an unlisted migration before bumping, then runs the pipeline; push main, wait for CI, then push the tag), `docker-smoke.sh`, `i18n-check.mjs`, `bundle-budget.mjs`, and `dev-idp.mjs` (a mock OIDC provider for local dev and tests).
   - P11:
     - `secret-scan.sh`: gitleaks over the history. Reviewed fixtures are pinned in `.gitleaksignore`.
     - `backup-drill.sh <image>`: backup, restore and verify, including an upload.
@@ -134,7 +134,7 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
     - `docs/keyboard.mjs` and `docs/screenshots.sh`, which seeds the Kestrel Lane demo team and captures `docs/screenshots/`. Each PNG records its density and window width (`docs/png-meta.mjs`), which `guide-build.ts` uses to show it at its real size and a crop at its window's scale; images written on adjacent lines sit side by side in the guide.
 - `compose.litestream.yaml`: the optional Litestream sidecar (`docs/operator.md`).
 - `.github/workflows/`: `ci.yml`, and `release.yml` (a pushed `vX.Y.Z` tag builds, smoke-tests and publishes the image to GHCR as `x.y.z`, `x.y`, `x` and `latest`; the tag must equal the root `package.json` version).
-- `CHANGELOG.md` (Keep a Changelog; list every migration), `README.md` (the front page with screenshots), `CONTRIBUTING.md`, `docs/oidc-setup.md` (sign-in provider guide), `docs/operator.md` (the operator guide), `docs/guide/{en,sv}/` (the user guide, also in the app at `/help`; `pages.json` orders it; **`keyboard.md` is generated, never edit it by hand**), `docs/security/asvs.md` (the ASVS L2 map), `docs/accessibility-checklist.md` (the manual screen reader pass per release).
+- `CHANGELOG.md` (Keep a Changelog; list every migration), `README.md` (the front page with screenshots), `CONTRIBUTING.md`, `docs/oidc-setup.md` (sign-in provider guide), `docs/operator.md` (the operator guide), `docs/guide/{en,sv}/` (the user guide, also in the app at `/help`; `pages.json` orders it; **`keyboard.md` is generated, never edit it by hand**; `whats-new.md` holds the release notes for users), `docs/security/asvs.md` (the ASVS L2 map), `docs/accessibility-checklist.md` (the manual screen reader pass per release).
 - `docs/spec/` (the spec; `09-phases.md` §Backlog holds specified but unscheduled work), `docs/adr/` (decisions made during implementation).
 
 ## Commands
@@ -159,7 +159,7 @@ pnpm db:generate               # drizzle-kit generate + STRICT post-processing
 pnpm run ci                    # full pipeline (scripts/ci.sh; plain `pnpm ci` is pnpm's own command); `--with-docker` adds image build, smoke and backup drill
 pnpm run ci unit e2e           # only the named stages (static | unit | build | e2e | e2e-perf); CI runs each as a parallel job
 ROOSTER_E2E_SHARD=1/3 pnpm run ci e2e   # one e2e shard without the timing budgets; `pnpm run ci e2e-perf` runs those alone (CI: 3 shards + e2e-perf)
-pnpm release X.Y.Z [--check]  # write the CHANGELOG [Unreleased] notes and the AGENTS.md "Latest release" line first; preflight, bump, the whole pipeline with the image and no e2e retries, then a local commit and tag (never pushes)
+pnpm release X.Y.Z [--check]  # write the CHANGELOG [Unreleased] notes, both What's new "## Unreleased" sections and the AGENTS.md "Latest release" line first; preflight, bump, the whole pipeline with the image and no e2e retries, then a local commit and tag (never pushes)
 node apps/web/scripts/render-icons.mjs   # regenerate favicon, logo SVGs and app icons from src/ui/brand.ts
 pnpm docs:keyboard [--check]   # regenerate (or check) docs/guide/{en,sv}/keyboard.md from keymap.ts
 pnpm docs:screenshots          # seed the demo team and capture docs/screenshots (uses the e2e ports and lock; DOCS_SHOTS=a,b limits the shots)
@@ -219,6 +219,7 @@ At least one sign-in provider must be configured, or the server exits with code 
 - IDs are UUIDv7 (`packages/core/ids`). Timestamps are ms epoch numbers.
 - Files are kebab-case. React components are PascalCase. Hooks are `useX`.
 - Comments explain *why*, not *what*. Do not write task-history comments.
+- **Release notes have two audiences.** A change users notice gets a CHANGELOG entry (for operators, English) **and** a line under `## Unreleased` in both `docs/guide/en/whats-new.md` and `docs/guide/sv/whats-new.md` (for users: what they see, no operator details, no ADR numbers; ADR 0057). `pnpm release` refuses a release without them.
 - Commits and PR titles follow Conventional Commits (`feat(list): …`, `fix(sync): …`).
 
 ## Keeping this file current (mandatory)

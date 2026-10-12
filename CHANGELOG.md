@@ -6,6 +6,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+- **What's new:** after an update, rooster offers once a page listing what changed for users in each version, in English and Swedish. It's in the guide and in Settings at any time. Releases need its notes (`docs/guide/{en,sv}/whats-new.md`; ADR 0057).
+
 ### Changed
 - On phones a new task's row shows its calendar too: tap it to pick the date while you type the name, as with the Date button above the keyboard. This also works for a new subtask, which has no button bar.
 

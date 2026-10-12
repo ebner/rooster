@@ -10,6 +10,12 @@
   "loading": "Läser in guiden…",
   "loadFailed": "Det gick inte att läsa in guiden. Kontrollera anslutningen och försök igen.",
   "retry": "Försök igen",
+  "whatsNew": {
+    "toast": "rooster har uppdaterats till {version}.",
+    "action": "Nyheter",
+    "link": "Nyheter",
+    "hint": "Vad som har ändrats i varje version"
+  },
   "notFound": {
     "title": "Sidan finns inte i guiden",
     "body": "Den kan ha flyttats eller bytt namn. Alla sidor finns listade i guiden.",

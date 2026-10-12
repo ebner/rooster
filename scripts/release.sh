@@ -2,14 +2,15 @@
 # Prepares a release locally and proves it before anything reaches origin.
 # Usage: scripts/release.sh X.Y.Z [--check]
 #
-# Before you run it, write the release notes: the CHANGELOG's [Unreleased] section and the
-# AGENTS.md "Latest release" line (starting with the new version). Those two files may be
+# Before you run it, write the release notes: the CHANGELOG's [Unreleased] section, the
+# "## Unreleased" section of docs/guide/{en,sv}/whats-new.md (what users notice; ADR 0057) and
+# the AGENTS.md "Latest release" line (starting with the new version). Those files may be
 # uncommitted; everything else must be committed.
 #
 #   1. Preflight (seconds): main, up to date with origin, the tag is free, the notes are written,
 #      the migration fixture is from the latest release that changed the schema, Docker is up.
-#   2. Bump every package.json, the Dockerfile's ROOSTER_VERSION and the CHANGELOG heading (with
-#      the release's migrations), then regenerate the API document.
+#   2. Bump every package.json, the Dockerfile's ROOSTER_VERSION, the CHANGELOG heading (with
+#      the release's migrations) and the What's new headings, then regenerate the API document.
 #   3. The whole pipeline with the image (scripts/ci.sh --with-docker) and without e2e retries,
 #      so a flaky test fails here rather than in CI. It holds the e2e lock.
 #   4. Commit `chore(release): X.Y.Z` and tag vX.Y.Z, both locally. Nothing is pushed.
@@ -38,12 +39,17 @@ step "preflight: $current → $version"
 git fetch --quiet origin main --tags
 git merge-base --is-ancestor origin/main HEAD || fail "behind origin/main: pull first"
 git rev-parse -q --verify "refs/tags/v$version" >/dev/null && fail "tag v$version exists"
-dirty="$(git status --porcelain | grep -vE '^.. (CHANGELOG\.md|AGENTS\.md)$' || true)"
+whats_new=(docs/guide/en/whats-new.md docs/guide/sv/whats-new.md)
+dirty="$(git status --porcelain | grep -vE '^.. (CHANGELOG\.md|AGENTS\.md|docs/guide/(en|sv)/whats-new\.md)$' || true)"
 [[ -z "$dirty" ]] || fail "uncommitted changes besides the release notes:
 $dirty"
 
 unreleased="$(awk '/^## \[Unreleased\]/{on=1; next} /^## \[/{on=0} on' CHANGELOG.md | grep -c '^- ' || true)"
 ((unreleased > 0)) || fail "CHANGELOG.md: [Unreleased] has no entries"
+for page in "${whats_new[@]}"; do
+  notes="$(awk '/^## Unreleased$/{on=1; next} /^## /{on=0} on' "$page" | grep -c '^- ' || true)"
+  ((notes > 0)) || fail "$page: write what users notice under \"## Unreleased\" (one line per change, or that nothing visible changed)"
+done
 grep -q "^- \*\*Latest release:\*\* $version " AGENTS.md ||
   fail "AGENTS.md: start the \"Latest release\" line with $version and what it brings"
 
@@ -69,9 +75,13 @@ $check_only && exit 0
 # From here on, a failure puts every file back the way it was.
 backup="$(mktemp -d)"
 cp CHANGELOG.md AGENTS.md "$backup/"
+cp "${whats_new[0]}" "$backup/whats-new.en.md"
+cp "${whats_new[1]}" "$backup/whats-new.sv.md"
 restore() {
   git checkout --quiet -- . 2>/dev/null || true
   cp "$backup/CHANGELOG.md" "$backup/AGENTS.md" .
+  cp "$backup/whats-new.en.md" "${whats_new[0]}"
+  cp "$backup/whats-new.sv.md" "${whats_new[1]}"
   printf '\033[1;31mrelease: failed; the bump is undone. Fix, commit, run again.\033[0m\n' >&2
   exit 1
 }
@@ -100,6 +110,7 @@ node -e '
   }
   text = `${text.slice(0, start)}## [Unreleased]\n\n## [${version}] - ${date}\n${section}\n${text.slice(end)}`;
   fs.writeFileSync("CHANGELOG.md", text);' "$version" "$(date +%F)"
+sed -i -E "s/^## Unreleased$/## $version\n\n_$(date +%F)_/" "${whats_new[@]}"
 pnpm gen:api >/dev/null
 
 step "the whole pipeline, with the image, no e2e retries (waits for the e2e lock)"

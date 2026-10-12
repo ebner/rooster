@@ -80,6 +80,8 @@ export interface SyncEngineOptions {
 
 export interface SyncEngine {
   pipeline: ListPipeline;
+  /** The account whose cache this browser held when the page started: it was used here before. */
+  startOwner: string | null;
   /** "Sync problem · Retry" and pull-to-refresh: try the outbox now. */
   syncNow(): void;
   /** Sign-out: forget every local copy (cache, outbox) in every tab. */
@@ -757,6 +759,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
 
   const engine: SyncEngine = {
     pipeline,
+    startOwner,
     syncNow: () => {
       pipeline.retryNow();
       events.reconnectNow();

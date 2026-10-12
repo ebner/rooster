@@ -90,6 +90,13 @@
         "en": "Settings and your data",
         "sv": "Inställningar och dina data"
       }
+    },
+    {
+      "slug": "whats-new",
+      "title": {
+        "en": "What’s new",
+        "sv": "Nyheter"
+      }
     }
   ]
 }
