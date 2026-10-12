@@ -80,8 +80,11 @@ export interface SyncEngineOptions {
 
 export interface SyncEngine {
   pipeline: ListPipeline;
-  /** The account whose cache this browser held when the page started: it was used here before. */
-  startOwner: string | null;
+  /**
+   * The app version that last saved the cache of the account this page started as (null: no
+   * cache): that account ran that version on this browser.
+   */
+  cacheAtStart: { owner: string; version: string } | null;
   /** "Sync problem · Retry" and pull-to-refresh: try the outbox now. */
   syncNow(): void;
   /** Sign-out: forget every local copy (cache, outbox) in every tab. */
@@ -249,6 +252,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   // account may have signed in and wiped the cache. The check runs right before `hydrate`
   // (nothing awaits between the read and it), and a wipe meanwhile discards the read too.
   let restoreAbandoned = false;
+  let cacheAtStart: SyncEngine['cacheAtStart'] = null;
   const restoreScope = sessionScope();
   const restoreOptions = {
     queryClient,
@@ -259,7 +263,9 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
         // older releases) go first.
         await persister.tidy(readOwner());
         const client = await persister.restoreClient();
-        return restoreAbandoned || restoreScope.stale() ? undefined : client;
+        if (restoreAbandoned || restoreScope.stale()) return undefined;
+        if (client && startOwner) cacheAtStart = { owner: startOwner, version: client.buster };
+        return client;
       },
     },
     buster: cacheBuster,
@@ -759,7 +765,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
 
   const engine: SyncEngine = {
     pipeline,
-    startOwner,
+    cacheAtStart,
     syncNow: () => {
       pipeline.retryNow();
       events.reconnectNow();

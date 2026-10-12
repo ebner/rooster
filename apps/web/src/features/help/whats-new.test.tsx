@@ -6,7 +6,7 @@ import { useWhatsNewNotice, whatsNewHref, whatsNewStep } from './whats-new';
 
 const env = vi.hoisted(() => ({
   version: '1.5.3',
-  startOwner: null as string | null,
+  cache: null as { owner: string; version: string } | null,
   html: '<h2 id="153">1.5.3</h2>',
   toast: vi.fn(),
   navigate: vi.fn(),
@@ -19,7 +19,7 @@ vi.mock('../../data/sync/build-info', () => ({
     },
   },
 }));
-vi.mock('../../data/sync/engine', () => ({ syncEngine: () => ({ startOwner: env.startOwner }) }));
+vi.mock('../../data/sync/engine', () => ({ syncEngine: () => ({ cacheAtStart: env.cache }) }));
 vi.mock('./guide-content', () => ({
   loadGuide: async () => [{ slug: 'whats-new', title: '', lang: 'en', html: env.html }],
 }));
@@ -41,7 +41,7 @@ describe("What's new (ADR 0057)", () => {
   beforeEach(() => {
     localStorage.clear();
     env.version = '1.5.3';
-    env.startOwner = null;
+    env.cache = null;
     env.html = '<h2 id="153">1.5.3</h2>';
   });
   afterEach(() => {
@@ -51,13 +51,11 @@ describe("What's new (ADR 0057)", () => {
   });
 
   test('the decision: a first visit is recorded, a newer version offered, a downgrade recorded', () => {
-    expect(whatsNewStep(null, '1.5.3', false)).toBe('record');
-    // An account that used this browser before the notes existed is told once.
-    expect(whatsNewStep(null, '1.5.3', true)).toBe('notify');
-    expect(whatsNewStep('1.5.2', '1.5.3', true)).toBe('notify');
-    expect(whatsNewStep('1.5.9', '1.6.0', false)).toBe('notify');
-    expect(whatsNewStep('1.5.3', '1.5.3', true)).toBe('none');
-    expect(whatsNewStep('1.6.0', '1.5.3', true)).toBe('record');
+    expect(whatsNewStep(null, '1.5.3')).toBe('record');
+    expect(whatsNewStep('1.5.2', '1.5.3')).toBe('notify');
+    expect(whatsNewStep('1.5.9', '1.6.0')).toBe('notify');
+    expect(whatsNewStep('1.5.3', '1.5.3')).toBe('none');
+    expect(whatsNewStep('1.6.0', '1.5.3')).toBe('record');
   });
 
   test("after an update the toast links to the version's section, once", async () => {
@@ -80,10 +78,22 @@ describe("What's new (ADR 0057)", () => {
     expect(localStorage.getItem(seenKey)).toBe('1.5.3');
   });
 
-  test('an account from before "What\'s new" that used this browser is told', async () => {
-    env.startOwner = 'u1';
+  test('an account whose cache an older version saved here is told, once', async () => {
+    env.cache = { owner: 'u1', version: '1.5.2' };
     await load();
     expect(env.toast).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem(seenKey)).toBe('1.5.3');
+  });
+
+  test("a cache this version saved (a first load cut short) is no update; another account's neither", async () => {
+    env.cache = { owner: 'u1', version: '1.5.3' };
+    await load();
+    expect(env.toast).not.toHaveBeenCalled();
+    expect(localStorage.getItem(seenKey)).toBe('1.5.3');
+    localStorage.clear();
+    env.cache = { owner: 'someone-else', version: '1.5.2' };
+    await load();
+    expect(env.toast).not.toHaveBeenCalled();
   });
 
   test('a release without a section shows nothing, but counts as seen', async () => {

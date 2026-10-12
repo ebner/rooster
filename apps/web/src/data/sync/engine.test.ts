@@ -271,6 +271,31 @@ describe('sync engine (04 §6)', () => {
     expect(transport.state(orgId).tasks.n2).toBeUndefined();
   });
 
+  test("ADR 0057: the engine reports which version saved the start account's cache", async () => {
+    const transport = createFixtureTransport({ userId });
+    const fresh = await boot({
+      storage: memoryStorage().storage,
+      outbox: createMemoryOutbox(),
+      transport,
+    });
+    expect(fresh.engine.cacheAtStart).toBeNull();
+    fresh.engine.stop();
+
+    const { data, storage } = memoryStorage();
+    localStorage.setItem('rooster.cacheOwner', userId);
+    data.set(
+      cacheStorageKey(userId),
+      JSON.stringify({
+        timestamp: Date.now(),
+        buster: '1.5.2',
+        confirmedAt: Date.now(),
+        queries: [],
+      }),
+    );
+    const { engine } = await boot({ storage, outbox: createMemoryOutbox(), transport });
+    expect(engine.cacheAtStart).toEqual({ owner: userId, version: '1.5.2' });
+  });
+
   test('sign-out clears everything and tells the other tabs', async () => {
     const { data, storage } = memoryStorage();
     const outbox = createMemoryOutbox();

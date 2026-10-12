@@ -27,18 +27,21 @@ export function whatsNewHref(version: string): string {
 
 /**
  * What a page load does: `notify` once per newer version, `record` silently on a first visit
- * (nothing is new to someone who just arrived) or after a downgrade. No version seen yet on a
- * browser this account used before means an account from before "What's new": it is told.
+ * (nothing is new to someone who just arrived) or after a downgrade. `seen` is the version
+ * this account last saw here; before "What's new" recorded it, the version that saved its
+ * cache stands in, so accounts from older releases are told too.
  */
-export function whatsNewStep(
-  seen: string | null,
-  current: string,
-  usedHereBefore: boolean,
-): 'none' | 'record' | 'notify' {
-  if (seen === null) return usedHereBefore ? 'notify' : 'record';
+export function whatsNewStep(seen: string | null, current: string): 'none' | 'record' | 'notify' {
+  if (seen === null) return 'record';
   const cmp = compareVersions(current, seen);
   if (cmp > 0) return 'notify';
   return cmp < 0 ? 'record' : 'none';
+}
+
+/** The version that saved `userId`'s cache on this browser before this page started. */
+function cachedVersion(userId: string): string | null {
+  const cache = syncEngine()?.cacheAtStart;
+  return cache?.owner === userId ? cache.version : null;
 }
 
 function readSeen(key: string): string | null {
@@ -65,10 +68,10 @@ export function useWhatsNewNotice(userId: string | undefined, locale: Locale): v
     const version = buildInfo.version;
     if (!userId || version === '0.0.0') return;
     const key = userStorageKey(userId, seenName);
-    const step = whatsNewStep(readSeen(key), version, syncEngine()?.startOwner === userId);
-    if (step === 'none') return;
-    if (step === 'record') {
-      writeSeen(key, version);
+    const stored = readSeen(key);
+    const step = whatsNewStep(stored ?? cachedVersion(userId), version);
+    if (step !== 'notify') {
+      if (step === 'record' || stored === null) writeSeen(key, version);
       return;
     }
     let live = true;

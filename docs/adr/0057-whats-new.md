@@ -14,8 +14,8 @@
    - Changes for the next release go under `## Unreleased`, in both files. Only builds from between releases show that heading.
 2. **After an update, a toast offers it once.** `useWhatsNewNotice` (in `features/help/whats-new.ts`, mounted in the signed-in layout) compares the bundle's version with the last one this account saw on this browser (`userStorageKey(userId, 'whatsNew.seen')`):
    - newer: "rooster was updated to X.Y.Z" with a "What's new" action that opens the version's section. It is shown for 12 s, and only once the guide chunk has loaded and has a section for the version. Either way the version then counts as seen.
-   - none seen, on a browser that held this account's cache when the page started (`SyncEngine.startOwner`): an account from before this feature. It gets the toast too, so the first release with notes reaches existing users.
-   - none seen otherwise (a first visit, a new browser, after a sign-out): the version is recorded silently. Nothing is new to someone who just arrived.
+   - none seen: the version that saved this account's cache on this browser stands in (`SyncEngine.cacheAtStart`, the cache's buster). If an older version saved it, the account is from before this feature and gets the toast too, so the first release with notes reaches existing users.
+   - none seen and no older cache (a first visit, a new browser, after a sign-out): the version is recorded silently. Nothing is new to someone who just arrived. A cache saved by the current version, as when a first load was cut short before the notice ran, is no update either; the 1.5.3 CI run caught the earlier check (only "this browser held the account's cache") showing the toast to brand-new users that way.
    - older (a downgrade): recorded silently.
 
    It is a toast, not a dialog (02 §1: no modals for everyday things), and it never blocks anything.
