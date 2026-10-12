@@ -25,3 +25,15 @@ export const whatsNewSlug = 'whats-new';
 export function versionAnchor(version: string): string {
   return version.toLowerCase().replace(/[^\p{L}\p{N}_-]/gu, '');
 }
+
+export interface GuideSearchParams {
+  q?: string;
+}
+
+/**
+ * The help routes' `validateSearch` (ADR 0058): an empty query is no query. It lives here, not
+ * with the search view, because route options stay in the initial bundle.
+ */
+export function guideSearchParams(search: Record<string, unknown>): GuideSearchParams {
+  return typeof search.q === 'string' && search.q !== '' ? { q: search.q } : {};
+}

@@ -6,7 +6,12 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+- **Search in the guide:** a field above the guide's page list (and on `/help`, also on phones) finds the sections that contain every word, ignoring case and accents, with highlighted snippets. It runs on the loaded guide, offline too, and the query is in the URL (`?q=`), so Back returns to the results (ADR 0058).
+
 ### Changed
+- On desktop the guide's header says "Help" instead of repeating the open page's title, which the page list already marks.
+- The guide calls the full-screen terminal app a TUI, names it in the page title ("Terminal app, command line and AI agents") and lists all of its keys.
 - The favicon has a lighter line (4 units on the 48 grid instead of 5), closer to the logo in the app.
 
 ### Fixed

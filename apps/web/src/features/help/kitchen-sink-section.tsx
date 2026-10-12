@@ -1,5 +1,5 @@
 import { isLocale } from '@rooster/i18n/core';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DisplayPrefs } from '../../lib/format';
 import { SystemSection } from '../admin/system-section';
@@ -27,6 +27,7 @@ export function HelpKitchenSection() {
     timeFormat: '24h',
   };
   const now = useMemo(() => Date.now(), []);
+  const [query, setQuery] = useState('reminder');
   const pages = fixtureGuidePages.map((page) => ({ ...page, lang: locale }));
   const reminders = pages[2] ?? pages[0];
   const fallbackPage = pages[1] && { ...pages[1], lang: other };
@@ -36,9 +37,18 @@ export function HelpKitchenSection() {
       <Group title={t('dev.index')} className="block">
         <GuideIndex pages={pages} />
       </Group>
+      <Group title={t('dev.search')} className="block">
+        <GuideIndex pages={pages} search={{ query, onQueryChange: setQuery }} />
+      </Group>
       {reminders && (
         <Group title={t('dev.article')} className="block">
-          <GuideArticle page={reminders} pages={pages} locale={locale} onNavigate={noop} />
+          <GuideArticle
+            page={reminders}
+            pages={pages}
+            locale={locale}
+            onNavigate={noop}
+            search={{ query: '', onQueryChange: noop }}
+          />
         </Group>
       )}
       {fallbackPage && (

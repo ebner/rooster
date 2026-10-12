@@ -8,6 +8,12 @@ import { Button, iconStrokeWidth } from '../../ui/button';
 import { Skeleton } from '../../ui/skeleton';
 import { paths } from '../shell/paths';
 import { type GuidePage, neighbours } from './guide-model';
+import {
+  GuideSearchField,
+  GuideSearchResults,
+  type GuideSearchState,
+  isSearching,
+} from './guide-search-view';
 import './guide.css';
 
 const linkClass = cn(
@@ -15,13 +21,22 @@ const linkClass = cn(
   'transition-colors duration-(--dur-fast) ease-standard',
 );
 
-/** `/help`: every page of the guide, in order. */
-export function GuideIndex({ pages }: { pages: readonly GuidePage[] }) {
+/** `/help`: every page of the guide, in order, and the search over them. */
+export function GuideIndex({
+  pages,
+  search,
+}: {
+  pages: readonly GuidePage[];
+  search?: GuideSearchState | undefined;
+}) {
   const { t } = useTranslation('help');
+  const searching = isSearching(search?.query);
   return (
     <div className="flex max-w-pane-max flex-col gap-6" data-testid="guide-index">
       <p className="text-md text-text-secondary">{t('lead')}</p>
-      <nav aria-label={t('pages')}>
+      {search && <GuideSearchField {...search} />}
+      {searching && search && <GuideSearchResults pages={pages} query={search.query} />}
+      <nav aria-label={t('pages')} hidden={searching}>
         <ol className="flex flex-col divide-y divide-border rounded-md border border-border">
           {pages.map((page, index) => (
             <li key={page.slug}>
@@ -64,6 +79,8 @@ export interface GuideArticleProps {
   hash?: string | undefined;
   /** On mount and page change, scroll to the article (or its anchor) and focus it (the route). */
   autoFocus?: boolean;
+  /** The search above the page list (desktop); a query shows its results instead of the page. */
+  search?: GuideSearchState | undefined;
 }
 
 function decodeFragment(value: string): string {
@@ -93,17 +110,28 @@ export function GuideArticle({
   onNavigate,
   hash,
   autoFocus = false,
+  search,
 }: GuideArticleProps) {
   const { t } = useTranslation('help');
   const article = useRef<HTMLElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const { previous, next } = neighbours(pages, page.slug);
+  const searching = isSearching(search?.query);
 
   // A new page: focus lands on the article (announced by its title) and the view starts at
-  // its top, or at the anchor the link named.
+  // its top, or at the anchor the link named. The article stays mounted under the search
+  // results; when they close the same happens, unless the field keeps focus (Esc, clear).
   useEffect(() => {
     const root = article.current;
     if (!root || !autoFocus) return;
+    if (searching) {
+      document.querySelector('[data-scroll-main]')?.scrollTo({ top: 0 });
+      return;
+    }
+    if (document.activeElement?.closest('[data-testid="guide-search"]')) {
+      root.scrollIntoView({ block: 'start' });
+      return;
+    }
     const target = hash ? document.getElementById(decodeFragment(hash)) : null;
     if (target && root.contains(target)) {
       target.tabIndex = -1;
@@ -113,7 +141,7 @@ export function GuideArticle({
     }
     root.scrollIntoView({ block: 'start' });
     root.focus({ preventScroll: true });
-  }, [page.slug, hash, autoFocus]);
+  }, [page.slug, hash, autoFocus, searching]);
 
   useEffect(() => {
     const root = body.current;
@@ -157,8 +185,13 @@ export function GuideArticle({
 
   return (
     <div className="flex flex-col gap-8 desktop:flex-row desktop:items-start desktop:gap-12">
-      <GuideNav pages={pages} current={page.slug} />
-      <div className="flex min-w-0 flex-1 flex-col gap-10">
+      <GuideNav pages={pages} current={page.slug} search={search} />
+      {searching && search && (
+        <div className="min-w-0 flex-1">
+          <GuideSearchResults pages={pages} query={search.query} />
+        </div>
+      )}
+      <div className="flex min-w-0 flex-1 flex-col gap-10" hidden={searching}>
         <article
           ref={article}
           tabIndex={-1}
@@ -182,37 +215,48 @@ export function GuideArticle({
   );
 }
 
-/** The list of pages beside the article (desktop); phones go back to the index instead. */
-function GuideNav({ pages, current }: { pages: readonly GuidePage[]; current: string }) {
+/**
+ * The search and the list of pages beside the article (desktop); phones go back to the index,
+ * which has both.
+ */
+function GuideNav({
+  pages,
+  current,
+  search,
+}: {
+  pages: readonly GuidePage[];
+  current: string;
+  search: GuideSearchState | undefined;
+}) {
   const { t } = useTranslation('help');
   return (
-    <nav
-      aria-label={t('pages')}
-      className="shrink-0 max-desktop:hidden desktop:sticky desktop:top-(--space-16) desktop:w-sidebar"
-    >
-      <ul className="flex flex-col gap-0.5">
-        {pages.map((page) => {
-          const active = page.slug === current;
-          return (
-            <li key={page.slug}>
-              <AriaLink
-                href={paths.helpPage(page.slug)}
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  linkClass,
-                  'flex min-h-control cursor-default items-center px-3 py-1 text-sm',
-                  active
-                    ? 'bg-bg-selected font-medium text-text'
-                    : 'text-text-secondary hover:bg-bg-subtle hover:text-text',
-                )}
-              >
-                <span lang={page.lang}>{page.title}</span>
-              </AriaLink>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
+    <div className="flex shrink-0 flex-col gap-3 max-desktop:hidden desktop:sticky desktop:top-(--space-16) desktop:w-sidebar">
+      {search && <GuideSearchField {...search} />}
+      <nav aria-label={t('pages')}>
+        <ul className="flex flex-col gap-0.5">
+          {pages.map((page) => {
+            const active = page.slug === current;
+            return (
+              <li key={page.slug}>
+                <AriaLink
+                  href={paths.helpPage(page.slug)}
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(
+                    linkClass,
+                    'flex min-h-control cursor-default items-center px-3 py-1 text-sm',
+                    active
+                      ? 'bg-bg-selected font-medium text-text'
+                      : 'text-text-secondary hover:bg-bg-subtle hover:text-text',
+                  )}
+                >
+                  <span lang={page.lang}>{page.title}</span>
+                </AriaLink>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+    </div>
   );
 }
 

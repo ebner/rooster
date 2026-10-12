@@ -26,8 +26,13 @@ test('AC-11.6 the guide reads offline in the installed app', async ({ page, cont
 
   await context.setOffline(true);
   await page.goto('/help/keyboard');
-  await expect(page.getByRole('heading', { level: 1, name: 'Keyboard shortcuts' })).toBeVisible();
-  await expect(page.getByTestId('guide-article').locator('kbd').first()).toBeVisible();
+  const article = page.getByTestId('guide-article');
+  await expect(article).toHaveAttribute('aria-label', 'Keyboard shortcuts');
+  await expect(article.locator('kbd').first()).toBeVisible();
+  // Search works offline too: it runs on the guide the app already holds.
+  await page.getByRole('searchbox', { name: 'Search the guide' }).fill('palette');
+  await expect(page.getByTestId('guide-search-results').getByRole('link').first()).toBeVisible();
+  await page.getByRole('searchbox', { name: 'Search the guide' }).fill('');
   await page
     .getByRole('navigation', { name: 'Previous and next page' })
     .getByRole('link', { name: /Next/ })

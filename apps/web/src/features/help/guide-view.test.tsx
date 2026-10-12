@@ -93,6 +93,31 @@ describe('the in-app guide (AC-11.6)', () => {
     );
   });
 
+  test('a query shows the matching sections instead of the page, linked to their headings', () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const onQueryChange = vi.fn();
+    article({ autoFocus: true, search: { query: 'reminder', onQueryChange } });
+    const results = screen.getByTestId('guide-search-results');
+    expect(within(results).getByRole('status').textContent).toMatch(/sections? match/);
+    const first = within(results).getAllByRole('link')[0];
+    expect(first?.getAttribute('href')).toBe('/help/reminders#add-a-reminder');
+    expect(first?.querySelector('mark')?.textContent?.toLowerCase()).toBe('reminder');
+    // The article stays mounted, hidden, so closing the search doesn't rebuild it.
+    expect(screen.getByTestId('guide-article').closest('[hidden]')).not.toBeNull();
+    // ↓ in the field moves to the first result; typing reports the new query.
+    const field = screen.getByRole('searchbox', { name: 'Search the guide' });
+    fireEvent.keyDown(field, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(first);
+    fireEvent.change(field, { target: { value: 'reminders' } });
+    expect(onQueryChange).toHaveBeenLastCalledWith('reminders');
+  });
+
+  test('a query that matches nothing says so; the index hides its list while searching', () => {
+    render(<GuideIndex pages={pages} search={{ query: 'zebra', onQueryChange: vi.fn() }} />);
+    expect(screen.getByRole('status').textContent).toBe('Nothing in the guide matches “zebra”.');
+    expect(screen.getByTestId('guide-index').querySelector('nav')?.hidden).toBe(true);
+  });
+
   test('a failed load offers a retry', () => {
     const onRetry = vi.fn();
     render(<GuideStatus error={new Error('offline')} onRetry={onRetry} />);

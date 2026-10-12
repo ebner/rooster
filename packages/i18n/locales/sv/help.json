@@ -10,6 +10,14 @@
   "loading": "Läser in guiden…",
   "loadFailed": "Det gick inte att läsa in guiden. Kontrollera anslutningen och försök igen.",
   "retry": "Försök igen",
+  "search": {
+    "label": "Sök i guiden",
+    "placeholder": "Sök i guiden",
+    "clear": "Rensa sökningen",
+    "results": "Sökresultat",
+    "count": "{count, plural, one {# avsnitt matchar} other {# avsnitt matchar}}",
+    "none": "Inget i guiden matchar ”{query}”."
+  },
   "whatsNew": {
     "toast": "rooster har uppdaterats till {version}.",
     "action": "Nyheter",
@@ -40,6 +48,7 @@
     "fallback": "Guidesida som visas på engelska",
     "notFound": "Okänd guidesida",
     "index": "Guidens innehåll",
+    "search": "Sökning i guiden med resultat",
     "system": "Administration → System",
     "systemBare": "Administration → System: en ny instans som uppdateras",
     "systemLoading": "Administration → System: läser in",

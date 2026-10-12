@@ -10,6 +10,14 @@
   "loading": "Loading the guide…",
   "loadFailed": "Couldn’t load the guide. Check your connection and try again.",
   "retry": "Try again",
+  "search": {
+    "label": "Search the guide",
+    "placeholder": "Search the guide",
+    "clear": "Clear the search",
+    "results": "Search results",
+    "count": "{count, plural, one {# section matches} other {# sections match}}",
+    "none": "Nothing in the guide matches “{query}”."
+  },
   "whatsNew": {
     "toast": "rooster was updated to {version}.",
     "action": "What’s new",
@@ -40,6 +48,7 @@
     "fallback": "Guide page shown in English",
     "notFound": "Unknown guide page",
     "index": "Guide index",
+    "search": "Guide search with results",
     "system": "Admin → System",
     "systemBare": "Admin → System: a new instance, refreshing",
     "systemLoading": "Admin → System: loading",
