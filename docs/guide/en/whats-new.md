@@ -2,7 +2,9 @@
 
 What changed for you in each version of rooster, newest first. After an update, rooster offers this page once. You can open it at any time from Settings or the guide's page list. The notes for whoever runs rooster (upgrades, settings, security) are in the [changelog](../../../CHANGELOG.md).
 
-## Unreleased
+## 1.6.0
+
+_2026-10-12_
 
 - **Search the guide.** Type in the field above the guide's page list to find every section about something, with the words highlighted. Accents don't matter, and it works offline too. The command palette (Ctrl+K, or **Search** on a phone) shows the best matches from the guide under **Help**, after your tasks.
 - **The guide's header says Help**, and the page list beside it shows which page you're on.

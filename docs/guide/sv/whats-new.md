@@ -2,7 +2,9 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
-## Unreleased
+## 1.6.0
+
+_2026-10-12_
 
 - **Sök i guiden.** Skriv i fältet ovanför guidens sidlista för att hitta alla avsnitt om något, med orden markerade. Accenter spelar ingen roll, och det fungerar också offline. Kommandopaletten (Ctrl+K, eller **Sök** på en telefon) visar de bästa träffarna i guiden under **Hjälp**, efter dina uppgifter.
 - **Guidens rubrik är Hjälp**, och sidlistan bredvid visar vilken sida du är på.

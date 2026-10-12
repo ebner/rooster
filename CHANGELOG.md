@@ -6,6 +6,8 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-12
+
 ### Added
 - **Send test email** in Admin → System: a test to the signed-in admin's own address that reports whether the SMTP server accepted it, with its SMTP code and status if not (`POST /api/v1/admin/mail/test`, ADR 0059). `docs/operator.md` describes relaying through the host's Postfix, including TLS for its outbound mail.
 - **Search in the guide:** a field above the guide's page list (and on `/help`, also on phones) finds the sections that contain every word, ignoring case and accents, with highlighted snippets. It runs on the loaded guide, offline too, and the query is in the URL (`?q=`), so Back returns to the results. The command palette (Ctrl+K, and Search on phones) shows the best five sections under **Help**, after the tasks (ADR 0058).
@@ -18,6 +20,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ### Fixed
 - In a narrow row (for example with the detail pane open), tag chips that don't fit drop out whole instead of running under the description, reminder, subtask and attachment icons.
+
+### Migrations
+- None.
 
 ## [1.5.3] - 2026-10-12
 

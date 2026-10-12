@@ -53,7 +53,7 @@ RUN mkdir -p /out /out-data \
 
 # ---- runtime ----
 FROM gcr.io/distroless/nodejs24-debian12:nonroot@sha256:14d42e2511532589a7c7e01a753667a74fcc96266e137e8125006b87b0c32d0a AS runtime
-ARG ROOSTER_VERSION=1.5.3
+ARG ROOSTER_VERSION=1.6.0
 ARG ROOSTER_GIT_SHA=dev
 LABEL org.opencontainers.image.title="rooster" \
       org.opencontainers.image.source="https://github.com/201works/rooster" \

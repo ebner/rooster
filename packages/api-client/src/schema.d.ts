@@ -2846,6 +2846,12 @@ export interface components {
             durationMs: number;
             finishedAt: number;
         };
+        /**
+         * @example {
+         *       "to": "admin@example.com",
+         *       "sentAt": 1791532800000
+         *     }
+         */
         MailTestResult: {
             to: string;
             sentAt: number;
