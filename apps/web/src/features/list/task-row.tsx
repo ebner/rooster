@@ -217,6 +217,13 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
       resumeDraftEdit();
     }
   };
+  const onPhoneDraftDateOpen = (open: boolean) => {
+    if (!open) return;
+    controller.ui().set({ suspendedEdit: id, popover: { kind: 'date', rowId: id } });
+    // The press focused the cell; the sheet hands focus back to what had it when it opened,
+    // and that must be the title, still within the tap so that iOS keeps the keyboard.
+    titleInputHandle(id)?.focus();
+  };
   // P10: the picker's reminder section; it loads (and fetches the reminders) when shown.
   const renderReminders = useCallback(
     (slot: ReminderSlotProps) => (
@@ -400,12 +407,9 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
       <GridCell
         data-no-row-press
         className="shrink-0"
-        {...(draft && !mobile ? { onPointerDownCapture: holdDraftEdit } : {})}
+        {...(draft ? { onPointerDownCapture: holdDraftEdit } : {})}
       >
-        {draft && mobile ? (
-          // Phones pick a draft's date from the accessory bar (02 §13.3).
-          <span className="block w-date-cell" />
-        ) : draft ? (
+        {draft ? (
           <DateCell
             value={{
               dueDate: task.dueDate,
@@ -416,8 +420,11 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
             startDate={task.startDate}
             onChange={(next) => controller.setDraftDue(id, next)}
             ctx={dateCtx}
-            isOpen={dateOpen}
-            onOpenChange={onDraftDateOpen}
+            className="max-tablet:w-auto"
+            // Phones pick a draft's date in the accessory bar's sheet (02 §13.3), which hands
+            // the caret back itself.
+            isOpen={dateOpen && !mobile}
+            onOpenChange={mobile ? onPhoneDraftDateOpen : onDraftDateOpen}
           />
         ) : (
           <DateCell

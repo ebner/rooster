@@ -215,6 +215,36 @@ test('AC-4.5 the FAB creates tasks with the accessory bar above the keyboard', a
   );
 });
 
+test("a new row's calendar opens the date sheet while its name stays in edit", async ({ page }) => {
+  const { orgId } = await setup(page, 'draft.calendar', ['Already here']);
+  await page.getByRole('button', { name: 'New task' }).tap();
+  const input = page.locator('[data-list-input]');
+  await expect(input).toBeFocused();
+  await input.fill('Pay rent');
+  const draftRow = page.getByTestId('task-row').filter({ has: input });
+  const calendar = draftRow.getByRole('button', { name: 'Set due date' });
+  // Touch has no hover: the calendar shows while the name is typed.
+  await expect(calendar.locator('svg')).toHaveCSS('opacity', '0.6');
+  await calendar.tap();
+  await page
+    .getByRole('dialog', { name: 'Due date' })
+    .getByRole('button', { name: /^Tomorrow/ })
+    .tap();
+  await expect(page.getByRole('dialog', { name: 'Due date' })).toHaveCount(0);
+  // Still the same draft, with its name and the caret back, and the date on its row.
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue('Pay rent');
+  await expect(draftRow.getByRole('button', { name: /^Due date: Tomorrow/ })).toBeVisible();
+  await input.press('Enter');
+  await expect(row(page, 'Pay rent')).toBeVisible();
+  await waitForSync(page);
+  const list = await myList(page, orgId);
+  const me = (await (await apiCall(page, 'GET', '/api/v1/me')).json()) as { timezone: string };
+  expect(list.tasks.find((t) => t.title === 'Pay rent')?.dueDate).toBe(
+    addDays(todayIn(me.timezone, Date.now()), 1),
+  );
+});
+
 test('the detail sheet opens on tap and closes with back (history) and ‹', async ({ page }) => {
   await setup(page, 'sheet.open', ['Write Q4 plan']);
   await row(page, 'Write Q4 plan').click();

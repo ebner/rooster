@@ -107,7 +107,7 @@ The pane (if open) always shows the **selected** row (D-29). Moving the selectio
 
 **Draft rows.** A new row is a *draft* until its title is non-empty and committed (Enter, Esc, blur or ↑/↓). Drafts are never sent to the server. A draft that loses focus while empty disappears silently. This prevents stray empty tasks.
 
-**A draft's date.** A draft has its date cell, with the calendar icon showing while the row is edited. Clicking it or pressing Tab+D opens the date popover without committing the title: the title stays in edit, and the caret returns to it when the popover closes. The date is applied when the task is created; a date phrase in the title still wins. The draft's popover has no Repeat or Reminders section (type `every mon` or `!1h` instead). On phones the accessory bar's date button does this (§13.3).
+**A draft's date.** A draft has its date cell, with the calendar icon showing while the row is edited. Clicking it or pressing Tab+D opens the date popover without committing the title: the title stays in edit, and the caret returns to it when the popover closes. The date is applied when the task is created; a date phrase in the title still wins. The draft's popover has no Repeat or Reminders section (type `every mon` or `!1h` instead). On phones, tapping the calendar or the accessory bar's date button (§13.3) opens the date sheet instead, with the same effect.
 
 **Context inheritance.** A new task inherits the **group** and assignee (me) of its position. In a smart view, a new task inherits the view's date: creating in *Today* sets the due date to today, in *Next 7 days → Wed* it sets Wednesday, and *No date* leaves it empty. It goes into the **Inbox** unless a group is chosen via `>Group` (below).
 

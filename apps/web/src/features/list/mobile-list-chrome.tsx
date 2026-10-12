@@ -105,8 +105,12 @@ export function MobileListChrome({
   };
 
   // ------------------------------------------------------------------ popover sheets
+  // A draft's date (from its row's calendar or the accessory bar) has its own sheet below.
+  const draftDateOpen =
+    draft !== undefined && popover?.kind === 'date' && popover.rowId === draft.id;
   const sheetIds =
     popover &&
+    !draftDateOpen &&
     (popover.kind === 'date' ||
       popover.kind === 'moveTo' ||
       popover.kind === 'tag' ||
@@ -133,26 +137,27 @@ export function MobileListChrome({
 
   // ------------------------------------------------------------------ the draft's accessory bar
   const keyboard = useKeyboardInset();
-  const [draftSheet, setDraftSheet] = useState<'date' | 'group' | null>(null);
+  const [groupSheetOpen, setGroupSheetOpen] = useState(false);
+  const draftSheetOpen = groupSheetOpen || draftDateOpen;
   const draftDue = draft?.due ?? noDue;
   const dateInfo = useDateLabel(draftDue, dateCtx);
   const groupName = draft ? (controller.state()?.groups[draft.groupId]?.name ?? '') : '';
   const openDraftSheet = (kind: 'date' | 'group') => {
     if (!draft) return;
-    controller.ui().set({ suspendedEdit: draft.id });
-    setDraftSheet(kind);
+    controller.ui().set({
+      suspendedEdit: draft.id,
+      ...(kind === 'date' ? { popover: { kind: 'date', rowId: draft.id } } : {}),
+    });
+    if (kind === 'group') setGroupSheetOpen(true);
   };
   const closeDraftSheet = () => {
     const id = controller.ui().suspendedEdit;
-    setDraftSheet(null);
-    controller.ui().set({ suspendedEdit: null });
+    setGroupSheetOpen(false);
+    controller.ui().set({ suspendedEdit: null, ...(draftDateOpen ? { popover: null } : {}) });
     if (id) titleInputHandle(id)?.focus();
   };
   const showAccessory =
-    draft !== undefined &&
-    editing !== null &&
-    !draft.parentId &&
-    (editingFocus || draftSheet !== null);
+    draft !== undefined && editing !== null && !draft.parentId && (editingFocus || draftSheetOpen);
 
   return (
     <>
@@ -173,7 +178,7 @@ export function MobileListChrome({
         />
       )}
 
-      {showAccessory && draftSheet === null && (
+      {showAccessory && !draftSheetOpen && (
         <AccessoryBar
           bottom={keyboard}
           dateLabel={dateInfo?.label}
@@ -187,14 +192,14 @@ export function MobileListChrome({
       {draft && (
         <>
           <QuickDateSheet
-            isOpen={draftSheet === 'date'}
+            isOpen={draftDateOpen}
             onOpenChange={(open) => !open && closeDraftSheet()}
             value={draftDue}
             ctx={dateCtx}
             onCommit={(next) => controller.setDraftDue(draft.id, next)}
           />
           <GroupSheet
-            isOpen={draftSheet === 'group'}
+            isOpen={groupSheetOpen}
             onOpenChange={(open) => !open && closeDraftSheet()}
             title={t('accessory.groupTitle')}
             groups={groupChoices(controller).filter((g) => !g.inbox)}

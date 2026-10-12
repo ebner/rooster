@@ -24,7 +24,7 @@ The **Inbox** is a special group pinned at the top. It collects tasks that arriv
 
 - **Enter** while editing adds a task below; **Shift+Enter** adds one above. While a row is only selected, **N** and **Shift+N** do the same, and **Q** (or Tab+Q) adds a task at the top of the first group.
 - **Add task** at the end of each group adds one there.
-- **Give a new task a date** while you type its name: click the calendar on the right of the row, or press **Tab+D**. Pick a date, carry on typing, and press Enter. You can also type the date into the name, such as `fri` ([Dates](./dates-and-repeats.md)).
+- **Give a new task a date** while you type its name: click the calendar on the right of the row, or press **Tab+D**. On a phone, tap the calendar or the **Date** button above the keyboard. Pick a date, carry on typing, and press Enter. You can also type the date into the name, such as `fri` ([Dates](./dates-and-repeats.md)).
 - Click a title to edit it. Changes are saved when you press Enter or Esc, move to another row or click elsewhere.
 - **Paste several lines** into an empty title, and a chip offers to create one task per line. Press Enter to accept, or Esc to paste the text as one line.
 - **Backspace in an empty title** removes the row, as long as the task has no description, subtasks, comments or attachments. Otherwise use Tab+Delete.

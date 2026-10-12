@@ -6,6 +6,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Changed
+- On phones a new task's row shows its calendar too: tap it to pick the date while you type the name, as with the Date button above the keyboard. This also works for a new subtask, which has no button bar.
+
 ### Fixed
 - Screenshots in the guide show at their real size: phone screens are no longer blown up to the full column, and a cropped picture has the same zoom as the full-screen ones beside it. On wide screens the two phone-layout pictures sit side by side.
 
