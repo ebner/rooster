@@ -28,7 +28,7 @@ Phase 11 changes no API contract, so it is released as **1.5.0** (strict SemVer)
 - The demo data is synthetic. No real people, companies or addresses appear.
 
 ## 4. Accessibility
-- CI runs the automated checks: axe on every screen in both themes and both form factors, a keyboard-only journey, and the list's accessible names.
+- The e2e suite runs the automated checks (in the release run since ADR 0060, not in CI): axe on every screen in both themes and both form factors, a keyboard-only journey, and the list's accessible names.
 - The manual screen reader passes in 10 §5 (VoiceOver on iOS and macOS, NVDA with Firefox) follow `docs/accessibility-checklist.md`. The maintainer runs them per release, and the findings come back as issues.
 
 ## 5. Security checks in CI

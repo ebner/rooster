@@ -100,7 +100,7 @@ The projects are `chromium` (desktop), `mobile` (iPhone 15, WebKit) and `mobile-
 - `build`: the build, the bundle budget and the CLI smoke test;
 - `e2e`: the Playwright suite, timing budgets included.
 
-`pnpm run ci unit e2e` runs only the stages you name; GitHub Actions runs each stage as its own parallel job. There, e2e runs in three shards (`ROOSTER_E2E_SHARD=1/3` and so on, which leaves out the `perf` project) and the timing budgets run alone in the `e2e-perf` stage (`ROOSTER_E2E_PERF=only`). A project with dependencies stays in one shard, so `perf`, which runs after `chromium`, would otherwise pin every desktop test to a single shard. `pnpm run ci --with-docker` also builds the image, smoke-tests it (`scripts/docker-smoke.sh`) and runs the backup drill.
+`pnpm run ci unit e2e` runs only the stages you name. GitHub Actions runs `static`, `unit` and `build` as parallel jobs, then builds and checks the image; the e2e suite runs locally, in `pnpm release` on the commit being released (ADR 0060). To split it, `ROOSTER_E2E_SHARD=1/3` (and so on) runs one shard without the `perf` project, and `pnpm run ci e2e-perf` runs the timing budgets alone (`ROOSTER_E2E_PERF=only`). A project with dependencies stays in one shard, so `perf`, which runs after `chromium`, would otherwise pin every desktop test to a single shard. `pnpm run ci --with-docker` also builds the image, smoke-tests it (`scripts/docker-smoke.sh`) and runs the backup drill.
 
 Every test runs in UTC, as on the CI runners: the vitest projects set `TZ`, and the Playwright config pins the runner, the servers and the browsers. A test that needs another zone passes it explicitly.
 

@@ -86,8 +86,10 @@ A corpus of 40 Markdown samples (`apps/web/src/features/editor/markdown.corpus.t
 
 ```
 install (pnpm, cached) → lint → typecheck → unit+service+api (parallel) → build (web, server, cli)
-  → e2e (chromium, webkit, mobile-webkit; sharded) → visual → docker build (+ smoke) → [tag] publish image & CLI binaries
+  → docker build (+ smoke, backup drill) → [tag] publish image & CLI binaries
 ```
+
+The e2e suite (chromium, webkit, the phone projects) and its timing budgets run in the local release run (`pnpm release`) on the commit being released, not in CI (ADR 0060).
 
 ## 8. Observability of quality
 - Every e2e failure keeps its trace and any visual diff in Playwright's output directory (ADR 0060: the suite runs locally).
