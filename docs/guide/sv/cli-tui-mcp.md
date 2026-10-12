@@ -76,6 +76,8 @@ Slutkoden talar om för skriptet vad som hände: `0` gick bra, `2` felaktigt kom
 
 Kör `rooster` utan argument i en terminal för att öppna en version av rooster i helskärm som styrs helt med tangentbordet: ett textbaserat gränssnitt, eller TUI. Den har samma vyer och organisationer som webbappen och uppdateras direkt när något ändras på annat håll. Den använder inloggningen från [Logga in](#logga-in), och `--profile` väljer en annan. Där en terminal inte kan skilja webbens tangenter åt använder den egna, ungefär som vim.
 
+![Terminalappen: Mina uppgifter i en organisation, med grupper, taggar, datum och tangenterna längst ned](../../screenshots/tui.desktop.light.png)
+
 | Tangenter | Gör |
 |---|---|
 | `j` `k` eller `↓` `↑` | Flytta mellan raderna |

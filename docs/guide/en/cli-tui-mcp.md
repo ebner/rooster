@@ -76,6 +76,8 @@ The exit code tells scripts what happened: `0` ok, `2` usage error, `3` not sign
 
 Run `rooster` with no arguments in a terminal to open a full-screen, keyboard-only version of rooster: a text user interface, or TUI. It shows the same views and organisations as the web app, and updates live when something changes elsewhere. It uses the sign-in from [Sign in](#sign-in), and `--profile` picks another one. Where a terminal can't tell the web's keys apart, it uses its own, much like vim's.
 
+![The terminal app: My tasks in an organisation, with its groups, tags, dates and the keys at the bottom](../../screenshots/tui.desktop.light.png)
+
 | Keys | Action |
 |---|---|
 | `j` `k` or `↓` `↑` | Move between rows |

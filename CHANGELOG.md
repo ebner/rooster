@@ -11,7 +11,7 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ### Changed
 - On desktop the guide's header says "Help" instead of repeating the open page's title, which the page list already marks.
-- The guide calls the full-screen terminal app a TUI, names it in the page title ("Terminal app, command line and AI agents") and lists all of its keys.
+- The guide calls the full-screen terminal app a TUI, names it in the page title ("Terminal app, command line and AI agents"), lists all of its keys and shows a screenshot of it, which `pnpm docs:screenshots` renders from the real TUI.
 - The favicon has a lighter line (4 units on the 48 grid instead of 5), closer to the logo in the app.
 
 ### Fixed

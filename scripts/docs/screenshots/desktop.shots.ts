@@ -1,6 +1,9 @@
 import type { Page } from '@playwright/test';
 import { clickRowBody, mod } from '../../../apps/web/e2e/support/p3';
+import { api } from './demo-api';
+import { DEMO } from './demo-env';
 import { capturing, expect, shot, test } from './shoot';
+import { terminalHtml, tuiFrame } from './terminal';
 
 /** Desktop (1440 × 900, the 112.5 % UI scale): the screens the guide and the README show. */
 
@@ -193,6 +196,56 @@ test('desktop screens', async ({ page, demo, request }, testInfo) => {
     await apps.scrollIntoViewIfNeeded();
     await expect(apps).toContainText('Weekly report script');
     await shot(page, testInfo, 'connected-apps');
+  });
+
+  await run.take('tui', async () => {
+    // The real TUI, signed in with a token that is revoked again afterwards (after the
+    // Connected apps shot, which must not show it).
+    const created = await api<{ token: string; grant: { id: string } }>(
+      page,
+      'POST',
+      '/me/tokens',
+      {
+        name: 'Docs TUI',
+        scopes: [
+          'tasks:read',
+          'tasks:write',
+          'comments:write',
+          'groups:write',
+          'notifications:read',
+        ],
+        constraints: { orgs: 'all' },
+        expiresInDays: 1,
+      },
+    );
+    try {
+      const frame = tuiFrame(DEMO.baseURL, created.token, {
+        columns: 100,
+        rows: 30,
+        org: 'Kestrel Lane',
+        wait: ['Homepage hero concepts'],
+        timezone: DEMO.timezone,
+      });
+      const terminal = await page.context().newPage();
+      try {
+        await terminal.setContent(terminalHtml(frame, 'rooster'));
+        const box = await terminal.locator('#terminal').boundingBox();
+        if (!box) throw new Error('no terminal');
+        const pad = 24;
+        await shot(terminal, testInfo, 'tui', {
+          clip: {
+            x: box.x - pad,
+            y: box.y - pad,
+            width: box.width + 2 * pad,
+            height: box.height + 2 * pad,
+          },
+        });
+      } finally {
+        await terminal.close();
+      }
+    } finally {
+      await api(page, 'DELETE', `/me/grants/${created.grant.id}`);
+    }
   });
 
   run.done();
