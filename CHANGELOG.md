@@ -6,14 +6,21 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.5.3] - 2026-10-12
+
 ### Added
 - **What's new:** after an update, rooster offers once a page listing what changed for users in each version, in English and Swedish. It's in the guide and in Settings at any time. Releases need its notes (`docs/guide/{en,sv}/whats-new.md`; ADR 0057).
 
 ### Changed
 - On phones a new task's row shows its calendar too: tap it to pick the date while you type the name, as with the Date button above the keyboard. This also works for a new subtask, which has no button bar.
+- Releases are cut with `pnpm release X.Y.Z`, which checks the notes and the migration fixture, then runs the whole pipeline with the image before the release commit and tag. The timing budgets get one retry everywhere.
 
 ### Fixed
+- On phones, a date picked for a new task shows on its row at once, not only after the task is created.
 - Screenshots in the guide show at their real size: phone screens are no longer blown up to the full column, and a cropped picture has the same zoom as the full-screen ones beside it. On wide screens the two phone-layout pictures sit side by side.
+
+### Migrations
+- None.
 
 ## [1.5.2] - 2026-10-11
 

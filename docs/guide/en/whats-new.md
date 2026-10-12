@@ -2,10 +2,12 @@
 
 What changed for you in each version of rooster, newest first. After an update, rooster offers this page once. You can open it at any time from Settings or the guide's page list. The notes for whoever runs rooster (upgrades, settings, security) are in the [changelog](../../../CHANGELOG.md).
 
-## Unreleased
+## 1.5.3
+
+_2026-10-12_
 
 - **What's new:** this page. After an update, rooster offers it once in a message at the bottom of the screen, and Settings links to it at any time.
-- **On a phone, a new task's row shows its calendar.** Tap it to give the task a date while you type its name, just like the **Date** button above the keyboard. This also works for a new subtask.
+- **On a phone, a new task's row shows its calendar.** Tap it to give the task a date while you type its name, just like the **Date** button above the keyboard. The date shows on the row at once, and this also works for a new subtask.
 - **Screenshots in this guide show at their real size.** Phone screens are no longer blown up to the full width, and on wide screens two phone pictures sit side by side.
 
 ## 1.5.2

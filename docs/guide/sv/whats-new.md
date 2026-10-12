@@ -2,10 +2,12 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
-## Unreleased
+## 1.5.3
+
+_2026-10-12_
 
 - **Nyheter:** den här sidan. Efter en uppdatering visar rooster den en gång i ett meddelande längst ned på skärmen, och Inställningar länkar till den när du vill.
-- **På en telefon visar raden för en ny uppgift sin kalender.** Tryck på den för att ge uppgiften ett datum medan du skriver namnet, precis som med knappen **Datum** ovanför tangentbordet. Det fungerar också för en ny deluppgift.
+- **På en telefon visar raden för en ny uppgift sin kalender.** Tryck på den för att ge uppgiften ett datum medan du skriver namnet, precis som med knappen **Datum** ovanför tangentbordet. Datumet syns direkt på raden, och det fungerar också för en ny deluppgift.
 - **Skärmbilderna i guiden visas i sin verkliga storlek.** Telefonbilder blåses inte längre upp till hela bredden, och på breda skärmar står två telefonbilder bredvid varandra.
 
 ## 1.5.2

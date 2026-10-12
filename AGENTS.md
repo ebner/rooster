@@ -233,7 +233,7 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
 
 ## Status
 - **Current phase:** none scheduled. Phase 11 was the last phase in 09; the next work is the backlog (09 §Backlog).
-- **Latest release:** 1.5.2 (a new task takes its date while its name is typed, pages open at their top, a pinned settings menu, touch hints), after 1.5.1 (a larger, centred Android icon) and 1.5.0 (Phase 11: the security audit, accessibility, 2,000-task performance, the guide at /help, Admin → System, the storage quota, removed sign-ins, apps without colleagues' emails; ADRs 0052–0056).
+- **Latest release:** 1.5.3 (What's new after each update, a new row's calendar on phones, guide screenshots at their real size, `pnpm release`), after 1.5.2 (a new task takes its date while its name is typed, pages open at their top, a pinned settings menu, touch hints) and 1.5.0 (Phase 11: the security audit, accessibility, 2,000-task performance, the guide at /help, Admin → System, the storage quota, removed sign-ins, apps without colleagues' emails; ADRs 0052–0056).
 - **Last completed phase:** Phase 11, hardening (2026-10-10; released in 1.5.0):
   - the security audit of every trust boundary: 107 findings, 102 fixed, 5 accepted or refuted (`docs/security/security-review.md`, ADR 0056);
   - the ASVS L2 map (`docs/security/asvs.md`); `pnpm audit` and gitleaks in CI;
