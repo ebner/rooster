@@ -278,6 +278,30 @@ test('tag chips in a narrow row drop out whole instead of running under the icon
   expect(visible.at(-1)).toBe('');
 });
 
+test("picking a day in a row's date picker sets the date without opening the pane", async ({
+  page,
+}) => {
+  const { orgId, today } = await setup(page, 'date.nopane');
+  const task = await createTask(page, orgId, { title: 'Book the venue', groupId: today });
+  await page.reload();
+  await row(page, 'Book the venue').getByRole('button', { name: 'Set due date' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Due date' });
+  await expect(dialog).toBeVisible();
+  // A day in the calendar is not a <button>, and the picker is portalled out of the row.
+  await dialog
+    .getByRole('grid')
+    .getByRole('gridcell', { name: / 20, \d{4}$/ })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    row(page, 'Book the venue').getByRole('button', { name: /^Due date/ }),
+  ).toBeVisible();
+  await expect(pane(page)).toHaveCount(0);
+  await expect(page).toHaveURL(/\/o\/personal\/my$/);
+  await waitForSync(page);
+  expect((await detail(page, task.id)).dueDate).toMatch(/-20$/);
+});
+
 test('AC-3.5 cycles and nesting deeper than 5 levels are rejected', async ({ page }) => {
   const { orgId, today } = await setup(page, 'ac.threefive');
   const root = await createTask(page, orgId, { title: 'Level 0', groupId: today });

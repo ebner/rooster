@@ -99,6 +99,8 @@ export const GroupHeader = memo(function GroupHeader({ row }: GroupHeaderProps) 
 
   const onRowClick = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target as Element;
+    // Clicks in its portalled menu reach the header through React, not the DOM.
+    if (!event.currentTarget.contains(target)) return;
     if (target.closest('button,input,[data-no-row-press]')) return;
     // A click on the name renames (02 §4); the Inbox name is not editable.
     if (target.closest('[data-focus-target]') && !inbox) controller.startRename(group.id);

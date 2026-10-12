@@ -140,6 +140,9 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
   const onRowClick = useCallback(
     (event: MouseEvent<HTMLDivElement>) => {
       const target = event.target as Element;
+      // React delivers clicks from portals (the date picker, the tag picker) to the row that
+      // renders them; only a click on the row itself is a row press.
+      if (!event.currentTarget.contains(target)) return;
       if (mobile && !draft) {
         // 02 §13.2: a tap opens the detail sheet (titles are edited there); in selection
         // mode it toggles the row.
