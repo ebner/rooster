@@ -1,6 +1,6 @@
-# Terminal och AI-agenter
+# Terminalapp, kommandorad och AI-agenter
 
-Kommandoradsverktyget `rooster` låter dig arbeta med dina uppgifter från en terminal och i skript. Det har också en terminalapp i helskärm, och det kopplar AI-agenter som Claude till rooster via MCP. Du bestämmer exakt vad var och en får se och ändra.
+Kommandoradsverktyget `rooster` låter dig arbeta med dina uppgifter från en terminal och i skript. Det har också en terminalapp i helskärm (ett TUI), och det kopplar AI-agenter som Claude till rooster via MCP. Du bestämmer exakt vad var och en får se och ändra.
 
 ## Installera kommandoradsverktyget
 
@@ -72,13 +72,15 @@ rooster ls overdue --json | jq -r '.[].seq' | rooster done -
 
 Slutkoden talar om för skriptet vad som hände: `0` gick bra, `2` felaktigt kommando, `3` inte inloggad eller saknar behörighet, `4` hittades inte, `5` konflikt eller ogiltigt värde, `6` problem med nätverket eller servern.
 
-## Terminalappen
+## Terminalappen (TUI)
 
-Kör `rooster` utan argument i en terminal för att öppna en version av rooster i helskärm som styrs helt med tangentbordet. Den har samma vyer och organisationer och uppdateras direkt när något ändras på annat håll.
+Kör `rooster` utan argument i en terminal för att öppna en version av rooster i helskärm som styrs helt med tangentbordet: ett textbaserat gränssnitt, eller TUI. Den har samma vyer och organisationer som webbappen och uppdateras direkt när något ändras på annat håll. Den använder inloggningen från [Logga in](#logga-in), och `--profile` väljer en annan. Där en terminal inte kan skilja webbens tangenter åt använder den egna, ungefär som vim.
 
 | Tangenter | Gör |
 |---|---|
 | `j` `k` eller `↓` `↑` | Flytta mellan raderna |
+| `←` / `→` | Fäll ihop / fäll ut en grupp eller en uppgifts deluppgifter |
+| `Home` / `End` · `PgUp` / `PgDn` | Första / sista raden · bläddra en sida |
 | `Enter` eller `i` | Redigera rubriken |
 | `n` / `N` | Ny uppgift nedanför / ovanför |
 | `x` | Markera som klar eller öppna igen |
@@ -86,10 +88,12 @@ Kör `rooster` utan argument i en terminal för att öppna en version av rooster
 | `t` · `m` · `s` | Taggar · flytta till en grupp · lägg till en deluppgift |
 | `o` / `e` | Öppna detaljerna / redigera beskrivningen i `$EDITOR` |
 | `J` `K` · `]` `[` | Flytta uppgiften nedåt, uppåt · till nästa eller föregående grupp |
+| `Delete` | Ta bort uppgiften (går att ångra) |
 | `u` / `Ctrl+R` | Ångra / gör om |
 | `/` | Sök |
 | `g` och sedan `m` `t` `w` `o` `n` `e` | Mina uppgifter, Idag, Kommande 7 dagar, Försenade, Utan datum, Allas uppgifter |
 | `1`–`9` | Byt organisation |
+| `H` | Visa eller dölj klara uppgifter |
 | `?` | Alla tangenter, och hur de skiljer sig från webben |
 | `q` | Avsluta |
 

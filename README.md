@@ -95,7 +95,7 @@ rooster                                               # the full-screen TUI
 rooster mcp setup --client claude-code                # a separate, narrower login for an AI agent
 ```
 
-Single-file binaries for Linux, macOS and Windows are attached to each [GitHub release](https://github.com/201works/rooster/releases). Remote agents only need `https://<your rooster>/mcp`. More in [Terminal and AI agents](docs/guide/en/cli-tui-mcp.md).
+Single-file binaries for Linux, macOS and Windows are attached to each [GitHub release](https://github.com/201works/rooster/releases). Remote agents only need `https://<your rooster>/mcp`. More in [Terminal app, command line and AI agents](docs/guide/en/cli-tui-mcp.md).
 
 ## Documentation
 

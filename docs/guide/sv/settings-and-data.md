@@ -35,7 +35,7 @@ Se [Aviseringar](./notifications.md) och [Kalenderflöden](./calendar-feeds.md).
 
 - **Inloggade enheter:** alla webbläsare och appar där du är inloggad, och när de senast var aktiva. **Logga ut** loggar ut enheten vid nästa anrop.
 - **Länkade identiteter:** kontona du kan logga in med, till exempel Google och företagets inloggning. **Ta bort länk** för ett konto du inte längre använder; det sista går inte att ta bort.
-- **Anslutna appar:** token, kommandoradsinloggningar och AI-agenter som använder rooster åt dig, med vad de får göra och när de senast användes. **Redigera** begränsar vad en anslutning får göra, **Återkalla** stoppar den direkt, och **Ny token** skapar en personlig åtkomsttoken. Se [Terminal och AI-agenter](./cli-tui-mcp.md#vad-en-anslutning-får-göra).
+- **Anslutna appar:** token, kommandoradsinloggningar och AI-agenter som använder rooster åt dig, med vad de får göra och när de senast användes. **Redigera** begränsar vad en anslutning får göra, **Återkalla** stoppar den direkt, och **Ny token** skapar en personlig åtkomsttoken. Se [Terminalapp, kommandorad och AI-agenter](./cli-tui-mcp.md#vad-en-anslutning-får-göra).
 
 ## Data
 

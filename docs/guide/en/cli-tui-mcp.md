@@ -1,6 +1,6 @@
-# Terminal and AI agents
+# Terminal app, command line and AI agents
 
-The `rooster` command line tool works with your tasks from a terminal and from scripts. It also has a full-screen terminal app, and it connects AI agents such as Claude to rooster through MCP. You decide exactly what each of them may see and change.
+The `rooster` command line tool works with your tasks from a terminal and from scripts. It also has a full-screen terminal app (a TUI), and it connects AI agents such as Claude to rooster through MCP. You decide exactly what each of them may see and change.
 
 ## Install the command line tool
 
@@ -72,13 +72,15 @@ rooster ls overdue --json | jq -r '.[].seq' | rooster done -
 
 The exit code tells scripts what happened: `0` ok, `2` usage error, `3` not signed in or not allowed, `4` not found, `5` conflict or invalid, `6` network or server problem.
 
-## The terminal app
+## The terminal app (TUI)
 
-Run `rooster` with no arguments in a terminal to open a full-screen, keyboard-only version of rooster. It shows the same views and organisations, and updates live when something changes elsewhere.
+Run `rooster` with no arguments in a terminal to open a full-screen, keyboard-only version of rooster: a text user interface, or TUI. It shows the same views and organisations as the web app, and updates live when something changes elsewhere. It uses the sign-in from [Sign in](#sign-in), and `--profile` picks another one. Where a terminal can't tell the web's keys apart, it uses its own, much like vim's.
 
 | Keys | Action |
 |---|---|
 | `j` `k` or `↓` `↑` | Move between rows |
+| `←` / `→` | Collapse / expand a group or a task’s subtasks |
+| `Home` / `End` · `PgUp` / `PgDn` | First / last row · scroll a page |
 | `Enter` or `i` | Edit the title |
 | `n` / `N` | New task below / above |
 | `x` | Complete or reopen |
@@ -86,10 +88,12 @@ Run `rooster` with no arguments in a terminal to open a full-screen, keyboard-on
 | `t` · `m` · `s` | Tags · move to a group · add a subtask |
 | `o` / `e` | Open the details / edit the description in `$EDITOR` |
 | `J` `K` · `]` `[` | Move the task down, up · to the next or previous group |
+| `Delete` | Delete the task (with undo) |
 | `u` / `Ctrl+R` | Undo / redo |
 | `/` | Search |
 | `g` then `m` `t` `w` `o` `n` `e` | My tasks, Today, Next 7 days, Overdue, No date, Everyone's tasks |
 | `1`–`9` | Switch organisation |
+| `H` | Show or hide completed tasks |
 | `?` | All keys, and how they differ from the web |
 | `q` | Quit |
 

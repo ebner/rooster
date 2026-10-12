@@ -35,7 +35,7 @@ See [Notifications](./notifications.md) and [Calendar feeds](./calendar-feeds.md
 
 - **Signed-in devices:** every browser and app where you are signed in, with when it was last active. **Sign out** signs that device out on its next request.
 - **Linked identities:** the accounts you can sign in with, for example Google and your company's sign-in. **Unlink** one you no longer use; the last one can't be unlinked.
-- **Connected apps:** tokens, command-line logins and AI agents that use rooster for you, with what they may do and when they were last used. **Edit** narrows what one may do, **Revoke** stops it at once, and **New token** creates a personal access token. See [Terminal and AI agents](./cli-tui-mcp.md#what-a-connection-may-do).
+- **Connected apps:** tokens, command-line logins and AI agents that use rooster for you, with what they may do and when they were last used. **Edit** narrows what one may do, **Revoke** stops it at once, and **New token** creates a personal access token. See [Terminal app, command line and AI agents](./cli-tui-mcp.md#what-a-connection-may-do).
 
 ## Data
 
