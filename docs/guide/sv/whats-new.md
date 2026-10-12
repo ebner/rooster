@@ -2,6 +2,11 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
+## Unreleased
+
+- **Att välja datum i listan stannar i listan.** När du väljer en dag i en uppgifts datumväljare sätts datumet utan att uppgiftens detaljer öppnas.
+- **En större logga i mejlen.**
+
 ## 1.6.0
 
 _2026-10-12_

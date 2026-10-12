@@ -9,7 +9,7 @@ The emails' header was the word "rooster" in Georgia: mail clients load neither 
 
 ## Decisions
 1. **The header logo is a PNG, sent inline.**
-   - `apps/web/scripts/render-icons.mjs` renders the `row` lockup (mark and the outlined Fraunces name, 28 px tall) at 2× from `brand.ts` and writes it, base64, to `apps/server/src/mail/logo.ts` (about 5 KB). The server bundle carries it; there is no file to ship or serve.
+   - `apps/web/scripts/render-icons.mjs` renders the `row` lockup (mark and the outlined Fraunces name, 36 px tall) at 2× from `brand.ts` and writes it, base64, to `apps/server/src/mail/logo.ts` (about 5 KB). The server bundle carries it; there is no file to ship or serve.
    - Every message attaches it with `Content-Disposition: inline` and `Content-ID: <logo@rooster>`, and the layout shows `<img src="cid:logo@rooster" alt="rooster">`. Inline images show without loading anything remote (Gmail, Apple Mail, Outlook), and nothing points at the instance, which may not be reachable from the reader's mail client.
    - The picture has the email page's own background colour (`bg-subtle`), not a transparent one: a mail app's dark mode can darken a transparent background under the black line.
    - Where images are blocked, the alt text shows the name in the old Georgia style.

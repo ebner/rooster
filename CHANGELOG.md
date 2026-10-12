@@ -6,6 +6,12 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Changed
+- The logo in the emails' header is larger: 36 px tall instead of 28.
+
+### Fixed
+- Picking a day in a row's date picker sets the date without opening the task's detail pane. Clicks inside a row's popovers no longer count as clicks on the row.
+
 ## [1.6.0] - 2026-10-12
 
 ### Added

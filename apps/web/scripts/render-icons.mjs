@@ -125,10 +125,10 @@ try {
     process.stdout.write(`wrote public/icons/${icon.file}\n`);
   }
 
-  // The emails' header: mark + name 28 px tall, at 2x. Mail clients drop SVG and web fonts,
+  // The emails' header: mark + name 36 px tall, at 2x. Mail clients drop SVG and web fonts,
   // and a dark mode may darken a transparent background under the black line, so the picture
   // carries the email page's own background colour.
-  const mailHeight = 28;
+  const mailHeight = 36;
   const mailWidth = Math.round((lockupWidth * mailHeight) / markGrid);
   const mailPage = await browser.newPage({ deviceScaleFactor: 2 });
   await mailPage.setViewportSize({ width: mailWidth, height: mailHeight });
