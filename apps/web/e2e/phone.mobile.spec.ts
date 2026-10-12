@@ -1,6 +1,6 @@
-import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { addDays, todayIn } from '@rooster/core/dates';
+import { expectAxeClean } from './support/a11y';
 import { apiCall, signInAs, uniqueEmail } from './support/auth';
 import { createTask, groupId, myList, personalOrg, waitForSync } from './support/p3';
 import { expect, reload, test } from './support/test';
@@ -11,7 +11,6 @@ import { longPress, showKeyboard, swipe, swipeAndHold } from './support/touch';
  * Pixel 8 (Chromium) profiles: swipes, long-press drag and selection mode, the FAB with the
  * accessory bar, the detail sheet with history, the org switcher, 16 px inputs and axe.
  */
-const wcag = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 const shots = process.env.ROOSTER_P4_SCREENSHOTS;
 
 test.beforeEach(async ({ page }) => {
@@ -23,11 +22,9 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+/** Axe on the whole page, re-checked once a sheet's or popover's transition has had time to end. */
 async function expectNoAxeViolations(page: Page) {
-  const results = await new AxeBuilder({ page }).withTags(wcag).analyze();
-  expect(
-    results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(' | ')}`),
-  ).toEqual([]);
+  await expectAxeClean(page, page.url());
 }
 
 /** Signs in and seeds `titles` at the top of Today, in order. */
