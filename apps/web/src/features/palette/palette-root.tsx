@@ -1,6 +1,11 @@
 import type { ListState } from '@rooster/core/reducers';
 import type { SearchHit, Tag, Task } from '@rooster/core/schemas';
-import { type LocalSearchContext, parseSearchQuery } from '@rooster/core/search';
+import {
+  type LocalSearchContext,
+  type ParsedSearchQuery,
+  parseSearchQuery,
+} from '@rooster/core/search';
+import { isLocale, type Locale } from '@rooster/i18n/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
@@ -12,6 +17,9 @@ import { useSyncStore } from '../../state/sync-store';
 import { useIsMobile, useKeyboardInset } from '../../ui/use-media';
 import { hasShortcutHandler, runShortcut, useKeymapHandlers } from '../../use-keymap';
 import { useViewerDateContext } from '../dates';
+import { loadGuide } from '../help/guide-content';
+import type { GuidePage } from '../help/guide-model';
+import { type Highlighted, searchGuide } from '../help/guide-search';
 import { orgUrlSlug, paths } from '../shell/paths';
 import { buildActions } from './actions';
 import { currentPaletteCommands, subscribePaletteCommands } from './commands';
@@ -20,6 +28,8 @@ import {
   buildSections,
   type ChipContext,
   findCachedTask,
+  type GuideItem,
+  guideMax,
   highlightTerms,
   nextActiveKey,
   type PaletteItem,
@@ -97,8 +107,41 @@ function cachedTags(lists: readonly ListState[], tagLists: readonly (readonly Ta
   return byId;
 }
 
+/** The guide's words in a query: none when it filters tasks (`#tag`, `due:`, `is:`, `@`). */
+function guideQuery(parsed: ParsedSearchQuery): string {
+  const filters =
+    parsed.tags.length > 0 ||
+    parsed.people.length > 0 ||
+    parsed.due !== null ||
+    parsed.status !== 'any';
+  return parsed.actionsOnly || filters ? '' : parsed.text.trim();
+}
+
+/** The guide in `locale`, loaded the first time it is `wanted` (its chunk is lazy). */
+function useGuidePages(wanted: boolean, locale: Locale): readonly GuidePage[] | null {
+  const [loaded, setLoaded] = useState<{ locale: Locale; pages: GuidePage[] } | null>(null);
+  const current = loaded?.locale === locale ? loaded.pages : null;
+  useEffect(() => {
+    if (!wanted || current) return;
+    let live = true;
+    loadGuide(locale).then(
+      (pages) => live && setLoaded({ locale, pages }),
+      // Offline before the chunk was cached: the palette still searches tasks.
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, [wanted, locale, current]);
+  return current;
+}
+
+const segments = (parts: readonly Highlighted[]) =>
+  parts.map((part) => ({ text: part.text, mark: part.match }));
+
 function PaletteSession({ me, currentOrg }: { me: Me; currentOrg: Org | null }) {
-  const { t } = useTranslation('palette');
+  const { t, i18n } = useTranslation('palette');
+  const locale = isLocale(i18n.language) ? i18n.language : 'en';
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const initialQuery = usePaletteStore((s) => s.initialQuery);
@@ -236,6 +279,29 @@ function PaletteSession({ me, currentOrg }: { me: Me; currentOrg: Org | null }) 
     }
   }
 
+  const helpQuery = step ? '' : guideQuery(parsed);
+  const guidePages = useGuidePages(helpQuery !== '', locale);
+  const guide: GuideItem[] = useMemo(
+    () =>
+      guidePages && helpQuery
+        ? searchGuide(guidePages, helpQuery)
+            .slice(0, guideMax)
+            .map(({ section, title, snippet }) => {
+              const anchor = section.id ? `#${section.id}` : '';
+              return {
+                kind: 'guide' as const,
+                key: `guide:${section.slug}${anchor}`,
+                href: `${paths.helpPage(section.slug)}${anchor}`,
+                page: section.heading === null ? null : section.pageTitle,
+                lang: section.lang,
+                title: segments(title),
+                snippet: segments(snippet),
+              };
+            })
+        : [],
+    [guidePages, helpQuery],
+  );
+
   const actions: ActionItem[] = step
     ? []
     : buildActions({
@@ -263,6 +329,7 @@ function PaletteSession({ me, currentOrg }: { me: Me; currentOrg: Org | null }) 
         recents,
         tasks,
         actions,
+        guide,
         searchMode: mode === 'search',
       });
 
@@ -293,6 +360,11 @@ function PaletteSession({ me, currentOrg }: { me: Me; currentOrg: Org | null }) 
         : t('placeholder.command');
 
   const select = (item: PaletteItem) => {
+    if (item.kind === 'guide') {
+      closePalette(true);
+      void navigate({ href: item.href });
+      return;
+    }
     if (item.kind === 'task') {
       if (step) {
         closePalette(true);

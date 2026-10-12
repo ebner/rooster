@@ -4,7 +4,7 @@ What changed for you in each version of rooster, newest first. After an update, 
 
 ## Unreleased
 
-- **Search the guide.** Type in the field above the guide's page list to find every section about something, with the words highlighted. Accents don't matter, and it works offline too.
+- **Search the guide.** Type in the field above the guide's page list to find every section about something, with the words highlighted. Accents don't matter, and it works offline too. The command palette (Ctrl+K, or **Search** on a phone) shows the best matches from the guide under **Help**, after your tasks.
 - **The guide's header says Help**, and the page list beside it shows which page you're on.
 - **The terminal app (TUI) is easier to find in the guide.** Its page shows a picture of it and lists all of its keys.
 - **Tags no longer run into the icons on a row.** When a row is too narrow for all of its tags, for example with the details open beside the list, the tags that don't fit are left out instead of overlapping the icons next to them. The details always show every tag.

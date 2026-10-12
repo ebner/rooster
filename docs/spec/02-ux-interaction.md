@@ -401,6 +401,7 @@ A tiny status label sits in the toolbar's left area:
   - Prefix `>` limits to actions only.
   - Prefix `#`, `@` or `due:` applies a filter.
 - Results show the title, the group or org chip, and the due label. Enter opens the task (navigating to its org) and selects it in the list.
+- After the tasks, a **Help** section lists the five best-matching sections of the user guide (ADR 0058), unless the query is `>` or filters tasks (`#`, `@`, `due:`, `is:`). Enter opens the page at that heading.
 - The palette is fully usable offline over cached data, using client-side filtering of cached tasks.
 
 ## 13. Mobile (< 768 px)

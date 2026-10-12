@@ -7,7 +7,7 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 ## [Unreleased]
 
 ### Added
-- **Search in the guide:** a field above the guide's page list (and on `/help`, also on phones) finds the sections that contain every word, ignoring case and accents, with highlighted snippets. It runs on the loaded guide, offline too, and the query is in the URL (`?q=`), so Back returns to the results (ADR 0058).
+- **Search in the guide:** a field above the guide's page list (and on `/help`, also on phones) finds the sections that contain every word, ignoring case and accents, with highlighted snippets. It runs on the loaded guide, offline too, and the query is in the URL (`?q=`), so Back returns to the results. The command palette (Ctrl+K, and Search on phones) shows the best five sections under **Help**, after the tasks (ADR 0058).
 
 ### Changed
 - On desktop the guide's header says "Help" instead of repeating the open page's title, which the page list already marks.

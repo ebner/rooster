@@ -33,6 +33,7 @@ Tryck på **Ctrl+K** (⌘K på Mac), klicka på **Sök** i sidofältet eller try
 
 - Med en tom ruta visas dina **senaste** uppgifter och de **kommandon** du kan använda, även de som gäller den markerade uppgiften.
 - Skriv för att söka uppgifter. Träffarna visar namn, grupp eller organisation och förfallodatum. Enter öppnar uppgiften i sin lista.
+- Under uppgifterna visar **Hjälp** de bästa träffarna i den här guiden. Enter öppnar sidan vid det avsnittet. Alla träffar ser du om du söker på [guidens egna sidor](./getting-started.md).
 - Börja med `>` för att bara söka bland kommandon: gå till en vy eller organisation, skapa en uppgift, visa klara uppgifter, öppna papperskorgen, exportera och alla uppgiftskommandon, som **Gör till deluppgift av…**. Kortkommandona visas bredvid.
 - Sökningen gäller den aktuella organisationen. Slå på **Alla organisationer** för att söka i alla.
 

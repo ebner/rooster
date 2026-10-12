@@ -103,6 +103,25 @@ export function PaletteKitchenSection() {
     ],
     actions,
   });
+  const guideQuery = t('dev.sampleGuideQuery');
+  const guideResults: PaletteSection[] = buildSections({
+    query: guideQuery,
+    parsed: parseSearchQuery(guideQuery),
+    recents: [],
+    tasks: [],
+    actions: [],
+    guide: [
+      {
+        kind: 'guide',
+        key: 'guide:reminders#add',
+        href: '/help/reminders',
+        page: t('dev.sampleGuidePage'),
+        lang: i18n.language,
+        title: highlightTerms(t('dev.sampleGuideHeading'), [guideQuery]),
+        snippet: splitSnippet(t('dev.sampleGuideSnippet')),
+      },
+    ],
+  });
   const panel = (
     label: string,
     q: string,
@@ -142,6 +161,7 @@ export function PaletteKitchenSection() {
         )}
       </Group>
       <Group title={t('dev.results')}>{panel(t('dev.results'), query, results)}</Group>
+      <Group title={t('dev.guide')}>{panel(t('dev.guide'), guideQuery, guideResults)}</Group>
       <Group title={t('dev.offline')}>
         {panel(
           t('dev.offline'),

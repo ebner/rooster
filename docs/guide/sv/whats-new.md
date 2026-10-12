@@ -4,7 +4,7 @@ Vad som har ändrats för dig i varje version av rooster, med den senaste först
 
 ## Unreleased
 
-- **Sök i guiden.** Skriv i fältet ovanför guidens sidlista för att hitta alla avsnitt om något, med orden markerade. Accenter spelar ingen roll, och det fungerar också offline.
+- **Sök i guiden.** Skriv i fältet ovanför guidens sidlista för att hitta alla avsnitt om något, med orden markerade. Accenter spelar ingen roll, och det fungerar också offline. Kommandopaletten (Ctrl+K, eller **Sök** på en telefon) visar de bästa träffarna i guiden under **Hjälp**, efter dina uppgifter.
 - **Guidens rubrik är Hjälp**, och sidlistan bredvid visar vilken sida du är på.
 - **Terminalappen (TUI) är lättare att hitta i guiden.** Dess sida visar en bild av den och listar alla tangenter.
 - **Taggarna krockar inte längre med ikonerna på en rad.** När en rad är för smal för alla taggar, till exempel när detaljerna är öppna bredvid listan, utelämnas de taggar som inte får plats i stället för att hamna över ikonerna bredvid. Detaljerna visar alltid alla taggar.

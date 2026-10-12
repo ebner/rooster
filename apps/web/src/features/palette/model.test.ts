@@ -8,6 +8,7 @@ import { type ActionContext, buildActions } from './actions';
 import {
   type ActionItem,
   buildSections,
+  guideMax,
   highlightTerms,
   mixedActionsMax,
   nextActiveKey,
@@ -165,6 +166,61 @@ describe('palette sections (02 §12)', () => {
       actions,
     });
     expect(filtered.map((s) => s.id)).toEqual(['tasks']);
+  });
+
+  test('the guide follows the tasks, its best few sections; never for > or an empty query', () => {
+    const tasks = [taskItem(task('Go jogging'))];
+    const guide = Array.from({ length: 8 }, (_, i) => ({
+      kind: 'guide' as const,
+      key: `guide:p${i}`,
+      href: `/help/p${i}`,
+      page: null,
+      lang: 'en',
+      title: [{ text: `Go ${i}`, mark: false }],
+      snippet: [],
+    }));
+    const sections = buildSections({
+      query: 'go',
+      parsed: parseSearchQuery('go'),
+      recents,
+      tasks,
+      actions,
+      guide,
+    });
+    expect(sections.map((s) => s.id)).toEqual(['tasks', 'guide', 'actions']);
+    expect(sections[1]?.items).toHaveLength(guideMax);
+    // Search mode (the phone's Search) shows the guide too, but no actions.
+    expect(
+      buildSections({
+        query: 'go',
+        parsed: parseSearchQuery('go'),
+        recents,
+        tasks: [],
+        actions,
+        guide,
+        searchMode: true,
+      }).map((s) => s.id),
+    ).toEqual(['guide']);
+    expect(
+      buildSections({
+        query: '>go',
+        parsed: parseSearchQuery('>go'),
+        recents,
+        tasks,
+        actions,
+        guide,
+      }).map((s) => s.id),
+    ).toEqual(['actions']);
+    expect(
+      buildSections({
+        query: '',
+        parsed: parseSearchQuery(''),
+        recents,
+        tasks: [],
+        actions,
+        guide,
+      }).map((s) => s.id),
+    ).not.toContain('guide');
   });
 
   test('ranking prefers word starts; ties keep registry order', () => {

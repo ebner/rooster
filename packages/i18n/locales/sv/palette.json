@@ -15,6 +15,7 @@
   "section": {
     "recent": "Senaste",
     "tasks": "Uppgifter",
+    "guide": "Hjälp",
     "actions": "Kommandon"
   },
   "status": {
@@ -93,11 +94,17 @@
     "samplePassport": "Förnya passet",
     "sampleGroup": "Idag",
     "sampleOrg": "Northwind",
-    "sampleDeletedBy": "Borttagen av Anna Berg · för 2 dagar sedan"
+    "sampleDeletedBy": "Borttagen av Anna Berg · för 2 dagar sedan",
+    "guide": "Avsnitt ur guiden bland resultaten",
+    "sampleGuideQuery": "påminnelse",
+    "sampleGuideHeading": "Lägg till en påminnelse",
+    "sampleGuideSnippet": "…välj Påminnelse (Alt+R) i datumväljaren och välj en tid…",
+    "sampleGuidePage": "Påminnelser"
   },
   "chip": {
     "inbox": "Inkorg",
     "group": "Grupp: {name}",
-    "org": "Organisation: {name}"
+    "org": "Organisation: {name}",
+    "page": "Guidesida: {name}"
   }
 }

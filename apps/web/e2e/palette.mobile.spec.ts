@@ -62,3 +62,21 @@ test('Settings → Data on a phone: export and an empty Trash', async ({ page },
     await page.screenshot({ path: `${shots}/settings-data-390.png` });
   }
 });
+
+test('on phones the Search tab finds the guide too', async ({ page }) => {
+  await seed(page, 'palette.phone.guide', ['Handla mat']);
+  await page
+    .getByRole('navigation', { name: 'Primary' })
+    .getByRole('button', { name: 'Search' })
+    .tap();
+  await paletteInput(page).fill('offline');
+  const first = palette(page)
+    .getByRole('group', { name: 'Help' })
+    .getByTestId('palette-guide')
+    .first();
+  await expect(first).toBeVisible();
+  await first.tap();
+  await expect(palette(page)).toHaveCount(0);
+  await expect(page).toHaveURL(/\/help\/[a-z-]+(#.+)?$/);
+  await expect(page.getByTestId('guide-article')).toBeVisible();
+});

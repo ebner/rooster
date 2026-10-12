@@ -61,9 +61,23 @@ export interface ActionItem {
   href?: string | undefined;
 }
 
-export type PaletteItem = TaskItem | ActionItem;
+/** A section of the user guide that matches the query (ADR 0058). */
+export interface GuideItem {
+  kind: 'guide';
+  key: string;
+  /** Where it opens: `/help/<page>#<heading>`. */
+  href: string;
+  /** The page's title, shown as the result's chip; null when the title is the page's. */
+  page: string | null;
+  lang: string;
+  /** The section's heading (or the page title), with the matched words marked. */
+  title: Segment[];
+  snippet: Segment[];
+}
 
-export type SectionId = 'recent' | 'tasks' | 'actions';
+export type PaletteItem = TaskItem | ActionItem | GuideItem;
+
+export type SectionId = 'recent' | 'tasks' | 'guide' | 'actions';
 
 export interface PaletteSection {
   id: SectionId;
@@ -76,6 +90,8 @@ const groupOrder: readonly PaletteGroup[] = ['task', 'list', 'navigation', 'gene
 /** With tasks on screen, only the best few actions follow them. */
 export const mixedActionsMax = 5;
 export const tasksMax = 50;
+/** The guide's best few sections follow the tasks; /help lists every match. */
+export const guideMax = 5;
 
 /** Splits a server snippet on the highlight markers (`SNIPPET_MARK_START` … `_END`). */
 export function splitSnippet(snippet: string): Segment[] {
@@ -163,13 +179,16 @@ export interface SectionsInput {
   recents: readonly TaskItem[];
   tasks: readonly TaskItem[];
   actions: readonly ActionItem[];
+  /** The guide's sections that match the query's words, best first. */
+  guide?: readonly GuideItem[];
   /** `/` (search mode): no actions unless the query asks for them with `>`. */
   searchMode?: boolean;
 }
 
 /**
  * 02 §12. Empty: recent tasks, then the actions. `>`: actions only, fuzzy-matched. Otherwise the
- * task results, then the few actions that match the free text.
+ * task results, the best few sections of the guide, then the few actions that match the free
+ * text.
  */
 export function buildSections({
   query,
@@ -177,6 +196,7 @@ export function buildSections({
   recents,
   tasks,
   actions,
+  guide = [],
   searchMode = false,
 }: SectionsInput): PaletteSection[] {
   const sections: PaletteSection[] = [];
@@ -193,6 +213,7 @@ export function buildSections({
     return sections;
   }
   add('tasks', tasks.slice(0, tasksMax));
+  add('guide', guide.slice(0, guideMax));
   if (!searchMode && parsed.text !== '') {
     const ranked = rankActions(actions, parsed.text);
     add('actions', tasks.length > 0 ? ranked.slice(0, mixedActionsMax) : ranked);

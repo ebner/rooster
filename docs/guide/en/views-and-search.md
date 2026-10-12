@@ -33,6 +33,7 @@ Press **Ctrl+K** (⌘K on a Mac), click **Search** in the sidebar, or press **/*
 
 - With an empty box, it shows your **Recent** tasks and the **Actions** you can take, including those for the selected task.
 - Type to search tasks. Results show the title, the group or organisation, and the due date. Enter opens the task in its list.
+- Below the tasks, **Help** lists the best matches from this guide. Enter opens the page at that section. To see every match, search on the [guide's own pages](./getting-started.md).
 - Start with `>` to search only actions: go to a view or organisation, create a task, show completed tasks, open Trash, export, and every task action, such as **Make subtask of…**. Shortcuts are shown next to them.
 - Search covers the current organisation. Turn on **All organisations** to search them all.
 

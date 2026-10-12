@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   ArrowRight,
+  BookOpen,
   Circle,
   CircleCheck,
   Command,
@@ -30,6 +31,7 @@ import { DateLabel, type ViewerDateContext } from '../dates';
 import {
   type ActionItem,
   flatItems,
+  type GuideItem,
   type PaletteItem,
   type PaletteSection,
   type Segment,
@@ -109,8 +111,8 @@ function Shortcut({ keys }: { keys: string }) {
   );
 }
 
-/** The group or org of a result, muted and outlined like the smart views' group chip. */
-function ResultChip({ chip }: { chip: TaskChip }) {
+/** The group, org or guide page of a result, muted and outlined like the smart views' chip. */
+function ResultChip({ chip }: { chip: TaskChip | { kind: 'page'; name: string } }) {
   const { t } = useTranslation('palette');
   return (
     <span
@@ -155,6 +157,29 @@ function TaskOption({ item, dateCtx }: { item: TaskItem; dateCtx: ViewerDateCont
         tooltip={false}
         className="shrink-0 text-sm"
       />
+    </>
+  );
+}
+
+function GuideOption({ item }: { item: GuideItem }) {
+  return (
+    <>
+      <BookOpen
+        className="size-4 shrink-0 text-text-muted"
+        strokeWidth={iconStrokeWidth}
+        aria-hidden
+      />
+      <span className="flex min-w-0 flex-1 items-baseline gap-2" lang={item.lang}>
+        <span className="min-w-0 shrink-0 truncate">
+          <Highlighted segments={item.title} />
+        </span>
+        {item.snippet.length > 0 && (
+          <span className="min-w-0 flex-1 truncate text-sm text-text-muted">
+            <Highlighted segments={item.snippet} />
+          </span>
+        )}
+      </span>
+      {item.page && <ResultChip chip={{ kind: 'page', name: item.page }} />}
     </>
   );
 }
@@ -352,7 +377,7 @@ export function PalettePanel({
                     id={`${baseId}-o${index}`}
                     role="option"
                     aria-selected={isActive}
-                    data-testid={item.kind === 'task' ? 'palette-task' : 'palette-action'}
+                    data-testid={`palette-${item.kind}`}
                     data-key={item.key}
                     onMouseDown={(event) => event.preventDefault()}
                     onPointerMove={() => {
@@ -370,6 +395,8 @@ export function PalettePanel({
                   >
                     {item.kind === 'task' ? (
                       <TaskOption item={item} dateCtx={dateCtx} />
+                    ) : item.kind === 'guide' ? (
+                      <GuideOption item={item} />
                     ) : (
                       <ActionOption item={item} />
                     )}

@@ -294,3 +294,32 @@ test('searching all organisations shows the org chip for hits in another org', a
     'Today',
   );
 });
+
+test('the palette finds the guide: a Help section after the tasks opens the page at its heading', async ({
+  page,
+}) => {
+  await seed(page, 'palette.guide', ['Set up reminders for invoices']);
+  await openPalette(page);
+  await paletteInput(page).fill('reminder');
+  const guide = palette(page).getByRole('group', { name: 'Help' });
+  await expect(guide.getByTestId('palette-guide').first()).toBeVisible();
+  await expect(guide.getByTestId('palette-guide')).toHaveCount(5);
+  // Tasks come first, then the guide.
+  const groups = palette(page).getByRole('group');
+  await expect(groups.first()).toHaveAccessibleName('Tasks');
+  await expect(guide.locator('mark').first()).toHaveText(/reminder/i);
+  // A filter is about tasks: no guide.
+  await paletteInput(page).fill('#home reminder');
+  await expect(palette(page).getByRole('group', { name: 'Help' })).toHaveCount(0);
+  // ↓ to the first guide result, Enter opens it.
+  await paletteInput(page).fill('set a reminder');
+  const first = palette(page)
+    .getByRole('group', { name: 'Help' })
+    .getByTestId('palette-guide')
+    .first();
+  await expect(first).toContainText('Set a reminder');
+  await first.click();
+  await expect(palette(page)).toHaveCount(0);
+  await expect(page).toHaveURL(/\/help\/reminders#set-a-reminder$/);
+  await expect(page.getByRole('heading', { name: 'Set a reminder' })).toBeFocused();
+});

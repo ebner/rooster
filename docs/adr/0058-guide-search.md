@@ -17,8 +17,8 @@ The guide grew to fourteen pages, and the only way to find something was to gues
 3. **Results:** each one links to `/help/<page>#<heading>`, showing the page, the heading and a snippet of about two lines from the sentence of the first match, with the matches marked. The count is announced in a status line.
 4. **Where:** a search field above the page list on desktop article pages, and above the page list on `/help` (the only place on phones, which have no list beside the article). While there is a query the results replace the article, which stays mounted and hidden, so closing the search doesn't rebuild or refocus it. ↓ moves from the field to the results, Enter opens the first one, Esc clears the field and keeps focus there.
 5. **The query is in the URL** (`?q=`, replaced while typing rather than pushed), so Back from a result returns to the same results.
-6. **The desktop header says "Help"**, not the page's title: the page list marks the open page. The article keeps the page title as its accessible name. Phones keep the page title in their header, with the way back to the page list.
+6. **The palette searches the guide too** (Ctrl+K, and the Search tab on phones): after the tasks, a "Help" section with the five best sections, each with its page as the chip. It loads the guide chunk the first time the palette has a query. A query that is `>` (actions) or filters tasks (`#tag`, `@name`, `due:`, `is:`) leaves the guide out: it is about tasks.
+7. **The desktop header says "Help"**, not the page's title: the page list marks the open page. The article keeps the page title as its accessible name. Phones keep the page title in their header, with the way back to the page list.
 
 ## Consequences
 - Synonyms are not handled: the text has to use the word people search for. The terminal app is now called a TUI in its heading for that reason.
-- The palette (Ctrl+K, and Search on phones) does not search the guide yet; it could reuse `searchGuide` later.
