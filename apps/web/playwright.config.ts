@@ -128,13 +128,16 @@ export default defineConfig({
       dependencies: ['pwa'],
       fullyParallel: false,
     },
-    // Timing budgets (AC-2.12) run last and alone, so other workers do not skew them.
+    // Timing budgets (AC-2.12, AC-11.4) run after the desktop specs, one at a time. They get
+    // one retry everywhere, also locally and in `pnpm release`: a real regression misses the
+    // budget twice, while a load spike on a shared machine rarely does.
     {
       name: 'perf',
       use: { ...devices['Desktop Chrome'] },
       testMatch: /perf\.spec\.ts$/,
       dependencies: perfMode === 'only' ? [] : ['chromium'],
       fullyParallel: false,
+      retries: 1,
     },
   ].filter((project) => (project.name === 'perf' ? perfMode !== 'skip' : perfMode !== 'only')),
   webServer: [

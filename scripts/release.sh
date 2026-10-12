@@ -11,8 +11,9 @@
 #      the migration fixture is from the latest release that changed the schema, Docker is up.
 #   2. Bump every package.json, the Dockerfile's ROOSTER_VERSION, the CHANGELOG heading (with
 #      the release's migrations) and the What's new headings, then regenerate the API document.
-#   3. The whole pipeline with the image (scripts/ci.sh --with-docker) and without e2e retries,
-#      so a flaky test fails here rather than in CI. It holds the e2e lock.
+#   3. The whole pipeline with the image (scripts/ci.sh --with-docker) and without e2e retries
+#      (only the timing budgets get one), so a flaky test fails here rather than in CI. It holds
+#      the e2e lock.
 #   4. Commit `chore(release): X.Y.Z` and tag vX.Y.Z, both locally. Nothing is pushed.
 #
 # --check runs only the preflight. On any failure the bump is undone, so fix, commit, re-run.
@@ -113,7 +114,7 @@ node -e '
 sed -i -E "s/^## Unreleased$/## $version\n\n_$(date +%F)_/" "${whats_new[@]}"
 pnpm gen:api >/dev/null
 
-step "the whole pipeline, with the image, no e2e retries (waits for the e2e lock)"
+step "the whole pipeline, with the image, no e2e retries except timing (waits for the e2e lock)"
 flock /tmp/rooster-e2e.lock bash scripts/ci.sh --with-docker
 
 step "commit and tag"
