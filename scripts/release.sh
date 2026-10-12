@@ -79,6 +79,7 @@ cp CHANGELOG.md AGENTS.md "$backup/"
 cp "${whats_new[0]}" "$backup/whats-new.en.md"
 cp "${whats_new[1]}" "$backup/whats-new.sv.md"
 restore() {
+  git reset --quiet 2>/dev/null || true
   git checkout --quiet -- . 2>/dev/null || true
   cp "$backup/CHANGELOG.md" "$backup/AGENTS.md" .
   cp "$backup/whats-new.en.md" "${whats_new[0]}"
@@ -113,12 +114,14 @@ node -e '
   fs.writeFileSync("CHANGELOG.md", text);' "$version" "$(date +%F)"
 sed -i -E "s/^## Unreleased$/## $version\n\n_$(date +%F)_/" "${whats_new[@]}"
 pnpm gen:api >/dev/null
+# Staged, so the pipeline's "the API client is generated" check compares against the bump.
+git add -u   # tracked files only: build output never lands in the release
 
 step "the whole pipeline, with the image, no e2e retries except timing (waits for the e2e lock)"
 flock /tmp/rooster-e2e.lock bash scripts/ci.sh --with-docker
 
 step "commit and tag"
-git add -u   # tracked files only: build output never lands in the release
+git add -u
 git commit --quiet -m "chore(release): $version"
 git tag -a "v$version" -m "rooster $version"
 trap - ERR INT TERM
