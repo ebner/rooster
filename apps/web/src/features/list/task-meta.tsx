@@ -17,7 +17,13 @@ export function taskTags(task: Task, byId: Readonly<Record<string, Tag>>): Tag[]
   return task.tagIds.flatMap((id) => (byId[id] ? [byId[id] as Tag] : []));
 }
 
-/** Tag chips for a row: never interactive themselves (a click opens the tag picker). */
+/**
+ * Tag chips for a row: never interactive themselves (a click opens the tag picker). In a
+ * narrow row the chips that don't fit wrap onto a second line that the one-chip height
+ * clips, so they drop out whole instead of running under the icons beside them. The
+ * zero-width item first keeps even the first chip from shrinking to a sliver alone on its
+ * line; a chip longer than its cap truncates.
+ */
 export const RowTagChips = memo(function RowTagChips({ task }: { task: Task }) {
   const { t } = useTranslation('list');
   const byId = useTagsStore((s) => s.byId);
@@ -25,7 +31,11 @@ export const RowTagChips = memo(function RowTagChips({ task }: { task: Task }) {
   if (tags.length === 0) return null;
   const shown = tags.slice(0, maxRowChips);
   return (
-    <span data-tag-chips className="flex min-w-0 shrink items-center gap-1">
+    <span
+      data-tag-chips
+      className="flex h-chip min-w-0 shrink flex-wrap content-start items-center gap-1 overflow-hidden"
+    >
+      <span aria-hidden className="-me-1 h-chip w-0" />
       <span className="sr-only">
         {t('tags.rowLabel', { names: tags.map((tag) => tag.name).join(', ') })}
       </span>
@@ -36,7 +46,7 @@ export const RowTagChips = memo(function RowTagChips({ task }: { task: Task }) {
             color={tag.color}
             className={cn('max-w-date-cell', i > 0 && 'max-tablet:hidden')}
           >
-            {tag.name}
+            <span className="min-w-0 truncate">{tag.name}</span>
           </Chip>
         ))}
         {tags.length > 1 && (

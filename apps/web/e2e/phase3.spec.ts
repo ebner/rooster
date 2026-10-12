@@ -225,6 +225,59 @@ test('AC-3.4 #urgent creates the tag, shows a chip, and the header filter shows 
   expect((await tags(page, orgId)).map((t) => t.name).sort()).toEqual(['home', 'urgent']);
 });
 
+test('tag chips in a narrow row drop out whole instead of running under the icons', async ({
+  page,
+}) => {
+  const { orgId, today } = await setup(page, 'tags.narrow');
+  const task = await createTask(page, orgId, {
+    title: 'Homepage hero concepts for the spring campaign',
+    description: 'Three directions.',
+    groupId: today,
+    tagNames: ['design', 'client'],
+  });
+  await createTask(page, orgId, { title: 'Collect imagery', parentId: task.id });
+  await page.reload();
+  await clickRowBody(page, 'Homepage hero');
+  await expect(pane(page)).toBeVisible();
+  const meta = row(page, 'Homepage hero').locator('[data-row-meta]');
+  await expect(meta.getByTestId('subtask-counter')).toBeVisible();
+  // Narrower and narrower meta: both chips, one, then none, never a cut one.
+  const visible: string[] = [];
+  for (const width of [200, 140, 110, 90, 60]) {
+    const layout = await meta.evaluate((el, width) => {
+      (el as HTMLElement).style.maxWidth = `${width}px`;
+      const area = (el.querySelector('[data-tag-chips]') as Element).getBoundingClientRect();
+      const icon = el.querySelector('[data-testid="description-indicator"]') as Element;
+      const chips = [...el.querySelectorAll('[data-tag-chips] [aria-hidden] > span')]
+        .map((chip) => ({ name: chip.textContent ?? '', box: chip.getBoundingClientRect() }))
+        .filter(({ box }) => box.width > 0);
+      return {
+        areaRight: area.right,
+        iconLeft: icon.getBoundingClientRect().left,
+        chips: chips.map(({ name, box }) => ({
+          name,
+          shown: box.top >= area.top - 0.5 && box.bottom <= area.bottom + 0.5,
+          whole: box.left >= area.left - 0.5 && box.right <= area.right + 0.5,
+        })),
+      };
+    }, width);
+    expect(layout.areaRight).toBeLessThanOrEqual(layout.iconLeft);
+    for (const chip of layout.chips) {
+      if (chip.shown) expect(chip.whole, `${chip.name} at ${width}px`).toBe(true);
+    }
+    visible.push(
+      layout.chips
+        .filter((c) => c.shown)
+        .map((c) => c.name)
+        .join(','),
+    );
+  }
+  // The later chip goes first; the widths depend on the UI scale.
+  expect(visible[0]).toBe('design,client');
+  expect(visible).toContain('design');
+  expect(visible.at(-1)).toBe('');
+});
+
 test('AC-3.5 cycles and nesting deeper than 5 levels are rejected', async ({ page }) => {
   const { orgId, today } = await setup(page, 'ac.threefive');
   const root = await createTask(page, orgId, { title: 'Level 0', groupId: today });

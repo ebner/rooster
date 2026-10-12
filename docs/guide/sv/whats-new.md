@@ -2,6 +2,11 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
+## Unreleased
+
+- **Taggarna krockar inte längre med ikonerna på en rad.** När en rad är för smal för alla taggar, till exempel när detaljerna är öppna bredvid listan, utelämnas de taggar som inte får plats i stället för att hamna över ikonerna bredvid. Detaljerna visar alltid alla taggar.
+- **En lättare flikikon.** roosters ikon i webbläsarfliken har en tunnare linje, närmare logotypen i appen.
+
 ## 1.5.3
 
 _2026-10-12_

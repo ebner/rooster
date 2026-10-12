@@ -6,6 +6,12 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Changed
+- The favicon has a lighter line (4 units on the 48 grid instead of 5), closer to the logo in the app.
+
+### Fixed
+- In a narrow row (for example with the detail pane open), tag chips that don't fit drop out whole instead of running under the description, reminder, subtask and attachment icons.
+
 ## [1.5.3] - 2026-10-12
 
 ### Added
