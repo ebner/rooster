@@ -31,8 +31,8 @@ export const mailTheme = {
   },
   font: {
     sans: fontFamilies.sans,
-    // The wordmark is set in Fraunces in the app; mail clients have no web fonts, and a
-    // serif fallback keeps its character without an image (images are often blocked).
+    // The header logo is a picture (Fraunces is outlined in it); where images are blocked, its
+    // alt text shows the name in a serif that keeps some of its character.
     wordmark: 'Georgia, "Times New Roman", serif',
   },
   size: fontSizes,

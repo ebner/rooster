@@ -507,6 +507,11 @@ const ROWS: Record<string, Row> = {
     request: () => ({ path: '/api/v1/admin/search/reindex' }),
     expect: { ...adminOnly(200), ...grants(403, 403, 403, 403) },
   },
+  // ADR 0059: the matrix app has no SMTP, so the admin gets 409; tokens never reach it.
+  'POST /api/v1/admin/mail/test': {
+    request: () => ({ path: '/api/v1/admin/mail/test' }),
+    expect: { ...adminOnly(409), ...grants(403, 403, 403, 403) },
+  },
   // Phase 6: collaboration (06 §2.6). Comments are written by any member and changed only
   // by their author (the owner here); notifications and prefs are the caller's own.
   'GET /api/v1/tasks/{id}/activity': {

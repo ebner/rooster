@@ -1,9 +1,13 @@
 import type { Locale } from '@rooster/i18n';
 import type { CSSProperties, ReactNode } from 'react';
 import type { MailT } from '../i18n.ts';
+import { mailLogo } from '../logo.ts';
 import { mailTheme as theme } from '../theme.ts';
 
 // Email-safe markup: tables for layout, inline styles only, no CSS variables or web fonts.
+
+/** The header logo's Content-ID: every message carries the PNG inline (`mailLogo`). */
+export const logoCid = 'logo@rooster';
 
 export interface UnsubscribeLink {
   /** Already localised, e.g. "Unsubscribe from emails about mentions". */
@@ -80,18 +84,24 @@ export function Layout(props: LayoutProps) {
                   <tbody>
                     <tr>
                       <td style={{ padding: `0 0 ${theme.space['4']}px` }}>
-                        <span
+                        {/* The app's mark and Fraunces name as a picture (no SVG or web fonts in
+                            mail); the alt text keeps the name where images are blocked. */}
+                        <img
+                          src={`cid:${logoCid}`}
+                          width={mailLogo.width}
+                          height={mailLogo.height}
+                          alt={t('common:app.name')}
                           style={{
+                            display: 'block',
+                            border: 0,
+                            outline: 'none',
                             fontFamily: theme.font.wordmark,
                             fontSize: `${theme.size.xl.size}px`,
-                            lineHeight: `${theme.size.xl.lineHeight}px`,
+                            lineHeight: `${mailLogo.height}px`,
                             fontWeight: 700,
-                            letterSpacing: '-0.012em',
                             color: theme.color.text,
                           }}
-                        >
-                          {t('common:app.name')}
-                        </span>
+                        />
                       </td>
                     </tr>
                     <tr>

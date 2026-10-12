@@ -92,5 +92,12 @@ export const adminSystemSchema = z.object({
   }),
 });
 
+/** POST /admin/mail/test (ADR 0059): the test email went to the admin's own address. */
+export const mailTestResultSchema = z.object({
+  to: z.string(),
+  sentAt: timestampSchema,
+});
+
 export type AdminJobRun = z.infer<typeof adminJobRunSchema>;
+export type MailTestResult = z.infer<typeof mailTestResultSchema>;
 export type AdminSystem = z.infer<typeof adminSystemSchema>;

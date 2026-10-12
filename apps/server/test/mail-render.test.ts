@@ -28,4 +28,47 @@ describe('email rendering without prettier', () => {
     expect(text).toContain('Accept invite https://tasks.example.com/invite/abc');
     expect(() => format()).toThrow(/not bundled/);
   });
+
+  it('the header logo is an inline picture with the name as its alt text (ADR 0059)', async () => {
+    const { html, text } = await renderMail(
+      InviteEmail({
+        locale: 'en',
+        t: mailT('en'),
+        host: 'tasks.example.com',
+        inviter: 'Ann',
+        org: 'Acme',
+        url: 'https://tasks.example.com/invite/abc',
+        expires: 'October 16, 2026',
+      }),
+    );
+    expect(html).toMatch(/<img[^>]+src="cid:logo@rooster"[^>]+alt="rooster"/);
+    expect(text).not.toContain('cid:');
+  });
+
+  it('nodemailer gets the logo as an inline attachment with its Content-ID', async () => {
+    const { nodemailerMessage } = await import('../src/mail/transport.ts');
+    const { mailLogo } = await import('../src/mail/logo.ts');
+    const MailComposer = (await import('nodemailer/lib/mail-composer/index.js')).default;
+    const png = Buffer.from(mailLogo.png, 'base64');
+    expect(png.subarray(1, 4).toString()).toBe('PNG');
+    const message = nodemailerMessage({
+      from: 'rooster <noreply@example.com>',
+      to: 'ann@example.com',
+      subject: 'Hi',
+      html: '<img src="cid:logo@rooster">',
+      text: 'Hi',
+      headers: {},
+      inline: [
+        { cid: 'logo@rooster', filename: 'rooster.png', contentType: 'image/png', content: png },
+      ],
+    });
+    const raw = await new Promise<string>((resolve, reject) =>
+      new MailComposer(message)
+        .compile()
+        .build((err, out) => (err ? reject(err) : resolve(out.toString()))),
+    );
+    expect(raw).toMatch(/Content-Type: multipart\/related/);
+    expect(raw).toContain('Content-ID: <logo@rooster>');
+    expect(raw).toContain('Content-Disposition: inline; filename=rooster.png');
+  });
 });

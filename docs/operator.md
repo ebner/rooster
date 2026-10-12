@@ -130,6 +130,16 @@ Without SMTP, email options are hidden in the app and invites are links to copy.
 | `ROOSTER_SMTP_URL` | — | `smtp://` (STARTTLS when offered) or `smtps://` (TLS), e.g. `smtps://user:pass@smtp.example.com:465`. Enables invite emails, notification emails (immediate or a 15-minute batch) and the daily digest. |
 | `ROOSTER_MAIL_FROM` | — | Required with `ROOSTER_SMTP_URL`: `Rooster <rooster@example.com>` or a bare address. |
 
+To check the setup, use **Send test email** in Admin → System. It sends to your own address and waits for the mail server's answer.
+
+**Through the host's own mail server** (Postfix on the Docker host): point rooster at the host, e.g. `ROOSTER_SMTP_URL=smtp://host.docker.internal:25` with `extra_hosts: ["host.docker.internal:host-gateway"]` in `compose.yaml`, and let Postfix relay for the Docker network (`mynetworks` includes `172.16.0.0/12`; with OpenDKIM, add it to `TrustedHosts` too, so the mail gets signed). Postfix has to listen on the Docker bridge (`inet_interfaces = all`, or add the bridge address); it then relays only for `mynetworks`, so it is no open relay. Turn on TLS for Postfix's own deliveries, or Gmail and others mark the mail as not encrypted:
+
+```
+sudo postconf -e 'smtp_tls_security_level = may' 'smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt' 'smtp_tls_loglevel = 1'
+sudo systemctl reload postfix
+```
+
+
 ### Web Push
 
 | Variable | Default | Description |
@@ -365,7 +375,8 @@ Don't run other tools that checkpoint the database while Litestream replicates. 
   - the database and WAL sizes;
   - the last backup;
   - the last run of each background job (backups, reminders, emails, digests, cleanup);
-  - whether SMTP is configured, the push key status and the number of push subscriptions;
+  - whether SMTP is configured, with **Send test email**: a test to your own address that reports whether the mail server accepted it (and its SMTP code if not);
+  - the push key status and the number of push subscriptions;
   - the number of live-update (SSE) connections;
   - attachment storage: the backend (local or S3), total size and file count;
   - the number of users, orgs and tasks.

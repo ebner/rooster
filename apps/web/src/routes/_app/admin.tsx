@@ -14,6 +14,7 @@ import {
   useRegeneratePushKeys,
   useReindexSearch,
   useRemoveAllowlistEntry,
+  useSendTestMail,
   useServerFeatures,
   useSetUserDisabled,
 } from '../../data';
@@ -52,6 +53,7 @@ function AdminRoute() {
   const regeneratePushKeys = useRegeneratePushKeys();
   const system = useAdminSystem();
   const reindex = useReindexSearch();
+  const mailTest = useSendTestMail();
   const online = useSyncStore((s) => s.online);
   const clock = useMinuteClock();
 
@@ -74,6 +76,7 @@ function AdminRoute() {
               prefs={prefs}
               now={now}
               reindex={{ onRun: () => reindex.mutateAsync(), online }}
+              mailTest={{ onRun: () => mailTest.mutateAsync(), online }}
             />
           }
           allowlist={

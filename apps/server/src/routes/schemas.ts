@@ -25,6 +25,7 @@ import {
   inviteCreateSchema,
   invitePreviewSchema,
   inviteSchema,
+  mailTestResultSchema,
   memberPatchSchema,
   memberSchema,
   mePatchSchema,
@@ -316,6 +317,7 @@ export const SearchHitSchema = named(
 );
 export const SearchResultSchema = named(z.array(SearchHitSchema), 'SearchResult');
 export const ReindexResultSchema = named(reindexResultSchema, 'ReindexResult');
+export const MailTestResultSchema = named(mailTestResultSchema, 'MailTestResult');
 export const ExportCommentSchema = named(exportCommentSchema, 'ExportComment');
 export const ExportTaskSchema = named(
   exportTaskSchema.extend({ placement: PlacementSchema.nullable() }),

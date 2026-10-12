@@ -160,7 +160,7 @@ The required claims are `email`, `email_verified` and `name`, with `picture` opt
 ## 9. Monitoring
 - Docker healthcheck plus `/readyz`. There is no Prometheus endpoint (ADR 0052 §9).
 - Logs are pino JSON on stdout; use `docker logs`, Loki or similar.
-- Admin → System shows the version, the DB and WAL sizes, the last backup, job runs, SMTP and push status, and the SSE connection count.
+- Admin → System shows the version, the DB and WAL sizes, the last backup, job runs, SMTP and push status, and the SSE connection count. With SMTP it can send a test email to the signed-in admin (ADR 0059).
 
 ## 10. Security operations
 - Rotating `ROOSTER_AUTH_SECRET` invalidates all sessions. This is documented.

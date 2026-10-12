@@ -66,4 +66,4 @@ Choose **Sign out** in the menu under your name. rooster removes everything it s
 
 ## Admin
 
-If you are an administrator of your rooster server, the menu under your name also has **Admin**: who may sign in (the allowlist), users (disable or enable them), backups (download one, or **Back up now**) and the server's push keys. The operator guide covers running the server.
+If you are an administrator of your rooster server, the menu under your name also has **Admin**: who may sign in (the allowlist), users (disable or enable them), backups (download one, or **Back up now**), the server's push keys, and **System**, where **Send test email** checks that rooster's email works. The operator guide covers running the server.

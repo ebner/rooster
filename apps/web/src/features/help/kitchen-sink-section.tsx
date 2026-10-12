@@ -13,6 +13,10 @@ const fakeReindex = () =>
   new Promise<{ indexed: number; durationMs: number }>((resolve) =>
     setTimeout(() => resolve({ indexed: 4208, durationMs: 184 }), 600),
   );
+const fakeMailTest = () =>
+  new Promise<{ to: string }>((resolve) =>
+    setTimeout(() => resolve({ to: 'maja.lind@kestrel-lane.example' }), 600),
+  );
 const gb = 1024 * 1024 * 1024;
 
 /** Kitchen-sink slot for Phase 11 UI: the guide at /help and Admin → System (WP 11.5, 11.6). */
@@ -74,6 +78,7 @@ export function HelpKitchenSection() {
             prefs={prefs}
             now={now}
             reindex={{ onRun: fakeReindex, online: true }}
+            mailTest={{ onRun: fakeMailTest, online: true }}
           />
         </div>
       </Group>

@@ -1,5 +1,13 @@
 import { createTransport } from 'nodemailer';
 
+/** An image the HTML shows by `cid:` (the header logo), sent inline with the message. */
+export interface InlineImage {
+  cid: string;
+  filename: string;
+  contentType: string;
+  content: Buffer;
+}
+
 export interface MailMessage {
   from: string;
   to: string;
@@ -7,6 +15,7 @@ export interface MailMessage {
   html: string;
   text: string;
   headers: Record<string, string>;
+  inline?: readonly InlineImage[];
 }
 
 /** Sends one message; rejects when the SMTP server refuses it. Tests inject a fake. */
@@ -56,6 +65,15 @@ export function sanitizeSmtpError(err: unknown): SmtpSendError {
   return new SmtpSendError(code, responseCode, command);
 }
 
+/** The message as nodemailer takes it: inline images become `cid:` attachments. */
+export function nodemailerMessage(message: MailMessage) {
+  const { inline = [], ...rest } = message;
+  return {
+    ...rest,
+    attachments: inline.map((image) => ({ ...image, contentDisposition: 'inline' as const })),
+  };
+}
+
 /** nodemailer over `ROOSTER_SMTP_URL` (the only host email goes to; 04 §4.11). */
 export function smtpTransport(url: string): MailTransport {
   const transporter = createTransport({
@@ -67,7 +85,7 @@ export function smtpTransport(url: string): MailTransport {
   return {
     async send(message) {
       try {
-        await transporter.sendMail(message);
+        await transporter.sendMail(nodemailerMessage(message));
       } catch (err) {
         throw sanitizeSmtpError(err);
       }

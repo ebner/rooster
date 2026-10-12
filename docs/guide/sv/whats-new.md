@@ -8,6 +8,8 @@ Vad som har ändrats för dig i varje version av rooster, med den senaste först
 - **Guidens rubrik är Hjälp**, och sidlistan bredvid visar vilken sida du är på.
 - **Terminalappen (TUI) är lättare att hitta i guiden.** Dess sida visar en bild av den och listar alla tangenter.
 - **Taggarna krockar inte längre med ikonerna på en rad.** När en rad är för smal för alla taggar, till exempel när detaljerna är öppna bredvid listan, utelämnas de taggar som inte får plats i stället för att hamna över ikonerna bredvid. Detaljerna visar alltid alla taggar.
+- **Mejlen visar roosters logotyp** i sidhuvudet, samma som i appen.
+- **Administratörer kan skicka ett testmejl** från Administration → System för att kontrollera att roosters mejl fungerar.
 - **En lättare flikikon.** roosters ikon i webbläsarfliken har en tunnare linje, närmare logotypen i appen.
 
 ## 1.5.3

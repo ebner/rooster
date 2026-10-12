@@ -2674,6 +2674,22 @@
           "finishedAt": 1791532800000
         }
       },
+      "MailTestResult": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string"
+          },
+          "sentAt": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "to",
+          "sentAt"
+        ]
+      },
       "Backup": {
         "type": "object",
         "properties": {
@@ -12081,6 +12097,274 @@
             "headers": {
               "Retry-After": {
                 "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/EditTime"
+          },
+          {
+            "$ref": "#/components/parameters/ClientId"
+          },
+          {
+            "$ref": "#/components/parameters/Client"
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/mail/test": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "sendTestMail",
+        "summary": "Send a test email to the admin's own address (instance admins, browser only)",
+        "description": "Sends a test email to the signed-in admin's own address through `ROOSTER_SMTP_URL` and waits for the SMTP server's answer. `409 mail_not_configured` without SMTP; `502 mail_failed` when the server refuses or cannot be reached (the detail names the SMTP code and status, never the server's text).",
+        "responses": {
+          "200": {
+            "description": "The SMTP server accepted the message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailTestResult"
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`, `forbidden`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  },
+                  "csrf_origin": {
+                    "summary": "Cross-origin request rejected.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Cross-origin request rejected.",
+                      "code": "csrf_origin"
+                    }
+                  },
+                  "forbidden": {
+                    "summary": "Only owners of this organisation can do that.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Only owners of this organisation can do that.",
+                      "code": "forbidden"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current state. Codes: `mail_not_configured`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "mail_not_configured": {
+                    "summary": "Email is off: set ROOSTER_SMTP_URL and ROOSTER_MAIL_FROM.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Conflict",
+                      "status": 409,
+                      "detail": "Email is off: set ROOSTER_SMTP_URL and ROOSTER_MAIL_FROM.",
+                      "code": "mail_not_configured"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body is too large (1 MB). Codes: `payload_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "payload_too_large": {
+                    "summary": "The request body exceeds the limit of 1024 KB.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Content Too Large",
+                      "status": 413,
+                      "detail": "The request body exceeds the limit of 1024 KB.",
+                      "code": "payload_too_large"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not JSON. Codes: `unsupported_media_type`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unsupported_media_type": {
+                    "summary": "Send JSON (application/json).",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unsupported Media Type",
+                      "status": 415,
+                      "detail": "Send JSON (application/json).",
+                      "code": "unsupported_media_type"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "idempotency_key_reuse": {
+                    "summary": "This Idempotency-Key was already used for a different request.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "This Idempotency-Key was already used for a different request.",
+                      "code": "idempotency_key_reuse"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          },
+          "502": {
+            "description": "An upstream service (e.g. the push service) refused the request. Codes: `mail_failed`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "mail_failed": {
+                    "summary": "The mail server did not accept the message.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Bad Gateway",
+                      "status": 502,
+                      "detail": "The mail server did not accept the message.",
+                      "code": "mail_failed"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             }
           }

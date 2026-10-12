@@ -128,6 +128,11 @@
       "done": "Search index rebuilt: {count, plural, one {# task} other {# tasks}} in {ms} ms.",
       "failed": "Couldn’t rebuild the search index. Try again.",
       "offline": "You’re offline. The search index can be rebuilt once you’re back online."
+    },
+    "mailTest": {
+      "action": "Send test email",
+      "sent": "Sent to {to}. The mail server accepted it; check that inbox.",
+      "failed": "The test email didn’t go out. Check ROOSTER_SMTP_URL and the server log."
     }
   }
 }

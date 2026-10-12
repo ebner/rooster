@@ -1,9 +1,10 @@
 import { type DateFormat, formatRelative, type TimeFormat } from '@rooster/core/dates';
-import type { UnsubscribeCategory } from '@rooster/core/schemas';
+import type { MailTestResult, UnsubscribeCategory } from '@rooster/core/schemas';
 import type { Locale } from '@rooster/i18n';
 import { and, asc, eq, gt, inArray, isNull, min, sql } from 'drizzle-orm';
 import type { ReactElement } from 'react';
 import { notification, organization, user } from '../db/schema/index.ts';
+import { AppError } from '../lib/errors.ts';
 import { logSafeError } from '../lib/log-safe-error.ts';
 import type { TaskQueue } from '../lib/task-queue.ts';
 import {
@@ -15,6 +16,7 @@ import {
   todayOrg,
 } from '../services/assigned-tasks.ts';
 import {
+  type Actor,
   afterCommit,
   immediate,
   readOnly,
@@ -22,6 +24,7 @@ import {
   type Tx,
 } from '../services/context.ts';
 import { loadDeliverable, toDeliverable } from '../services/deliverable.ts';
+import { requireAdminAccess, requireBrowserSession } from '../services/grant-access.ts';
 import { claimJobRun, dueSlot, jobScope, lastUserRun } from '../services/job-runs.ts';
 import {
   loadRecipient,
@@ -32,13 +35,15 @@ import {
 } from '../services/pref-store.ts';
 import { type DescribedNotification, describeNotification } from './describe.ts';
 import { instantDate, longDate, mailT } from './i18n.ts';
+import { mailLogo } from './logo.ts';
 import { renderMail } from './render.ts';
 import { DigestEmail, type DigestSection } from './templates/digest.tsx';
 import { InviteEmail } from './templates/invite.tsx';
-import type { ListItem, UnsubscribeLink } from './templates/layout.tsx';
+import { type ListItem, logoCid, type UnsubscribeLink } from './templates/layout.tsx';
 import { BatchEmail, NotificationEmail } from './templates/notifications.tsx';
 import { ReminderEmail } from './templates/reminder.tsx';
-import type { MailTransport } from './transport.ts';
+import { TestEmail } from './templates/test.tsx';
+import { type InlineImage, type MailTransport, SmtpSendError } from './transport.ts';
 import { parseUnsubscribeToken, unsubscribeToken } from './unsubscribe-token.ts';
 
 /** FR-NOT-3: batched notification emails go out once the oldest waited this long. */
@@ -49,6 +54,13 @@ export const BATCH_GIVE_UP_MS = 24 * 3_600_000;
 export const DIGEST_SECTION_MAX = 10;
 
 export const DIGEST_JOB = 'digest';
+
+const logoImage: InlineImage = {
+  cid: logoCid,
+  filename: 'rooster.png',
+  contentType: 'image/png',
+  content: Buffer.from(mailLogo.png, 'base64'),
+};
 
 /** A user's email jobs share one delivery-queue key (lib/task-queue.ts). */
 const mailKey = (userId: string) => `mail:${userId}`;
@@ -145,7 +157,69 @@ export class MailService {
       html,
       text,
       headers,
+      inline: [logoImage],
     });
+  }
+
+  // --- the admin's test ------------------------------------------------------------------
+
+  /**
+   * POST /admin/mail/test (ADR 0059): a test email to the signed-in admin's own address, and
+   * the SMTP server's verdict. Only ever to the caller, so it cannot mail anyone else; a
+   * refusal is `502 mail_failed` with the shape-checked SMTP code and status only.
+   */
+  async sendTest(actor: Actor): Promise<MailTestResult> {
+    requireBrowserSession(actor);
+    requireAdminAccess(actor);
+    if (!this.enabled()) {
+      throw new AppError(
+        'mail_not_configured',
+        409,
+        'Email is off: set ROOSTER_SMTP_URL and ROOSTER_MAIL_FROM.',
+      );
+    }
+    const recipient = readOnly(this.deps.db, (tx) => loadRecipient(tx, actor.userId));
+    if (recipient === null) throw new AppError('not_found', 404, 'Not found.');
+    const t = mailT(recipient.locale);
+    const now = this.deps.clock();
+    const outcome = await this.queue.run(
+      'mail-test',
+      async () => {
+        try {
+          await this.send({
+            to: recipient.email,
+            subject: t('test.subject'),
+            element: TestEmail({
+              locale: recipient.locale,
+              t,
+              host: this.host,
+              unsubscribe: [],
+              settingsUrl: this.url('/settings/notifications'),
+              sentBy: recipient.name,
+              when: instantDate(recipient.locale, now, recipient.timezone),
+              url: this.url('/admin'),
+            }),
+          });
+          return { ok: true as const };
+        } catch (err) {
+          return { ok: false as const, err };
+        }
+      },
+      mailKey(actor.userId),
+    );
+    if (outcome?.ok !== true) {
+      const err = outcome?.err;
+      const reason = err instanceof SmtpSendError ? ` (${err.message})` : '';
+      if (err !== undefined) {
+        this.deps.logger.warn({ err: logSafeError(err) }, 'test email failed');
+      }
+      throw new AppError(
+        'mail_failed',
+        502,
+        `The mail server did not accept the message${reason}. The server log has the details.`,
+      );
+    }
+    return { to: recipient.email, sentAt: now };
   }
 
   // --- invites --------------------------------------------------------------------------

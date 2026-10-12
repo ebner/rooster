@@ -8,6 +8,8 @@ What changed for you in each version of rooster, newest first. After an update, 
 - **The guide's header says Help**, and the page list beside it shows which page you're on.
 - **The terminal app (TUI) is easier to find in the guide.** Its page shows a picture of it and lists all of its keys.
 - **Tags no longer run into the icons on a row.** When a row is too narrow for all of its tags, for example with the details open beside the list, the tags that don't fit are left out instead of overlapping the icons next to them. The details always show every tag.
+- **Emails show rooster's logo** in their header, the same as in the app.
+- **Admins can send a test email** from Admin → System, to check that rooster's email works.
 - **A lighter tab icon.** rooster's icon in the browser tab has a thinner line, closer to the logo in the app.
 
 ## 1.5.3

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { act } from 'react';
 import { describe, expect, test, vi } from 'vitest';
+import { ApiError } from '../../data/errors';
 import type { DisplayPrefs } from '../../lib/format';
 import { fixtureSystem, fixtureSystemBare } from '../help/fixtures';
 import { formatAbsolute, SystemSection } from './system-section';
@@ -47,6 +48,55 @@ describe('Admin → System (AC-11.5, 08 §9)', () => {
       'email-batch3 minutes agoFailedconnect ECONNREFUSED 10.0.0.25:587',
       'blob-gc–Not run yet',
     ]);
+  });
+
+  test('Send test email (ADR 0059): says where it went, or what the mail server answered', async () => {
+    const onRun = vi
+      .fn()
+      .mockResolvedValueOnce({ to: 'ada@example.com' })
+      .mockRejectedValueOnce(
+        new ApiError(
+          'mail_failed',
+          502,
+          'The mail server did not accept the message (SMTP send failed (EAUTH): 535 after AUTH PLAIN).',
+        ),
+      );
+    render(
+      <SystemSection
+        system={fixtureSystem(now)}
+        error={null}
+        onRefresh={vi.fn()}
+        prefs={prefs}
+        now={now}
+        mailTest={{ onRun, online: true }}
+      />,
+    );
+    const smtp = screen.getByTestId('system-smtp');
+    const button = within(smtp).getByRole('button', { name: 'Send test email' });
+    await act(async () => fireEvent.click(button));
+    expect(within(smtp).getByRole('status').textContent).toBe(
+      'Sent to ada@example.com. The mail server accepted it; check that inbox.',
+    );
+    await act(async () => fireEvent.click(button));
+    const alert = within(smtp).getByRole('alert');
+    expect(alert.textContent).toContain('The test email didn’t go out.');
+    expect(alert.textContent).toContain('535 after AUTH PLAIN');
+    expect(onRun).toHaveBeenCalledTimes(2);
+  });
+
+  test('without SMTP there is nothing to test', () => {
+    const system = { ...fixtureSystem(now), smtp: { configured: false } };
+    render(
+      <SystemSection
+        system={system}
+        error={null}
+        onRefresh={vi.fn()}
+        prefs={prefs}
+        now={now}
+        mailTest={{ onRun: vi.fn(), online: true }}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Send test email' })).toBeNull();
   });
 
   test('times show the exact moment on focus, as a tooltip', () => {

@@ -60,6 +60,14 @@
     "expires": "The invite is valid until {date}.",
     "ignore": "If you weren’t expecting this invite, you can ignore this email."
   },
+  "test": {
+    "subject": "rooster test email",
+    "preview": "Email from rooster at {host} works.",
+    "heading": "Email works",
+    "body": "{name} sent this test from Admin → System in rooster at {host} on {when}.",
+    "next": "Invites, notifications, reminders and the daily digest go out the same way.",
+    "open": "Open Admin → System"
+  },
   "push": {
     "reminder": "{count, plural, one {# task today} other {# tasks today}}",
     "reminderMore": "{count, plural, one {and # more} other {and # more}}",

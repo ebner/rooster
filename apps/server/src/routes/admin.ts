@@ -12,6 +12,7 @@ import {
   AllowlistCreateSchema,
   AllowlistEntrySchema,
   BackupSchema,
+  MailTestResultSchema,
   ReindexResultSchema,
 } from './schemas.ts';
 
@@ -163,12 +164,27 @@ const reindexSearch = createRoute({
   },
 });
 
+const testMail = createRoute({
+  method: 'post',
+  path: '/api/v1/admin/mail/test',
+  tags,
+  operationId: 'sendTestMail',
+  summary: "Send a test email to the admin's own address (instance admins, browser only)",
+  description:
+    "Sends a test email to the signed-in admin's own address through `ROOSTER_SMTP_URL` and waits for the SMTP server's answer. `409 mail_not_configured` without SMTP; `502 mail_failed` when the server refuses or cannot be reached (the detail names the SMTP code and status, never the server's text).",
+  responses: {
+    200: json(MailTestResultSchema, 'The SMTP server accepted the message'),
+    ...problems(...AUTHED, 'forbidden', 'mail_not_configured', 'mail_failed'),
+  },
+});
+
 export function registerAdminRoutes(
   app: OpenAPIHono<AppEnv>,
-  { admin, backups, search, system }: Services,
+  { admin, backups, mail, search, system }: Services,
 ): void {
   app.openapi(getSystem, (c) => c.json(system.status(actorOf(c)), 200));
   app.openapi(reindexSearch, (c) => c.json(search.reindex(actorOf(c)), 200));
+  app.openapi(testMail, async (c) => c.json(await mail.sendTest(actorOf(c)), 200));
   app.openapi(listBackups, (c) => c.json(backups.list(actorOf(c)), 200));
   app.openapi(createBackup, (c) => c.json(backups.createManual(actorOf(c)), 201));
   app.openapi(downloadBackup, (c) => {

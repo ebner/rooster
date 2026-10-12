@@ -18,8 +18,8 @@ import { account, attachment, oauthClient, user } from '../src/db/schema/index.t
 import { NAMED_SCHEMAS } from '../src/lib/openapi.ts';
 import { checkResponse, type RouteContract, routeContracts } from '../src/lib/response-contract.ts';
 import type { Actor } from '../src/services/index.ts';
-import type { FakePush } from './delivery-fakes.ts';
-import { fcmEndpoint, subscriptionBody } from './delivery-fakes.ts';
+import type { FakeMail, FakePush } from './delivery-fakes.ts';
+import { fcmEndpoint, SMTP_ENV, subscriptionBody } from './delivery-fakes.ts';
 import {
   addSession,
   BASE_URL,
@@ -42,6 +42,7 @@ interface Fixture {
   app: App;
   db: AppDb;
   push: FakePush;
+  mail: FakeMail;
   orgId: string;
   orgSlug: string;
   /** Another org of the owner, whose slug a rename can collide with. */
@@ -801,6 +802,35 @@ const SPECS: Record<string, Spec> = {
   'POST /api/v1/admin/search/reindex': {
     ok: () => ({ path: '/api/v1/admin/search/reindex' }),
     as: 'admin',
+  },
+  'POST /api/v1/admin/mail/test': {
+    ok: () => ({ path: '/api/v1/admin/mail/test' }),
+    as: 'admin',
+    fixture: { env: SMTP_ENV },
+    cases: [
+      {
+        name: 'without SMTP',
+        status: 409,
+        code: 'mail_not_configured',
+        request: () => ({ path: '/api/v1/admin/mail/test', as: 'admin' }),
+        // The case's env replaces the route's SMTP env.
+        fixture: { env: {} },
+      },
+      {
+        name: 'the mail server refuses',
+        status: 502,
+        code: 'mail_failed',
+        setup: (f) => {
+          f.mail.failing = true;
+        },
+        request: () => ({ path: '/api/v1/admin/mail/test', as: 'admin' }),
+      },
+      {
+        status: 403,
+        code: 'forbidden',
+        request: () => ({ path: '/api/v1/admin/mail/test', as: 'member' }),
+      },
+    ],
   },
   'GET /api/v1/orgs/{orgId}/my-list': {
     ok: (f) => ({ path: `/api/v1/orgs/${f.orgId}/my-list` }),
@@ -1696,7 +1726,7 @@ function actorFor(app: App, userId: string, sessionId: string): Actor {
 function fixture(options: FixtureOptions = {}): Fixture {
   const dataDir = tempDir();
   dataDirs.push(dataDir.cleanup);
-  const { app, db, push } = createTestApp({
+  const { app, db, push, mail } = createTestApp({
     env: { ROOSTER_DATA_DIR: dataDir.path, ...options.env },
     apiRateLimit: options.rateLimited ? { max: 0, windowMs: 60_000 } : false,
   });
@@ -1752,6 +1782,7 @@ function fixture(options: FixtureOptions = {}): Fixture {
   return {
     app,
     push,
+    mail,
     orgId: org.id,
     orgSlug: org.slug,
     otherOrgSlug: otherOrg.slug,

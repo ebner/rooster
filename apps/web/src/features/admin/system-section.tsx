@@ -1,8 +1,9 @@
 import type { AdminJobRun, AdminSystem } from '@rooster/core/schemas';
-import { DatabaseZap, RefreshCw } from 'lucide-react';
+import { DatabaseZap, MailCheck, RefreshCw } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Focusable } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
+import { ApiError } from '../../data/errors';
 import { type DisplayPrefs, formatTimeAgo } from '../../lib/format';
 import { Banner } from '../../ui/banner';
 import { Button } from '../../ui/button';
@@ -22,6 +23,14 @@ export interface SystemSectionProps {
   now: number;
   /** "Rebuild search index" (ADR 0013); left out where there is no server (kitchen sink). */
   reindex?: ReindexAction | undefined;
+  /** "Send test email" (ADR 0059), shown when SMTP is configured. */
+  mailTest?: MailTestAction | undefined;
+}
+
+export interface MailTestAction {
+  /** Resolves with the admin's address once the mail server accepted it; throws otherwise. */
+  onRun: () => Promise<{ to: string }>;
+  online: boolean;
 }
 
 export interface ReindexAction {
@@ -152,6 +161,55 @@ function JobsTable({
   );
 }
 
+type MailTestState =
+  | { kind: 'idle' }
+  | { kind: 'running' }
+  | { kind: 'sent'; to: string }
+  | { kind: 'failed'; detail: string | null };
+
+/**
+ * "Send test email" (`POST /admin/mail/test`): no confirmation, since it only ever goes to
+ * the admin's own address; the result says where it went, or what the mail server answered.
+ */
+function MailTestControl({ action }: { action: MailTestAction }) {
+  const { t } = useTranslation('admin');
+  const [state, setState] = useState<MailTestState>({ kind: 'idle' });
+  const run = async () => {
+    setState({ kind: 'running' });
+    try {
+      const { to } = await action.onRun();
+      setState({ kind: 'sent', to });
+    } catch (err) {
+      const mailFailed = err instanceof ApiError && err.code === 'mail_failed';
+      setState({ kind: 'failed', detail: mailFailed ? err.message : null });
+    }
+  };
+  return (
+    <div className="flex w-full flex-col items-start gap-2 pt-1" data-testid="system-mail-test">
+      <Button
+        size="sm"
+        icon={MailCheck}
+        isLoading={state.kind === 'running'}
+        isDisabled={!action.online}
+        onPress={() => void run()}
+      >
+        {t('system.mailTest.action')}
+      </Button>
+      <p role="status" className="text-sm empty:hidden">
+        {state.kind === 'sent' && t('system.mailTest.sent', { to: state.to })}
+      </p>
+      {state.kind === 'failed' && (
+        <Banner tone="danger" role="alert">
+          <span className="flex flex-col gap-1">
+            <span>{t('system.mailTest.failed')}</span>
+            {state.detail && <span className="font-mono text-xs">{state.detail}</span>}
+          </span>
+        </Banner>
+      )}
+    </div>
+  );
+}
+
 type ReindexState =
   | { kind: 'idle' }
   | { kind: 'confirming' }
@@ -262,6 +320,7 @@ export function SystemSection({
   prefs,
   now,
   reindex,
+  mailTest,
 }: SystemSectionProps) {
   const { t } = useTranslation('admin');
   const bytes = (n: number) => formatBytes(n, prefs.locale);
@@ -324,6 +383,7 @@ export function SystemSection({
             <Chip color={system.smtp.configured ? 'green' : 'gray'}>
               {system.smtp.configured ? t('system.configured') : t('system.notConfigured')}
             </Chip>
+            {system.smtp.configured && mailTest && <MailTestControl action={mailTest} />}
           </Item>
           <Item label={t('system.push')} testId="push">
             <Chip color={system.push.keySource === 'none' ? 'gray' : 'green'}>

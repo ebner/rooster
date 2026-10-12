@@ -120,6 +120,11 @@ export const PROBLEM_CODES = {
   reminder_in_past: { status: 422, detail: 'The reminder time has already passed.' },
   rate_limited: { status: 429, detail: 'Too many requests; slow down.' },
   push_failed: { status: 502, detail: 'The push service did not accept the message.' },
+  mail_not_configured: {
+    status: 409,
+    detail: 'Email is off: set ROOSTER_SMTP_URL and ROOSTER_MAIL_FROM.',
+  },
+  mail_failed: { status: 502, detail: 'The mail server did not accept the message.' },
   unavailable: { status: 503, detail: 'The server is shutting down; reconnect shortly.' },
 } as const satisfies Record<string, { status: number; detail: string }>;
 

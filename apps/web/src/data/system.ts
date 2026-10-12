@@ -49,3 +49,13 @@ export function useReindexSearch(): MutationResult<void, ReindexResult> {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['search'] }),
   });
 }
+
+/**
+ * `POST /admin/mail/test` (ADR 0059): a test email to the signed-in admin's own address. It
+ * resolves once the SMTP server accepted it; `502 mail_failed` carries its code and status.
+ */
+export function useSendTestMail(): MutationResult<void, { to: string; sentAt: number }> {
+  return useMutation({
+    mutationFn: () => unwrap(api.POST('/api/v1/admin/mail/test')),
+  });
+}

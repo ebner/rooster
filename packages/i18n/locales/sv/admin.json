@@ -128,6 +128,11 @@
       "done": "Sökindexet är ombyggt: {count, plural, one {# uppgift} other {# uppgifter}} på {ms} ms.",
       "failed": "Det gick inte att bygga om sökindexet. Försök igen.",
       "offline": "Du är offline. Sökindexet kan byggas om när du är online igen."
+    },
+    "mailTest": {
+      "action": "Skicka testmejl",
+      "sent": "Skickat till {to}. Mejlservern tog emot det; titta i den inkorgen.",
+      "failed": "Testmejlet skickades inte. Kontrollera ROOSTER_SMTP_URL och serverloggen."
     }
   }
 }

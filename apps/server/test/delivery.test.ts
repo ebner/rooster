@@ -20,6 +20,7 @@ import {
   notification,
   pushSubscription,
 } from '../src/db/schema/index.ts';
+import { SmtpSendError } from '../src/mail/transport.ts';
 import { unsubscribeToken } from '../src/mail/unsubscribe-token.ts';
 import { dueSlot, SEND_GRACE_MS } from '../src/services/job-runs.ts';
 import { FakeMail, FakePush, fcmEndpoint, SMTP_ENV, subscriptionBody } from './delivery-fakes.ts';
@@ -506,6 +507,11 @@ describe('notification emails (FR-NOT-3)', () => {
     expect(mail.sent[0]?.subject).toBe('Ann Andersson assigned a task to you: Now');
     expect(mail.sent[0]?.html).toContain(`http://localhost:3000/o/${org.slug}/t/${task.id}`);
     expect(mail.sent[0]?.html).toContain('Open task');
+    // The header logo is a picture sent with the message (ADR 0059).
+    expect(mail.sent[0]?.html).toContain('src="cid:logo@rooster"');
+    expect(mail.sent[0]?.inline?.map((i) => [i.cid, i.contentType])).toEqual([
+      ['logo@rooster', 'image/png'],
+    ]);
     // The batch job has nothing left to send.
     expect(await app.services.mail.runBatches()).toBe(0);
   });
@@ -730,6 +736,56 @@ describe('invite emails (FR-ORG-3)', () => {
     await idle(ctx);
     expect(ctx.mail.to('known@example.com')[0]?.subject).toBe(
       'Ann Andersson har bjudit in dig till Acme',
+    );
+  });
+});
+
+describe('the admin test email (ADR 0059)', () => {
+  it("goes only to the admin's own address and says so; members are refused", async () => {
+    const ctx = listCtx({ env: SMTP_ENV });
+    const admin = ctx.user(TEST_ENV.ROOSTER_ADMIN_EMAILS, 'Ada Admin');
+    const member = ctx.user('ann@example.com');
+    const result = await admin.ok<{ to: string; sentAt: number }>(
+      'POST',
+      '/api/v1/admin/mail/test',
+    );
+    expect(result.to).toBe(TEST_ENV.ROOSTER_ADMIN_EMAILS);
+    expect(ctx.mail.sent).toHaveLength(1);
+    const [email] = ctx.mail.sent;
+    expect(email?.to).toBe(TEST_ENV.ROOSTER_ADMIN_EMAILS);
+    expect(email?.subject).toBe('rooster test email');
+    expect(email?.html).toContain('Ada Admin sent this test from Admin → System');
+    expect(email?.html).toContain('http://localhost:3000/admin');
+    expect(email?.headers['List-Unsubscribe']).toBeUndefined();
+    expect(email?.inline?.[0]?.cid).toBe('logo@rooster');
+    expect((await member.call('POST', '/api/v1/admin/mail/test')).status).toBe(403);
+    expect(ctx.mail.sent).toHaveLength(1);
+  });
+
+  it('a refusing mail server is 502 mail_failed; without SMTP it is 409', async () => {
+    const ctx = listCtx({ env: SMTP_ENV });
+    const admin = ctx.user(TEST_ENV.ROOSTER_ADMIN_EMAILS);
+    ctx.mail.failing = true;
+    const res = await admin.call('POST', '/api/v1/admin/mail/test');
+    expect(res.status).toBe(502);
+    expect(((await res.json()) as { code: string }).code).toBe('mail_failed');
+    const off = listCtx();
+    const offAdmin = off.user(TEST_ENV.ROOSTER_ADMIN_EMAILS);
+    const offRes = await offAdmin.call('POST', '/api/v1/admin/mail/test');
+    expect(offRes.status).toBe(409);
+    expect(((await offRes.json()) as { code: string }).code).toBe('mail_not_configured');
+  });
+
+  it('names the SMTP code and status, never the server text', async () => {
+    const ctx = listCtx({ env: SMTP_ENV });
+    const admin = ctx.user(TEST_ENV.ROOSTER_ADMIN_EMAILS);
+    ctx.mail.send = async () => {
+      throw new SmtpSendError('EAUTH', 535, 'AUTH PLAIN');
+    };
+    const res = await admin.call('POST', '/api/v1/admin/mail/test');
+    const problem = (await res.json()) as { detail: string };
+    expect(problem.detail).toBe(
+      'The mail server did not accept the message (SMTP send failed (EAUTH): 535 after AUTH PLAIN). The server log has the details.',
     );
   });
 });

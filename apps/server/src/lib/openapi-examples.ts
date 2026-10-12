@@ -418,6 +418,7 @@ export const COMPONENT_EXAMPLES: Record<string, unknown> = {
   SearchHit: searchHitExample,
   SearchResult: [searchHitExample],
   ReindexResult: { indexed: 1204, durationMs: 85, finishedAt: T },
+  MailTestResult: { to: 'admin@example.com', sentAt: T },
   ExportComment: { ...commentExample, authorName: 'Anna Lindqvist' },
   ExportTask: { ...taskExample, description: 'Invoice **#2026-117** from the printer.' },
   OrgExport: {

@@ -60,6 +60,14 @@
     "expires": "Inbjudan gäller till och med {date}.",
     "ignore": "Om du inte väntade dig den här inbjudan kan du bortse från mejlet."
   },
+  "test": {
+    "subject": "Testmejl från rooster",
+    "preview": "Mejl från rooster på {host} fungerar.",
+    "heading": "Mejlen fungerar",
+    "body": "{name} skickade det här testet från Administration → System i rooster på {host} den {when}.",
+    "next": "Inbjudningar, aviseringar, påminnelser och den dagliga sammanfattningen skickas på samma sätt.",
+    "open": "Öppna Administration → System"
+  },
   "push": {
     "reminder": "{count, plural, one {# uppgift idag} other {# uppgifter idag}}",
     "reminderMore": "{count, plural, one {och # till} other {och # till}}",

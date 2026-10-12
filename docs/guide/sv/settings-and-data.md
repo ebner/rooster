@@ -66,4 +66,4 @@ Välj **Logga ut** i menyn under ditt namn. rooster tar då bort allt som sparat
 
 ## Administration
 
-Om du är administratör för din rooster-server finns också **Administration** i menyn under ditt namn: vilka som får logga in (tillåtna adresser), användare (inaktivera eller aktivera dem), säkerhetskopior (ladda ner en, eller **Säkerhetskopiera nu**) och serverns pushnycklar. Driftsguiden beskriver hur servern körs.
+Om du är administratör för din rooster-server finns också **Administration** i menyn under ditt namn: vilka som får logga in (tillåtna adresser), användare (inaktivera eller aktivera dem), säkerhetskopior (ladda ner en, eller **Säkerhetskopiera nu**), serverns pushnycklar och **System**, där **Skicka testmejl** kontrollerar att roosters mejl fungerar. Driftsguiden beskriver hur servern körs.

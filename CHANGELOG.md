@@ -7,9 +7,11 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 ## [Unreleased]
 
 ### Added
+- **Send test email** in Admin → System: a test to the signed-in admin's own address that reports whether the SMTP server accepted it, with its SMTP code and status if not (`POST /api/v1/admin/mail/test`, ADR 0059). `docs/operator.md` describes relaying through the host's Postfix, including TLS for its outbound mail.
 - **Search in the guide:** a field above the guide's page list (and on `/help`, also on phones) finds the sections that contain every word, ignoring case and accents, with highlighted snippets. It runs on the loaded guide, offline too, and the query is in the URL (`?q=`), so Back returns to the results. The command palette (Ctrl+K, and Search on phones) shows the best five sections under **Help**, after the tasks (ADR 0058).
 
 ### Changed
+- Emails show the app's logo (mark and name) in their header: a small PNG sent inline with each message, with "rooster" as its alt text (ADR 0059).
 - On desktop the guide's header says "Help" instead of repeating the open page's title, which the page list already marks.
 - The guide calls the full-screen terminal app a TUI, names it in the page title ("Terminal app, command line and AI agents"), lists all of its keys and shows a screenshot of it, which `pnpm docs:screenshots` renders from the real TUI.
 - The favicon has a lighter line (4 units on the 48 grid instead of 5), closer to the logo in the app.
