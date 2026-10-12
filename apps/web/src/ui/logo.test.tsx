@@ -25,7 +25,7 @@ describe('LogoMark', () => {
       </>,
     );
     const [small, regular] = [...container.querySelectorAll('svg')];
-    expect(small?.querySelector('.ink')?.getAttribute('stroke-width')).toBe('5');
+    expect(small?.querySelector('.ink')?.getAttribute('stroke-width')).toBe('4');
     expect(small?.querySelector(':scope > g')?.getAttribute('transform')).toContain('scale');
     expect(regular?.querySelector('.ink')?.getAttribute('stroke-width')).toBe('3.5');
   });

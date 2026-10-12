@@ -42,8 +42,8 @@ export const markEye = { cx: 28.8, cy: 23.4 } as const;
 export const markGrid = 48;
 
 /** Line weight and eye radius on the 48 grid: regular, and the small cut used below 24 px. */
-export const markStroke = { regular: 3.5, small: 5 } as const;
-export const markEyeRadius = { regular: 2, small: 2.7 } as const;
+export const markStroke = { regular: 3.5, small: 4 } as const;
+export const markEyeRadius = { regular: 2, small: 2.3 } as const;
 
 /** The small cut crops tighter so the heavier line keeps its proportions at 16 px. */
 export const markSmallTransform = 'translate(-4.5 -2.5) scale(1.13)';
