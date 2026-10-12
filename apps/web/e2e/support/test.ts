@@ -43,6 +43,9 @@ export async function openKitchenSink(page: Page, hash = ''): Promise<void> {
   await page.goto(`/_dev/ui${hash}`);
   // The embedded sign-in screens bring their own h1s, so match the page title by name.
   await expect(page.getByRole('heading', { level: 1, name: 'Kitchen sink' })).toBeVisible({
-    timeout: 30_000,
+    timeout: kitchenSinkRender,
   });
 }
+
+/** How long the kitchen sink may take to render, after a navigation or a reload. */
+export const kitchenSinkRender = 30_000;

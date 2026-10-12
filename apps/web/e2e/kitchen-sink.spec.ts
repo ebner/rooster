@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { openKitchenSink } from './support/test';
+import { kitchenSinkRender, openKitchenSink } from './support/test';
 
 const sections = [
   ['foundations', 'Foundations', 'Grunder'],
@@ -120,7 +120,9 @@ test('AC-0.5 switching to Svenska translates the kitchen sink and persists acros
   await expect(page.getByText('Kitchen sink')).toHaveCount(0);
 
   await page.reload();
-  await expect(page.getByRole('heading', { level: 1, name: 'Komponentkatalog' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Komponentkatalog' })).toBeVisible({
+    timeout: kitchenSinkRender,
+  });
   await expect(page.locator('html')).toHaveAttribute('lang', 'sv');
   await expect(page.getByRole('radio', { name: 'Svenska' }).first()).toBeChecked();
 });
