@@ -441,10 +441,10 @@
 @layer base {
   /*
    * UI scale (03 §2.5): every size token is rem, so the root font size scales the whole UI.
-   * Phones, tablets and narrow desktops (below 1440 px) render at 1:1. Each step starts at the
-   * narrowest window where sidebar + minimum list + default pane still sit side by side
-   * (1404 px at 112.5 %, 1560 px at 125 %), so a 1280 or 1366 px laptop keeps its split view.
-   * Percentages keep the browser's own default font size in play.
+   * Phones, tablets and narrow desktops (below 1440 px) render at 1:1. The one step starts at
+   * the narrowest window where sidebar + minimum list + default pane still sit side by side
+   * at 112.5 % (1404 px), so a 1280 or 1366 px laptop keeps its split view. Wide screens stay at
+   * 112.5 % (ADR 0061). Percentages keep the browser's own default font size in play.
    */
   html {
     color-scheme: light;
@@ -454,11 +454,6 @@
   @media (min-width: 1440px) {
     html {
       font-size: 112.5%;
-    }
-  }
-  @media (min-width: 1600px) {
-    html {
-      font-size: 125%;
     }
   }
 

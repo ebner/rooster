@@ -46,7 +46,7 @@ export async function waitForSync(page: Page) {
 
 export const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
 
-/** The UI scale: the root font size over 16 px (112.5 % on desktop, 125 % on wide). */
+/** The UI scale: the root font size over 16 px (112.5 % from 1440 px). */
 export async function uiScale(page: Page): Promise<number> {
   return page.evaluate(
     () => Number.parseFloat(getComputedStyle(document.documentElement).fontSize) / 16,

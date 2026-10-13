@@ -6,6 +6,10 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Changed
+- A task due tomorrow has a blue date label (blue-700, 6.7:1 on white) instead of orange-700, which read as red next to overdue; in 16-colour terminals the CLI now prints it blue rather than red. The unused `orange-700` palette value is gone (ADR 0061).
+- The desktop UI scale stops at 112.5 % (from 1440 px): windows of 1600 px and wider no longer step up to 125 %, which looked a step too big at 100 % browser zoom (ADR 0061).
+
 ## [1.6.1] - 2026-10-12
 
 ### Changed

@@ -1,6 +1,6 @@
 # ADR 0024: Amber accent instead of coral-red
 
-- Status: accepted
+- Status: accepted (§3 amended by ADR 0061: "tomorrow" is blue-700)
 - Date: 2026-10-09
 - Amends: D-21 (00-overview); 03 §2 (palette, semantic colours, due dates), 02 §13.1 (FAB)
 - Code: `packages/tokens/src/{tokens.css,index.ts}`, `packages/tokens/test/contrast.test.ts`, `apps/web/public/icons/*`, `apps/web/scripts/render-icons.mjs`, `apps/web/src/ui/fab.tsx`

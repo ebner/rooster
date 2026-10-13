@@ -17,7 +17,7 @@ Datumcellen till höger på varje rad visar en kort etikett:
 | **Idag 14:00** | med klockslag (12- eller 24-timmarsklocka enligt din inställning) |
 | **10–12 okt** | med startdatum |
 
-Färgen visar hur bråttom det är: försenat är rött med en varningsikon, idag grönt, imorgon orange, den här veckan lila och senare grått. En uppgift som förfaller idag vid en tid som redan har passerat räknas som försenad. Håll muspekaren över etiketten för att se hela datumet.
+Färgen visar hur bråttom det är: försenat är rött med en varningsikon, idag grönt, imorgon blått, den här veckan lila och senare grått. En uppgift som förfaller idag vid en tid som redan har passerat räknas som försenad. Håll muspekaren över etiketten för att se hela datumet.
 
 Tidszon, veckans första dag, datumformat och tidsformat ställer du in under Inställningar → Profil.
 

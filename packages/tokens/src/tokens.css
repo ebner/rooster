@@ -5,8 +5,7 @@
  * ../test/contrast.test.ts enforces the agreement and the WCAG contrast pairs.
  *
  * Sizes (type, spacing, heights, squares, widths, radii) are rem at 16 px = 1 rem, so the
- * root font size scales the whole UI (apps/web/src/styles/theme.css: 112.5 % on desktop,
- * 125 % on wide). The design values in 03 §2.5–2.8 are the px at scale 1. Border widths,
+ * root font size scales the whole UI (apps/web/src/styles/theme.css: 112.5 % from 1440 px). The design values in 03 §2.5–2.8 are the px at scale 1. Border widths,
  * shadows and breakpoints stay px.
  */
 :root {
@@ -40,7 +39,6 @@
   --green-50: #eefbf2;
   --green-600: #16a34a;
   --green-700: #15803d;
-  --orange-700: #c2410c;
   --violet-700: #6d28d9;
   --rose-50: #fff1f3;
   --rose-600: #e11d48;
@@ -106,7 +104,7 @@
   /* Due-date label colours (03 §2.3) */
   --color-date-overdue: var(--rose-700);
   --color-date-today: var(--green-700);
-  --color-date-tomorrow: var(--orange-700);
+  --color-date-tomorrow: var(--blue-700);
   --color-date-this-week: var(--violet-700);
   --color-date-later: var(--n-600);
   --color-date-done: var(--n-500);

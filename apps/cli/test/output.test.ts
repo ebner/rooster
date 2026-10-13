@@ -105,7 +105,7 @@ describe('task lines (07 §4.1)', () => {
     const lines = renderRows(listing(), 3, null);
     const rgb = (hex: string) => hexToRgb(hex).join(';');
     expect(lines[0]).toContain(`38;2;${rgb(palette['green-700'])}mToday`);
-    expect(lines[1]).toContain(`38;2;${rgb(palette['orange-700'])}mTomorrow`);
+    expect(lines[1]).toContain(`38;2;${rgb(palette['blue-700'])}mTomorrow`);
     expect(lines[3]).toContain(`38;2;${rgb(palette['violet-700'])}mMon`);
     expect(lines[5]).toContain(`1;38;2;${rgb(palette['rose-700'])}m! Oct 1`);
     expect(lines[6]).toContain('\u001b[9;');
@@ -207,7 +207,6 @@ describe('colour support', () => {
     expect(toAnsi256([128, 128, 128])).toBe(244);
     expect(toAnsi16(hexToRgb(palette['rose-700']))).toBe(31);
     expect(toAnsi16(hexToRgb(palette['green-700']))).toBe(32);
-    expect(toAnsi16(hexToRgb(palette['orange-700']))).toBe(31);
     expect(toAnsi16(hexToRgb(palette['violet-700']))).toBe(35);
     expect(toAnsi16(hexToRgb(palette['blue-700']))).toBe(34);
     expect(toAnsi16(hexToRgb(palette['n-600']))).toBe(90);

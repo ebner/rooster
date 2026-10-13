@@ -2,6 +2,11 @@
 
 What changed for you in each version of rooster, newest first. After an update, rooster offers this page once. You can open it at any time from Settings or the guide's page list. The notes for whoever runs rooster (upgrades, settings, security) are in the [changelog](../../../CHANGELOG.md).
 
+## Unreleased
+
+- **Tomorrow is blue.** A task due tomorrow has a blue date instead of an orange one, so only overdue tasks look red.
+- **A slightly smaller layout on large screens.** On screens 1600 pixels wide or more, everything is now the same size as on screens from 1440 pixels, a step smaller than before. If you had zoomed your browser out to make rooster smaller, you can set it back to 100 %.
+
 ## 1.6.1
 
 _2026-10-12_

@@ -1,6 +1,6 @@
 /**
  * The UI scale: the root font size over 16 px. Size tokens are rem, and theme.css raises the
- * root font size on desktop (112.5 %) and wide (125 %) screens, so layout constants measured
+ * root font size to 112.5 % from 1440 px, so layout constants measured
  * in px at scale 1 (the pane widths, D-29/D-29a) multiply by this to match what CSS renders.
  * It is 1 outside a browser and whenever the root font size cannot be read.
  */

@@ -1,6 +1,6 @@
 # ADR 0027: Rem tokens and a larger desktop UI
 
-- Status: accepted
+- Status: accepted (§2 amended by ADR 0061: no 125 % step)
 - Date: 2026-10-09
 - Amends: 03 §2.5–2.8 (sizes are rem; px values are at scale 1); D-29/D-29a (pane widths scale)
 - Code: `packages/tokens/src/{tokens.css,index.ts}`, `apps/web/src/styles/theme.css` (root font size), `apps/web/src/lib/ui-scale.ts`, `apps/web/src/state/pane-store.ts`, `apps/web/src/features/pane/split-view.tsx`, `apps/web/src/features/dates/time-field.tsx`

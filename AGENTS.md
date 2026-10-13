@@ -200,7 +200,7 @@ At least one sign-in provider must be configured, or the server exits with code 
 ## Conventions
 - TypeScript strict and ESM everywhere. Named exports. No default exports, except where a framework requires them (route files).
 - Zod schemas live in `packages/core/src/schemas`. Infer types from them (`z.infer`) rather than duplicating them. The server registers them for OpenAPI with `.openapi('Name')`.
-- **Sizes are rem** (ADR 0027): the root font size is the UI scale (112.5 % from 1440 px, 125 % from 1600 px). Never hard-code layout px in CSS; JS that sizes layout in px multiplies by `uiScale()` (`src/lib/ui-scale.ts`). Interaction thresholds (offsets, gesture slop) stay px.
+- **Sizes are rem** (ADRs 0027, 0061): the root font size is the UI scale (112.5 % from 1440 px, 100 % below). Never hard-code layout px in CSS; JS that sizes layout in px multiplies by `uiScale()` (`src/lib/ui-scale.ts`). Interaction thresholds (offsets, gesture slop) stay px.
 - **Tailwind classes = utility + token name** (full mapping at the top of `apps/web/src/styles/theme.css`):
   - colours: `bg-bg-app`, `text-text-muted`, `border-border-strong`, `text-date-overdue`, `bg-tag-red-bg`
   - type: `text-xs` … `text-2xl`, `text-group`

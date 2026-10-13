@@ -17,7 +17,7 @@ The date cell on the right of each row shows a short label:
 | **Today 14:00** | with a time (12- or 24-hour clock, per your setting) |
 | **Oct 10 – 12** | with a start date |
 
-The colour tells you how soon: overdue is red with a warning icon, today is green, tomorrow orange, this week violet, and later grey. A task due today at a time that has passed counts as overdue. Hover a label for the full date.
+The colour tells you how soon: overdue is red with a warning icon, today is green, tomorrow blue, this week violet, and later grey. A task due today at a time that has passed counts as overdue. Hover a label for the full date.
 
 Your time zone, the first day of the week, the date format and the time format are in Settings → Profile.
 

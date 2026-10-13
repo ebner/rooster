@@ -51,10 +51,9 @@ The accent is a warm honey amber, not red: red reads as "something is wrong", an
 | Token | Hex | Notes |
 |---|---|---|
 | `--green-50` / `--green-600` / `--green-700` | #EEFBF2 / #16A34A / #15803D | success, completed checkbox, "today" |
-| `--orange-700` | #C2410C | "tomorrow" |
 | `--violet-700` | #6D28D9 | "this week" |
 | `--rose-50` / `--rose-600` / `--rose-700` | #FFF1F3 / #E11D48 / #BE123C | **danger and overdue** (crimson, clearly distinct from the amber accent) |
-| `--blue-50` / `--blue-700` | #EFF6FF / #1D4ED8 | info, links in descriptions |
+| `--blue-50` / `--blue-700` | #EFF6FF / #1D4ED8 | info, links in descriptions, "tomorrow" |
 
 ### 2.2 Semantic tokens (components use these)
 
@@ -97,13 +96,13 @@ The date label colour is set by `dueState()` in `packages/core`. The same functi
 |---|---|---|---|---|
 | `overdue` | due < today, or due today with a time already past | rose-700 | 500 | `circle-alert` icon (12 px) before the label |
 | `today` | due = today | green-700 | 500 | — (the label "Today" itself) |
-| `tomorrow` | due = today + 1 | orange-700 | 400 | label "Tomorrow" |
+| `tomorrow` | due = today + 1 | blue-700 | 400 | label "Tomorrow" |
 | `thisWeek` | today + 2 … today + 6 | violet-700 | 400 | weekday label |
 | `later` | > today + 6 | n-600 | 400 | — |
 | `done` | task completed | n-500 (`--color-text-muted`) | 400 | strikethrough row (n-400 would fail 4.5:1) |
 | `start-range` | has a start date | per due state | — | "Oct 10 – 12" |
 
-The brand accent is amber (D-21), so the accent never appears in date labels: "tomorrow" uses orange-700, not amber-700. **Overdue** uses rose-700 plus the icon plus weight 500, the one place where red says "something is wrong".
+The brand accent is amber (D-21), so the accent never appears in date labels. "Tomorrow" is blue-700 (ADR 0061): the orange it had read as red next to overdue, and only overdue may look alarming. **Overdue** uses rose-700 plus the icon plus weight 500, the one place where red says "something is wrong".
 
 ### 2.4 Tag palette (10 colours, chip = bg + fg)
 
@@ -135,7 +134,7 @@ All pairs are ≥ 4.5:1. New tags get the next colour in round-robin order.
 
 Letter spacing: −0.011em at 20 px and above, 0 below. The description editor uses `--text-md`, a max line length of about 72 ch, and heading sizes H1 20, H2 18, H3 16 (600 weight).
 
-**Scale.** Every size token (type, spacing, heights, square sizes, layout widths, radii except `--radius-full`) is declared in **rem** at 16 px = 1 rem, so the root font size scales the whole UI. The px values in §2.5–2.8 and §3 are the design values at scale 1. Phones, tablets and desktops below 1440 px render at 100 %; from **1440 px** the root is **112.5 %** and from `--bp-wide` (1600 px) **125 %**. Each step starts at the narrowest window where sidebar + minimum list + default pane still sit side by side (1404 px at 112.5 %, 1560 px at 125 %), so 1280 and 1366 px laptops keep the split view. The root uses percentages, so the browser's default font size still applies. Border widths, shadows, breakpoints, z-index and motion stay in px; layout constants in JS (the pane widths, D-29/D-29a) multiply by the current scale.
+**Scale.** Every size token (type, spacing, heights, square sizes, layout widths, radii except `--radius-full`) is declared in **rem** at 16 px = 1 rem, so the root font size scales the whole UI. The px values in §2.5–2.8 and §3 are the design values at scale 1. Phones, tablets and desktops below 1440 px render at 100 %; from **1440 px** the root is **112.5 %** (ADR 0061 dropped the 125 % step on wide screens). The step starts at the narrowest window where sidebar + minimum list + default pane still sit side by side at 112.5 % (1404 px), so 1280 and 1366 px laptops keep the split view. The root uses percentages, so the browser's default font size still applies. Border widths, shadows, breakpoints, z-index and motion stay in px; layout constants in JS (the pane widths, D-29/D-29a) multiply by the current scale.
 
 ### 2.6 Spacing, sizing, radius, elevation
 

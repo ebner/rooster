@@ -33,7 +33,6 @@ export const palette = {
   'green-50': '#EEFBF2',
   'green-600': '#16A34A',
   'green-700': '#15803D',
-  'orange-700': '#C2410C',
   'violet-700': '#6D28D9',
   'rose-50': '#FFF1F3',
   'rose-600': '#E11D48',
@@ -108,7 +107,7 @@ export const overlayColor = 'rgb(22 25 30 / 0.32)';
 export const dueDateColors = {
   overdue: 'rose-700',
   today: 'green-700',
-  tomorrow: 'orange-700',
+  tomorrow: 'blue-700',
   thisWeek: 'violet-700',
   later: 'n-600',
   done: 'n-500',
