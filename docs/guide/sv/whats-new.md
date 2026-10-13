@@ -2,7 +2,9 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
-## Unreleased
+## 1.6.2
+
+_2026-10-13_
 
 - **Imorgon är blått.** En uppgift som förfaller imorgon har ett blått datum i stället för ett orange, så att bara försenade uppgifter ser röda ut.
 - **En något mindre layout på stora skärmar.** På skärmar som är minst 1600 pixlar breda är allt nu lika stort som på skärmar från 1440 pixlar, ett steg mindre än förut. Om du har zoomat ut webbläsaren för att göra rooster mindre kan du ställa tillbaka den till 100 %.
