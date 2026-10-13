@@ -233,7 +233,7 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
 
 ## Status
 - **Current phase:** none scheduled. Phase 11 was the last phase in 09; the next work is the backlog (09 §Backlog).
-- **Latest release:** 1.6.1 (a row's date picker no longer opens the pane, a larger email logo), after 1.6.0 (search in the guide and the palette's Help section, the TUI's screenshot, the emails' logo, Admin → System's test email, whole tag chips in narrow rows, a lighter favicon; ADRs 0058, 0059) and 1.5.0 (Phase 11: the security audit, accessibility, 2,000-task performance, the guide at /help, Admin → System, the storage quota, removed sign-ins, apps without colleagues' emails; ADRs 0052–0056).
+- **Latest release:** 1.6.2 (tomorrow's date label is blue, the desktop scale stops at 112.5 %; ADR 0061), after 1.6.1 (a row's date picker no longer opens the pane, a larger email logo) and 1.6.0 (search in the guide and the palette's Help section, the TUI's screenshot, the emails' logo, Admin → System's test email, whole tag chips in narrow rows, a lighter favicon; ADRs 0058, 0059), and 1.5.0 (Phase 11: the security audit, accessibility, 2,000-task performance, the guide at /help, Admin → System, the storage quota, removed sign-ins, apps without colleagues' emails; ADRs 0052–0056).
 - **Last completed phase:** Phase 11, hardening (2026-10-10; released in 1.5.0):
   - the security audit of every trust boundary: 107 findings, 102 fixed, 5 accepted or refuted (`docs/security/security-review.md`, ADR 0056);
   - the ASVS L2 map (`docs/security/asvs.md`); `pnpm audit` and gitleaks in CI;
