@@ -142,8 +142,10 @@ export function MarkdownEditor({
   if (failure) throw failure.error;
   const replaceContent = useCallback(
     (markdown: string) => {
-      // The positions of a tapped link mean nothing in the new document.
+      // The positions of a tapped link, and the link field's selection, mean nothing in the new
+      // document: an open field would apply its address to whatever text is selected now.
       setTapped(null);
+      setLinkMode(false);
       known.current = markdown;
       try {
         editorRef.current?.commands.setContent(fromMarkdown(markdown), { emitUpdate: false });

@@ -308,6 +308,45 @@ test('a tap on a description link shows the link card, and Open opens it (ADR 00
   await expect(await popup).toHaveURL(target);
 });
 
+test('an edit from another device while the link card is open never rewrites another link', async ({
+  page,
+}) => {
+  const { ids } = await setup(page, 'link.remote', ['Pay the invoice']);
+  const before = 'See [docs](https://example.com/) and [billing](https://billing.example/).';
+  expect(
+    (await apiCall(page, 'PATCH', `/api/v1/tasks/${ids[0]}`, { description: before })).ok(),
+  ).toBe(true);
+  await reload(page);
+  await row(page, 'Pay the invoice').click();
+  const sheet = page.getByTestId('detail-pane');
+  await sheet.getByRole('link', { name: 'docs' }).tap();
+  const card = page.getByTestId('link-card');
+  await expect(card).toBeVisible();
+  // Another device rewrites the description; it waits while this one is being edited.
+  // It ends with a link, so the caret at its end is inside one.
+  const remote = 'See [billing](https://billing.example/)';
+  expect(
+    (await apiCall(page, 'PATCH', `/api/v1/tasks/${ids[0]}`, { description: remote })).ok(),
+  ).toBe(true);
+  await page.waitForTimeout(1500);
+  await card.getByRole('button', { name: 'Edit link' }).tap();
+  // While anything editable has focus the keyboard stays up, and the user types the new
+  // address, field visible or not (after a human pause: the field shows with the bubble menu,
+  // 250 ms after the selection).
+  await page.waitForTimeout(600);
+  const editable = await page.evaluate(
+    () => document.activeElement?.matches('input, [contenteditable="true"]') ?? false,
+  );
+  if (editable) {
+    await page.keyboard.type('https://changed.example/');
+    await page.keyboard.press('Enter');
+  }
+  await page.getByRole('button', { name: 'Back' }).tap();
+  await waitForSync(page);
+  const task = await (await apiCall(page, 'GET', `/api/v1/tasks/${ids[0]}`)).json();
+  expect(task.description).not.toContain('changed.example');
+});
+
 test('the org switcher sheet lists the orgs and switches', async ({ page }) => {
   await signInAs(page, uniqueEmail('org.switch'));
   const res = await apiCall(page, 'POST', '/api/v1/orgs', { name: 'Garden club' });
