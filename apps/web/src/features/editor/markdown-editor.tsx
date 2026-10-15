@@ -1,3 +1,4 @@
+import { PluginKey } from '@tiptap/pm/state';
 import {
   type Editor,
   EditorContent,
@@ -61,6 +62,9 @@ interface TappedLink {
   href: string;
 }
 
+/** The link card's bubble menu, addressed by its key to follow the link when an ancestor scrolls. */
+const linkCardKey = new PluginKey('roosterLinkCard');
+
 /** The link card keeps this far from the viewport's edges, like React Aria's popovers. */
 const viewportPaddingPx = 12;
 
@@ -105,6 +109,8 @@ export function MarkdownEditor({
   const editorRef = useRef<Editor | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [linkMode, setLinkMode] = useState(forceToolbar === 'link');
+  const linkModeRef = useRef(linkMode);
+  linkModeRef.current = linkMode;
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
   /** ADR 0062: the link card shows while the caret stays in the link a touch tap landed in. */
@@ -134,14 +140,19 @@ export function MarkdownEditor({
   // outside): rethrown while rendering, so the caller's error boundary shows the fallback.
   const [failure, setFailure] = useState<{ error: unknown } | null>(null);
   if (failure) throw failure.error;
-  const replaceContent = useCallback((markdown: string) => {
-    known.current = markdown;
-    try {
-      editorRef.current?.commands.setContent(fromMarkdown(markdown), { emitUpdate: false });
-    } catch (error) {
-      setFailure({ error });
-    }
-  }, []);
+  const replaceContent = useCallback(
+    (markdown: string) => {
+      // The positions of a tapped link mean nothing in the new document.
+      setTapped(null);
+      known.current = markdown;
+      try {
+        editorRef.current?.commands.setContent(fromMarkdown(markdown), { emitUpdate: false });
+      } catch (error) {
+        setFailure({ error });
+      }
+    },
+    [setTapped],
+  );
 
   const [extensions] = useState(() =>
     editorExtensions({
@@ -305,11 +316,47 @@ export function MarkdownEditor({
     const view = editorRef.current?.view;
     if (!link || !view) return null;
     const rect = posToDOMRect(view, link.from, link.to);
-    return { getBoundingClientRect: () => rect, getClientRects: () => [rect] };
+    return {
+      getBoundingClientRect: () => rect,
+      getClientRects: () => [rect],
+      // The pane scrolls inside its own scroller: floating-ui hides the card when the link
+      // is scrolled out of it.
+      contextElement: view.dom,
+    };
   }, []);
 
-  const editTappedLink = () => {
+  // The pane and the phone sheet scroll their own elements, which BubbleMenu (listening on
+  // the window) does not see.
+  useEffect(() => {
+    if (!tapped) return;
+    let frame = 0;
+    const follow = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (!editor.isDestroyed) {
+          editor.view.dispatch(editor.state.tr.setMeta(linkCardKey, 'updatePosition'));
+        }
+      });
+    };
+    document.addEventListener('scroll', follow, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener('scroll', follow, { capture: true });
+      cancelAnimationFrame(frame);
+    };
+  }, [editor, tapped]);
+
+  /** The tapped link, if it is still there unchanged; otherwise the card is dropped. */
+  const liveTappedLink = () => {
     const link = tappedRef.current;
+    const current = link && linkAt(editor, link.from);
+    if (link && current && current.to === link.to && current.href === link.href) return link;
+    setTapped(null);
+    return null;
+  };
+
+  const editTappedLink = () => {
+    const link = liveTappedLink();
     if (!link) return;
     setTapped(null);
     editor.chain().focus().setTextSelection({ from: link.from, to: link.to }).run();
@@ -317,7 +364,7 @@ export function MarkdownEditor({
   };
 
   const removeTappedLink = () => {
-    const link = tappedRef.current;
+    const link = liveTappedLink();
     if (!link) return;
     setTapped(null);
     editor
@@ -377,6 +424,10 @@ export function MarkdownEditor({
             strategy: 'fixed',
             offset: overlayOffsetPx,
             onHide: () => setLinkMode(false),
+            // The link field mounts while the menu waits to show, when it cannot take the focus.
+            onShow: () => {
+              if (linkModeRef.current) toolbarRef.current?.querySelector('input')?.focus();
+            },
           }}
           appendTo={() => document.body}
           className="z-(--z-popover)"
@@ -389,7 +440,7 @@ export function MarkdownEditor({
       {!readOnly && !forceToolbar && (
         <BubbleMenu
           editor={editor}
-          pluginKey="roosterLinkCard"
+          pluginKey={linkCardKey}
           shouldShow={showLinkCard}
           getReferencedVirtualElement={linkCardAnchor}
           options={{
@@ -397,6 +448,7 @@ export function MarkdownEditor({
             strategy: 'fixed',
             offset: overlayOffsetPx,
             shift: { padding: viewportPaddingPx * uiScale() },
+            hide: true,
           }}
           appendTo={() => document.body}
           className="z-(--z-popover)"
@@ -435,10 +487,14 @@ function findLinkAnchor(editor: Editor, target: EventTarget): Element | null {
 
 /** The whole link mark around a rendered anchor, with its stored address. */
 function tappedLinkAt(editor: Editor, anchor: Element): TappedLink | null {
+  return linkAt(editor, editor.view.posAtDOM(anchor, 0));
+}
+
+/** The whole link mark that starts at or contains `pos`, with its stored address. */
+function linkAt(editor: Editor, pos: number): TappedLink | null {
   const type = editor.schema.marks.link;
-  if (!type) return null;
-  const $pos = editor.state.doc.resolve(editor.view.posAtDOM(anchor, 0));
-  const range = getMarkRange($pos, type);
+  if (!type || pos < 0 || pos > editor.state.doc.content.size) return null;
+  const range = getMarkRange(editor.state.doc.resolve(pos), type);
   if (!range) return null;
   const mark = editor.state.doc.nodeAt(range.from)?.marks.find((m) => m.type === type);
   const href = mark?.attrs.href;

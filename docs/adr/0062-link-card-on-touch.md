@@ -16,7 +16,7 @@ The options considered:
 ## Decisions
 1. **A tap with a finger or pen on a link shows a link card**, anchored under the whole link (Google Docs does the same). The tap still places the caret, so the text stays editable.
 2. **The card shows the address** (without `https://`, `mailto:` or a trailing slash), which opens the link in a new tab, and **Edit** (selects the link and opens the toolbar's link field) and **Remove** (unlinks it, keeping the text). Addresses that `isAllowedLinkHref` refuses are shown as text and do not open.
-3. **The card goes away** when the caret leaves the link, on any key or edit, on a mouse press, or when the focus leaves the text. Its buttons do not take the focus, so the keyboard stays up.
+3. **The card goes away** when the caret leaves the link, on any key or edit, on a mouse press, when the focus leaves the text, or when another device's edit replaces the description. Edit and Remove check that the link is still where it was, so a stale card never changes other text. Its buttons do not take the focus, so the keyboard stays up. The card follows its link when the pane scrolls, and hides while the link is scrolled out of view.
 4. **Touch only, for now.** The card is tied to the pointer type of the tap (`pointerType` other than `mouse`), so a touch screen laptop gets it and a mouse never does. Desktop keeps ADR 0022 (Ctrl/⌘+click, and Mod+K inside a link). Showing the card whenever the caret enters a link, on every device, is a possible later step.
 5. Read-only descriptions and comments are unchanged: their links open on a tap.
 

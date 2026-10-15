@@ -392,6 +392,10 @@ describe('Markdown helpers', () => {
 });
 
 describe('the link card on touch screens (ADR 0062)', () => {
+  // jsdom lays nothing out, so floating-ui's hide middleware hides the card, which leaves its
+  // controls without a computed name: they are found by label, and the phone e2e test checks
+  // that the card is visible.
+
   /** A finger tap on the link's text: a touch press, then the caret lands inside the link. */
   function tapLink(editor: Editor, dom: HTMLElement, pointerType = 'touch') {
     const link = dom.querySelector('a') as HTMLAnchorElement;
@@ -411,12 +415,12 @@ describe('the link card on touch screens (ADR 0062)', () => {
   test('a tap on a link shows its address with Open, Edit and Remove', async () => {
     const { dom, editor } = setup({ value: 'See [docs](https://example.com/team/) here' });
     tapLink(editor, dom);
-    const open = await screen.findByRole('link', { name: 'Open example.com/team' });
+    const open = await screen.findByLabelText('Open example.com/team');
     expect(open.getAttribute('href')).toBe('https://example.com/team/');
     expect(open.getAttribute('target')).toBe('_blank');
     expect(open.getAttribute('rel')).toBe('noopener noreferrer nofollow');
-    expect(screen.getByRole('button', { name: 'Edit link' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Remove link' })).toBeTruthy();
+    expect(screen.getByLabelText('Edit link')).toBeTruthy();
+    expect(screen.getByLabelText('Remove link')).toBeTruthy();
   });
 
   test('a mouse click on a link shows no card', async () => {
@@ -438,9 +442,11 @@ describe('the link card on touch screens (ADR 0062)', () => {
   test('Edit selects the link and opens the link field', async () => {
     const { dom, editor } = setup({ value: 'See [docs](https://example.com) here' });
     tapLink(editor, dom);
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit link' }));
+    fireEvent.click(await screen.findByLabelText('Edit link'));
     const field = await screen.findByRole('textbox', { name: 'Link address' });
     expect((field as HTMLInputElement).value).toBe('https://example.com');
+    // Typing goes to the address, not over the link's text (the field mounts detached).
+    await waitFor(() => expect(document.activeElement).toBe(field), { timeout: 3000 });
     const { from, to } = editor.state.selection;
     expect(editor.state.doc.textBetween(from, to)).toBe('docs');
   });
@@ -448,7 +454,35 @@ describe('the link card on touch screens (ADR 0062)', () => {
   test('Remove unlinks the whole link and keeps its text', async () => {
     const { dom, editor } = setup({ value: 'See [docs](https://example.com) here' });
     tapLink(editor, dom);
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove link' }));
+    fireEvent.click(await screen.findByLabelText('Remove link'));
     expect(toMarkdown(editor.getJSON())).toBe('See docs here');
+  });
+
+  test('a description replaced from outside during a tap drops the tapped link', async () => {
+    const value = 'AAAA [docsdocs](https://example.com/) [pay](https://billing.example/) end';
+    const { dom, editor, rerender, onChange } = setup({ value });
+    // Touch down while the text is not focused yet; another device's edit lands before the
+    // caret does, which shifts every position.
+    const link = dom.querySelector('a') as HTMLAnchorElement;
+    fireEvent.pointerDown(
+      link.firstChild?.nodeType === Node.TEXT_NODE ? link : (link.firstElementChild as Element),
+      {
+        pointerType: 'touch',
+      },
+    );
+    rerender(
+      <MarkdownEditor
+        value={value.replace('AAAA ', 'AA ')}
+        onChange={onChange}
+        ariaLabel="Description"
+      />,
+    );
+    vi.spyOn(editor.view, 'hasFocus').mockReturnValue(true);
+    act(() => {
+      editor.commands.focus();
+      editor.commands.setTextSelection(textPos(editor, 'docs') + 2);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(screen.queryByTestId('link-card')).toBeNull();
   });
 });

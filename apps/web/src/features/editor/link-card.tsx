@@ -43,9 +43,14 @@ export function LinkCard({ href, onEdit, onRemove, ref, className }: LinkCardPro
           rel="noopener noreferrer nofollow"
           aria-label={t('link.openAddress', { address })}
           title={href}
-          // Keeps the focus (and the bubble menu) in the text until the click lands.
+          // Keeps the focus (and the bubble menu) in the text until the click lands. `shrink`
+          // undoes the buttons' shrink-0, so a long address truncates instead of pushing Edit
+          // and Remove off the screen.
           onMouseDown={(event) => event.preventDefault()}
-          className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'min-w-0 text-text-info')}
+          className={cn(
+            buttonVariants({ variant: 'ghost', size: 'sm' }),
+            'min-w-0 shrink text-text-info',
+          )}
         >
           <ExternalLink className="size-4 shrink-0" strokeWidth={iconStrokeWidth} aria-hidden />
           <span className="truncate">{address}</span>

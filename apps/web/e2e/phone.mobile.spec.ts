@@ -273,9 +273,12 @@ test('a tap on a description link shows the link card, and Open opens it (ADR 00
   page,
 }) => {
   const { ids } = await setup(page, 'link.card', ['Read the guide']);
-  const target = new URL('/help', page.url()).href;
+  // A long address must truncate, not push Edit and Remove off the screen.
+  const target = new URL(`/help?q=${'keyboard-shortcuts-'.repeat(8)}`, page.url()).href;
+  // Enough text below the link for the sheet to scroll.
+  const filler = Array.from({ length: 30 }, (_, i) => `Line ${i + 1}.`).join('\n\n');
   const res = await apiCall(page, 'PATCH', `/api/v1/tasks/${ids[0]}`, {
-    description: `See [the guide](${target}) first.`,
+    description: `See [the guide](${target}) first.\n\n${filler}`,
   });
   expect(res.ok()).toBe(true);
   await reload(page);
@@ -287,6 +290,18 @@ test('a tap on a description link shows the link card, and Open opens it (ADR 00
   await expect(card).toBeVisible();
   // The tap only placed the caret: the text is still being edited, nothing navigated.
   await expect(page).toHaveURL(/\/t\//);
+  const viewport = page.viewportSize();
+  const remove = await card.getByRole('button', { name: 'Remove link' }).boundingBox();
+  expect(remove && viewport && remove.x + remove.width).toBeLessThanOrEqual(viewport?.width ?? 0);
+  // The card follows its link when the sheet scrolls.
+  const link = sheet.getByRole('link', { name: 'the guide' });
+  await page.locator('[data-pane-scroller]').evaluate((el) => el.scrollBy(0, 40));
+  await expect(async () => {
+    const [linkBox, cardBox] = await Promise.all([link.boundingBox(), card.boundingBox()]);
+    expect(Math.abs((cardBox?.y ?? 0) - ((linkBox?.y ?? 0) + (linkBox?.height ?? 0)))).toBeLessThan(
+      12,
+    );
+  }).toPass();
   await expectNoAxeViolations(page);
   const popup = page.waitForEvent('popup');
   await card.getByRole('link', { name: /^Open / }).tap();
