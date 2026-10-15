@@ -355,7 +355,7 @@ Colours and icons follow 03 §Due-date semantics. A tooltip on hover shows the f
    - A Tiptap editor with the placeholder "Add more detail…".
    - Markdown shortcuts work (`# `, `- `, `[] `, `**`, `` ` ``, ``` ``` ```).
    - The floating bubble toolbar on selection has B, I, S, code, link, H, list and checklist.
-   - Links: a plain click places the caret, so a link's text can be edited; **Ctrl+click** (⌘+click on a Mac) opens it in a new tab. Holding the modifier shows the pointer cursor on links, and each link has a "Ctrl+click to open" tooltip. The toolbar's "Open link" button (Mod+K inside a link) is the keyboard path. Read-only descriptions open links on a plain click.
+   - Links: a plain click places the caret, so a link's text can be edited; **Ctrl+click** (⌘+click on a Mac) opens it in a new tab. Holding the modifier shows the pointer cursor on links, and each link has a "Ctrl+click to open" tooltip. The toolbar's "Open link" button (Mod+K inside a link) is the keyboard path. On touch screens, a tap on a link places the caret and shows a link card under it: the address (which opens the link in a new tab), **Edit** and **Remove** (ADR 0062). Read-only descriptions open links on a plain click.
    - When the description exceeds 12 lines it collapses, with "Show more"; editing expands it.
 6. **Subtasks:**
    - A header "Subtasks 2/5" with "+".

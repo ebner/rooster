@@ -59,7 +59,7 @@ Panelen visar en uppgift i sin helhet: ansvarig, förfallodatum, upprepning, på
 
 - **Öppna den:** klicka på raden (inte på namnet), tryck på **O** (fokus flyttas till panelen), **blanksteg** (titta: panelen öppnas men fokus stannar i listan) eller **Tab+Enter** (redigera namnet i panelen).
 - När panelen är öppen byter ↑ och ↓ i listan vilken uppgift den visar.
-- **Beskrivning:** en redigerare som sparar Markdown. Markdown-genvägar fungerar medan du skriver (`# `, `- `, `[] `, `**fetstil**`). Markera text för att få fram formateringsverktygen. **Ctrl+klick** (⌘+klick) öppnar en länk; ett vanligt klick låter dig redigera länktexten. Långa beskrivningar fälls ihop efter ungefär 12 rader bakom **Visa mer**. Tab+R hoppar till beskrivningen.
+- **Beskrivning:** en redigerare som sparar Markdown. Markdown-genvägar fungerar medan du skriver (`# `, `- `, `[] `, `**fetstil**`). Markera text för att få fram formateringsverktygen. **Ctrl+klick** (⌘+klick) öppnar en länk; ett vanligt klick låter dig redigera länktexten. På en telefon eller surfplatta trycker du på en länk för att se adressen: tryck på adressen för att öppna den, eller redigera eller ta bort länken. Långa beskrivningar fälls ihop efter ungefär 12 rader bakom **Visa mer**. Tab+R hoppar till beskrivningen.
 - **Verktygsfältet:** **Markera som klar**, **Kopiera länk**, **Duplicera**, **Helskärm** (Tab+X) och **Fler åtgärder** (Ta bort uppgift, Kopiera uppgifts-ID, Öppna i ny flik, Flytta till grupp).
 - Esc går tillbaka till listan, och Esc en gång till stänger panelen. Varje uppgift har en egen länk som du kan spara eller dela.
 

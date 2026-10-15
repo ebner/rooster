@@ -20,7 +20,9 @@
     "placeholder": "Paste or type a link",
     "apply": "Apply link",
     "remove": "Remove link",
+    "edit": "Edit link",
     "open": "Open link",
+    "openAddress": "Open {address}",
     "openHint": "{key}+click to open",
     "invalid": "That isn't a link"
   },
@@ -29,6 +31,7 @@
     "empty": "Empty, with placeholder",
     "collapsed": "Long, collapsed",
     "toolbar": "Bubble toolbar",
+    "linkCard": "Link card (after a tap, on touch screens)",
     "readOnly": "Read-only",
     "sample": "## Agenda\n\nWalk through the **Q3 plan** with [the team](https://example.com/team).\n\n- [x] Book the room\n- [ ] Send the *draft* to Anna\n  - [ ] Attach `budget.xlsx`\n\n> Keep it under 30 minutes.\n\n1. Status\n2. Risks\n3. Next steps\n\n### Notes\n\nBring coffee.\n\nAsk about the offsite.\n\n---\n\nThat's all.",
     "short": "Call **Anna** about the venue and check `room-4`."

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Group, Section, Specimen } from '../dev-ui/layout';
+import { LinkCard } from './link-card';
 import { MarkdownEditor, type MarkdownEditorProps } from './markdown-editor';
 
 function EditorSample({
@@ -32,6 +33,9 @@ export function EditorSection() {
         <EditorSample label={t('dev.collapsed')} initial={t('dev.sample')} />
         <EditorSample label={t('dev.toolbar')} initial={t('dev.short')} forceToolbar="buttons" />
         <EditorSample label={t('link.label')} initial={t('dev.short')} forceToolbar="link" />
+        <Specimen label={t('dev.linkCard')}>
+          <LinkCard href="https://example.com/team/q3-plan" onEdit={() => {}} onRemove={() => {}} />
+        </Specimen>
         <EditorSample label={t('dev.readOnly')} initial={t('dev.sample')} readOnly />
       </Group>
     </Section>

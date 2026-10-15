@@ -2,6 +2,10 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
+## Unreleased
+
+- **Öppna länkar i telefonen.** Tryck på en länk i en uppgifts beskrivning för att se vart den leder, och tryck sedan på adressen för att öppna den. Där kan du också redigera eller ta bort länken.
+
 ## 1.6.2
 
 _2026-10-13_

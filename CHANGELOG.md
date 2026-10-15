@@ -6,6 +6,12 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+- On touch screens, a tap on a link in a task's description shows a link card under it: the address, which opens the link in a new tab, plus Edit and Remove. Before, a tap only placed the caret, and opening a link took the formatting toolbar (ADR 0062).
+
+### Migrations
+- None.
+
 ## [1.6.2] - 2026-10-13
 
 ### Changed

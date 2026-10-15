@@ -2,6 +2,10 @@
 
 What changed for you in each version of rooster, newest first. After an update, rooster offers this page once. You can open it at any time from Settings or the guide's page list. The notes for whoever runs rooster (upgrades, settings, security) are in the [changelog](../../../CHANGELOG.md).
 
+## Unreleased
+
+- **Open links on your phone.** Tap a link in a task's description to see where it goes, then tap the address to open it. You can also edit or remove the link from there.
+
 ## 1.6.2
 
 _2026-10-13_

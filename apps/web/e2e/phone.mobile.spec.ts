@@ -269,6 +269,30 @@ test('the detail sheet opens on tap and closes with back (history) and ‹', asy
   await expect(page).toHaveURL(/\/my$/);
 });
 
+test('a tap on a description link shows the link card, and Open opens it (ADR 0062)', async ({
+  page,
+}) => {
+  const { ids } = await setup(page, 'link.card', ['Read the guide']);
+  const target = new URL('/help', page.url()).href;
+  const res = await apiCall(page, 'PATCH', `/api/v1/tasks/${ids[0]}`, {
+    description: `See [the guide](${target}) first.`,
+  });
+  expect(res.ok()).toBe(true);
+  await reload(page);
+  await row(page, 'Read the guide').click();
+  const sheet = page.getByTestId('detail-pane');
+  await expect(sheet).toBeVisible();
+  await sheet.getByRole('link', { name: 'the guide' }).tap();
+  const card = page.getByTestId('link-card');
+  await expect(card).toBeVisible();
+  // The tap only placed the caret: the text is still being edited, nothing navigated.
+  await expect(page).toHaveURL(/\/t\//);
+  await expectNoAxeViolations(page);
+  const popup = page.waitForEvent('popup');
+  await card.getByRole('link', { name: /^Open / }).tap();
+  await expect(await popup).toHaveURL(target);
+});
+
 test('the org switcher sheet lists the orgs and switches', async ({ page }) => {
   await signInAs(page, uniqueEmail('org.switch'));
   const res = await apiCall(page, 'POST', '/api/v1/orgs', { name: 'Garden club' });

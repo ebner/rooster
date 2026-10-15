@@ -1,13 +1,22 @@
-import { type Editor, EditorContent, isTextSelection, useEditor } from '@tiptap/react';
+import {
+  type Editor,
+  EditorContent,
+  getMarkRange,
+  isTextSelection,
+  posToDOMRect,
+  useEditor,
+} from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { type PointerEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
 import { detectPlatform } from '../../lib/platform';
+import { uiScale } from '../../lib/ui-scale';
 import { Button } from '../../ui/button';
 import { overlayOffsetPx } from '../../ui/popover';
 import { editorExtensions } from './extensions';
 import { FormatToolbar } from './format-toolbar';
+import { LinkCard } from './link-card';
 import { fromMarkdown, toMarkdown } from './markdown';
 import './editor.css';
 
@@ -44,6 +53,16 @@ export interface MarkdownEditorProps {
   /** Kitchen sink: show the bubble toolbar statically under the text. */
   forceToolbar?: 'buttons' | 'link' | undefined;
 }
+
+/** A link a touch tap landed in (ADR 0062): its range and address. */
+interface TappedLink {
+  from: number;
+  to: number;
+  href: string;
+}
+
+/** The link card keeps this far from the viewport's edges, like React Aria's popovers. */
+const viewportPaddingPx = 12;
 
 /** Fallback when the computed line height is unavailable (jsdom): `--text-md` is 24 px. */
 const fallbackLineHeightPx = 24;
@@ -88,6 +107,14 @@ export function MarkdownEditor({
   const [linkMode, setLinkMode] = useState(forceToolbar === 'link');
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
+  /** ADR 0062: the link card shows while the caret stays in the link a touch tap landed in. */
+  const linkCardRef = useRef<HTMLDivElement>(null);
+  const tappedRef = useRef<TappedLink | null>(null);
+  const [tapped, setTappedState] = useState<TappedLink | null>(null);
+  const setTapped = useCallback((link: TappedLink | null) => {
+    tappedRef.current = link;
+    setTappedState(link);
+  }, []);
 
   /** Reports a pending edit; true when something was reported. */
   const flush = useCallback(() => {
@@ -179,6 +206,7 @@ export function MarkdownEditor({
     autofocus: autoFocus ? 'end' : false,
     editorProps,
     onUpdate: () => {
+      setTapped(null);
       if (timer.current !== null) clearTimeout(timer.current);
       timer.current = setTimeout(() => {
         // Run the same path as blur, which clears the timer itself.
@@ -186,7 +214,9 @@ export function MarkdownEditor({
       }, changeDebounceMs);
     },
     onFocus: () => setExpanded(true),
-    onBlur: () => {
+    onBlur: ({ event }) => {
+      const next = event.relatedTarget;
+      if (!(next instanceof Node && linkCardRef.current?.contains(next))) setTapped(null);
       const reported = flush();
       // A change from outside that arrived while editing applies now, unless this
       // editor just reported its own edit (the last edit wins).
@@ -244,12 +274,71 @@ export function MarkdownEditor({
 
   const collapsed = overflowing && !expanded;
 
+  // A tap with a finger or pen on a link remembers it; a mouse press or any key forgets it.
+  const onPointerDownCapture = (event: PointerEvent<HTMLDivElement>) => {
+    const anchor = event.pointerType === 'mouse' ? null : findLinkAnchor(editor, event.target);
+    setTapped(anchor ? tappedLinkAt(editor, anchor) : null);
+  };
+
+  const showLinkCard = useCallback(
+    ({
+      editor: e,
+      view,
+      state,
+    }: {
+      editor: Editor;
+      view: Editor['view'];
+      state: Editor['state'];
+    }) => {
+      const link = tappedRef.current;
+      if (!link || !e.isEditable) return false;
+      const inCard = linkCardRef.current?.contains(document.activeElement) ?? false;
+      if (!view.hasFocus() && !inCard) return false;
+      const { selection } = state;
+      return selection.empty && selection.from >= link.from && selection.from <= link.to;
+    },
+    [],
+  );
+
+  const linkCardAnchor = useCallback(() => {
+    const link = tappedRef.current;
+    const view = editorRef.current?.view;
+    if (!link || !view) return null;
+    const rect = posToDOMRect(view, link.from, link.to);
+    return { getBoundingClientRect: () => rect, getClientRects: () => [rect] };
+  }, []);
+
+  const editTappedLink = () => {
+    const link = tappedRef.current;
+    if (!link) return;
+    setTapped(null);
+    editor.chain().focus().setTextSelection({ from: link.from, to: link.to }).run();
+    setLinkMode(true);
+  };
+
+  const removeTappedLink = () => {
+    const link = tappedRef.current;
+    if (!link) return;
+    setTapped(null);
+    editor
+      .chain()
+      .focus()
+      .setTextSelection({ from: link.from, to: link.to })
+      .unsetLink()
+      .setTextSelection(link.to)
+      .run();
+  };
+
   return (
     <div className={cn('flex w-full flex-col items-start gap-1', className)}>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: focus inside expands the text */}
       <div
         id={contentId}
         ref={contentRef}
+        onPointerDownCapture={onPointerDownCapture}
+        onKeyDownCapture={() => {
+          if (tappedRef.current) setTapped(null);
+        }}
         // Focus anywhere inside (the text, or a link in read-only text) expands it.
         onFocus={() => setExpanded(true)}
         className={cn('w-full', collapsed && 'rooster-prose-clip')}
@@ -297,6 +386,31 @@ export function MarkdownEditor({
           </div>
         </BubbleMenu>
       )}
+      {!readOnly && !forceToolbar && (
+        <BubbleMenu
+          editor={editor}
+          pluginKey="roosterLinkCard"
+          shouldShow={showLinkCard}
+          getReferencedVirtualElement={linkCardAnchor}
+          options={{
+            placement: 'bottom',
+            strategy: 'fixed',
+            offset: overlayOffsetPx,
+            shift: { padding: viewportPaddingPx * uiScale() },
+          }}
+          appendTo={() => document.body}
+          className="z-(--z-popover)"
+        >
+          {tapped && (
+            <LinkCard
+              ref={linkCardRef}
+              href={tapped.href}
+              onEdit={editTappedLink}
+              onRemove={removeTappedLink}
+            />
+          )}
+        </BubbleMenu>
+      )}
       {forceToolbar && (
         <div ref={toolbarRef}>
           <FormatToolbar
@@ -310,4 +424,23 @@ export function MarkdownEditor({
       )}
     </div>
   );
+}
+
+/** The description link under a pointer target, if the text is editable. */
+function findLinkAnchor(editor: Editor, target: EventTarget): Element | null {
+  if (!editor.isEditable || !(target instanceof Element)) return null;
+  const anchor = target.closest('a[href]');
+  return anchor && editor.view.dom.contains(anchor) ? anchor : null;
+}
+
+/** The whole link mark around a rendered anchor, with its stored address. */
+function tappedLinkAt(editor: Editor, anchor: Element): TappedLink | null {
+  const type = editor.schema.marks.link;
+  if (!type) return null;
+  const $pos = editor.state.doc.resolve(editor.view.posAtDOM(anchor, 0));
+  const range = getMarkRange($pos, type);
+  if (!range) return null;
+  const mark = editor.state.doc.nodeAt(range.from)?.marks.find((m) => m.type === type);
+  const href = mark?.attrs.href;
+  return typeof href === 'string' ? { ...range, href } : null;
 }
