@@ -67,6 +67,8 @@ jobs:
         with:
           name: cli-binaries
           path: apps/cli/dist/bin
+          # Only carries the binaries to the later jobs; the release assets are the copy that stays.
+          retention-days: 1
 
   cli-smoke:
     needs: cli-binaries
