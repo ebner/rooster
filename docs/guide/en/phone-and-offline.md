@@ -17,7 +17,7 @@ On iPhone and iPad the installed app keeps its own storage, so you sign in once 
 ![My tasks on a phone, with the view switcher, the add button and the bottom bar](../../screenshots/my-tasks.phone.light.png)
 ![The organisation switcher sheet on a phone](../../screenshots/org-switcher.phone.light.png)
 
-- **Header:** the organisation switcher on the left (tap the name to switch, or to create a **New organisation**), and on the right the sync status and a **More** menu.
+- **Header:** the organisation switcher on the left (tap the name to switch, or to create a **New organisation**), and on the right the sync status and a **More** menu. To switch faster, swipe the name left or right for the next or previous organisation (the dots under it show where you are), or hold the name, slide your finger to an organisation and let go. You stay on the same view, so Today stays Today.
 - **View switcher:** My tasks · Today · 7 days · Overdue · No date · Everyone. It stays at the top while you scroll.
 - **Bottom bar:** My tasks · Search · Inbox · Settings.
 - **Add button (+):** adds a task at the top of the first group, or of the current view. The keyboard opens with a bar above it: **Date**, **Group**, **Add tag** and **Next**. **Next** saves the task and starts another one; tap outside to finish. Dates typed in the title work as on a computer; see [Dates and repeating tasks](./dates-and-repeats.md).

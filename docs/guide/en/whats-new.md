@@ -4,6 +4,7 @@ What changed for you in each version of rooster, newest first. After an update, 
 
 ## Unreleased
 
+- **Switch organisations with a swipe.** On a phone, swipe the organisation name at the top left to go to the next or previous organisation, or hold it and slide your finger to the one you want. You stay on the same view.
 - **Open links on your phone.** Tap a link in a task's description to see where it goes, then tap the address to open it. You can also edit or remove the link from there.
 
 ## 1.6.2

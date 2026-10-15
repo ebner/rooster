@@ -35,3 +35,11 @@ export const sidebarViews: readonly SidebarViewDefinition[] = [
 export function viewsFor(org: Pick<Org, 'isPersonal'>): readonly SidebarViewDefinition[] {
   return sidebarViews.filter((view) => !view.sharedOnly || !org.isPersonal);
 }
+
+/**
+ * The view an org switch lands on (ADR 0063): the same one (Today stays Today) when the other
+ * org has it, otherwise My tasks.
+ */
+export function switchView(view: OrgViewId | null, org: Pick<Org, 'isPersonal'>): OrgViewId {
+  return view && viewsFor(org).some((v) => v.id === view) ? view : 'my';
+}

@@ -1,6 +1,6 @@
-import { ChevronDown, ChevronLeft, MoreHorizontal, Plus } from 'lucide-react';
+import { ChevronLeft, MoreHorizontal, Plus } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { Button as AriaButton, Link as AriaLink } from 'react-aria-components';
+import { Link as AriaLink } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import type { CreateOrgInput, Org } from '../../data/types';
 import { cn } from '../../lib/cn';
@@ -12,6 +12,7 @@ import { LogoMark } from '../../ui/logo';
 import { Menu, MenuPopover, MenuTrigger } from '../../ui/menu';
 import { SyncStatus } from '../pwa/sync-status';
 import { CreateOrgForm } from './create-org-form';
+import { type OrgSlide, OrgSwitcher } from './org-switcher';
 import { nextColor } from './sidebar';
 
 export interface ViewTab {
@@ -29,6 +30,11 @@ export interface MobileHeaderProps {
   /** Shows the org switcher on the left (02 §13.1); otherwise the title. */
   org?: Org | null | undefined;
   onOpenOrgs?: (() => void) | undefined;
+  /** The user's orgs in sidebar order: a sideways swipe on the switcher moves between them. */
+  orgs?: readonly Org[] | undefined;
+  onSwitchOrg?: ((org: Org) => void) | undefined;
+  /** Press-and-slide on the switcher (ADR 0063). */
+  orgSlide?: OrgSlide | undefined;
   /** Icon actions before the ⋯ menu. */
   actions?: ReactNode;
   /** The ⋯ menu's items (`MenuItem`s). */
@@ -56,6 +62,9 @@ export function MobileHeader({
   context,
   org,
   onOpenOrgs,
+  orgs,
+  onSwitchOrg,
+  orgSlide,
   actions,
   menu,
   views,
@@ -119,32 +128,13 @@ export function MobileHeader({
           {org ? (
             <>
               <h1 className="sr-only">{context ? `${title} · ${context}` : title}</h1>
-              <AriaButton
-                {...(onOpenOrgs ? { onPress: onOpenOrgs } : {})}
-                aria-label={t('org.switch', { name: org.name })}
-                data-testid="org-switcher"
-                className={cn(
-                  'flex h-hit-touch min-w-0 cursor-default items-center gap-2 rounded-sm px-2',
-                  'transition-colors duration-(--dur-fast) pressed:bg-bg-muted',
-                  'outline-none focus-ring:outline-2 focus-ring:outline-border-focus',
-                )}
-              >
-                <Avatar
-                  id={org.id}
-                  name={org.name}
-                  emoji={org.avatarEmoji}
-                  color={org.color}
-                  shape="square"
-                  size={24}
-                  decorative
-                />
-                <span className="min-w-0 truncate text-group text-text">{org.name}</span>
-                <ChevronDown
-                  className="size-4 shrink-0 text-text-secondary"
-                  strokeWidth={iconStrokeWidth}
-                  aria-hidden
-                />
-              </AriaButton>
+              <OrgSwitcher
+                org={org}
+                orgs={orgs ?? [org]}
+                onOpen={onOpenOrgs}
+                onSwitch={onSwitchOrg}
+                slide={orgSlide}
+              />
             </>
           ) : (
             <h1 className="min-w-0 truncate px-2 text-lg">{title}</h1>
@@ -194,6 +184,8 @@ export interface OrgSwitcherSheetProps {
   onOpenChange: (open: boolean) => void;
   orgs: readonly Org[];
   activeOrgId?: string | undefined;
+  /** Press-and-slide: the org under the finger (ADR 0063). */
+  highlightedOrgId?: string | null | undefined;
   onSelect: (org: Org) => void;
   /** Resolve to close the sheet; throw to show the error in the form. */
   onCreateOrg: (input: CreateOrgInput) => Promise<void> | void;
@@ -208,6 +200,7 @@ export function OrgSwitcherSheet({
   onOpenChange,
   orgs,
   activeOrgId,
+  highlightedOrgId,
   onSelect,
   onCreateOrg,
   isStatic = false,
@@ -255,6 +248,8 @@ export function OrgSwitcherSheet({
                 />
               }
               label={org.name}
+              data-org-option={org.id}
+              className={cn(org.id === highlightedOrgId && 'bg-bg-muted')}
               checked={org.id === activeOrgId}
               aria-pressed={org.id === activeOrgId}
               onPress={() => {

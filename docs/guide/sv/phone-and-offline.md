@@ -17,7 +17,7 @@ På iPhone och iPad har den installerade appen egen lagring, så du loggar in en
 ![Mina uppgifter på en telefon, med vyväljaren, plusknappen och menyraden](../../screenshots/my-tasks.phone.light.png)
 ![Organisationsväljaren på en telefon](../../screenshots/org-switcher.phone.light.png)
 
-- **Sidhuvudet:** organisationsväljaren till vänster (tryck på namnet för att byta organisation eller skapa en **Ny organisation**), och till höger synkstatus och menyn **Mer**.
+- **Sidhuvudet:** organisationsväljaren till vänster (tryck på namnet för att byta organisation eller skapa en **Ny organisation**), och till höger synkstatus och menyn **Mer**. Byt snabbare genom att svepa namnet åt vänster eller höger till nästa eller föregående organisation (prickarna under namnet visar var du är), eller håll på namnet, dra fingret till en organisation och släpp. Du stannar i samma vy, så Idag förblir Idag.
 - **Vyväljaren:** Mina uppgifter · Idag · 7 dagar · Försenade · Utan datum · Alla. Den ligger kvar högst upp när du skrollar.
 - **Menyraden längst ner:** Mina uppgifter · Sök · Inkorg · Inställningar.
 - **Plusknappen (+):** lägger till en uppgift överst i den första gruppen, eller i vyn du står i. Tangentbordet öppnas med en rad ovanför: **Datum**, **Grupp**, **Lägg till tagg** och **Nästa**. **Nästa** sparar uppgiften och påbörjar en ny; tryck utanför för att sluta. Datum som du skriver i rubriken fungerar som på datorn; se [Datum och återkommande uppgifter](./dates-and-repeats.md).

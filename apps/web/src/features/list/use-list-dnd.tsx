@@ -38,7 +38,7 @@ import {
 } from '../../state/list-store';
 import { announce } from './announcer';
 import type { ListController } from './controller';
-import { longPressSlopPx, suppressNextClick } from './gestures';
+import { longPressMs, longPressSlopPx, suppressNextClick } from './gestures';
 import { useListContext } from './list-context';
 import { isNoopIntent } from './model/moves';
 import { type GroupOrder, type Row, visibleOrder } from './model/rows';
@@ -55,7 +55,7 @@ import {
 
 /** 02 §5: pointer drags start after 4 px; touch after a 350 ms long-press. */
 export const dragDistancePx = 4;
-export const touchDelayMs = 350;
+export const touchDelayMs = longPressMs;
 /** Hovering a collapsed header this long opens it. */
 export const hoverExpandMs = 600;
 /** Auto-scroll zone at the scroll container's edges, and the top speed (px per frame). */

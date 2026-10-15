@@ -408,7 +408,7 @@ A tiny status label sits in the toolbar's left area:
 
 ### 13.1 Frame
 - **Header (56 px + safe area):**
-  - The org switcher button on the left: avatar, org name and ▾. It opens a bottom sheet listing the orgs, with "Create org".
+  - The org switcher button on the left: avatar, org name and ▾. It opens a bottom sheet listing the orgs, with "Create org". A sideways swipe on it moves to the next or previous org, with dots under the name for the position, and press-and-slide (hold, slide to an org in the sheet, lift) picks any org. A switch keeps the view where the other org has it (ADR 0063).
   - Centre: nothing.
   - Right: the offline/sync pill (when relevant) and ⋯.
 - **View switcher:** a horizontally scrollable segmented control below the header: My tasks · Today · 7 days · Overdue · No date · Everyone. It sticks to the top while scrolling.

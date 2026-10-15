@@ -26,6 +26,7 @@ import { AppShell } from '../features/shell/app-shell';
 import { MobileNav } from '../features/shell/mobile-nav';
 import { type OrgViewId, orgUrlSlug, paths } from '../features/shell/paths';
 import { Sidebar } from '../features/shell/sidebar';
+import { switchView } from '../features/shell/sidebar-views';
 import { listViewOf, useLastListView } from '../features/views/last-view';
 import { LiveViewCounts } from '../features/views/view-counts';
 import { setLocale } from '../lib/i18n';
@@ -143,7 +144,9 @@ function AppLayout() {
           orgs,
           activeOrg: activeOrg ?? null,
           isAdmin: user.isAdmin,
-          onSelectOrg: (org) => void navigate({ href: paths.orgView(orgUrlSlug(org), 'my') }),
+          // ADR 0063: a switch keeps the view (Today stays Today) where the other org has it.
+          onSelectOrg: (org) =>
+            void navigate({ href: paths.orgView(orgUrlSlug(org), switchView(activeView, org)) }),
           onCreateOrg: createOrgAndGo,
           onSignOut: () => void signOutNow(),
           nav: (

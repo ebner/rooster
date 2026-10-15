@@ -10,6 +10,8 @@ export const flingMinPx = 40;
 export const swipeSlopPx = 10;
 /** A swipe toward a direction without an action only stretches this much (rubber band). */
 export const swipeResistance = 0.15;
+/** A touch held this long is a long-press (drag a row, or press-and-slide the org switcher). */
+export const longPressMs = 350;
 /** A long-press that moved less than this enters selection mode instead of dropping. */
 export const longPressSlopPx = 8;
 

@@ -88,6 +88,56 @@ export async function swipeAndHold(page: Page, locator: Locator, share: number, 
   return () => fire('pointerup', startX + dx);
 }
 
+/**
+ * Press-and-slide with pointer events: hold on `locator` past the long-press, then slide to
+ * the centre of `to` (resolved after the hold, so it may be something the press opened) and
+ * lift there. Every event goes to the pressed element, as the touch's implicit capture does.
+ */
+export async function pressAndSlide(page: Page, locator: Locator, to: Locator, holdMs = 500) {
+  const { x, y } = await centre(locator);
+  const fire = (type: string, px: number, py: number) =>
+    page.evaluate(
+      ({ type, px, py, x, y }) => {
+        const w = window as unknown as { __slideTarget?: Element | undefined };
+        if (type === 'pointerdown') w.__slideTarget = document.elementFromPoint(x, y) ?? undefined;
+        const target = w.__slideTarget;
+        if (!target) throw new Error('nothing under the finger');
+        target.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            pointerId: 9,
+            pointerType: 'touch',
+            isPrimary: true,
+            button: type === 'pointermove' ? -1 : 0,
+            buttons: type === 'pointerup' ? 0 : 1,
+            clientX: px,
+            clientY: py,
+          }),
+        );
+      },
+      { type, px, py, x, y },
+    );
+  await fire('pointerdown', x, y);
+  await page.waitForTimeout(holdMs);
+  // What the press opened may still be sliding in: aim once it has stopped moving.
+  await to.waitFor();
+  let end = await centre(to);
+  for (let i = 0; i < 40; i += 1) {
+    await page.waitForTimeout(50);
+    const next = await centre(to);
+    if (next.x === end.x && next.y === end.y) break;
+    end = next;
+  }
+  const steps = 8;
+  for (let i = 1; i <= steps; i += 1) {
+    await fire('pointermove', x + ((end.x - x) * i) / steps, y + ((end.y - y) * i) / steps);
+    await page.waitForTimeout(20);
+  }
+  await fire('pointerup', end.x, end.y);
+}
+
 /** Dispatches one TouchEvent at (x, y) on `target` (dnd-kit listens on the touched element). */
 async function touch(
   page: Page,

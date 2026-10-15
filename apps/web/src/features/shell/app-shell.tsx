@@ -13,6 +13,7 @@ import { openPalette, togglePalette } from '../palette/store';
 import { SyncStatus } from '../pwa/sync-status';
 import { CheatSheet, toggleCheatSheet } from './cheat-sheet';
 import { MobileHeader, OrgSwitcherSheet, type ViewTab } from './mobile-header';
+import type { OrgSlide } from './org-switcher';
 import { orgUrlSlug, paths } from './paths';
 import { useSidebarCollapsed } from './use-sidebar-collapsed';
 
@@ -39,6 +40,7 @@ export interface MobileShell {
 interface ShellContextValue {
   mobile: MobileShell | null;
   openOrgs: () => void;
+  orgSlide: OrgSlide;
 }
 
 const ShellContext = createContext<ShellContextValue | null>(null);
@@ -64,6 +66,8 @@ export function AppShell({ renderSidebar, children, navKey, mobile }: AppShellPr
   const breakpoint = useBreakpoint();
   const [railOpen, setRailOpen] = useState(false);
   const [orgsOpen, setOrgsOpen] = useState(false);
+  /** Press-and-slide (ADR 0063): the org option under the finger. */
+  const [slideOrgId, setSlideOrgId] = useState<string | null>(null);
   const editingFocus = useEditingFocus();
   const selectionMode = useListStore((s) => s.selectionMode);
   const tablet = breakpoint === 'tablet';
@@ -105,8 +109,25 @@ export function AppShell({ renderSidebar, children, navKey, mobile }: AppShellPr
     };
   }, [phoneFrame]);
 
-  const context = useMemo(
-    () => ({ mobile: mobile ?? null, openOrgs: () => setOrgsOpen(true) }),
+  const context = useMemo<ShellContextValue>(
+    () => ({
+      mobile: mobile ?? null,
+      openOrgs: () => setOrgsOpen(true),
+      orgSlide: {
+        start: () => {
+          setSlideOrgId(null);
+          setOrgsOpen(true);
+        },
+        move: setSlideOrgId,
+        end: (orgId) => {
+          setSlideOrgId(null);
+          const org = orgId ? mobile?.orgs.find((o) => o.id === orgId) : undefined;
+          if (!org) return;
+          setOrgsOpen(false);
+          mobile?.onSelectOrg(org);
+        },
+      },
+    }),
     [mobile],
   );
 
@@ -148,6 +169,7 @@ export function AppShell({ renderSidebar, children, navKey, mobile }: AppShellPr
               onOpenChange={setOrgsOpen}
               orgs={mobile.orgs}
               activeOrgId={mobile.activeOrg?.id}
+              highlightedOrgId={slideOrgId}
               onSelect={mobile.onSelectOrg}
               onCreateOrg={mobile.onCreateOrg}
             />
@@ -246,6 +268,9 @@ export function ViewHeader({ title, context, actions, mobile }: ViewHeaderProps)
         context={context}
         org={mobile?.switcher ? shell.mobile.activeOrg : null}
         onOpenOrgs={shell.openOrgs}
+        orgs={shell.mobile.orgs}
+        onSwitchOrg={shell.mobile.onSelectOrg}
+        orgSlide={shell.orgSlide}
         actions={mobile?.actions}
         views={mobile?.views}
         back={mobile?.back}

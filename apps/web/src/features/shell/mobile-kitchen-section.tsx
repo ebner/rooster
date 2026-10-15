@@ -126,6 +126,8 @@ export function MobileKitchenSection() {
             title={t('nav.myTasks')}
             org={personal}
             onOpenOrgs={noop}
+            orgs={orgs}
+            onSwitchOrg={noop}
             syncPill={null}
             menu={<MenuItem onAction={noop}>{t('nav.settings')}</MenuItem>}
             views={[{ id: 'my', label: t('nav.myTasks'), href: '#mobile', isActive: true }]}
@@ -271,6 +273,19 @@ export function MobileKitchenSection() {
             onOpenChange={noop}
             orgs={orgs}
             activeOrgId={personal?.id}
+            onSelect={noop}
+            onCreateOrg={noop}
+          />
+        </Phone>
+        <Phone>
+          {/* Press-and-slide: the org under the finger (ADR 0063). */}
+          <OrgSwitcherSheet
+            isStatic
+            isOpen
+            onOpenChange={noop}
+            orgs={orgs}
+            activeOrgId={personal?.id}
+            highlightedOrgId={orgs[1]?.id}
             onSelect={noop}
             onCreateOrg={noop}
           />

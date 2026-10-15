@@ -4,7 +4,7 @@ import { expectAxeClean } from './support/a11y';
 import { apiCall, signInAs, uniqueEmail } from './support/auth';
 import { createTask, groupId, myList, personalOrg, waitForSync } from './support/p3';
 import { expect, reload, test } from './support/test';
-import { longPress, showKeyboard, swipe, swipeAndHold } from './support/touch';
+import { longPress, pressAndSlide, showKeyboard, swipe, swipeAndHold } from './support/touch';
 
 /**
  * Phase 4 phone layout and gestures (WP 4.5–4.6, AC-4.5) on the iPhone 15 (WebKit) and
@@ -361,6 +361,53 @@ test('the org switcher sheet lists the orgs and switches', async ({ page }) => {
   await expect(sheet).toHaveCount(0);
   await expect(page).toHaveURL(/\/o\/garden-club[^/]*\/my$/);
   await expect(page.getByTestId('org-switcher')).toContainText('Garden club');
+});
+
+test('ADR 0063 a swipe on the org name moves between orgs and keeps the view', async ({ page }) => {
+  await signInAs(page, uniqueEmail('org.swipe'));
+  for (const name of ['Garden club', 'Book club']) {
+    expect((await apiCall(page, 'POST', '/api/v1/orgs', { name })).status()).toBe(201);
+  }
+  await reload(page);
+  await page.getByRole('link', { name: 'Today' }).click();
+  await expect(page).toHaveURL(/\/today$/);
+  const switcher = page.getByTestId('org-switcher');
+  await expect(switcher).toContainText('Personal');
+  await expect(page.getByTestId('org-dots').locator('span')).toHaveCount(3);
+  // Left brings the next org in, in sidebar order, on the same view.
+  await swipe(page, switcher, -0.9);
+  await expect(page).toHaveURL(/\/o\/garden-club[^/]*\/today$/);
+  await expect(switcher).toContainText('Garden club');
+  await swipe(page, switcher, -0.9);
+  await expect(switcher).toContainText('Book club');
+  // Past the last org it only springs back; the sheet stays closed.
+  await swipe(page, switcher, -0.9);
+  await page.waitForTimeout(400);
+  await expect(switcher).toContainText('Book club');
+  await expect(page.getByRole('dialog', { name: 'Organisations' })).toHaveCount(0);
+  // Right goes back.
+  await swipe(page, switcher, 0.9);
+  await expect(switcher).toContainText('Garden club');
+  await expect(page).toHaveURL(/\/today$/);
+});
+
+test('ADR 0063 press-and-slide: hold the org name, slide to an org, lift to switch', async ({
+  page,
+}) => {
+  await signInAs(page, uniqueEmail('org.slide'));
+  expect((await apiCall(page, 'POST', '/api/v1/orgs', { name: 'Garden club' })).status()).toBe(201);
+  await reload(page);
+  const switcher = page.getByTestId('org-switcher');
+  await expect(switcher).toContainText('Personal');
+  const sheet = page.getByRole('dialog', { name: 'Organisations' });
+  await pressAndSlide(page, switcher, sheet.getByRole('button', { name: 'Garden club' }));
+  await expect(sheet).toHaveCount(0);
+  await expect(page).toHaveURL(/\/o\/garden-club[^/]*\/my$/);
+  await expect(switcher).toContainText('Garden club');
+  // Lifting outside the list leaves the sheet open, as a tap would.
+  await pressAndSlide(page, switcher, sheet.getByRole('heading', { name: 'Organisations' }));
+  await expect(sheet).toBeVisible();
+  await expect(page).toHaveURL(/\/o\/garden-club[^/]*\/my$/);
 });
 
 test('inputs are at least 16 px on phones (no zoom on focus)', async ({ page }) => {

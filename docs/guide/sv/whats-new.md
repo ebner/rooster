@@ -4,6 +4,7 @@ Vad som har ändrats för dig i varje version av rooster, med den senaste först
 
 ## Unreleased
 
+- **Byt organisation med ett svep.** På en telefon sveper du organisationens namn uppe till vänster för att gå till nästa eller föregående organisation, eller håller på det och drar fingret till den du vill ha. Du stannar i samma vy.
 - **Öppna länkar i telefonen.** Tryck på en länk i en uppgifts beskrivning för att se vart den leder, och tryck sedan på adressen för att öppna den. Där kan du också redigera eller ta bort länken.
 
 ## 1.6.2
