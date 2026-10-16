@@ -2,7 +2,9 @@
 
 What changed for you in each version of rooster, newest first. After an update, rooster offers this page once. You can open it at any time from Settings or the guide's page list. The notes for whoever runs rooster (upgrades, settings, security) are in the [changelog](../../../CHANGELOG.md).
 
-## Unreleased
+## 1.7.0
+
+_2026-10-16_
 
 - **Switch organisations with a swipe.** On a phone, swipe the organisation name at the top left to go to the next or previous organisation, or hold it and slide your finger to the one you want. You stay on the same view.
 - **Open links on your phone.** Tap a link in a task's description to see where it goes, then tap the address to open it. You can also edit or remove the link from there.
