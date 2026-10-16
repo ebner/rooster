@@ -1,7 +1,9 @@
 // Shared helpers for the grant tests (WP 8.2): bearer requests, PATs and the device flow.
+import { defaultKeyHasher } from '@better-auth/api-key';
 import type { GrantConstraints, GrantScope } from '@rooster/core/grants';
 import type { Grant, Me, TokenCreated } from '@rooster/core/schemas';
 import { expect } from 'vitest';
+import type { Actor } from '../src/services/index.ts';
 import type { Caller, ListCtx } from './list-helpers.ts';
 
 export const ALL: GrantScope[] = [
@@ -123,4 +125,22 @@ export async function deviceLogin(
   const token = await pollToken(ctx, code.device_code);
   expect(token.status, JSON.stringify(token.body)).toBe(200);
   return { token: token.body.access_token as string, grant, scope: token.body.scope };
+}
+
+/** The actor a PAT resolves to. */
+export async function actorOf(ctx: ListCtx, token: string) {
+  const actor = ctx.app.services.grants.resolvePat(await defaultKeyHasher(token), null);
+  if (actor === null) throw new Error('no actor');
+  return actor;
+}
+
+/** An SSE stream of a grant actor on the hub, discarding what it receives. */
+export function openStream(ctx: ListCtx, actor: Actor): { close(): void } {
+  const handle = ctx.app.hub.open({
+    userId: actor.userId,
+    ...ctx.app.services.grants.streamAccess(actor),
+    sink: { write: () => {}, close: () => {} },
+  });
+  if (handle === null) throw new Error('hub closed');
+  return handle;
 }

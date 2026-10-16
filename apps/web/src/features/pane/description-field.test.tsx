@@ -24,7 +24,9 @@ beforeAll(() => {
 describe('the pane description survives any stored text', () => {
   test('a description nested 5,000 deep opens in the editor', async () => {
     render(<DescriptionField value={`${'> '.repeat(5000)}x`} onChange={vi.fn()} />);
-    const editor = await screen.findByRole('textbox', { name: 'Description' });
+    // It checks that the editor copes, not how fast: the lazy editor and this document take
+    // over a second to load in the parallel coverage run on a busy machine.
+    const editor = await screen.findByRole('textbox', { name: 'Description' }, { timeout: 5_000 });
     expect(editor.getAttribute('contenteditable')).toBe('true');
     expect(editor.textContent).toContain('x');
   });
