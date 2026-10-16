@@ -97,6 +97,10 @@ export class S3BlobStore implements BlobStore {
     // Closed here whatever happens: a PUT refused before `100 Continue` never reads it, and
     // the SDK leaves it (and its descriptor) open.
     const source = Buffer.isBuffer(body) ? null : createReadStream(body.file);
+    // The file opens asynchronously. When S3 refuses the PUT before that open completes, the
+    // caller may already have deleted the file; the late ENOENT must not become an uncaught
+    // exception (it would end the process). The PUT's own failure is reported by the SDK.
+    source?.on('error', () => {});
     try {
       await this.withDeadline(
         this.timeoutMs + Math.ceil(size * UPLOAD_MS_PER_BYTE),

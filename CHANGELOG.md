@@ -10,6 +10,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 - On phones, a sideways swipe on the org name in the header switches to the next or previous org, with dots under the name for the position; holding the name and sliding to an org in the sheet picks any org. Every phone org switch now keeps the view (Today stays Today) where the other org has it (ADR 0063).
 - On touch screens, a tap on a link in a task's description shows a link card under it: the address, which opens the link in a new tab, plus Edit and Remove. Before, a tap only placed the caret, and opening a link took the formatting toolbar (ADR 0062).
 
+### Fixed
+- With S3 storage, an upload that S3 refused before rooster had opened its temporary file could end the server process with an uncaught `ENOENT` once the file was cleaned up. The error is now ignored; the refused upload still fails as before.
+
 ### Migrations
 - None.
 

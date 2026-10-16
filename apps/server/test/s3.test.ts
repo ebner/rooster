@@ -446,4 +446,26 @@ describe('S3 lifecycle (loopback)', () => {
     },
     15_000,
   );
+
+  it('a refused PUT of a file deleted before it opened does not throw later', async () => {
+    const s3 = await loopbackS3();
+    const dir = tempDir();
+    dirs.push(dir.cleanup);
+    s3.behaviour.put = 'forbid';
+    const uncaught: unknown[] = [];
+    const onUncaught = (error: unknown) => uncaught.push(error);
+    process.on('uncaughtException', onUncaught);
+    try {
+      // The upload's temp file is already gone when the stream opens it (its open is async).
+      const file = join(dir.path, 'gone.bin');
+      await expect(
+        s3.store.put(key, { file, size: 3 * 1024 * 1024 }, 'application/octet-stream'),
+      ).rejects.toThrow();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(uncaught).toEqual([]);
+    } finally {
+      process.off('uncaughtException', onUncaught);
+      s3.close();
+    }
+  });
 });
