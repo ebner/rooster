@@ -107,7 +107,8 @@ test('AC-11.3 keyboard only: sign in, create with a date, subtask, move, complet
   await page.keyboard.press('Enter');
   await page.keyboard.press('Escape');
   await expect(row(page, 'Call Bob')).toBeVisible();
-  await expect(row(page, 'Call Bob')).toContainText(/Fri|Today|Tomorrow/);
+  // On a Friday, "fri" is next week's Friday, which the row shows as a date ("Oct 23").
+  await expect(row(page, 'Call Bob')).toContainText(/Fri|Today|Tomorrow|[A-Z][a-z]{2} \d{1,2}/);
   await expect(row(page, 'Call Bob').locator('[data-focus-target]')).toBeFocused();
   await expectVisibleFocus(page, 'created row');
   await waitForSync(page);
