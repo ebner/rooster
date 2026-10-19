@@ -21,3 +21,12 @@ A second cause: a request whose answer was lost (the phone slept or switched net
 5. **Startup messages.** Sync-channel messages are buffered from the moment the engine starts, so a confirmation that arrives during restore is not lost.
 6. **Failed merge.** When the request returned 2xx but merging the response fails, the op is not resent; the list is refetched instead.
 7. **Testing a frozen page.** E2E simulates it with CDP `Debugger.pause`, because headless Chromium ignores `Page.setWebLifecycleState` on visible pages (`e2e/sync-recovery.mobile.spec.ts`).
+
+## Amendment (2026-10-19): bounded outbox waits
+8. **Every wait for the outbox has a deadline (4 s).** On Android, the app could show "Syncing…" while nothing reached the server for days, and a task created meanwhile could be lost. Each send waited for the IndexedDB write chain (write-ahead) without limit, so a browser whose IndexedDB stopped answering held every op in memory until the page closed. Now:
+   - each outbox write may take 4 s; after that it no longer holds the chain, and the queue is marked stalled. Its IndexedDB request is already placed, so later writes still land after it;
+   - a send waits for the writes at most 4 s, and not at all while the outbox is stalled: an op that only lives in memory is safest once it is sent. The Idempotency-Key covers a write that lands late and is replayed after a reload;
+   - a follower's `enqueued` message goes out after the timeout with `stored: false`, so the leader still learns of and sends the op;
+   - `syncWithOutbox` gives up on a read after 4 s (`StorageTimeoutError`) and leaves the queue as it is; a write still unanswered is not in `stored`, so its op never counts as settled;
+   - when the start-up read misses the 3 s restore wait, its records still join the queue (through `restore`) when it answers;
+   - the tag lookup after a `409 tag_name_taken` without `existingId` is bounded like a send.

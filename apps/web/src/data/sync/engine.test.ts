@@ -1397,6 +1397,51 @@ describe('session expiry after another account took over (ADR 0051/0056)', () =>
   });
 });
 
+describe('an outbox that answers after the start', () => {
+  test('its ops still join the queue and are sent', async () => {
+    const outbox = createMemoryOutbox();
+    const transport = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const today = Object.values(transport.state(orgId).groups).find((g) => g.name === 'Today');
+    const op = {
+      ...listOps.createTask({ id: 'late', title: 'Late', groupId: today?.id as string }),
+      opId: '01900000-0000-7000-8000-0000000000f1',
+      editTime: 1,
+      clientId: 'c',
+    };
+    await outbox.put([{ op, orgId, ctx: { userId }, userId }]);
+    localStorage.setItem('rooster.cacheOwner', userId);
+    // IndexedDB answers the start's read only after the start stopped waiting, and never
+    // answers a later read (the leader's reconciliation gives up on it).
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let loads = 0;
+    const slow = {
+      ...outbox,
+      load: () => (loads++ === 0 ? gate.then(() => outbox.load()) : new Promise<never>(() => {})),
+    };
+    const queryClient = new QueryClient();
+    const engine = await startSync({
+      queryClient,
+      transport,
+      outbox: slow,
+      channel: nullChannel(),
+      persister: createCachePersister(() => undefined, memoryStorage().storage),
+      eventSource: quietSource,
+      locks: null,
+      listen: false,
+      restoreTimeoutMs: 10,
+    });
+    engines.push(engine);
+    expect(engine.pipeline.pending).toBe(0);
+    release();
+    await vi.waitFor(() => expect(engine.pipeline.pending).toBe(1));
+    await fetchMe(queryClient, me(userId));
+    await vi.waitFor(() => expect(transport.state(orgId).tasks.late?.title).toBe('Late'));
+  });
+});
+
 describe('session expiry after a timed-out restore', () => {
   test("a 401 still deletes the stored account's snapshot and keys", async () => {
     const { data, storage } = memoryStorage();

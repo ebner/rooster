@@ -275,8 +275,27 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     restoreAbandoned = true;
   });
   restoreScope.done();
-  const records = withOwner(await withTimeout(outbox.load(), [], waitMs));
+  const startLoad = outbox.load();
+  let loadAbandoned = false;
+  const records = withOwner(
+    await withTimeout(startLoad, [], waitMs, () => {
+      loadAbandoned = true;
+    }),
+  );
   pipeline.restore(restoredBases(queryClient), records);
+  if (loadAbandoned) {
+    // IndexedDB answered too late for the start: the ops it holds still join the queue (and
+    // are sent) when it does, instead of staying hidden until the next start. `restore` skips
+    // ops already queued or settled, and other accounts' records.
+    void startLoad.then(
+      (late) => {
+        if (isSessionClosed()) return;
+        pipeline.restore(new Map(), withOwner(late));
+        pipeline.resume();
+      },
+      () => {},
+    );
+  }
   // The restored data renders before a fresh `/me`: this page has run as that account too.
   ranAs = (queryClient.getQueryData<Me>(['me']) as Me | undefined)?.user?.id ?? null;
   // Restored data renders now but is never trusted as fresh: every query refetches on mount

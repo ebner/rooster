@@ -2,6 +2,10 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
+## Unreleased
+
+- **Inget mer ändlöst "Synkar…".** På vissa telefoner kunde ändringar fastna på "Synkar…" utan att någonsin sparas, och försvann när appen stängdes. Nu skickas de även när webbläsarens lagring slutar svara.
+
 ## 1.7.0
 
 _2026-10-16_

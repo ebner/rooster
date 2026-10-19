@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { useSyncStore } from '../../state/sync-store';
 import { ApiError } from '../errors';
 import { createFixtureTransport } from '../pipeline/fixture-transport';
-import { ListPipeline, myListKey } from '../pipeline/pipeline';
+import { ListPipeline, myListKey, StorageTimeoutError } from '../pipeline/pipeline';
 import { type ListTransport, RateLimitedError } from '../pipeline/transport';
 import type { SyncChannel, SyncMessage } from './channel';
 import { createMemoryOutbox, type Outbox } from './outbox';
@@ -50,6 +50,7 @@ interface TabOptions {
   afterPaint?: () => Promise<void>;
   canSend?: () => boolean;
   sendTimeoutMs?: number;
+  storageTimeoutMs?: number;
 }
 
 function tab({
@@ -63,6 +64,7 @@ function tab({
   afterPaint,
   canSend,
   sendTimeoutMs,
+  storageTimeoutMs,
 }: TabOptions) {
   const client = queryClient ?? new QueryClient();
   const pipeline = new ListPipeline({
@@ -78,6 +80,7 @@ function tab({
     ...(afterPaint ? { afterPaint } : {}),
     ...(canSend ? { canSend } : {}),
     ...(sendTimeoutMs ? { sendTimeoutMs } : {}),
+    ...(storageTimeoutMs ? { storageTimeoutMs } : {}),
   });
   channel?.listen((m) => pipeline.receive(m));
   return { pipeline, queryClient: client };
@@ -594,5 +597,96 @@ describe('AC-1.0.1 the outbox is bound to its user', () => {
     await local.pipeline.syncWithOutbox(() => outbox.load());
     expect(local.pipeline.pending).toBe(1);
     warn.mockRestore();
+  });
+});
+
+describe('an outbox that stops answering (IndexedDB hangs)', () => {
+  /** IndexedDB that takes requests and never answers them. */
+  const hungOutbox = (): Outbox => ({
+    load: () => new Promise(() => {}),
+    put: () => new Promise(() => {}),
+    remove: () => new Promise(() => {}),
+    clear: () => new Promise(() => {}),
+  });
+
+  test('ops are still sent, one after another, once the write has had its time', async () => {
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const { transport, sent } = spy(server);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { pipeline, queryClient } = tab({
+      transport,
+      outbox: hungOutbox(),
+      storageTimeoutMs: 20,
+    });
+    const today = await load(pipeline, queryClient);
+    pipeline.enqueue(orgId, [listOps.createTask({ id: 'n1', title: 'X', groupId: today })], ctx);
+    await pipeline.idle();
+    pipeline.enqueue(orgId, [listOps.createTask({ id: 'n2', title: 'Y', groupId: today })], ctx);
+    await pipeline.idle();
+    expect(sent).toEqual(['create:X', 'create:Y']);
+    expect(server.state(orgId).tasks.n2?.title).toBe('Y');
+    expect(useSyncStore.getState().pending).toBe(0);
+    expect(warn).toHaveBeenCalledWith(
+      'rooster: outbox write failed',
+      expect.any(StorageTimeoutError),
+    );
+    warn.mockRestore();
+  });
+
+  test("a follower's op still reaches the leader, which sends it", async () => {
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const { transport, sent } = spy(server);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const outbox = hungOutbox();
+    const { channel } = bus();
+    const options = { transport, outbox, storageTimeoutMs: 20 };
+    const leader = tab({ ...options, channel: channel(), leader: () => true });
+    const follower = tab({ ...options, channel: channel(), leader: () => false });
+    await load(leader.pipeline, leader.queryClient);
+    const today = await load(follower.pipeline, follower.queryClient);
+    follower.pipeline.enqueue(
+      orgId,
+      [listOps.createTask({ id: 'f1', title: 'F', groupId: today })],
+      ctx,
+    );
+    await vi.waitFor(() => expect(sent).toEqual(['create:F']));
+    await vi.waitFor(() => expect(follower.pipeline.pending).toBe(0));
+    warn.mockRestore();
+  });
+
+  test('reconciling with an outbox that never answers gives up and keeps the queue', async () => {
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const { pipeline, queryClient } = tab({
+      transport: server,
+      leader: () => false,
+      storageTimeoutMs: 20,
+    });
+    const today = await load(pipeline, queryClient);
+    pipeline.enqueue(orgId, [listOps.createTask({ id: 'n1', title: 'X', groupId: today })], ctx);
+    await expect(pipeline.syncWithOutbox(() => new Promise(() => {}))).rejects.toThrow(
+      StorageTimeoutError,
+    );
+    expect(pipeline.pending).toBe(1);
+  });
+
+  test('a tag lookup that never answers drops the refused tag create instead of holding the queue', async () => {
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const { transport: refusing } = spy(server, (op) =>
+      op.kind === 'tag.create' ? new ApiError('tag_name_taken', 409) : undefined,
+    );
+    const transport: ListTransport = { ...refusing, fetchTags: () => new Promise(() => {}) };
+    const { pipeline, queryClient } = tab({ transport, sendTimeoutMs: 20 });
+    await load(pipeline, queryClient);
+    const a = Object.values(server.state(orgId).tasks)[0] as Task;
+    const dropped = vi.fn();
+    pipeline.onDropped(dropped);
+    pipeline.enqueue(
+      orgId,
+      [listOps.createTag({ id: 't-new', name: 'Home' }), listOps.completeTask(a.id, true)],
+      ctx,
+    );
+    await pipeline.idle();
+    expect(dropped).toHaveBeenCalledTimes(1);
+    expect(server.state(orgId).tasks[a.id]?.completedAt).not.toBeNull();
   });
 });

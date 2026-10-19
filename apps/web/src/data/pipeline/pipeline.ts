@@ -82,6 +82,8 @@ export interface PipelineOptions {
   browserOwner?: () => string | null;
   /** A request still unanswered after this long is aborted and retried. Default 20 s. */
   sendTimeoutMs?: number;
+  /** An outbox read or write still unanswered after this long is given up on. Default 4 s. */
+  storageTimeoutMs?: number;
 }
 
 /** How long an offline flusher sleeps before looking again (the `online` event wakes it). */
@@ -97,6 +99,32 @@ export class SendTimeoutError extends Error {
     super(`no answer within ${ms} ms`);
     this.name = 'SendTimeoutError';
   }
+}
+
+/**
+ * How long the queue waits for the outbox (IndexedDB) before it goes on without it. IndexedDB
+ * can stop answering altogether: unbounded, the write-ahead wait kept every op unsent behind
+ * "Syncing…" until the page closed, and the ops, which never reached the outbox, were lost
+ * with it.
+ */
+export const storageTimeoutMs = 4_000;
+/** The outbox did not answer within `storageTimeoutMs`. */
+export class StorageTimeoutError extends Error {
+  constructor(ms: number) {
+    super(`the outbox did not answer within ${ms} ms`);
+    this.name = 'StorageTimeoutError';
+  }
+}
+
+/** Settles like `promise`, or rejects with `timeout()` once `ms` have passed. */
+function within<T>(promise: Promise<T>, ms: number, timeout: () => Error): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(timeout()), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
 }
 
 /** How many settled op ids a tab remembers, so a late copy of a settled op is not queued again. */
@@ -263,6 +291,9 @@ export class ListPipeline {
   private readonly afterPaint: () => Promise<void>;
   /** Outbox writes in order; a send waits for them (write-ahead, 04 §6.2). */
   private persisted: Promise<void> = Promise.resolve();
+  /** The last outbox write timed out: sends stop waiting for writes until one lands in time. */
+  private storageStalled = false;
+  private readonly storageTimeout: number;
   /**
    * Bumped by `reset()`. A write queued before a reset (e.g. an op waiting for its paint) is
    * skipped, so it cannot put records back after sign-out cleared the outbox.
@@ -303,6 +334,7 @@ export class ListPipeline {
     this.user = options.user;
     this.browserOwner = options.browserOwner;
     this.sendTimeout = options.sendTimeoutMs ?? sendTimeoutMs;
+    this.storageTimeout = options.storageTimeoutMs ?? storageTimeoutMs;
   }
 
   /** Whether a record belongs to someone other than the current user (never sent or shown). */
@@ -574,22 +606,44 @@ export class ListPipeline {
     return ops;
   }
 
-  /** Resolves once every outbox write queued so far has landed (or was skipped). */
+  /** Resolves once every outbox write queued so far has landed, was skipped or timed out. */
   writesSettled(): Promise<void> {
     return this.persisted;
   }
 
   /**
    * Chains an outbox write; failures (quota, private mode) leave the op in memory only. A write
-   * still waiting when `reset()` runs is skipped.
+   * still waiting when `reset()` runs is skipped. One that takes longer than `storageTimeout`
+   * no longer holds the chain: its IndexedDB request is already placed, so a later write's
+   * request still lands after it (IndexedDB runs them in order).
    */
   private write(run: () => Promise<void> | undefined): Promise<void> {
     const generation = this.generation;
-    const guarded = () => (generation === this.generation ? run() : undefined);
+    const guarded = async () => {
+      if (generation !== this.generation) return;
+      const pending = run();
+      if (!pending) return;
+      await within(
+        pending,
+        this.storageTimeout,
+        () => new StorageTimeoutError(this.storageTimeout),
+      );
+      this.storageStalled = false;
+    };
     this.persisted = this.persisted.then(guarded).catch((error: unknown) => {
+      if (error instanceof StorageTimeoutError) this.storageStalled = true;
       console.warn('rooster: outbox write failed', error);
     });
     return this.persisted;
+  }
+
+  /** The outbox writes queued so far, waited for at most `storageTimeout`. */
+  private writesLanded(): Promise<void> {
+    return within(
+      this.persisted,
+      this.storageTimeout,
+      () => new StorageTimeoutError(this.storageTimeout),
+    ).catch(() => {});
   }
 
   /**
@@ -691,10 +745,15 @@ export class ListPipeline {
    * Only for an outbox shared by every tab (IndexedDB).
    */
   async syncWithOutbox(load: () => Promise<readonly OutboxRecord[]>): Promise<void> {
-    await this.persisted;
+    // A write still unanswered is not in `stored` yet: its op never counts as settled below.
+    await this.writesLanded();
     const generation = this.generation;
     const before = new Set(this.stored);
-    const records = await load();
+    const records = await within(
+      load(),
+      this.storageTimeout,
+      () => new StorageTimeoutError(this.storageTimeout),
+    );
     if (generation !== this.generation) return;
     const present = new Set(records.map((record) => record.op.opId));
     const gone = this.queue.filter(
@@ -768,8 +827,9 @@ export class ListPipeline {
     this.flushing = true;
     try {
       while (this.queue.length > 0 && !this.paused && this.isLeader() && this.canSend()) {
-        // Write-ahead: an op is in the outbox before its request leaves.
-        await this.persisted;
+        // Write-ahead: an op is in the outbox before its request leaves, unless the outbox stopped
+        // answering: then the op lives in memory only, and sending it is the way to keep it.
+        if (!this.storageStalled) await this.writesLanded();
         // The session may have ended (or the page closed) while the write ran: the request
         // would then carry whatever cookie the browser holds now (ADR 0056).
         if (this.paused || !this.isLeader() || !this.canSend()) break;
@@ -1062,7 +1122,12 @@ export class ListPipeline {
     if (item.op.kind !== 'tag.create') return undefined;
     const name = item.op.payload.name.toLocaleLowerCase();
     try {
-      const tags = await this.transport.fetchTags(item.orgId);
+      // Bounded like a send: the flush waits for this lookup.
+      const tags = await within(
+        this.transport.fetchTags(item.orgId),
+        this.sendTimeout,
+        () => new SendTimeoutError(this.sendTimeout),
+      );
       return tags.find((t) => t.name.toLocaleLowerCase() === name)?.id;
     } catch {
       return undefined;
