@@ -6,6 +6,13 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Fixed
+- 1.7.1 did not cure the phone that sat on "Syncing…": it still sent nothing. Another rooster page on the same browser (a forgotten tab, possibly on an older version) can hold the sending lock and answer the app's "are you alive?" check without ever sending. The app in front now takes the lock from a leader that answers but leaves the same change unsent for 45 s without reporting a failure (ADR 0019 §9).
+- Reload no longer waits forever for a queue that doesn't drain: after 10 s it goes ahead when every queued change is stored on the device, and the new version sends them. This deviates from 04 §6.3, which waited for an empty outbox (ADR 0021 amendment).
+
+### Migrations
+- None.
+
 ## [1.7.1] - 2026-10-19
 
 ### Fixed

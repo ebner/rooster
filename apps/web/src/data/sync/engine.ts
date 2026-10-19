@@ -53,6 +53,12 @@ export const leaderStallMs = 2_000;
 export const leaderAnswerMs = 2_000;
 /** After the leader answered, the follower looks again this much later. */
 const leaderRecheckMs = 15_000;
+/**
+ * A leader that answers but has left the same op at the head of the queue this long, without
+ * reporting a failure, is stuck (a send never takes longer than the send and storage timeouts
+ * without counting a failure). The follower takes the lock from it.
+ */
+export const leaderProgressMs = 45_000;
 /** Cold start waits at most this long for IndexedDB before rendering without the cache. */
 const restoreTimeoutMs = 3_000;
 
@@ -73,7 +79,7 @@ export interface SyncEngineOptions {
    */
   sharedOutbox?: boolean;
   /** Test seam: the leader watch's timings (default `leaderStallMs`, `leaderAnswerMs`). */
-  leaderWatch?: { stallMs?: number; answerMs?: number; recheckMs?: number };
+  leaderWatch?: { stallMs?: number; answerMs?: number; recheckMs?: number; progressMs?: number };
   /** Test seam: how long the cold start waits for IndexedDB (default 3 s). */
   restoreTimeoutMs?: number;
 }
@@ -209,6 +215,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   const stallMs = options.leaderWatch?.stallMs ?? leaderStallMs;
   const answerMs = options.leaderWatch?.answerMs ?? leaderAnswerMs;
   const recheckMs = options.leaderWatch?.recheckMs ?? leaderRecheckMs;
+  const progressMs = options.leaderWatch?.progressMs ?? leaderProgressMs;
   const sharedOutbox = options.sharedOutbox ?? (options.outbox !== undefined || hasIndexedDb());
   const outbox = options.outbox ?? (hasIndexedDb() ? createIdbOutbox() : createMemoryOutbox());
   const channel = options.channel ?? createSyncChannel();
@@ -369,10 +376,32 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
     pipeline.pending > 0 &&
     online() &&
     pageVisible();
+  /** The op at the head of this tab's queue, and since when the watch has seen it there. */
+  let headSeen: { opId: string; at: number } | null = null;
+  /**
+   * Whether an answering leader is stuck: alive, but not getting the head op out. A leader
+   * whose flush hangs (an old version waiting for IndexedDB forever, in a background tab the
+   * user never closes) answers every ping, so without this the tab in front never takes over.
+   */
+  function headStalled(): boolean {
+    const head = pipeline.headOpId;
+    if (head === undefined) {
+      headSeen = null;
+      return false;
+    }
+    const now = Date.now();
+    if (headSeen?.opId !== head) {
+      headSeen = { opId: head, at: now };
+      return false;
+    }
+    const { failures, sessionExpired } = useSyncStore.getState();
+    return failures === 0 && !sessionExpired && now - headSeen.at >= progressMs;
+  }
   function stopWatching() {
     if (watchTimer) clearTimeout(watchTimer);
     watchTimer = null;
     pinging = false;
+    headSeen = null;
   }
   /**
    * Looks at the leader after `delay`, unless a look is already planned. With 0 (foreground,
@@ -389,7 +418,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
       watchTimer = null;
       if (!mayTakeOver()) return;
       // The leader is getting on with it: look again later.
-      if (delay > 0 && leaderSeenAt >= since) watchLeader(stallMs);
+      if (delay > 0 && leaderSeenAt >= since && !headStalled()) watchLeader(stallMs);
       else pingLeader();
     }, delay);
   }
@@ -401,7 +430,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
       watchTimer = null;
       pinging = false;
       if (!mayTakeOver()) return;
-      if (leaderSeenAt >= askedAt) {
+      if (leaderSeenAt >= askedAt && !headStalled()) {
         // Alive. What is stale may be this tab's mirror (a confirmation it missed).
         watchLeader(recheckMs);
         void readOutbox();

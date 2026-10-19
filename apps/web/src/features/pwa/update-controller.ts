@@ -61,6 +61,7 @@ export function createUpdateController(deps: UpdateControllerDeps): UpdateContro
 
   const gate = createUpdateGate({
     pending: deps.pending,
+    ...(deps.durable ? { durable: deps.durable } : {}),
     editing: deps.editing,
     subscribe: deps.subscribe,
     apply: () => {

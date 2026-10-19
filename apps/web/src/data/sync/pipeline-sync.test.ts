@@ -654,6 +654,26 @@ describe('an outbox that stops answering (IndexedDB hangs)', () => {
     warn.mockRestore();
   });
 
+  test('durable() tells whether every queued op is in the outbox (the update gate reads it)', async () => {
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const stored = tab({ transport: server, outbox: createMemoryOutbox(), leader: () => false });
+    const memoryOnly = tab({
+      transport: server,
+      outbox: hungOutbox(),
+      leader: () => false,
+      storageTimeoutMs: 20,
+    });
+    for (const { pipeline, queryClient } of [stored, memoryOnly]) {
+      const today = await load(pipeline, queryClient);
+      pipeline.enqueue(orgId, [listOps.createTask({ id: 'n1', title: 'X', groupId: today })], ctx);
+      await pipeline.writesSettled();
+    }
+    expect(stored.pipeline.durable()).toBe(true);
+    expect(memoryOnly.pipeline.durable()).toBe(false);
+    warn.mockRestore();
+  });
+
   test('reconciling with an outbox that never answers gives up and keeps the queue', async () => {
     const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
     const { pipeline, queryClient } = tab({

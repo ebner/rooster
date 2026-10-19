@@ -513,6 +513,16 @@ export class ListPipeline {
     return this.queue.length;
   }
 
+  /** Whether every queued op is stored in the outbox, so a reload keeps it. */
+  durable(): boolean {
+    return this.queue.every((item) => this.stored.has(item.op.opId));
+  }
+
+  /** The op id at the head of the queue (the next one to send), if any. */
+  get headOpId(): string | undefined {
+    return this.queue[0]?.op.opId;
+  }
+
   /**
    * Ops not yet confirmed for an org, oldest first. Caches outside the list (`['task', id]`,
    * `['tags', orgId]`) render their server state with these replayed on top.

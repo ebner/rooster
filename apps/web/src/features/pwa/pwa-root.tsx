@@ -60,6 +60,7 @@ export function PwaRoot({ navigate }: PwaRootProps) {
     const controller = createUpdateController({
       sw: registerServiceWorker(handlers),
       pending: () => useSyncStore.getState().pending,
+      durable: () => syncEngine()?.pipeline.durable() ?? false,
       editing: () => isEditingText(),
       subscribe: (listener) => {
         // Focus has not moved yet during `focusout`: look once it has.

@@ -2,6 +2,11 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
+## Unreleased
+
+- **"Synkar…" försvinner nu på riktigt.** Om en annan rooster-flik på samma telefon eller dator slutar skicka dina ändringar tar appen du har framför dig över efter en kort stund.
+- **Uppdateringar fastnar inte.** Om dina ändringar inte kan skickas installerar Ladda om ändå uppdateringen efter några sekunder. Ändringarna ligger kvar på enheten och skickas av den nya versionen.
+
 ## 1.7.1
 
 _2026-10-19_

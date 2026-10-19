@@ -30,3 +30,5 @@ A second cause: a request whose answer was lost (the phone slept or switched net
    - `syncWithOutbox` gives up on a read after 4 s (`StorageTimeoutError`) and leaves the queue as it is; a write still unanswered is not in `stored`, so its op never counts as settled;
    - when the start-up read misses the 3 s restore wait, its records still join the queue (through `restore`) when it answers;
    - the tag lookup after a `409 tag_name_taken` without `existingId` is bounded like a send.
+
+## Amendment (2026-10-19, later): a leader that answers but makes no progress

@@ -1070,6 +1070,62 @@ describe('leader watch (a frozen leader must not block the tab in front)', () =>
     );
   });
 
+  test('a leader that answers but never sends loses the lock to the tab in front', async () => {
+    localStorage.setItem('rooster.cacheOwner', userId);
+    const outbox = createMemoryOutbox();
+    const server = createFixtureTransport({ userId, tasks: { 1: ['A'] } });
+    const { transport, sent } = counting(server);
+    const locks = fakeLocks();
+    const net = bus();
+    // An old tab whose flush hangs: it holds the lock and answers every ping, all is well.
+    const zombie = net.join();
+    let lost = false;
+    electLeader(
+      {
+        onLeader: () => {},
+        onLost: () => {
+          lost = true;
+        },
+      },
+      locks,
+    );
+    zombie.channel.listen((m) => {
+      if (m.type !== 'ping') return;
+      zombie.channel.post({
+        type: 'status',
+        status: { syncing: true, failures: 0, lastError: null, sessionExpired: false },
+      });
+    });
+    const tab = net.join();
+    const queryClient = new QueryClient();
+    const engine = await startSync({
+      queryClient,
+      transport,
+      outbox,
+      channel: tab.channel,
+      persister: createCachePersister(() => undefined, memoryStorage().storage),
+      eventSource: quietSource,
+      locks,
+      listen: false,
+      leaderWatch: { ...watch, progressMs: 100 },
+    });
+    engines.push(engine);
+    await fetchMe(queryClient, me(userId));
+    await queryClient.fetchQuery({
+      queryKey: myListKey(orgId),
+      queryFn: () => engine.pipeline.fetch(orgId),
+    });
+    const [op] = engine.pipeline.enqueue(
+      orgId,
+      [listOps.createTask({ id: 'n1', title: 'Stuck behind', groupId: todayOf(engine) })],
+      { userId },
+    );
+    await vi.waitFor(() => expect(engine.pipeline.pending).toBe(0), { timeout: 3_000 });
+    expect(sent).toEqual([op?.opId]);
+    expect(server.state(orgId).tasks.n1?.title).toBe('Stuck behind');
+    expect(lost).toBe(true);
+  });
+
   test('a confirmation posted while a tab is still starting is not lost', async () => {
     localStorage.setItem('rooster.cacheOwner', userId);
     const outbox = createMemoryOutbox();

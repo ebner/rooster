@@ -1,12 +1,14 @@
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createUpdateGate, isEditingText } from './update-gate';
 
-function setup(initial: { pending: number; editing: boolean }) {
-  const state = { ...initial };
+function setup(initial: { pending: number; editing: boolean; durable?: boolean }) {
+  const state = { durable: false, ...initial };
   const listeners = new Set<() => void>();
   const apply = vi.fn();
   const gate = createUpdateGate({
     pending: () => state.pending,
+    durable: () => state.durable,
+    stuckMs: 1_000,
     editing: () => state.editing,
     subscribe: (listener) => {
       listeners.add(listener);
@@ -55,6 +57,45 @@ describe('update gate (FR-PWA-6)', () => {
     gate.cancel();
     change({ pending: 0 });
     expect(apply).not.toHaveBeenCalled();
+  });
+});
+
+describe('update gate with a queue that does not drain (ADR 0021)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('Reload goes through after the wait when every queued op is stored', () => {
+    vi.useFakeTimers();
+    const { gate, apply } = setup({ pending: 2, editing: false, durable: true });
+    expect(gate.request()).toBe('deferred');
+    vi.advanceTimersByTime(999);
+    expect(apply).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(apply).toHaveBeenCalledOnce();
+  });
+
+  test('an op that lives in memory only keeps holding it, until it is stored', () => {
+    vi.useFakeTimers();
+    const { gate, apply, change } = setup({ pending: 1, editing: false, durable: false });
+    gate.request();
+    vi.advanceTimersByTime(5_000);
+    expect(apply).not.toHaveBeenCalled();
+    change({ durable: true });
+    expect(apply).toHaveBeenCalledOnce();
+  });
+
+  test('the wait starts again with the next request after a cancel', () => {
+    vi.useFakeTimers();
+    const { gate, apply } = setup({ pending: 1, editing: false, durable: true });
+    gate.request();
+    vi.advanceTimersByTime(600);
+    gate.cancel();
+    gate.request();
+    vi.advanceTimersByTime(600);
+    expect(apply).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(400);
+    expect(apply).toHaveBeenCalledOnce();
   });
 });
 

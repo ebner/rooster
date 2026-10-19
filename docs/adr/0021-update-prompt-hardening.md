@@ -13,3 +13,8 @@ The update prompt was a toast only. Once it was dismissed, an open tab could sta
 2. **Newer `hello` without a new worker.** When no service worker works, or the active worker already is the server's latest, a newer `hello` prompts directly, and Reload is a gated `location.reload()`.
 3. **Takeover by another tab.** A worker takeover started elsewhere no longer reloads silently. `onNeedReload` routes it through the update gate (empty outbox, no focused editor).
 4. **Update checks.** `visibilitychange` (visible) and `online` run the SW update check, throttled to once per 5 minutes; the hourly check stays. A newer `hello` that arrives before the PWA module is ready is remembered and checked once it is.
+
+## Amendment (2026-10-19): a queue that does not drain no longer blocks Reload
+A phone whose queue was stuck on "Syncing…" could not take the update that fixed it: Reload waited for an empty outbox that never came. Now, once Reload has waited 10 s (`updateStuckMs`), it goes ahead when every queued op is stored in the outbox (`ListPipeline.durable()`). The new version restores them from the outbox and sends them; one in flight is resent with the same Idempotency-Key. An op that lives only in memory (its outbox write failed or timed out) still holds the reload, since the reload would lose it. A focused editor still holds it too.
+
+This deviates from 04 §6.3 ("`skipWaiting` only when the user clicks Reload **and** the outbox is empty, or after the outbox is flushed"). FR-PWA-6 (01) only forbids reloading *silently* with a non-empty outbox; here the user asked for the reload, and nothing queued is lost.
