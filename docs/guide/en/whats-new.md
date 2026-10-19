@@ -2,7 +2,9 @@
 
 What changed for you in each version of rooster, newest first. After an update, rooster offers this page once. You can open it at any time from Settings or the guide's page list. The notes for whoever runs rooster (upgrades, settings, security) are in the [changelog](../../../CHANGELOG.md).
 
-## Unreleased
+## 1.7.1
+
+_2026-10-19_
 
 - **No more endless "Syncing…".** On some phones, changes could stay on "Syncing…" without ever being saved, and were lost when the app was closed. They are now sent even when the browser's storage stops answering.
 

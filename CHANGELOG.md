@@ -6,6 +6,8 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-10-19
+
 ### Fixed
 - The web app's sync queue could stop sending for good, showing "Syncing…" with nothing reaching the server, when the browser's IndexedDB stopped answering (seen on an Android phone). Every send waited for its op's outbox write, with no time limit; the ops lived only in memory and were lost when the app was closed. Outbox reads and writes now get 4 s each: after that, ops are sent anyway, and outbox records that arrive after the start-up read gave up still join the queue. A refused tag create no longer waits without limit for the tag lookup either (ADR 0019 §8).
 
