@@ -2,7 +2,9 @@
 
 What changed for you in each version of rooster, newest first. After an update, rooster offers this page once. You can open it at any time from Settings or the guide's page list. The notes for whoever runs rooster (upgrades, settings, security) are in the [changelog](../../../CHANGELOG.md).
 
-## Unreleased
+## 1.7.2
+
+_2026-10-19_
 
 - **"Syncing…" really clears now.** If another rooster tab on the same phone or computer stops sending your changes, the app in front takes over after a short while.
 - **Updates don't get stuck.** If your changes can't be sent, Reload still installs the update after a few seconds. Your changes stay on the device and are sent by the new version.
