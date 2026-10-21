@@ -108,6 +108,14 @@ export const PROBLEM_CODES = {
     status: 422,
     detail: 'Choose at least one thing the app may do, or deny it.',
   },
+  session_only_not_offered: {
+    status: 422,
+    detail: '"This session only" is offered for apps, not for the rooster CLI.',
+  },
+  admin_not_for_mcp: {
+    status: 422,
+    detail: 'An MCP token cannot have the "admin" permission; MCP has no admin tools.',
+  },
   confirm_name_mismatch: {
     status: 422,
     detail: 'Type the organisation name exactly to delete it.',

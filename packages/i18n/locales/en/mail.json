@@ -9,7 +9,9 @@
     "due_changed": "{actor} changed the due date of your task to {date}",
     "due_removed": "{actor} removed the due date of your task",
     "invite_accepted": "{actor} joined {org}",
-    "reminder": "Reminder"
+    "reminder": "Reminder",
+    "device_connected": "{client} was connected from {ip}",
+    "device_connected_unknown_ip": "{client} was connected to your account"
   },
   "category": {
     "assigned": "assignments",
@@ -24,7 +26,8 @@
   "action": {
     "openTask": "Open task",
     "openInbox": "Open inbox",
-    "openToday": "Open Today"
+    "openToday": "Open Today",
+    "reviewApps": "Review connected apps"
   },
   "footer": {
     "reason": "You get this email because you use rooster at {host}.",
@@ -84,5 +87,8 @@
     "open": "Open rooster",
     "invalidTitle": "Link not valid",
     "invalidBody": "This unsubscribe link is not valid. You can change your email settings in Settings → Notifications."
+  },
+  "device": {
+    "subject": "Not you? Revoke it in Settings → Connected apps."
   }
 }

@@ -53,6 +53,7 @@ export function listCtx(
     sse?: AppDeps['sse'];
     db?: AppDb;
     cimdFetch?: AppDeps['cimdFetch'];
+    deviceIntervalSec?: number;
   } = {},
 ): ListCtx {
   const { app, db, push, mail } = createTestApp({
@@ -61,6 +62,9 @@ export function listCtx(
     ...(options.env === undefined ? {} : { env: options.env }),
     ...(options.sse === undefined ? {} : { sse: options.sse }),
     ...(options.cimdFetch === undefined ? {} : { cimdFetch: options.cimdFetch }),
+    ...(options.deviceIntervalSec === undefined
+      ? {}
+      : { deviceIntervalSec: options.deviceIntervalSec }),
     apiRateLimit: options.apiRateLimit ?? false,
   });
   const user = (email: string, name?: string): Caller =>

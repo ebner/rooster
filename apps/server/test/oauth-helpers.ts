@@ -61,6 +61,7 @@ export function oauthCtx(
     clock?: () => number;
     env?: Record<string, string>;
     cimd?: ReturnType<typeof fakeCimd>;
+    deviceIntervalSec?: number;
   } = {},
 ): OAuthCtx {
   const cimd = options.cimd ?? fakeCimd();
@@ -68,6 +69,9 @@ export function oauthCtx(
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.env === undefined ? {} : { env: options.env }),
     cimdFetch: cimd.fetch,
+    ...(options.deviceIntervalSec === undefined
+      ? {}
+      : { deviceIntervalSec: options.deviceIntervalSec }),
   });
   return { ...ctx, cimd };
 }

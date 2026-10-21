@@ -38,6 +38,12 @@ export const accessGrant = sqliteTable(
      * unused this long. Null: no idle limit.
      */
     idleTimeoutMs: integer('idle_timeout_ms'),
+    /**
+     * Phase 12 (11 §9.4): a CLI login through the OAuth device grant is bound to the resource it
+     * asked for (`api` or `mcp`). Null for every other grant (a PAT's audience is in its key's
+     * metadata, an OAuth app's tokens each carry their own resource).
+     */
+    audience: text('audience', { enum: ['api', 'mcp'] }),
   },
   (t) => [
     check('access_grant_kind', sql`kind IN ('pat','device','oauth')`),
@@ -90,7 +96,8 @@ export const apikey = sqliteTable(
 /**
  * Device authorisation requests (better-auth `deviceAuthorization`, RFC 8628). `grantId` is
  * rooster's: approval through `POST /api/v1/device/:userCode/approve` creates the grant and
- * records it here, and redeeming the code links the new session to it.
+ * records it here, and redeeming the code links the new session (legacy) or the OAuth tokens
+ * (Phase 12) to it. Both codes are stored as SHA-256 hashes (04 §4, `hashDeviceSecret`).
  */
 export const deviceCode = sqliteTable(
   'deviceCode',
@@ -108,6 +115,17 @@ export const deviceCode = sqliteTable(
     grantId: text('grant_id'),
     /** The requesting client's `User-Agent`, for the default device label. */
     userAgent: text('user_agent'),
+    /**
+     * Phase 12 (11 §9): the OAuth client of a device grant request (`rooster-cli` or a CIMD URL);
+     * null for the legacy CLI flow, whose redemption is a bearer session.
+     */
+    oauthClientId: text('oauth_client_id'),
+    /** Phase 12: the one resource (RFC 8707) the tokens will be bound to; null for legacy. */
+    resource: text('resource'),
+    /** Phase 12: the IP address of the device authorization request (shown at `/device`). */
+    requestIp: text('request_ip'),
+    /** Phase 12: when the device authorization request was made. */
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
   },
   (t) => [
     uniqueIndex('device_code_device_code').on(t.deviceCode),

@@ -301,8 +301,10 @@ export class MailService {
     const claimed = immediate(this.deps.db, (tx) => {
       const found = loadDeliverable(tx, id);
       if (found === null) return null;
-      // A task reminder is time-bound: it never waits for the batch (ADR 0049 §2.3).
-      const timeBound = found.notification.type === 'reminder';
+      // A task reminder is time-bound: it never waits for the batch (ADR 0049 §2.3), and
+      // neither does the security notice of a device connection (11 §9.4).
+      const timeBound =
+        found.notification.type === 'reminder' || found.notification.type === 'device_connected';
       if (!timeBound && found.recipient.prefs.emailMode !== 'immediate') return null;
       if (!prefEnabled(tx, found.recipient.id, found.notification.type, 'email')) return null;
       const pending = tx

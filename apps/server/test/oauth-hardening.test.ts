@@ -59,6 +59,12 @@ describe('review round 1: token endpoint', () => {
     const bob = other.user('bob@example.com');
     const tokens = await connect(other, bob);
     expect((await refresh(other, tokens.refresh ?? '')).status).toBe(200);
+    // Past the refresh grace (11 §2.4), a replay is reuse.
+    other.db.sqlite
+      .prepare(
+        'UPDATE oauthRefreshToken SET rotated_at = rotated_at - 61000 WHERE rotated_at IS NOT NULL',
+      )
+      .run();
     const replay = await rawToken(
       other,
       `grant_type=refresh_token%09&refresh_token=${tokens.refresh}&client_id=${encodeURIComponent(CLIENT_ID)}`,
@@ -96,20 +102,28 @@ describe('review round 1: token endpoint', () => {
     expect((await refresh(ctx, tokens.refresh ?? '')).status).toBe(200);
   });
 
-  it('#2 two concurrent uses of one refresh token: one wins, the other revokes the grant', async () => {
+  it('#2 two concurrent uses of one refresh token: the later one is the grace retry, and the earlier pair dies', async () => {
     const ctx = oauthCtx();
     const user = ctx.user('ada@example.com');
     const tokens = await connect(ctx, user);
-    const results = await Promise.all([
+    // Serialised per grant: the first rotates; the second finds the successor unused, so it is
+    // served by the refresh grace (11 §2.4), which revokes the first answer's tokens.
+    const [first, second] = await Promise.all([
       refresh(ctx, tokens.refresh ?? ''),
       refresh(ctx, tokens.refresh ?? ''),
     ]);
-    expect(results.map((r) => r.status).sort()).toEqual([200, 400]);
+    expect([first.status, second.status]).toEqual([200, 200]);
+    const live = await Promise.all(
+      [first, second].map((r) =>
+        resolveOAuthBearer(ctx.app.services, String(r.body.access_token), 'mcp', null),
+      ),
+    );
+    expect(live.filter((a) => a !== null)).toHaveLength(1);
+    const dead = live[0] === null ? first : second;
+    // Whoever holds the dead pair and refreshes with it reveals the split: the grant ends.
+    const late = await refresh(ctx, String(dead.body.refresh_token));
+    expect(late.body.error).toBe('invalid_grant');
     expect(grantsOf(ctx, user.userId)[0]?.revokedAt).not.toBeNull();
-    const winner = results.find((r) => r.status === 200);
-    expect(
-      await resolveOAuthBearer(ctx.app.services, String(winner?.body.access_token), 'mcp', null),
-    ).toBeNull();
   });
 
   it('#3 DPoP: proofs are refused, dpop_jkt is dropped, bound tokens fail closed', async () => {

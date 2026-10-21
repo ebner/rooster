@@ -1,5 +1,4 @@
 import { apiKey } from '@better-auth/api-key';
-import { cimd } from '@better-auth/cimd';
 import { oauthProvider } from '@better-auth/oauth-provider';
 import { ALL_GRANT_SCOPES, isGrantScope, OAUTH_EXCLUDED_SCOPES } from '@rooster/core/grants';
 import { uuidv7 } from '@rooster/core/ids';
@@ -32,6 +31,7 @@ import {
 } from '../db/schema/index.ts';
 import { localeFromAcceptLanguage, type ServerTextKey, serverText } from '../lib/i18n.ts';
 import type { Logger } from '../lib/logger.ts';
+import { DEVICE_POLL_INTERVAL_MS } from '../services/device-codes.ts';
 import {
   CLI_CLIENT_ID,
   OAUTH_ACCESS_PREFIX,
@@ -40,15 +40,13 @@ import {
 } from '../services/grant-service.ts';
 import type { Services } from '../services/index.ts';
 import type { SignInRejection } from '../services/sign-in-policy.ts';
-import { AUTH_BASE_PATH } from './auth-paths.ts';
+import { AUTH_BASE_PATH, CLIENT_IP_HEADER } from './auth-paths.ts';
 import { createCimdFetch } from './cimd-fetch.ts';
 import { authCookieName, isSecureBaseUrl, readInviteToken, sessionCookieName } from './cookies.ts';
+import { deviceGrantExtension, deviceGrantPlugin } from './device-grant.ts';
 import { consentReferenceId } from './oauth-handoff.ts';
 
-export { AUTH_BASE_PATH };
-
-/** Set by the `/api/auth/*` mount from the socket (or a trusted proxy); never from clients. */
-export const CLIENT_IP_HEADER = 'x-rooster-client-ip';
+export { AUTH_BASE_PATH, CLIENT_IP_HEADER };
 
 const DAY_SECONDS = 86_400;
 
@@ -183,6 +181,8 @@ export interface AuthDeps {
   cimdFetch?:
     | ((input: string | URL | Request, init?: RequestInit) => Promise<Response>)
     | undefined;
+  /** Phase 12: the device grant's polling interval in seconds (default 5); tests shorten it. */
+  deviceIntervalSec?: number | undefined;
 }
 
 /** Endpoint context headers; better-auth passes `null` for calls outside a request. */
@@ -265,6 +265,11 @@ export function createAuth(deps: AuthDeps) {
     deviceCodeSchemaFields: {
       grantId: { type: 'string', required: false, input: false },
       userAgent: { type: 'string', required: false, input: false },
+      // Phase 12: requests through the OAuth device grant (auth/device-grant.ts).
+      oauthClientId: { type: 'string', required: false, input: false },
+      resource: { type: 'string', required: false, input: false },
+      requestIp: { type: 'string', required: false, input: false },
+      createdAt: { type: 'date', required: false, input: false },
     },
     authorizeRequest: ({ ctx, request }) => {
       if (request.client_id !== CLI_CLIENT_ID) {
@@ -287,6 +292,10 @@ export function createAuth(deps: AuthDeps) {
       return { clientId: CLI_CLIENT_ID, deviceCodeFields: { userAgent } };
     },
     assertSessionRedemption: ({ ctx, deviceCode: code }) => {
+      // A code of the OAuth device grant redeems for OAuth tokens only, never for a session.
+      if (typeof code.oauthClientId === 'string') {
+        throw deviceError('invalid_grant', 'Unknown device code.');
+      }
       if (code.status === 'approved' && typeof code.grantId === 'string') {
         redeemedGrant.set(ctx, code.grantId);
       }
@@ -295,6 +304,13 @@ export function createAuth(deps: AuthDeps) {
   };
 
   services.grants.seedOAuthResources(OAUTH_ACCESS_TOKEN_TTL_S);
+  services.grants.seedCliClient(OAUTH_SCOPES);
+  const deviceDeps = {
+    config,
+    services,
+    cimdFetch: deps.cimdFetch ?? createCimdFetch(),
+    intervalMs: (deps.deviceIntervalSec ?? DEVICE_POLL_INTERVAL_MS / 1000) * 1000,
+  };
 
   return betterAuth({
     appName: 'rooster',
@@ -403,6 +419,9 @@ export function createAuth(deps: AuthDeps) {
         },
         accessTokenExpiresIn: OAUTH_ACCESS_TOKEN_TTL_S,
         refreshTokenReuseInterval: 0,
+        // Client ID Metadata Documents (11 §4.2, fetched through the IP-based guard) and the
+        // device grant at the token endpoint (Phase 12, 11 §9; auth/device-grant.ts).
+        extensions: [deviceGrantExtension(deviceDeps)],
         // The two resources are rows seeded by `seedOAuthResources` (synchronously, so no
         // background seeding outlives a closed database). Every client may ask for either; the
         // user consents per request.
@@ -418,12 +437,8 @@ export function createAuth(deps: AuthDeps) {
             ),
         },
       }) as unknown as BetterAuthPlugin,
-      // Client ID Metadata Documents (11 §4.2): fetched through the IP-based guard.
-      cimd({
-        fetchClientMetadataResource: deps.cimdFetch ?? createCimdFetch(),
-        metadataProfile: 'mcp-2026-07-28',
-        metadataRevalidationInterval: '24h',
-      }) as unknown as BetterAuthPlugin,
+      // Phase 12: `POST /api/auth/oauth2/device-authorization` (11 §9.2).
+      deviceGrantPlugin(deviceDeps),
     ],
     user: {
       additionalFields: {

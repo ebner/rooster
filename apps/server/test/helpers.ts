@@ -56,6 +56,8 @@ export function createTestApp(
     mail?: FakeMail;
     /** P9: the CIMD transport (tests never fetch client metadata from the network). */
     cimdFetch?: AppDeps['cimdFetch'];
+    /** Phase 12: the device grant's polling interval in seconds (default 5). */
+    deviceIntervalSec?: number;
   } = {},
 ): { app: App; db: AppDb; config: Config; push: FakePush; mail: FakeMail } {
   const config = testConfig({ ROOSTER_WEB_DIR: '/nonexistent/web', ...options.env });
@@ -74,6 +76,9 @@ export function createTestApp(
     ...(options.apiRateLimit === undefined ? {} : { apiRateLimit: options.apiRateLimit }),
     ...(options.sse === undefined ? {} : { sse: options.sse }),
     ...(options.cimdFetch === undefined ? {} : { cimdFetch: options.cimdFetch }),
+    ...(options.deviceIntervalSec === undefined
+      ? {}
+      : { deviceIntervalSec: options.deviceIntervalSec }),
   });
   return { app, db, config, push, mail };
 }

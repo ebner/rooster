@@ -4,11 +4,14 @@ import type { Config } from '../config.ts';
 import { clientIp } from '../lib/client-ip.ts';
 import type { AppEnv } from '../lib/context.ts';
 import { problemResponse } from '../lib/errors.ts';
+import { type RateLimitOptions, SlidingWindowLimiter } from '../lib/rate-limit.ts';
+import { hashDeviceSecret } from '../services/device-codes.ts';
+import { CLI_CLIENT_ID, DEVICE_CODE_GRANT_TYPE } from '../services/grant-service.ts';
 import type { Services } from '../services/index.ts';
-import { hashOAuthToken } from '../services/oauth-grants.ts';
 import type { SignInRejection } from '../services/sign-in-policy.ts';
 import { AUTH_BASE_PATH, type Auth, CLIENT_IP_HEADER, IDENTITY_UNLINKED } from './auth.ts';
 import { clearInviteCookie, isSecureBaseUrl } from './cookies.ts';
+import { DEVICE_AUTHORIZATION_PATH } from './device-grant.ts';
 import { KeyedLock } from './keyed-lock.ts';
 import { resourceOf } from './oauth-metadata.ts';
 
@@ -48,9 +51,10 @@ function rewriteCallback(res: Response, config: Config): Response {
  * The only better-auth endpoints a non-browser client may call: the CLI asks for a device
  * code and polls for its token before it has any credential (RFC 8628).
  */
+const DEVICE_CODE_PATH = `${AUTH_BASE_PATH}/device/code`;
 const DEVICE_TOKEN_PATH = `${AUTH_BASE_PATH}/device/token`;
 export const DEVICE_FLOW_PATHS: ReadonlySet<string> = new Set([
-  `${AUTH_BASE_PATH}/device/code`,
+  DEVICE_CODE_PATH,
   DEVICE_TOKEN_PATH,
 ]);
 
@@ -60,6 +64,9 @@ const OAUTH_ADMIN_PREFIX = `${AUTH_BASE_PATH}/admin/oauth2/`;
 const OAUTH_AUTHORIZE_PATH = `${AUTH_BASE_PATH}/oauth2/authorize`;
 const OAUTH_TOKEN_PATH = `${AUTH_BASE_PATH}/oauth2/token`;
 const OAUTH_REGISTER_PATH = `${AUTH_BASE_PATH}/oauth2/register`;
+const OAUTH_REVOKE_PATH = `${AUTH_BASE_PATH}/oauth2/revoke`;
+/** Phase 12: the device grant's authorization endpoint (11 §9.2). */
+const OAUTH_DEVICE_PATH = `${AUTH_BASE_PATH}${DEVICE_AUTHORIZATION_PATH}`;
 
 /**
  * The OAuth endpoints a client calls directly (ADR 0041 §1): exempt from the browser-only rule.
@@ -68,9 +75,18 @@ const OAUTH_REGISTER_PATH = `${AUTH_BASE_PATH}/oauth2/register`;
  */
 export const OAUTH_CLIENT_PATHS: ReadonlySet<string> = new Set([
   OAUTH_TOKEN_PATH,
-  `${AUTH_BASE_PATH}/oauth2/revoke`,
+  OAUTH_REVOKE_PATH,
   OAUTH_REGISTER_PATH,
+  OAUTH_DEVICE_PATH,
 ]);
+
+/**
+ * 11 §9.2: device authorization requests (both flows) per IP, on top of better-auth's limit on
+ * `/api/auth/*`; and per third-party client (`rooster-cli` is shared by every user, so the IP
+ * limit is its only one).
+ */
+export const DEVICE_REQUESTS_PER_IP: RateLimitOptions = { max: 10, windowMs: 10 * 60_000 };
+export const DEVICE_REQUESTS_PER_CLIENT: RateLimitOptions = { max: 30, windowMs: 60 * 60_000 };
 
 /** Parameters of the provider's signed query that a resumed authorization must not repeat. */
 const SIGNED_QUERY_PARAMS = ['sig', 'exp', 'ba_iat', 'ba_pl', 'ba_param'];
@@ -110,15 +126,30 @@ function normalizeAuthorize(params: URLSearchParams, config: Config): URLSearchP
 }
 
 /** An RFC 6749 §5.2 error from the token endpoint. */
-function tokenError(error: string, description: string): Response {
+function tokenError(
+  error: string,
+  description: string,
+  status = 400,
+  extra: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify({ error, error_description: description }), {
-    status: 400,
+    status,
     headers: {
       'content-type': 'application/json',
       'cache-control': 'no-store',
       pragma: 'no-cache',
+      ...extra,
     },
   });
+}
+
+function tooManyDeviceRequests(waitMs: number): Response {
+  return tokenError(
+    'temporarily_unavailable',
+    'Too many device authorization requests; try again later.',
+    429,
+    { 'retry-after': String(Math.ceil(waitMs / 1000)) },
+  );
 }
 
 /**
@@ -182,7 +213,10 @@ async function withGrantScope(
   return new Response(JSON.stringify({ ...body, scope }), { status: 200, headers });
 }
 
-/** One refresh-token exchange at a time per token (reuse detection, ADR 0041). */
+/**
+ * One refresh-token exchange at a time per grant (reuse detection and the refresh grace, ADR
+ * 0041, 11 §2.4): a retry of the previous token and a use of its successor never interleave.
+ */
 const refreshLocks = new KeyedLock();
 
 /**
@@ -218,10 +252,21 @@ async function tokenRequest(
     if (!check.ok) return tokenError('invalid_grant', check.description);
     return withGrantScope(await forward(), check.grantId, services);
   }
+  if (grantType === DEVICE_CODE_GRANT_TYPE) {
+    // Phase 12 (11 §9.2): an approved code must still carry a live grant; everything else
+    // (pending, slow down, denied, expired, the client and the resource) is the grant handler's.
+    const code = fields.get('device_code');
+    const check =
+      code === undefined
+        ? { ok: true as const, grantId: null }
+        : services.grants.checkDeviceToken(code);
+    if (!check.ok) return tokenError('invalid_grant', check.description);
+    return withGrantScope(await forward(), check.grantId, services);
+  }
   if (grantType === 'refresh_token') {
     const token = fields.get('refresh_token');
     if (token === undefined) return forward();
-    return refreshLocks.run(hashOAuthToken(token), async () => {
+    return refreshLocks.run(services.grants.refreshLockKey(token), async () => {
       const check = services.grants.checkOAuthRefresh(token);
       if (!check.ok) return tokenError('invalid_grant', check.description);
       // A `scope` is judged against the grant, whose scopes the responses report (the provider
@@ -235,10 +280,93 @@ async function tokenRequest(
         fields.delete('scope');
         init.body = new URLSearchParams([...fields]).toString();
       }
-      return withGrantScope(await forward(), check.grantId, services);
+      const res = await forward();
+      if (res.status === 200) {
+        const rotated = (await res.clone().json()) as { refresh_token?: unknown };
+        if (typeof rotated.refresh_token === 'string') {
+          services.grants.recordRotation(token, rotated.refresh_token);
+        }
+      }
+      return withGrantScope(res, check.grantId, services);
     });
   }
   return forward();
+}
+
+/**
+ * The legacy CLI flow's `/device/token` body as single-valued fields: a form (RFC 8628 §3.4)
+ * or the JSON object better-auth takes. A repeated form field is dropped (the plugin then
+ * answers `invalid_request`), and so is a JSON value that is not a string.
+ */
+function legacyTokenFields(body: ArrayBuffer, contentType: string): Record<string, unknown> {
+  const text = new TextDecoder().decode(body);
+  const fields: Record<string, unknown> = {};
+  if (/^application\/x-www-form-urlencoded\b/i.test(contentType)) {
+    const form = new URLSearchParams(text);
+    for (const key of new Set(form.keys())) {
+      const values = form.getAll(key);
+      if (values.length === 1) fields[key] = values[0] as string;
+    }
+    return fields;
+  }
+  try {
+    const value = JSON.parse(text) as unknown;
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      for (const [key, v] of Object.entries(value)) {
+        if (typeof v === 'string') fields[key] = v;
+      }
+    }
+  } catch {
+    // Not JSON: the plugin answers `invalid_request` for the empty body.
+  }
+  return fields;
+}
+
+/**
+ * The legacy CLI flow's `/device/code` answer: better-auth stored both codes in the clear, so
+ * they are replaced by their hashes (04 §4) before the answer leaves; if that fails, the codes
+ * are never handed out.
+ */
+async function sealLegacyDeviceCodes(
+  res: Response,
+  ip: string | null,
+  services: Services,
+): Promise<Response> {
+  if (res.status !== 200) return res;
+  const body = (await res.clone().json()) as { device_code?: unknown; user_code?: unknown };
+  if (
+    typeof body.device_code !== 'string' ||
+    typeof body.user_code !== 'string' ||
+    !services.grants.sealLegacyDeviceRequest(body.device_code, body.user_code, ip)
+  ) {
+    return tokenError('server_error', 'The device code could not be stored.', 500);
+  }
+  return res;
+}
+
+/**
+ * `POST /api/auth/oauth2/revoke` (RFC 7009). A `rooster-cli` login through the device grant
+ * is one grant per refresh chain, so revoking its refresh token (`rooster logout`, 11 §9.6)
+ * ends the grant too, once the provider has accepted the revocation.
+ */
+async function revokeRequest(
+  body: ArrayBuffer,
+  headers: Headers,
+  forward: () => Promise<Response>,
+  services: Services,
+): Promise<Response> {
+  let grantId: string | null = null;
+  if (/^application\/x-www-form-urlencoded\b/i.test(headers.get('content-type') ?? '')) {
+    const form = new URLSearchParams(new TextDecoder().decode(body));
+    const token = form.getAll('token');
+    const clientId = form.getAll('client_id');
+    if (token.length === 1 && clientId.length === 1) {
+      grantId = services.grants.cliLoginOfRefreshToken(token[0] as string, clientId[0]);
+    }
+  }
+  const res = await forward();
+  if (grantId !== null && res.status === 200) services.grants.endCliLogin(grantId);
+  return res;
 }
 
 /** Headers that carry a non-browser credential (a session token as bearer, a PAT, an API key). */
@@ -279,9 +407,11 @@ const nonBrowser = (c: Context) =>
  */
 export function registerAuthRoutes(
   app: OpenAPIHono<AppEnv>,
-  deps: { auth: Auth; config: Config; services: Services },
+  deps: { auth: Auth; config: Config; services: Services; clock: () => number },
 ): void {
-  const { auth, config, services } = deps;
+  const { auth, config, services, clock } = deps;
+  const devicePerIp = new SlidingWindowLimiter(DEVICE_REQUESTS_PER_IP);
+  const devicePerClient = new SlidingWindowLimiter(DEVICE_REQUESTS_PER_CLIENT);
   app.on(['GET', 'POST'], `${AUTH_BASE_PATH}/*`, async (c) => {
     const raw = c.req.raw;
     const path = c.req.path;
@@ -320,9 +450,38 @@ export function registerAuthRoutes(
     }
     const ip = clientIp(c, config);
     if (ip !== null) headers.set(CLIENT_IP_HEADER, ip);
+    const deviceRequest =
+      raw.method === 'POST' && (path === OAUTH_DEVICE_PATH || path === DEVICE_CODE_PATH);
+    if (deviceRequest) {
+      const waitMs = devicePerIp.hit(ip ?? 'unknown', clock());
+      if (waitMs > 0) return tooManyDeviceRequests(waitMs);
+    }
     let url = raw.url;
     const init: RequestInit = { method: raw.method, headers };
     if (raw.method !== 'GET') init.body = await raw.arrayBuffer();
+    const handle = async () => withoutAuthToken(await auth.handler(new Request(url, init)));
+    if (path === OAUTH_DEVICE_PATH && raw.method === 'POST') {
+      const fields =
+        init.body instanceof ArrayBuffer
+          ? canonicalTokenFields(init.body, headers.get('content-type') ?? '')
+          : { error: 'invalid_request', description: 'The request has no parameters.' };
+      if (!(fields instanceof Map)) return tokenError(fields.error, fields.description);
+      const clientId = fields.get('client_id');
+      if (clientId !== undefined && clientId !== CLI_CLIENT_ID) {
+        const waitMs = devicePerClient.hit(clientId, clock());
+        if (waitMs > 0) return tooManyDeviceRequests(waitMs);
+      }
+      init.body = new URLSearchParams([...fields]).toString();
+      headers.set('content-type', 'application/x-www-form-urlencoded');
+      headers.delete('content-length');
+      return handle();
+    }
+    if (path === DEVICE_CODE_PATH && raw.method === 'POST') {
+      return sealLegacyDeviceCodes(await handle(), ip, services);
+    }
+    if (path === OAUTH_REVOKE_PATH && raw.method === 'POST' && init.body instanceof ArrayBuffer) {
+      return revokeRequest(init.body, headers, handle, services);
+    }
     if (path === OAUTH_AUTHORIZE_PATH) {
       if (raw.method === 'GET') {
         const target = new URL(raw.url);
@@ -335,30 +494,21 @@ export function registerAuthRoutes(
       }
     }
     if (path === OAUTH_TOKEN_PATH) {
-      return tokenRequest(
-        init,
-        headers,
-        async () => withoutAuthToken(await auth.handler(new Request(url, init))),
-        services,
-      );
+      return tokenRequest(init, headers, handle, services);
     }
-    if (
-      c.req.path === DEVICE_TOKEN_PATH &&
-      /^application\/x-www-form-urlencoded\b/i.test(headers.get('content-type') ?? '') &&
-      init.body instanceof ArrayBuffer
-    ) {
+    if (path === DEVICE_TOKEN_PATH && init.body instanceof ArrayBuffer) {
       // RFC 8628 §3.4 polls with a form body, but better-auth's token endpoint takes JSON
       // only (its code endpoint takes both). Single values only: a repeated field is invalid.
-      const form = new URLSearchParams(new TextDecoder().decode(init.body));
-      const fields: Record<string, string> = {};
-      for (const key of new Set(form.keys())) {
-        const values = form.getAll(key);
-        if (values.length === 1) fields[key] = values[0] as string;
+      // The stored device code is its hash (04 §4), so the presented one is hashed here.
+      const fields = legacyTokenFields(init.body, headers.get('content-type') ?? '');
+      if (typeof fields.device_code === 'string') {
+        fields.device_code = hashDeviceSecret(fields.device_code);
       }
       init.body = JSON.stringify(fields);
       headers.set('content-type', 'application/json');
+      headers.delete('content-length');
     }
-    const res = withoutAuthToken(await auth.handler(new Request(url, init)));
+    const res = await handle();
     return c.req.path.startsWith(`${AUTH_BASE_PATH}/callback/`)
       ? rewriteCallback(res, config)
       : res;

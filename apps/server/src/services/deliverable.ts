@@ -32,6 +32,9 @@ export function toDeliverable(
     ...(row.type === 'reminder'
       ? { reminder: { due: stored.due ?? null, late: stored.late === true } }
       : {}),
+    ...(row.type === 'device_connected'
+      ? { device: { clientName: stored.clientName ?? '', ip: stored.ip ?? null } }
+      : {}),
     createdAt: row.createdAt,
   };
 }

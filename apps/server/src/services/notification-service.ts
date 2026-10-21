@@ -68,6 +68,11 @@ export interface NotificationDraft {
     late?: boolean;
     /** P10 reminder: the due unit when it fired (stored only, for push and email). */
     due?: ReminderDueSnapshot | null;
+    /** Phase 12 device_connected (11 §9.4): the grant, the client's name and host, the IP. */
+    grantId?: string;
+    clientName?: string;
+    clientHost?: string;
+    ip?: string;
   };
 }
 
@@ -86,6 +91,10 @@ export interface StoredData {
   fireAt?: number;
   late?: boolean;
   due?: ReminderDueSnapshot | null;
+  grantId?: string;
+  clientName?: string;
+  clientHost?: string;
+  ip?: string;
   actorName?: string;
   actorImage?: string | null;
   taskTitle?: string;
@@ -135,6 +144,10 @@ function toNotificationDto(row: NotificationRow, orgSlug: string): Notification 
   if (stored.reminderId !== undefined) data.reminderId = stored.reminderId;
   if (stored.fireAt !== undefined) data.fireAt = stored.fireAt;
   if (stored.late !== undefined) data.late = stored.late;
+  if (stored.grantId !== undefined) data.grantId = stored.grantId;
+  if (stored.clientName !== undefined) data.clientName = stored.clientName;
+  if (stored.clientHost !== undefined) data.clientHost = stored.clientHost;
+  if (stored.ip !== undefined) data.ip = stored.ip;
   return {
     id: row.id,
     orgId: row.orgId,

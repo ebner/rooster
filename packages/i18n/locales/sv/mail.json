@@ -9,7 +9,9 @@
     "due_changed": "{actor} ändrade förfallodatum för din uppgift till {date}",
     "due_removed": "{actor} tog bort förfallodatumet för din uppgift",
     "invite_accepted": "{actor} gick med i {org}",
-    "reminder": "Påminnelse"
+    "reminder": "Påminnelse",
+    "device_connected": "{client} anslöts från {ip}",
+    "device_connected_unknown_ip": "{client} anslöts till ditt konto"
   },
   "category": {
     "assigned": "tilldelningar",
@@ -24,7 +26,8 @@
   "action": {
     "openTask": "Öppna uppgiften",
     "openInbox": "Öppna inkorgen",
-    "openToday": "Öppna Idag"
+    "openToday": "Öppna Idag",
+    "reviewApps": "Visa anslutna appar"
   },
   "footer": {
     "reason": "Du får det här mejlet eftersom du använder rooster på {host}.",
@@ -84,5 +87,8 @@
     "open": "Öppna rooster",
     "invalidTitle": "Ogiltig länk",
     "invalidBody": "Den här avregistreringslänken är inte giltig. Du kan ändra dina mejlinställningar under Inställningar → Aviseringar."
+  },
+  "device": {
+    "subject": "Inte du? Återkalla den under Inställningar → Anslutna appar."
   }
 }

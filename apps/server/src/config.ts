@@ -12,6 +12,10 @@ export const EXIT_CONFIG = 78;
 // Both sit next to the server package root, where the Docker image puts the web build.
 export const DEFAULT_WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../public');
 
+/** `ROOSTER_OAUTH_DEVICE` (11 §9.1). */
+export const OAUTH_DEVICE_MODES = ['off', 'first-party', 'all'] as const;
+export type OAuthDeviceMode = (typeof OAUTH_DEVICE_MODES)[number];
+
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
 
 const emailSchema = z.email();
@@ -208,6 +212,13 @@ const envSchema = z.object({
   ROOSTER_OAUTH_DCR: onOffFlag(false),
   /** P9: the best-effort discovery documents (11 §6.1). The OAuth metadata stays either way. */
   ROOSTER_AGENT_DISCOVERY: onOffFlag(true),
+  /**
+   * Phase 12 (11 §9.1): who may use the OAuth device grant. `first-party`: only `rooster-cli`;
+   * `all`: also clients with a Client ID Metadata Document listing the grant; `off`: nobody.
+   */
+  ROOSTER_OAUTH_DEVICE: z
+    .enum(OAUTH_DEVICE_MODES, { error: 'must be off, first-party or all' })
+    .default('first-party'),
   ROOSTER_GIT_SHA: z.string().default('dev'),
   /** Test-only (AC-8.4): check every /api/v1 response against the OpenAPI document. */
   ROOSTER_VALIDATE_RESPONSES: booleanFlag(false),
@@ -309,6 +320,7 @@ function toConfig(env: Env) {
     },
     oauthDcr: env.ROOSTER_OAUTH_DCR,
     agentDiscovery: env.ROOSTER_AGENT_DISCOVERY,
+    oauthDevice: env.ROOSTER_OAUTH_DEVICE,
     gitSha: env.ROOSTER_GIT_SHA,
     validateResponses: env.ROOSTER_VALIDATE_RESPONSES,
   };

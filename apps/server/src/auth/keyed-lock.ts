@@ -1,7 +1,8 @@
 /**
  * Serialises async work per key within this process (rooster runs one server process). The
  * refresh-token exchange uses it so that checking a token for reuse and the provider rotating
- * it happen as one step: a concurrent second use waits, then sees the rotated token as reused.
+ * it happen as one step: a concurrent second use waits, then sees the rotated token (a retry
+ * within the refresh grace, or reuse).
  */
 export class KeyedLock {
   private readonly tails = new Map<string, Promise<unknown>>();

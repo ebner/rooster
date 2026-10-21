@@ -14,7 +14,7 @@ export function NotificationEmail(props: Frame & { item: DescribedNotification; 
         <p style={{ ...styles.body, marginTop: '16px' }}>{item.quote}</p>
       )}
       <Button href={props.url}>
-        {item.path === '/inbox' ? t('action.openInbox') : t('action.openTask')}
+        {item.action ?? (item.path === '/inbox' ? t('action.openInbox') : t('action.openTask'))}
       </Button>
     </Layout>
   );

@@ -37,7 +37,11 @@ export class FakeOAuth {
       this.calls.push({ token, resource });
       const entry = this.tokens.get(token);
       if (entry === undefined || entry.resource !== resource) return null;
-      const actor = this.app.services.grants.resolvePat(await defaultKeyHasher(entry.pat), ip);
+      const actor = this.app.services.grants.resolvePat(
+        await defaultKeyHasher(entry.pat),
+        ip,
+        'api',
+      );
       if (actor?.grant == null) return null;
       return { ...actor, via: 'oauth', grant: { ...actor.grant, kind: 'oauth', resource } };
     };

@@ -62,7 +62,8 @@ export function actorMiddleware(deps: {
     const ip = clientIp(c, deps.config);
     let actor: Actor | null = null;
     if (token?.startsWith(PAT_PREFIX)) {
-      actor = deps.services.grants.resolvePat(await defaultKeyHasher(token), ip);
+      // An MCP token (audience `mcp`) is unknown here (11 §9.7).
+      actor = deps.services.grants.resolvePat(await defaultKeyHasher(token), ip, 'api');
     } else if (token?.startsWith(OAUTH_ACCESS_PREFIX)) {
       // An OAuth access token works here only if it was issued for `/api/v1` (11 §4.3).
       actor = await resolveOAuthBearer(deps.services, token, 'api', ip);

@@ -3,12 +3,14 @@ import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi';
 import { OAUTH_QUERY_MAX } from '@rooster/core/limits';
 import type { Context } from 'hono';
 import { OAUTH_SCOPES, oauthProviderApi } from '../auth/auth.ts';
+import { DEVICE_AUTHORIZATION_PATH } from '../auth/device-grant.ts';
 import { KeyedLock } from '../auth/keyed-lock.ts';
 import { consentHandoff } from '../auth/oauth-handoff.ts';
-import { protectedResourceMetadata } from '../auth/oauth-metadata.ts';
+import { oauthIssuer, protectedResourceMetadata } from '../auth/oauth-metadata.ts';
 import type { AppEnv } from '../lib/context.ts';
 import { AppError } from '../lib/errors.ts';
 import { logSafeError } from '../lib/log-safe-error.ts';
+import { DEVICE_CODE_GRANT_TYPE } from '../services/grant-service.ts';
 import { AUTHED, actorOf, body, json, problems } from './common.ts';
 import type { P9RouteDeps } from './p9-deps.ts';
 import {
@@ -113,7 +115,9 @@ function discoveryJson(c: Context<AppEnv>, document: unknown): Response {
 /**
  * RFC 8414 metadata: the provider's, minus what rooster does not offer (introspection, DPoP,
  * back-channel logout, JWKS, `client_credentials`), with `scopes_supported` and the code flow
- * pinned (PKCE S256 only, `iss` in responses).
+ * pinned (PKCE S256 only, `iss` in responses). The device grant (Phase 12) is advertised only
+ * when every CIMD client may use it (`ROOSTER_OAUTH_DEVICE=all`, 11 §9.1); `rooster-cli` knows
+ * the endpoint.
  */
 async function authorizationServerMetadata(deps: P9RouteDeps): Promise<Record<string, unknown>> {
   const provider = oauthProviderApi(deps.auth);
@@ -124,13 +128,22 @@ async function authorizationServerMetadata(deps: P9RouteDeps): Promise<Record<st
     }
   }
   delete metadata.jwks_uri;
+  delete metadata.device_authorization_endpoint;
   if (!deps.config.oauthDcr) delete metadata.registration_endpoint;
+  const device = deps.config.oauthDevice === 'all';
   return {
     ...metadata,
+    ...(device
+      ? { device_authorization_endpoint: `${oauthIssuer(deps.config)}${DEVICE_AUTHORIZATION_PATH}` }
+      : {}),
     scopes_supported: [...OAUTH_SCOPES],
     response_types_supported: ['code'],
     response_modes_supported: ['query'],
-    grant_types_supported: ['authorization_code', 'refresh_token'],
+    grant_types_supported: [
+      'authorization_code',
+      'refresh_token',
+      ...(device ? [DEVICE_CODE_GRANT_TYPE] : []),
+    ],
     code_challenge_methods_supported: ['S256'],
     authorization_response_iss_parameter_supported: true,
     client_id_metadata_document_supported: true,

@@ -451,7 +451,7 @@ describe('OAuth conformance (11 §7)', () => {
     }
   });
 
-  it('refresh tokens rotate, and a reused one revokes the whole grant', async () => {
+  it('refresh tokens rotate, and one reused after its successor revokes the whole grant', async () => {
     const ctx = oauthCtx();
     const user = ctx.user('ada@example.com');
     const tokens = await connect(ctx, user);
@@ -460,13 +460,15 @@ describe('OAuth conformance (11 §7)', () => {
     expect(rotated.body.refresh_token).not.toBe(tokens.refresh);
     const newAccess = String(rotated.body.access_token);
     expect(await resolveOAuthBearer(ctx.app.services, newAccess, 'mcp', null)).not.toBeNull();
-    // The old one again: reuse.
+    // The successor is used; the old one again is then reuse, not a lost answer's retry.
+    const used = await refresh(ctx, String(rotated.body.refresh_token));
+    expect(used.status).toBe(200);
     const reused = await refresh(ctx, tokens.refresh ?? '');
     expect(reused.status).toBe(400);
     expect(reused.body.error).toBe('invalid_grant');
     expect(grantsOf(ctx, user.userId)[0]?.revokedAt).not.toBeNull();
     expect(await resolveOAuthBearer(ctx.app.services, newAccess, 'mcp', null)).toBeNull();
-    const next = await refresh(ctx, String(rotated.body.refresh_token));
+    const next = await refresh(ctx, String(used.body.refresh_token));
     expect(next.status).toBe(400);
     for (const table of [oauthAccessToken, oauthRefreshToken, oauthConsent]) {
       expect(ctx.db.orm.select().from(table).all()).toEqual([]);

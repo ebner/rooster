@@ -177,6 +177,7 @@ export function createServices(
       deps,
       (userId, sessionId) => users.sessionActive(userId, sessionId),
       (actor) => notifications.unreadCountFor(actor),
+      (tx, drafts) => notifications.notify(tx, drafts),
     ),
     identities: new IdentityService(deps),
     admin: new AdminService(deps),

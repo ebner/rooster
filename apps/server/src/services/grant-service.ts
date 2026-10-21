@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { defaultKeyHasher } from '@better-auth/api-key';
 import {
   ADMIN_SCOPE,
+  ALL_GRANT_SCOPES,
   expandScopes,
   GRANT_SCOPES,
   type GrantConstraints,
@@ -38,6 +39,7 @@ import {
   deviceCode,
   member,
   oauthAccessToken,
+  oauthClient,
   oauthConsent,
   oauthRefreshToken,
   oauthResource,
@@ -60,8 +62,20 @@ import {
   type ServiceDeps,
   type Tx,
 } from './context.ts';
+import {
+  DEVICE_CODE_TTL_MS,
+  DEVICE_POLL_INTERVAL_MS,
+  deviceGrantAllowed,
+  generateDeviceCode,
+  generateUserCode,
+  hashDeviceSecret,
+  normalizeUserCode,
+  UserCodeMisses,
+  userCodeHash,
+} from './device-codes.ts';
 import { selfAudience } from './event-audience.ts';
 import { canReadNotification, requireBrowserSession, visibleKeys } from './grant-access.ts';
+import type { NotificationDraft } from './notification-service.ts';
 import {
   authorizationCodeValue,
   clientInfo,
@@ -82,6 +96,12 @@ export const GRANT_TOUCH_MS = 60_000;
 export const CLI_CLIENT_ID = 'rooster-cli';
 const CLI_CLIENT_NAME = 'rooster CLI';
 
+/** RFC 8628 §3.4: the device grant's `grant_type`. */
+export const DEVICE_CODE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
+
+/** Where a credential works (11 §9): the REST API or the remote MCP endpoint. */
+export type CredentialAudience = 'api' | 'mcp';
+
 /**
  * OAuth access and refresh tokens carry these prefixes (the plugin adds them and does not store
  * them; auth.ts configures the same values).
@@ -99,6 +119,13 @@ const PAT_VISIBLE_LENGTH = PAT_PREFIX.length + 4;
 export const GRANTS_KEY = ['grants'] as const;
 
 type GrantRow = typeof accessGrant.$inferSelect;
+type RefreshRow = typeof oauthRefreshToken.$inferSelect;
+
+/**
+ * The refresh grace (11 §2.4): how long after a rotation the previous refresh token may be
+ * redeemed once more, if its successor was never used (a lost token response).
+ */
+export const REFRESH_GRACE_MS = 60_000;
 
 const grantNotFound = () => new AppError('not_found', 404, 'Grant not found.');
 const consentNotFound = () =>
@@ -213,7 +240,46 @@ function grantCodeIdentifiers(tx: Tx, grantId: string): string[] {
 /** The capabilities an OAuth client may get, in contract order. */
 const ALL_OAUTH_SCOPES = GRANT_SCOPES.filter((s) => !OAUTH_EXCLUDED_SCOPES.includes(s));
 const deviceNotFound = () =>
-  new AppError('not_found', 404, 'That code is unknown or has expired. Start again in the CLI.');
+  new AppError(
+    'not_found',
+    404,
+    'That code is unknown or has expired. Start again on the device that showed it.',
+  );
+/** 11 §9.2: too many wrong codes typed at `/device` lock code entry for the rest of the window. */
+function codeEntryLocked(waitMs: number): AppError {
+  const error = new AppError(
+    'rate_limited',
+    429,
+    'Too many wrong codes. Wait a few minutes before you try again.',
+  );
+  error.headers = { 'Retry-After': String(Math.ceil(waitMs / 1000)) };
+  return error;
+}
+
+type DeviceRow = typeof deviceCode.$inferSelect;
+
+/** A request through the OAuth device grant (Phase 12), rather than the legacy CLI flow. */
+function isOAuthDevice(row: DeviceRow): row is DeviceRow & { oauthClientId: string } {
+  return row.oauthClientId !== null;
+}
+
+/** What a third-party client asked for: OAuth scopes only, in contract order. */
+function appScopes(scope: string | null): GrantScope[] {
+  const asked = new Set(parseScopes(scope));
+  return ALL_OAUTH_SCOPES.filter((s) => asked.has(s));
+}
+
+/** The audience a PAT's `apikey.metadata` names; absent means `api` (11 §9.7). */
+function patAudience(metadata: string | null): { grantId: unknown; audience: unknown } | null {
+  try {
+    const value = JSON.parse(metadata ?? '{}') as { grantId?: unknown; audience?: unknown };
+    return value !== null && typeof value === 'object'
+      ? { grantId: value.grantId, audience: value.audience ?? 'api' }
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 const ALPHANUMERIC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
@@ -241,11 +307,6 @@ function parseConstraints(text: string): GrantConstraints {
     // Unreadable constraints grant nothing.
   }
   return { orgs: [] };
-}
-
-/** User codes are shown as `ABCD-EFGH`; typed codes may carry dashes, spaces or lower case. */
-export function normalizeUserCode(code: string): string {
-  return code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 }
 
 /**
@@ -297,11 +358,16 @@ export interface StreamAccess {
  * approval (06 §2.1).
  */
 export class GrantService {
+  /** Wrong codes typed at `/device`, per user (11 §9.2). */
+  private readonly codeMisses = new UserCodeMisses();
+
   constructor(
     private readonly deps: ServiceDeps,
     private readonly sessionActive: (userId: string, sessionId: string) => boolean,
     /** The bell badge as the actor may see it (NotificationService.unreadCountFor). */
     private readonly unreadCount: (actor: Actor) => number,
+    /** In-app and email notices in the caller's transaction (NotificationService.notify). */
+    private readonly notify: (tx: Tx, drafts: readonly NotificationDraft[]) => void = () => {},
   ) {}
 
   /**
@@ -399,6 +465,18 @@ export class GrantService {
     return this.live(row, now) && row.kind === 'oauth' && !this.idleExpired(row, now);
   }
 
+  /**
+   * A grant whose credentials are OAuth tokens: an app's (`oauth`), or a `rooster-cli` login
+   * through the device grant (Phase 12, 11 §9.4: `device` with an audience). A CLI device
+   * session from the legacy flow has no audience and never holds OAuth tokens.
+   */
+  private holdsOAuthTokens(row: GrantRow): boolean {
+    return (
+      row.kind === 'oauth' ||
+      (row.kind === 'device' && row.clientId === CLI_CLIENT_ID && row.audience !== null)
+    );
+  }
+
   /** Whether the session is a CLI device session (linked to a grant). */
   isGrantSession(sessionId: string): boolean {
     const row = this.deps.db.orm
@@ -471,18 +549,19 @@ export class GrantService {
     return { ...base, via, sessionId, grant: this.toActorGrant(row) };
   }
 
-  /** The actor of a PAT (`Authorization: Bearer rooster_pat_…`), by the key's hash. */
-  resolvePat(hash: string, ip: string | null): Actor | null {
+  /**
+   * The actor of a PAT (`Authorization: Bearer rooster_pat_…`), by the key's hash. A PAT works
+   * only where its audience says (11 §9.7): `api` tokens at `/api/v1`, `mcp` tokens at `/mcp`;
+   * anywhere else it is unknown (`401`).
+   */
+  resolvePat(hash: string, ip: string | null, audience: CredentialAudience): Actor | null {
     const now = this.now();
     const key = this.deps.db.orm.select().from(apikey).where(eq(apikey.key, hash)).get();
     if (key === undefined || key.enabled === false) return null;
     if (key.expiresAt !== null && key.expiresAt.getTime() <= now) return null;
-    let grantId: unknown;
-    try {
-      grantId = (JSON.parse(key.metadata ?? '{}') as { grantId?: unknown }).grantId;
-    } catch {
-      return null;
-    }
+    const meta = patAudience(key.metadata);
+    if (meta === null || meta.audience !== audience) return null;
+    const grantId = meta.grantId;
     if (typeof grantId !== 'string') return null;
     const row = this.deps.db.orm
       .select()
@@ -493,14 +572,20 @@ export class GrantService {
     const base = this.userActor(row.userId);
     if (base === null) return null;
     this.touch(row, ip, now);
-    return { ...base, via: 'pat', sessionId: row.id, grant: this.toActorGrant(row) };
+    return {
+      ...base,
+      via: 'pat',
+      sessionId: row.id,
+      grant: { ...this.toActorGrant(row), resource: audience },
+    };
   }
 
   /**
    * The actor of an OAuth access token (`rooster_at_…`) at `resource` (11 §4.3): the hashed
    * token must exist, be unexpired and unrevoked, be bound to exactly this resource, and point
-   * (`referenceId`) at a live OAuth grant of the same user and client. Scopes and constraints
-   * are the grant's, read on every request. Null answers `401`.
+   * (`referenceId`) at a live grant of the same user and client: an app's OAuth grant, or a
+   * `rooster-cli` login through the device grant bound to this resource (11 §9.4). Scopes and
+   * constraints are the grant's, read on every request. Null answers `401`.
    */
   resolveOAuthToken(token: string, resource: OAuthResource, ip: string | null): Actor | null {
     if (!token.startsWith(OAUTH_ACCESS_PREFIX)) return null;
@@ -518,8 +603,9 @@ export class GrantService {
       return null;
     }
     const grant = db.select().from(accessGrant).where(eq(accessGrant.id, row.referenceId)).get();
-    if (!this.live(grant, now) || grant.kind !== 'oauth') return null;
+    if (!this.live(grant, now) || !this.holdsOAuthTokens(grant)) return null;
     if (grant.userId !== row.userId || grant.clientId !== row.clientId) return null;
+    if (grant.kind === 'device' && grant.audience !== resource) return null;
     if (
       grant.idleTimeoutMs !== null &&
       now - (row.createdAt?.getTime() ?? 0) > grant.idleTimeoutMs
@@ -581,13 +667,15 @@ export class GrantService {
    */
   oauthTokenScope(grantId: string, withRefresh: boolean): string | null {
     const row = this.deps.db.orm
-      .select({ scopes: accessGrant.scopes })
+      .select({ scopes: accessGrant.scopes, kind: accessGrant.kind })
       .from(accessGrant)
       .where(eq(accessGrant.id, grantId))
       .get();
     if (row === undefined) return null;
     const covered = expandScopes(parseScopes(row.scopes));
-    const scopes: string[] = ALL_OAUTH_SCOPES.filter((s) => covered.has(s));
+    // A CLI login may hold `admin` (an instance admin's); an app never does.
+    const reported = row.kind === 'device' ? ALL_GRANT_SCOPES : ALL_OAUTH_SCOPES;
+    const scopes: string[] = reported.filter((s) => covered.has(s));
     return [...scopes, ...(withRefresh ? ['offline_access'] : [])].join(' ');
   }
 
@@ -632,6 +720,43 @@ export class GrantService {
             .run();
         }
       });
+    } catch (error) {
+      const cause = (error as { cause?: unknown }).cause;
+      if (!/no such table/i.test(`${String(error)} ${String(cause)}`)) throw error;
+    }
+  }
+
+  /**
+   * `rooster-cli` as the provider's client (Phase 12, 11 §9.6): public, the device grant and
+   * refresh tokens only, no redirect URIs (so no authorization code can ever be issued to it).
+   * Kept as configured on every boot.
+   */
+  seedCliClient(scopes: readonly string[]): void {
+    const fields = {
+      name: CLI_CLIENT_NAME,
+      redirectUris: '[]',
+      tokenEndpointAuthMethod: 'none',
+      grantTypes: JSON.stringify([DEVICE_CODE_GRANT_TYPE, 'refresh_token']),
+      responseTypes: '[]',
+      scopes: JSON.stringify(scopes),
+      clientDiscoveryId: null,
+      clientSecret: null,
+      disabled: false,
+      skipConsent: false,
+    };
+    try {
+      const now = new Date(this.now());
+      this.deps.db.orm
+        .insert(oauthClient)
+        .values({
+          id: uuidv7(),
+          clientId: CLI_CLIENT_ID,
+          ...fields,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({ target: oauthClient.clientId, set: { ...fields, updatedAt: now } })
+        .run();
     } catch (error) {
       const cause = (error as { cause?: unknown }).cause;
       if (!/no such table/i.test(`${String(error)} ${String(cause)}`)) throw error;
@@ -687,8 +812,10 @@ export class GrantService {
   /**
    * `POST /api/auth/oauth2/token` with `grant_type=refresh_token`, before the provider rotates
    * it (11 §2.4, ADR 0041):
-   * - a refresh token that was already rotated (or revoked) is reuse: the whole grant is
-   *   revoked, with its tokens and consent;
+   * - a refresh token that was already rotated is redeemed once more within
+   *   `REFRESH_GRACE_MS` of its rotation, if its successor was never used (a lost response;
+   *   `reopenForGrace`); any other reuse (after the window, after the successor was used, a
+   *   second replay, a revoked token) revokes the whole grant, with its tokens and consent;
    * - "this session only": once the grant has had no token activity for `idle_timeout_ms`, it
    *   ends; a stale refresh token of a grant still in use (another chain refreshed since) is only
    *   refused;
@@ -713,16 +840,24 @@ export class GrantService {
             .from(accessGrant)
             .where(eq(accessGrant.id, row.referenceId))
             .get();
-    if (row.revoked !== null) {
+    const reused = () => {
       this.deps.logger.warn(
         { grantId: grant?.id ?? null },
         'OAuth refresh token reused: revoking the grant',
       );
       this.revokeOAuthGrant(grant, row.referenceId);
-      return { ok: false, description: 'The refresh token was already used; authorize again.' };
-    }
-    if (grant === undefined || !this.live(grant, now) || grant.kind !== 'oauth') {
-      return { ok: false, description: 'The authorization was revoked or has expired.' };
+      return {
+        ok: false as const,
+        description: 'The refresh token was already used; authorize again.',
+      };
+    };
+    // A rotated token is either a retry within the grace (checked in full below) or reuse.
+    const retry = row.revoked !== null && row.rotatedAt !== null;
+    if (row.revoked !== null && !retry) return reused();
+    if (grant === undefined || !this.live(grant, now) || !this.holdsOAuthTokens(grant)) {
+      return retry
+        ? reused()
+        : { ok: false, description: 'The authorization was revoked or has expired.' };
     }
     if (grant.userId !== row.userId || grant.clientId !== row.clientId) {
       return { ok: false, description: 'The authorization was revoked or has expired.' };
@@ -735,11 +870,111 @@ export class GrantService {
         this.revokeOAuthGrant(grant, grant.id);
         return { ok: false, description: 'The session ended after a day without use.' };
       }
-      if (now - (row.createdAt?.getTime() ?? 0) > grant.idleTimeoutMs) {
+      // A retried token was in use until its rotation.
+      const lastUse = retry ? row.rotatedAt : row.createdAt;
+      if (now - (lastUse?.getTime() ?? 0) > grant.idleTimeoutMs) {
         return { ok: false, description: 'This refresh token went unused for too long.' };
       }
     }
+    if (retry) {
+      if (!this.reopenForGrace(row, now)) return reused();
+      this.deps.logger.info({ grantId: grant.id }, 'OAuth refresh token retried within the grace');
+    }
     return { ok: true, grantId: grant.id };
+  }
+
+  /**
+   * The refresh grace (11 §2.4): a client whose rotation answer was lost retries with the token
+   * it still holds. That token may be redeemed once more if it was rotated (not revoked) at most
+   * `REFRESH_GRACE_MS` ago, has not had its retry yet, and its successor was never used (not
+   * rotated, not revoked) and still belongs to the same live grant. The successor and its access
+   * tokens are then revoked and the token is made current again, so the provider rotates it
+   * normally into a fresh pair; the retry is recorded, so a second one is reuse. All in one
+   * transaction; the caller serialises refreshes per grant (auth/mount.ts).
+   */
+  private reopenForGrace(row: RefreshRow, now: number): boolean {
+    if (row.rotatedAt === null || row.graceUsedAt !== null || row.successorId === null) {
+      return false;
+    }
+    if (now - row.rotatedAt.getTime() > REFRESH_GRACE_MS) return false;
+    return immediate(this.deps.db, (tx) => {
+      const successor = tx
+        .select()
+        .from(oauthRefreshToken)
+        .where(eq(oauthRefreshToken.id, row.successorId as string))
+        .get();
+      if (
+        successor === undefined ||
+        successor.revoked !== null ||
+        successor.rotatedAt !== null ||
+        successor.referenceId !== row.referenceId
+      ) {
+        return false;
+      }
+      const at = new Date(now);
+      tx.update(oauthRefreshToken)
+        .set({ revoked: at })
+        .where(eq(oauthRefreshToken.id, successor.id))
+        .run();
+      tx.update(oauthAccessToken)
+        .set({ revoked: at })
+        .where(eq(oauthAccessToken.refreshId, successor.id))
+        .run();
+      const reopened = tx
+        .update(oauthRefreshToken)
+        .set({ revoked: null, rotatedAt: null, successorId: null, graceUsedAt: at })
+        .where(
+          and(
+            eq(oauthRefreshToken.id, row.id),
+            isNull(oauthRefreshToken.graceUsedAt),
+            eq(oauthRefreshToken.successorId, successor.id),
+          ),
+        )
+        .run();
+      if (reopened.changes !== 1) throw new Error('refresh grace: the token changed meanwhile');
+      return true;
+    });
+  }
+
+  /**
+   * After the provider rotated `oldToken` into `newToken`: records the successor, which the
+   * refresh grace checks (`reopenForGrace`).
+   */
+  recordRotation(oldToken: string, newToken: string): void {
+    if (!oldToken.startsWith(OAUTH_REFRESH_PREFIX) || !newToken.startsWith(OAUTH_REFRESH_PREFIX)) {
+      return;
+    }
+    const successor = this.deps.db.orm
+      .select({ id: oauthRefreshToken.id })
+      .from(oauthRefreshToken)
+      .where(
+        eq(oauthRefreshToken.token, hashOAuthToken(newToken.slice(OAUTH_REFRESH_PREFIX.length))),
+      )
+      .get();
+    if (successor === undefined) return;
+    this.deps.db.orm
+      .update(oauthRefreshToken)
+      .set({ successorId: successor.id })
+      .where(
+        eq(oauthRefreshToken.token, hashOAuthToken(oldToken.slice(OAUTH_REFRESH_PREFIX.length))),
+      )
+      .run();
+  }
+
+  /**
+   * What refreshes of a token are serialised on: its grant (so a retry within the grace and a
+   * use of the successor never interleave), else the token itself.
+   */
+  refreshLockKey(refreshToken: string): string {
+    const hash = refreshToken.startsWith(OAUTH_REFRESH_PREFIX)
+      ? hashOAuthToken(refreshToken.slice(OAUTH_REFRESH_PREFIX.length))
+      : refreshToken;
+    const row = this.deps.db.orm
+      .select({ referenceId: oauthRefreshToken.referenceId })
+      .from(oauthRefreshToken)
+      .where(eq(oauthRefreshToken.token, hash))
+      .get();
+    return row?.referenceId == null ? `token:${hash}` : `grant:${row.referenceId}`;
   }
 
   /** Revokes an OAuth grant outside a user request (refresh reuse, idle expiry). */
@@ -818,11 +1053,12 @@ export class GrantService {
     const key =
       row.kind === 'pat'
         ? tx
-            .select({ start: apikey.start })
+            .select({ start: apikey.start, metadata: apikey.metadata })
             .from(apikey)
             .where(sql`json_extract(${apikey.metadata}, '$.grantId') = ${row.id}`)
             .get()
         : undefined;
+    const keyAudience = key === undefined ? undefined : patAudience(key.metadata)?.audience;
     return {
       id: row.id,
       kind: row.kind,
@@ -840,7 +1076,14 @@ export class GrantService {
       lastUsedAt: row.lastUsedAt,
       lastUsedIp: row.lastUsedIp,
       current: actor.grant?.id === row.id,
-      audience: row.kind === 'pat' ? 'api' : null,
+      audience:
+        row.kind === 'pat'
+          ? keyAudience === 'mcp'
+            ? 'mcp'
+            : 'api'
+          : row.kind === 'device'
+            ? row.audience
+            : null,
     };
   }
 
@@ -956,6 +1199,7 @@ export class GrantService {
       expiresInDays?: number | undefined;
       createdByGrantId?: string | null;
       idleTimeoutMs?: number | null;
+      audience?: CredentialAudience | null;
     },
   ): GrantRow {
     const now = this.now();
@@ -975,6 +1219,7 @@ export class GrantService {
       lastUsedIp: null,
       createdByGrantId: input.createdByGrantId ?? null,
       idleTimeoutMs: input.idleTimeoutMs ?? null,
+      audience: input.audience ?? null,
     };
     tx.insert(accessGrant).values(row).run();
     return row;
@@ -1100,8 +1345,8 @@ export class GrantService {
       const sessions = this.sessionsOf(tx, row.id);
       if (sessions.length > 0) tx.delete(session).where(inArray(session.id, sessions)).run();
       tx.delete(apikey).where(sql`json_extract(${apikey.metadata}, '$.grantId') = ${row.id}`).run();
-      // An app's tokens, consent and pending codes go with it (ADR 0041).
-      if (row.kind === 'oauth') deleteGrantArtifacts(tx, [row.id]);
+      // An app's or a CLI login's tokens, consent and pending codes go with it (ADR 0041).
+      if (row.kind !== 'pat') deleteGrantArtifacts(tx, [row.id]);
       this.emitGrants(tx, actor.userId, row.id, [row.id, ...sessions]);
     });
   }
@@ -1111,10 +1356,20 @@ export class GrantService {
    * create any PAT. A CLI device (`rooster token create`, 07 §4) may create one within its own
    * grant: scopes it has, narrower constraints, and an expiry no later than its own (else
    * `422 widening_not_allowed`); the PAT records `createdByGrantId` and outlives a revoke of
-   * its creator. A PAT cannot mint PATs (`403 forbidden_scope`).
+   * its creator. A PAT cannot mint PATs (`403 forbidden_scope`). An MCP token (`audience:
+   * 'mcp'`, 11 §9.7) works only at `/mcp` and never carries `admin` (`422 admin_not_for_mcp`).
    */
   async createToken(actor: Actor, input: TokenCreate): Promise<TokenCreated> {
     if (actor.grant !== null && actor.grant.kind !== 'device') requireBrowserSession(actor);
+    const audience: CredentialAudience = input.audience ?? 'api';
+    if (audience === 'mcp' && input.scopes.includes(ADMIN_SCOPE)) {
+      throw new AppError(
+        'admin_not_for_mcp',
+        422,
+        'An MCP token cannot have the "admin" permission; MCP has no admin tools.',
+        [{ path: 'scopes', message: 'Not available for MCP tokens' }],
+      );
+    }
     // `admin` only from an instance admin (ADR 0042 §1); a device must also hold it itself.
     if (input.scopes.includes(ADMIN_SCOPE) && !actor.isAdmin) throw adminOnly();
     const minted = await mintToken();
@@ -1150,7 +1405,7 @@ export class GrantService {
           requestCount: 0,
           createdAt: now,
           updatedAt: now,
-          metadata: JSON.stringify({ grantId: row.id }),
+          metadata: JSON.stringify({ grantId: row.id, audience }),
         })
         .run();
       this.emitGrants(tx, actor.userId, row.id);
@@ -1191,20 +1446,37 @@ export class GrantService {
     }
   }
 
-  // --- device approval (07 §2, ADR 0036 §6) ----------------------------------------------------
+  // --- device approval (07 §2, ADR 0036 §6; Phase 12: 11 §9) -----------------------------------
 
-  private pendingDevice(tx: Tx, actor: Actor, userCode: string) {
-    const wanted = normalizeUserCode(userCode);
+  /**
+   * The pending request behind a code typed at `/device`, looked up by the hash of its
+   * normalised spelling. Unknown, expired, used and other users' codes are the same `404`, and
+   * each counts as a miss: 10 misses within 10 minutes lock code entry for the user (`429`) for
+   * the rest of the window, whatever is typed (11 §9.2).
+   */
+  private pendingDevice(tx: Tx, actor: Actor, userCode: string): DeviceRow {
+    const now = this.now();
+    const wait = this.codeMisses.lockedFor(actor.userId, now);
+    if (wait > 0) throw codeEntryLocked(wait);
     const row = tx
       .select()
       .from(deviceCode)
-      .where(or(eq(deviceCode.userCode, userCode), eq(deviceCode.userCode, wanted)))
+      .where(eq(deviceCode.userCode, userCodeHash(userCode)))
       .get();
     if (
       row === undefined ||
       row.status !== 'pending' ||
-      row.expiresAt.getTime() <= this.now() ||
+      row.expiresAt.getTime() <= now ||
       (row.userId !== null && row.userId !== actor.userId)
+    ) {
+      this.codeMisses.record(actor.userId, now);
+      throw deviceNotFound();
+    }
+    // The operator switched the device grant off for this client since the request was made:
+    // nothing to decide (the token endpoint would refuse it anyway).
+    if (
+      isOAuthDevice(row) &&
+      !deviceGrantAllowed(this.deps.config.oauthDevice, row.oauthClientId)
     ) {
       throw deviceNotFound();
     }
@@ -1212,97 +1484,496 @@ export class GrantService {
   }
 
   /**
-   * What a device asked for: everything when it named nothing. `admin` stays only for instance
-   * admins; anyone else's request loses it silently (ADR 0042 §1).
+   * What `rooster-cli` asked for: everything when it named nothing. `admin` stays only for
+   * instance admins; anyone else's request loses it silently (ADR 0042 §1), and so does a login
+   * for `/mcp`, which has no admin tools.
    */
-  private requestedScopes(actor: Actor, scope: string | null): GrantScope[] {
+  private requestedScopes(
+    actor: Actor,
+    scope: string | null,
+    resource: CredentialAudience | null = null,
+  ): GrantScope[] {
     const scopes = parseScopes(scope);
     const requested = scopes.length > 0 ? scopes : [...GRANT_SCOPES];
-    return actor.isAdmin ? requested : requested.filter((s) => s !== ADMIN_SCOPE);
+    return actor.isAdmin && resource !== 'mcp'
+      ? requested
+      : requested.filter((s) => s !== ADMIN_SCOPE);
   }
 
-  /** GET /device/:userCode: what the CLI asks for, before the user approves (11 §3.1). */
+  /** The audience a Phase 12 request's stored `resource` names (null: legacy or unreadable). */
+  private deviceResource(row: DeviceRow): CredentialAudience | null {
+    return row.resource === null ? null : resourceOf(this.deps.config, row.resource);
+  }
+
+  /**
+   * How `/device` presents a third-party device client (11 §9.1): nothing binds a CIMD
+   * `client_id` to whoever started the flow, so it is always Unverified, named by its host,
+   * and never shown with its logo.
+   */
+  private deviceClient(tx: Tx, clientId: string): NonNullable<DeviceRequest['client']> {
+    const row = findClient(tx, clientId);
+    const host = URL.canParse(clientId) ? new URL(clientId).hostname.toLowerCase() : clientId;
+    const info = row === undefined ? null : clientInfo(row);
+    return {
+      name: info?.name || host,
+      domain: host,
+      logoUri: null,
+      clientUri: info?.clientUri ?? null,
+      verified: false,
+      dynamic: false,
+    };
+  }
+
+  /** GET /device/:userCode: what the device asks for, before the user decides (11 §9.3). */
   deviceRequest(actor: Actor, userCode: string): DeviceRequest {
     requireBrowserSession(actor);
     return readOnly(this.deps.db, (tx) => {
       const row = this.pendingDevice(tx, actor, userCode);
+      const resource = this.deviceResource(row);
+      const app = isOAuthDevice(row) && row.oauthClientId !== CLI_CLIENT_ID;
+      const client = app ? this.deviceClient(tx, row.oauthClientId as string) : null;
+      const current = app
+        ? this.oauthRow(tx, actor.userId, row.oauthClientId as string)
+        : undefined;
+      const existing = this.liveOAuth(current, this.now()) ? current : undefined;
       return {
-        userCode: row.userCode,
-        clientId: row.clientId ?? CLI_CLIENT_ID,
-        clientName: CLI_CLIENT_NAME,
-        requestedScopes: minimalScopes(this.requestedScopes(actor, row.scope)),
+        userCode: normalizeUserCode(userCode),
+        clientId: row.oauthClientId ?? row.clientId ?? CLI_CLIENT_ID,
+        clientName: client?.name ?? CLI_CLIENT_NAME,
+        requestedScopes: minimalScopes(
+          app ? appScopes(row.scope) : this.requestedScopes(actor, row.scope, resource),
+        ),
         expiresAt: row.expiresAt.getTime(),
-        firstParty: true,
-        client: null,
-        resource: null,
-        requestIp: null,
-        requestedAt: row.expiresAt.getTime() - 10 * 60_000,
-        existing: null,
-        offerSessionOnly: false,
+        firstParty: !app,
+        client,
+        resource,
+        requestIp: row.requestIp,
+        requestedAt: row.createdAt?.getTime() ?? row.expiresAt.getTime() - DEVICE_CODE_TTL_MS,
+        existing:
+          existing === undefined
+            ? null
+            : {
+                scopes: minimalScopes(parseScopes(existing.scopes)),
+                constraints: this.withLiveConstraints(
+                  tx,
+                  actor.userId,
+                  this.toDto(tx, actor, existing),
+                ).constraints,
+              },
+        offerSessionOnly: app,
         decisionNonce: this.decisionNonce('rooster-device-approval', actor, row.id),
       };
     });
   }
 
   /**
-   * POST /device/:userCode/approve: creates the device grant (scopes no wider than requested,
-   * `422 widening_not_allowed`) and marks the code approved with it. The CLI's next poll of
-   * `/api/auth/device/token` gets a bearer session linked to the grant (auth.ts).
+   * POST /device/:userCode/approve, with the nonce `/device` was shown (ADR 0056):
+   * - `rooster-cli`, legacy flow: a `device` grant; the CLI's next poll of
+   *   `/api/auth/device/token` gets a bearer session linked to it (auth.ts);
+   * - `rooster-cli` through the device grant: a new `device` grant per login, bound to the
+   *   requested resource; the next poll of `/api/auth/oauth2/token` gets OAuth tokens for it;
+   * - a third-party client: creates or steps up the user's single `oauth` grant for it, the
+   *   one the browser flow uses (11 §9.4); "This session only" as on the consent screen.
+   * Scopes no wider than requested (`422 widening_not_allowed`). Every approval through the
+   * device grant notifies the user (`device_connected`). The code is approved only if it is
+   * still pending (compare-and-swap), so it is decided once.
    */
   approveDevice(actor: Actor, userCode: string, input: DeviceApprove): Grant {
     requireBrowserSession(actor);
     return immediate(this.deps.db, (tx) => {
       const row = this.pendingDevice(tx, actor, userCode);
       this.requireDeviceNonce(actor, row.id, input.decisionNonce);
-      const requested = expandScopes(this.requestedScopes(actor, row.scope));
-      // A non-admin's `admin` is dropped, not refused (ADR 0042 §1).
-      const scopes = actor.isAdmin ? input.scopes : input.scopes.filter((s) => s !== ADMIN_SCOPE);
-      if (scopes.length === 0) {
-        throw new AppError('validation_failed', 422, 'Approve at least one capability.', [
-          { path: 'scopes', message: 'Nothing left to approve' },
-        ]);
+      const app = isOAuthDevice(row) && row.oauthClientId !== CLI_CLIENT_ID;
+      if (input.sessionOnly === true && !app) {
+        throw new AppError(
+          'session_only_not_offered',
+          422,
+          '"This session only" is offered for apps, not for the rooster CLI.',
+        );
       }
-      if ([...expandScopes(scopes)].some((s) => !requested.has(s))) {
-        throw new AppError('widening_not_allowed', 422, 'Approve at most what the CLI asked for.', [
-          { path: 'scopes', message: 'Not requested by the device' },
-        ]);
-      }
-      this.validateConstraints(tx, actor.userId, input.constraints);
-      const grant = this.insertGrant(tx, {
-        userId: actor.userId,
-        kind: 'device',
-        clientId: row.clientId ?? CLI_CLIENT_ID,
-        label: input.label ?? deviceLabel(row.userAgent),
-        scopes,
-        constraints: input.constraints,
-        expiresInDays: input.expiresInDays,
-      });
-      tx.update(deviceCode)
-        .set({
-          status: 'approved',
-          userId: actor.userId,
-          grantId: grant.id,
-          // The token response echoes it, so the CLI learns what was approved.
-          scope: grant.scopes,
-        })
-        .where(eq(deviceCode.id, row.id))
-        .run();
-      this.emitGrants(tx, actor.userId, grant.id);
+      if (!isOAuthDevice(row)) return this.approveLegacyDevice(tx, actor, row, input);
+      const resource = this.deviceResource(row);
+      if (resource === null) throw deviceNotFound();
+      const grant = app
+        ? this.approveAppDevice(tx, actor, row, input)
+        : this.approveCliDevice(tx, actor, row, input, resource);
+      this.markApproved(tx, actor, row, grant);
+      this.notifyDeviceConnected(tx, actor.userId, row, grant, app);
       return this.toDto(tx, actor, grant);
     });
   }
 
-  /** POST /device/:userCode/deny: the CLI's next poll gets `access_denied`. */
+  /** The approval's scopes, at least one, none beyond what was requested (implied ones count). */
+  private approvedScopes(requested: readonly GrantScope[], scopes: readonly GrantScope[]) {
+    if (scopes.length === 0) {
+      throw new AppError('validation_failed', 422, 'Approve at least one capability.', [
+        { path: 'scopes', message: 'Nothing left to approve' },
+      ]);
+    }
+    const allowed = expandScopes(requested);
+    if ([...expandScopes(scopes)].some((s) => !allowed.has(s))) {
+      throw new AppError(
+        'widening_not_allowed',
+        422,
+        'Approve at most what the device asked for.',
+        [{ path: 'scopes', message: 'Not requested by the device' }],
+      );
+    }
+  }
+
+  /** The legacy CLI flow (07 §2): a device grant, redeemed for a bearer session. */
+  private approveLegacyDevice(tx: Tx, actor: Actor, row: DeviceRow, input: DeviceApprove): Grant {
+    // A non-admin's `admin` is dropped, not refused (ADR 0042 §1).
+    const scopes = actor.isAdmin ? input.scopes : input.scopes.filter((s) => s !== ADMIN_SCOPE);
+    this.approvedScopes(this.requestedScopes(actor, row.scope), scopes);
+    this.validateConstraints(tx, actor.userId, input.constraints);
+    const grant = this.insertGrant(tx, {
+      userId: actor.userId,
+      kind: 'device',
+      clientId: row.clientId ?? CLI_CLIENT_ID,
+      label: input.label ?? deviceLabel(row.userAgent),
+      scopes,
+      constraints: input.constraints,
+      expiresInDays: input.expiresInDays,
+    });
+    this.markApproved(tx, actor, row, grant);
+    this.emitGrants(tx, actor.userId, grant.id);
+    return this.toDto(tx, actor, grant);
+  }
+
+  /** `rooster-cli` through the device grant: one new grant per login, bound to its resource. */
+  private approveCliDevice(
+    tx: Tx,
+    actor: Actor,
+    row: DeviceRow,
+    input: DeviceApprove,
+    resource: CredentialAudience,
+  ): GrantRow {
+    const requested = this.requestedScopes(actor, row.scope, resource);
+    const scopes = input.scopes.filter((s) => s !== ADMIN_SCOPE || requested.includes(s));
+    this.approvedScopes(requested, scopes);
+    this.validateConstraints(tx, actor.userId, input.constraints);
+    const grant = this.insertGrant(tx, {
+      userId: actor.userId,
+      kind: 'device',
+      clientId: CLI_CLIENT_ID,
+      label: input.label ?? deviceLabel(row.userAgent),
+      scopes,
+      constraints: input.constraints,
+      expiresInDays: input.expiresInDays,
+      audience: resource,
+    });
+    this.emitGrants(tx, actor.userId, grant.id);
+    return grant;
+  }
+
+  /**
+   * A third-party client through the device grant: the user's one `oauth` grant for the client
+   * (11 §9.4). A live grant is stepped up: it keeps its scopes and gains the approved ones, and
+   * takes the constraints and expiry chosen now (the page pre-fills its current ones). An
+   * expired or idle one gives way to a new grant. Never `admin`; `tasks:delete` only when
+   * requested.
+   */
+  private approveAppDevice(tx: Tx, actor: Actor, row: DeviceRow, input: DeviceApprove): GrantRow {
+    const clientId = row.oauthClientId as string;
+    const requested = appScopes(row.scope);
+    this.approvedScopes(requested, input.scopes);
+    this.validateConstraints(tx, actor.userId, input.constraints);
+    const now = this.now();
+    const sessionOnly = input.sessionOnly === true;
+    const fields = {
+      label: (input.label ?? this.deviceClient(tx, clientId).name).slice(0, 100),
+      constraints: JSON.stringify(input.constraints),
+      expiresAt:
+        sessionOnly || input.expiresInDays === undefined
+          ? null
+          : now + input.expiresInDays * DAY_MS,
+      idleTimeoutMs: sessionOnly ? SESSION_ONLY_IDLE_MS : null,
+    };
+    const current = this.oauthRow(tx, actor.userId, clientId);
+    const live = this.liveOAuth(current, now) ? current : undefined;
+    if (live !== undefined) {
+      const update = {
+        ...fields,
+        scopes: minimalScopes([...input.scopes, ...parseScopes(live.scopes)]).join(' '),
+        updatedAt: now,
+      };
+      tx.update(accessGrant).set(update).where(eq(accessGrant.id, live.id)).run();
+      // The browser flow's consent forgets what the grant does not cover.
+      this.syncConsentScopes(tx, live.id, parseScopes(update.scopes));
+      this.emitGrants(tx, actor.userId, live.id, [live.id]);
+      return { ...live, ...update };
+    }
+    if (current !== undefined) {
+      // Expired or idle but never revoked: it gives way (one live grant per user and app).
+      tx.update(accessGrant)
+        .set({ revokedAt: now, updatedAt: now })
+        .where(eq(accessGrant.id, current.id))
+        .run();
+      deleteGrantArtifacts(tx, [current.id]);
+    }
+    deleteStaleConsents(tx, actor.userId, clientId, '');
+    const grant = this.insertGrant(tx, {
+      userId: actor.userId,
+      kind: 'oauth',
+      clientId,
+      label: fields.label,
+      scopes: input.scopes,
+      constraints: input.constraints,
+      expiresInDays: sessionOnly ? undefined : input.expiresInDays,
+      idleTimeoutMs: fields.idleTimeoutMs,
+    });
+    this.emitGrants(tx, actor.userId, grant.id);
+    return grant;
+  }
+
+  /** Approves the code for `grant` if it is still pending (compare-and-swap); else `404`. */
+  private markApproved(
+    tx: Tx,
+    actor: Actor,
+    row: DeviceRow,
+    grant: Pick<GrantRow, 'id' | 'scopes'>,
+  ) {
+    const result = tx
+      .update(deviceCode)
+      .set({
+        status: 'approved',
+        userId: actor.userId,
+        grantId: grant.id,
+        // The legacy token response echoes it, so the CLI learns what was approved.
+        scope: grant.scopes,
+      })
+      .where(
+        and(
+          eq(deviceCode.id, row.id),
+          eq(deviceCode.status, 'pending'),
+          or(isNull(deviceCode.userId), eq(deviceCode.userId, actor.userId)),
+        ),
+      )
+      .run();
+    if (result.changes !== 1) throw deviceNotFound();
+  }
+
+  /**
+   * The security notice of a device-grant approval (11 §9.4): in-app and by email, never
+   * pushed, not in the preference matrix. Addressed to the user's personal org.
+   */
+  private notifyDeviceConnected(
+    tx: Tx,
+    userId: string,
+    row: DeviceRow,
+    grant: GrantRow,
+    app: boolean,
+  ): void {
+    const personal = tx
+      .select({ id: organization.id })
+      .from(member)
+      .innerJoin(organization, eq(organization.id, member.organizationId))
+      .where(
+        and(
+          eq(member.userId, userId),
+          eq(organization.isPersonal, true),
+          isNull(organization.deletedAt),
+        ),
+      )
+      .get();
+    if (personal === undefined) {
+      this.deps.logger.warn('device_connected: the user has no personal org');
+      return;
+    }
+    const client = app ? this.deviceClient(tx, row.oauthClientId as string) : null;
+    this.notify(tx, [
+      {
+        userId,
+        orgId: personal.id,
+        type: 'device_connected',
+        taskId: null,
+        actorId: null,
+        data: {
+          grantId: grant.id,
+          clientName: client?.name ?? grant.label,
+          ...(client === null ? {} : { clientHost: client.domain }),
+          ...(row.requestIp === null ? {} : { ip: row.requestIp }),
+        },
+      },
+    ]);
+  }
+
+  /** POST /device/:userCode/deny: the device's next poll gets `access_denied`. */
   denyDevice(actor: Actor, userCode: string, input: DeviceDeny): void {
     requireBrowserSession(actor);
     immediate(this.deps.db, (tx) => {
       const row = this.pendingDevice(tx, actor, userCode);
       this.requireDeviceNonce(actor, row.id, input.decisionNonce);
-      tx.update(deviceCode)
+      const result = tx
+        .update(deviceCode)
         .set({ status: 'denied', userId: actor.userId })
-        .where(eq(deviceCode.id, row.id))
+        .where(and(eq(deviceCode.id, row.id), eq(deviceCode.status, 'pending')))
         .run();
+      if (result.changes !== 1) throw deviceNotFound();
     });
+  }
+
+  // --- the device side of the device grant (11 §9.2) -------------------------------------------
+
+  /**
+   * A new device authorization request through the OAuth device grant, for a client the
+   * caller (auth/device-grant.ts) has already identified and checked against the operator's
+   * switch: stores it with both codes hashed and returns the codes in the clear, once.
+   */
+  createDeviceRequest(input: {
+    clientId: string;
+    scope: string | undefined;
+    resource: string;
+    requestIp: string | null;
+    userAgent: string | null;
+    pollingIntervalMs?: number;
+  }): { deviceCode: string; userCode: string } {
+    const now = this.now();
+    for (let attempt = 0; ; attempt += 1) {
+      const codes = { deviceCode: generateDeviceCode(), userCode: generateUserCode() };
+      try {
+        this.deps.db.orm
+          .insert(deviceCode)
+          .values({
+            id: uuidv7(),
+            deviceCode: hashDeviceSecret(codes.deviceCode),
+            userCode: userCodeHash(codes.userCode),
+            userId: null,
+            expiresAt: new Date(now + DEVICE_CODE_TTL_MS),
+            status: 'pending',
+            pollingInterval: input.pollingIntervalMs ?? DEVICE_POLL_INTERVAL_MS,
+            clientId: input.clientId,
+            oauthClientId: input.clientId,
+            scope: input.scope ?? null,
+            resource: input.resource,
+            requestIp: input.requestIp,
+            userAgent: input.userAgent,
+            createdAt: new Date(now),
+          })
+          .run();
+        return codes;
+      } catch (error) {
+        // A user code collision (40 bits) is retried with fresh codes.
+        if (
+          attempt >= 2 ||
+          !/UNIQUE/i.test(String((error as { cause?: unknown }).cause ?? error))
+        ) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  /**
+   * The legacy CLI flow's request just stored by better-auth's plugin in the clear: its codes
+   * are replaced by their hashes before they leave the server, and the request's IP and time
+   * recorded for `/device`. False when the row is not there (the answer must then not be sent).
+   */
+  sealLegacyDeviceRequest(plainDeviceCode: string, plainUserCode: string, ip: string | null) {
+    const result = this.deps.db.orm
+      .update(deviceCode)
+      .set({
+        deviceCode: hashDeviceSecret(plainDeviceCode),
+        userCode: userCodeHash(plainUserCode),
+        requestIp: ip,
+        createdAt: new Date(this.now()),
+      })
+      .where(
+        and(
+          eq(deviceCode.deviceCode, plainDeviceCode),
+          isNull(deviceCode.oauthClientId),
+          eq(deviceCode.status, 'pending'),
+        ),
+      )
+      .run();
+    return result.changes === 1;
+  }
+
+  /**
+   * The grant an approved device-grant code redeems for, when it is still live and is what the
+   * approval created: a `rooster-cli` login bound to the code's resource, or the user's live
+   * `oauth` grant for the code's client. Null otherwise (the token request is refused).
+   */
+  deviceCodeGrant(code: {
+    grantId?: unknown;
+    userId?: unknown;
+    oauthClientId?: unknown;
+    resource?: unknown;
+  }): string | null {
+    if (typeof code.grantId !== 'string' || typeof code.oauthClientId !== 'string') return null;
+    const row = this.deps.db.orm
+      .select()
+      .from(accessGrant)
+      .where(eq(accessGrant.id, code.grantId))
+      .get();
+    const now = this.now();
+    if (!this.live(row, now) || row.userId !== code.userId) return null;
+    if (row.clientId !== code.oauthClientId) return null;
+    if (code.oauthClientId === CLI_CLIENT_ID) {
+      return row.kind === 'device' &&
+        typeof code.resource === 'string' &&
+        row.audience === resourceOf(this.deps.config, code.resource)
+        ? row.id
+        : null;
+    }
+    return this.liveOAuth(row, now) ? row.id : null;
+  }
+
+  /**
+   * `POST /api/auth/oauth2/token` with the device grant, before the provider redeems the code:
+   * an approved code must still carry a live grant (`deviceCodeGrant`). Codes that are unknown
+   * or not yet approved are the grant handler's to answer (pending, slow down, denied, expired).
+   */
+  checkDeviceToken(plainDeviceCode: string): OAuthTokenCheck {
+    const row = this.deps.db.orm
+      .select()
+      .from(deviceCode)
+      .where(eq(deviceCode.deviceCode, hashDeviceSecret(plainDeviceCode)))
+      .get();
+    if (row === undefined || row.status !== 'approved' || !isOAuthDevice(row)) {
+      return { ok: true, grantId: null };
+    }
+    const grantId = this.deviceCodeGrant(row);
+    return grantId === null
+      ? { ok: false, description: 'The approval was revoked; start again.' }
+      : { ok: true, grantId };
+  }
+
+  /**
+   * RFC 7009 revocation of a `rooster-cli` refresh token (`rooster logout`, 11 §9.6): the login
+   * is one grant per refresh chain, so the grant ends with it. Returns the grant to end once the
+   * provider has accepted the revocation, or null when the token is not such a login's.
+   */
+  cliLoginOfRefreshToken(refreshToken: string, clientId: string | undefined): string | null {
+    if (clientId !== CLI_CLIENT_ID || !refreshToken.startsWith(OAUTH_REFRESH_PREFIX)) return null;
+    const hash = hashOAuthToken(refreshToken.slice(OAUTH_REFRESH_PREFIX.length));
+    const token = this.deps.db.orm
+      .select()
+      .from(oauthRefreshToken)
+      .where(eq(oauthRefreshToken.token, hash))
+      .get();
+    if (token === undefined || token.clientId !== CLI_CLIENT_ID || token.referenceId === null) {
+      return null;
+    }
+    const grant = this.deps.db.orm
+      .select()
+      .from(accessGrant)
+      .where(eq(accessGrant.id, token.referenceId))
+      .get();
+    return grant !== undefined && grant.kind === 'device' && grant.userId === token.userId
+      ? grant.id
+      : null;
+  }
+
+  /** Ends a `rooster-cli` login whose refresh token was revoked (`cliLoginOfRefreshToken`). */
+  endCliLogin(grantId: string): void {
+    const grant = this.deps.db.orm
+      .select()
+      .from(accessGrant)
+      .where(eq(accessGrant.id, grantId))
+      .get();
+    this.revokeOAuthGrant(grant, grantId);
   }
 
   // --- OAuth consent (11 §3.1, ADR 0041, ADR 0042 §4) ------------------------------------------

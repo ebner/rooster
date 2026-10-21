@@ -20,6 +20,7 @@ import {
   user,
 } from '../src/db/schema/index.ts';
 import { randomToken } from '../src/lib/tokens.ts';
+import { userCodeHash } from '../src/services/device-codes.ts';
 import { OAUTH_ACCESS_PREFIX } from '../src/services/grant-service.ts';
 import type { Actor } from '../src/services/index.ts';
 import { hashOAuthToken } from '../src/services/oauth-grants.ts';
@@ -897,7 +898,7 @@ async function fixture(): Promise<Fixture> {
     .values({
       id: uuidv7(),
       deviceCode: randomToken(),
-      userCode,
+      userCode: userCodeHash(userCode),
       expiresAt: new Date(now + 600_000),
       status: 'pending',
       pollingInterval: 5000,

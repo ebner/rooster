@@ -24,6 +24,8 @@ export interface DeliverableNotification {
   dueTo?: { dueDate: string | null; dueTime: string | null } | null | undefined;
   /** P10 reminder: the task's due unit when it fired, and whether it fired late. */
   reminder?: { due: ReminderDueSnapshot | null; late: boolean } | undefined;
+  /** Phase 12 device_connected (11 §9.4): the client's name and the request IP. */
+  device?: { clientName: string; ip: string | null } | undefined;
   createdAt: number;
 }
 
@@ -37,8 +39,31 @@ export interface DescribedNotification {
   quote?: string;
   /** P10 reminder: the due moment in words ("Due today 14:00"), plus a delay note. */
   when?: string;
-  /** Same-origin path: the task in its org, or the inbox. */
+  /** Same-origin path: the task in its org, the inbox, or Connected apps. */
   path: string;
+  /** The button's label when it is not "Open task" or "Open inbox". */
+  action?: string;
+}
+
+/** Where Connected apps lives in the web app (Settings → Security, 11 §3.2). */
+export const CONNECTED_APPS_PATH = '/settings/security#connected-apps';
+
+/**
+ * The security notice of a device-grant approval (11 §9.4): who was connected from where, and
+ * where to revoke it.
+ */
+function describeDeviceConnected(n: DeliverableNotification, t: MailT): DescribedNotification {
+  const client = n.device?.clientName || t('someone');
+  const ip = n.device?.ip ?? null;
+  return {
+    event:
+      ip === null
+        ? t('event.device_connected_unknown_ip', { client })
+        : t('event.device_connected', { client, ip }),
+    subject: t('device.subject'),
+    path: CONNECTED_APPS_PATH,
+    action: t('action.reviewApps'),
+  };
 }
 
 /**
@@ -97,6 +122,7 @@ export function describeNotification(
   now: number,
 ): DescribedNotification {
   if (n.type === 'reminder') return describeReminder(n, recipient, t, now);
+  if (n.type === 'device_connected') return describeDeviceConnected(n, t);
   const actor = n.actorName === null || n.actorName === '' ? t('someone') : n.actorName;
   let event: string;
   if (n.type === 'due_changed') {

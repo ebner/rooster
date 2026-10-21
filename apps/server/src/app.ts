@@ -79,6 +79,11 @@ export interface AppDeps {
   transports?: DeliveryTransports;
   /** P9: the Client ID Metadata Document transport (default: the guarded fetch); tests inject one. */
   cimdFetch?: AuthDeps['cimdFetch'];
+  /**
+   * Phase 12: the OAuth device grant's polling interval in seconds (default 5, 11 §9.2). A test
+   * seam only, so device logins in tests need not wait; `slow_down` still adds 5 s.
+   */
+  deviceIntervalSec?: number;
 }
 
 export const OPENAPI_PATH = '/api/v1/openapi.json';
@@ -136,6 +141,7 @@ export function createApp(deps: AppDeps): App {
     services,
     clock,
     rateLimit: deps.authRateLimit,
+    ...(deps.deviceIntervalSec === undefined ? {} : { deviceIntervalSec: deps.deviceIntervalSec }),
     cimdFetch: deps.cimdFetch,
   });
   const app = new OpenAPIHono<AppEnv>({ defaultHook: validationHook });
@@ -170,7 +176,7 @@ export function createApp(deps: AppDeps): App {
   app.use('/api/v1/*', idempotencyMiddleware(services.idempotency));
 
   registerHealthRoutes(app, { db, migrationsDir: deps.migrationsDir });
-  registerAuthRoutes(app, { auth, config, services });
+  registerAuthRoutes(app, { auth, config, services, clock });
   registerMetaRoutes(app, {
     config,
     version,

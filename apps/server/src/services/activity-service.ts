@@ -45,14 +45,14 @@ export function viaOf(client: string | null | undefined): ActivityVia {
 }
 
 /**
- * `via` of a write: a PAT is `pat`; an OAuth app is `mcp` through the remote MCP endpoint and
+ * `via` of a write: a PAT is `pat`, an MCP token (11 §9.7) `mcp`; an OAuth app is `mcp` through the remote MCP endpoint and
  * `oauth` on `/api/v1` (by the resource its token is bound to, 11 §2.3); a CLI device is the
  * kind it names in `X-Rooster-Client` (`cli`, `tui`, `mcp`), else `cli`; the browser session as
  * `viaOf`.
  */
 export function viaFor(actor: Actor, meta: { client: string | null } | undefined): ActivityVia {
   if (actor.grant === null) return viaOf(meta?.client);
-  if (actor.grant.kind === 'pat') return 'pat';
+  if (actor.grant.kind === 'pat') return actor.grant.resource === 'mcp' ? 'mcp' : 'pat';
   if (actor.grant.kind === 'oauth') return actor.grant.resource === 'mcp' ? 'mcp' : 'oauth';
   const via = viaOf(meta?.client);
   return via === 'web' || via === 'pwa' ? 'cli' : via;

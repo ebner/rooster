@@ -129,6 +129,12 @@ export const oauthRefreshToken = sqliteTable(
     authTime: integer('auth_time', { mode: 'timestamp_ms' }),
     confirmation: text('confirmation'),
     scopes: text('scopes').notNull(),
+    /**
+     * rooster's (Phase 12, the refresh grace): the refresh token this one was rotated into, and
+     * when this one used its single redemption within the grace window after that rotation.
+     */
+    successorId: text('successor_id'),
+    graceUsedAt: integer('grace_used_at', { mode: 'timestamp_ms' }),
   },
   (t) => [
     uniqueIndex('oauth_refresh_token_token').on(t.token),

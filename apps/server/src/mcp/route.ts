@@ -1,3 +1,4 @@
+import { defaultKeyHasher } from '@better-auth/api-key';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import { createMcpHandler, SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/server';
 import { ALL_GRANT_SCOPES, type GrantScope } from '@rooster/core/grants';
@@ -13,6 +14,7 @@ import { logSafeError } from '../lib/log-safe-error.ts';
 import { type RateLimitOptions, SlidingWindowLimiter } from '../lib/rate-limit.ts';
 import type { P9RouteDeps } from '../routes/p9-deps.ts';
 import type { Actor } from '../services/context.ts';
+import { PAT_PREFIX } from '../services/grant-service.ts';
 import {
   MCP_BASE_SCOPE,
   MCP_PATH,
@@ -127,9 +129,11 @@ function setMetadataHeaders(c: Context<AppEnv>): void {
  *   stateless server has no standalone SSE stream and no session to end.
  * - `Origin`, when present, must be `ROOSTER_BASE_URL`'s origin (DNS rebinding, MCP transport
  *   security); non-browser clients send none.
- * - Auth is an OAuth access token bound to the `mcp` resource, from `Authorization` only. No
- *   token or an invalid one: `401` with the RFC 9728 challenge. A `tools/call` beyond the
- *   grant's scopes: `403 insufficient_scope` naming every scope it needs, before the SDK runs.
+ * - Auth is an OAuth access token bound to the `mcp` resource, or (Phase 12, 11 §9.7) an MCP
+ *   token (a PAT with audience `mcp`), from `Authorization` only. No token or an invalid one:
+ *   `401` with the RFC 9728 challenge. A `tools/call` beyond the grant's scopes: `403
+ *   insufficient_scope` naming every scope it needs, before the SDK runs; an MCP token cannot
+ *   be stepped up, so its answer says to widen it in Settings → Connected apps.
  * - 120 tool calls per grant and minute (`429` with `Retry-After`).
  * - Tools run against the REST API in-process with the resolved actor; the token never leaves
  *   this handler, and the SDK never sees it.
@@ -194,17 +198,22 @@ export function registerMcpRoutes(app: OpenAPIHono<AppEnv>, deps: P9RouteDeps): 
         c,
         401,
         RPC_SERVER_ERROR,
-        'Unauthorized: an OAuth access token is required.',
+        'Unauthorized: an OAuth access token or an MCP token is required.',
         null,
         {
           'WWW-Authenticate': mcpChallenge(config, { scope: [MCP_BASE_SCOPE] }),
         },
       );
     }
-    const resolve = () =>
-      token.length > MAX_TOKEN_LENGTH
-        ? Promise.resolve(null)
-        : resolveOAuthBearer(services, token, 'mcp', clientIp(c, config));
+    const ip = clientIp(c, config);
+    const resolve = async (): Promise<Actor | null> => {
+      if (token.length > MAX_TOKEN_LENGTH) return null;
+      // An MCP token: a PAT whose audience is `mcp` (an API token is unknown here).
+      if (token.startsWith(PAT_PREFIX)) {
+        return services.grants.resolvePat(await defaultKeyHasher(token), ip, 'mcp');
+      }
+      return resolveOAuthBearer(services, token, 'mcp', ip);
+    };
     const early = await resolve();
     if (early?.grant == null) {
       return rpcResponse(
@@ -292,11 +301,14 @@ export function registerMcpRoutes(app: OpenAPIHono<AppEnv>, deps: P9RouteDeps): 
       if (!coversScopes(grant.scopes, scopes)) missing = true;
     }
     if (missing) {
-      return rpcResponse(c, 403, RPC_SERVER_ERROR, 'Forbidden: insufficient scope.', echoId(body), {
-        'WWW-Authenticate': mcpChallenge(config, {
-          error: 'insufficient_scope',
-          scope: orderedScopes(needed),
-        }),
+      const scopes = orderedScopes(needed);
+      // An MCP token is fixed: no authorization request can widen it (11 §9.7).
+      const message =
+        actor.via === 'pat'
+          ? `Forbidden: insufficient scope. This MCP token needs ${scopes.join(', ')}; give it more access in rooster under Settings → Connected apps, or create a new token.`
+          : 'Forbidden: insufficient scope.';
+      return rpcResponse(c, 403, RPC_SERVER_ERROR, message, echoId(body), {
+        'WWW-Authenticate': mcpChallenge(config, { error: 'insufficient_scope', scope: scopes }),
       });
     }
 

@@ -155,7 +155,7 @@ describe('index maintenance (every task write path)', () => {
     );
     ctx.db.sqlite
       .prepare(
-        'DELETE FROM __drizzle_migrations WHERE created_at IN (SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 12)',
+        'DELETE FROM __drizzle_migrations WHERE created_at IN (SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 13)',
       )
       .run();
     runMigrations(ctx.db);

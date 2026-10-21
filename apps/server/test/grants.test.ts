@@ -46,7 +46,7 @@ describe('PATs (AC-8.3, 04 §4.4)', () => {
     const { token, grant } = await pat(owner, ['tasks:read']);
     const row = ctx.db.orm.select().from(apikey).get();
     expect(row?.key).toBe(await defaultKeyHasher(token));
-    expect(JSON.parse(row?.metadata ?? '{}')).toEqual({ grantId: grant.id });
+    expect(JSON.parse(row?.metadata ?? '{}')).toEqual({ audience: 'api', grantId: grant.id });
     const verified = await ctx.app.auth.api.verifyApiKey({ body: { key: token } });
     expect(verified.valid).toBe(true);
   });
@@ -699,6 +699,7 @@ describe('SSE with a grant', () => {
     const actor = ctx.app.services.grants.resolvePat(
       ctx.db.orm.select().from(apikey).get()?.key ?? '',
       null,
+      'api',
     );
     expect(actor?.grant?.id).toBe(grant.id);
     const access = ctx.app.services.grants.streamAccess(actor ?? owner.actor);
@@ -833,7 +834,11 @@ describe('notifications under a grant', () => {
       (await api.ok<{ unreadCount: number }>('POST', '/api/v1/notifications/read', { all: true }))
         .unreadCount,
     ).toBe(0);
-    const actor = ctx.app.services.grants.resolvePat(await defaultKeyHasher(created.token), null);
+    const actor = ctx.app.services.grants.resolvePat(
+      await defaultKeyHasher(created.token),
+      null,
+      'api',
+    );
     const access = ctx.app.services.grants.streamAccess(actor ?? owner.actor);
     const preview = (org: string) => ({
       unreadCount: 7,

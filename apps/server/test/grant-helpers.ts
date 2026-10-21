@@ -129,7 +129,7 @@ export async function deviceLogin(
 
 /** The actor a PAT resolves to. */
 export async function actorOf(ctx: ListCtx, token: string) {
-  const actor = ctx.app.services.grants.resolvePat(await defaultKeyHasher(token), null);
+  const actor = ctx.app.services.grants.resolvePat(await defaultKeyHasher(token), null, 'api');
   if (actor === null) throw new Error('no actor');
   return actor;
 }
