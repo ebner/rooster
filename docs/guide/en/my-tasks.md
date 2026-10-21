@@ -58,7 +58,7 @@ The pane shows one task in full: assignee, due date, repeat, reminders, group, t
 ![The detail pane with description, subtasks and comments](../../screenshots/task-pane.desktop.light.png)
 
 - **Open it:** click the row (not the title), press **O** (focus moves into the pane), **Space** (peek: the pane opens and focus stays in the list) or **Tab+Enter** (edit the pane's title).
-- While it is open, ↑ and ↓ in the list change which task it shows.
+- While it is open, ↑ and ↓ in the list change which task it shows. A task you add while it is open shows in the pane as soon as you press Enter, so you can go on with its description (click it, or press Tab+R).
 - **Description:** a rich editor that stores Markdown. Markdown shortcuts work as you type (`# `, `- `, `[] `, `**bold**`). Select text for a small formatting toolbar. **Ctrl+click** (⌘+click) opens a link; a plain click lets you edit its text. On a phone or tablet, tap a link to see its address: tap the address to open it, or edit or remove the link. Long descriptions fold after about 12 lines behind **Show more**. Tab+R jumps into the description.
 - **Toolbar:** **Mark complete**, **Copy link**, **Duplicate**, **Full screen** (Tab+X) and **More actions** (Delete task, Copy task ID, Open in new tab, Move to group).
 - Esc returns to the list; Esc again closes the pane. Each task has its own link, so you can bookmark or share it.

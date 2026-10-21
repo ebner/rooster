@@ -2,6 +2,11 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
+## Unreleased
+
+- **Nya uppgifter öppnas i detaljpanelen.** När panelen är öppen visas en uppgift du lägger till där så fort du trycker på Enter, så att du direkt kan skriva beskrivningen.
+- **Ta bort ett förfallodatum med ett klick.** Ett **×** bredvid förfallodatumet i detaljpanelen tar bort det.
+
 ## 1.7.2
 
 _2026-10-19_

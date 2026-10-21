@@ -107,6 +107,11 @@ export interface ListUiState {
    * its blur neither commits nor discards the draft (02 §13.3).
    */
   suspendedEdit: string | null;
+  /**
+   * The task just created from a draft of this list, for an open pane to switch to (02 §3.3).
+   * The row keeps the draft's id, so the cursor alone never shows the change.
+   */
+  created: string | null;
 }
 
 export interface ListUiActions {
@@ -166,6 +171,7 @@ const initial = (): ListUiState => ({
   tagFilter: [],
   selectionMode: false,
   suspendedEdit: null,
+  created: null,
 });
 
 let editSeq = 0;

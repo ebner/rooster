@@ -32,6 +32,9 @@
     "suggestions": "Föreslagna tider",
     "remove": "Ta bort tid"
   },
+  "dueDate": {
+    "remove": "Ta bort förfallodatum"
+  },
   "startDate": {
     "add": "Startdatum",
     "label": "Startdatum",

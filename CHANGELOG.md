@@ -6,6 +6,15 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+- An × next to the due date in the detail pane (desktop and the phone sheet) clears it like "No date" (ADR 0064).
+
+### Changed
+- A task created while the detail pane is open takes the pane as soon as its title is committed. Before, the pane kept showing the previous task until another row was selected. From the empty row Enter leaves below, O, Tab+Enter and Tab+R act on the new task (ADR 0064).
+
+### Migrations
+- None.
+
 ## [1.7.2] - 2026-10-19
 
 ### Fixed

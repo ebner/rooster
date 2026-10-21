@@ -545,6 +545,17 @@ export function MyListView({
     }
   }, [cursor, selectedCount, controller]);
 
+  // A task created while the pane is open takes the pane, so its details can be added at once.
+  // Its row keeps the draft's id: the cursor effect above never sees it become a task.
+  const created = useListStore((s) => s.created);
+  useEffect(() => {
+    if (!created) return;
+    useListStore.getState().set({ created: null });
+    const p = paneRef.current;
+    if (!p?.taskId() || selectedIds(useListStore.getState()).length > 1) return;
+    if (controller.task(created) && p.taskId() !== created) p.open(created, null);
+  }, [created, controller]);
+
   // A different org or view starts with a clean slate (drafts and selection are per list).
   useEffect(() => {
     useListStore.getState().set({
@@ -557,6 +568,7 @@ export function MyListView({
       popover: null,
       hiding: {},
       selectionMode: false,
+      created: null,
     });
   }, [orgId, view, everyone]);
 
@@ -592,9 +604,13 @@ export function MyListView({
   };
 
   const openPane = (focus: PaneFocusTarget | null) => {
-    const row = cursorTask();
-    if (!row || !pane) return false;
-    pane.open(row.id, focus);
+    if (!pane) return false;
+    // On a new row without a title yet (Enter just created the task above it), the keys reach
+    // the task the open pane shows: the new task's description can be written right away.
+    const row = controller.cursorRow();
+    const id = cursorTask()?.id ?? (row?.kind === 'task' && row.draft ? pane.taskId() : null);
+    if (!id) return false;
+    pane.open(id, focus);
   };
   /** Tab+A / A (02 §6): the assignee picker on the selection; shared orgs only. */
   const openAssign = () => {

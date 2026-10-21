@@ -417,6 +417,7 @@ function PaneContent({
   );
   const removeReminder = (reminder: Parameters<ListController['removeReminder']>[1]) =>
     controller.removeReminder(taskId, reminder);
+  const clearDue = () => controller.setDue([taskId], null);
 
   useKeymapHandlers(
     inPane({
@@ -689,6 +690,7 @@ function PaneContent({
                   <span className="text-text-muted">{tDates('cell.set')}</span>
                 )}
               </PropButton>
+              {task.dueDate && <RemoveDue onPress={clearDue} />}
             </MobileProp>
             <MobileProp label={t('props.reminders')}>
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 py-2">
@@ -791,6 +793,7 @@ function PaneContent({
                   renderReminders={renderReminders}
                   showReminders={(detail.data?.reminders?.length ?? 0) > 0}
                 />
+                {task.dueDate && <RemoveDue onPress={clearDue} />}
               </div>
               {/* 02 §7 (P10): the viewer's reminders, under the due date. */}
               <fieldset
@@ -1082,6 +1085,20 @@ function PaneContent({
 }
 
 /** A 48 px property row of the phone sheet (02 §13.4): label column, then the value. */
+/** The X next to a due date: clears it like the picker's "No date" (start date and repeat too). */
+function RemoveDue({ onPress }: { onPress: () => void }) {
+  const { t } = useTranslation('dates');
+  return (
+    <IconButton
+      size="sm"
+      icon={X}
+      aria-label={t('dueDate.remove')}
+      onPress={onPress}
+      data-testid="pane-remove-due"
+    />
+  );
+}
+
 function MobileProp({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex min-h-property-row-mobile items-center gap-3 border-b border-border last:border-b-0">

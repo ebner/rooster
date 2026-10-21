@@ -712,6 +712,7 @@ export class ListController {
     if (draft) {
       if (parsed.title === '') return {};
       this.createFromDraft(draft, [parsed]);
+      this.store().set({ created: draft.id });
       return {};
     }
     const task = this.task(rowId);

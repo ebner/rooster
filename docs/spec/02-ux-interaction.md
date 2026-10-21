@@ -83,7 +83,7 @@ This document defines **exact behaviour**. Visual styling (sizes, colours, type)
 | **Navigate** | a row is *selected* (highlighted background, no caret) | Esc from Edit; click on the row padding, checkbox gutter or date gap; ↑/↓ after Esc | Enter, F2 or I starts Edit (caret at the end). Other printable keys are shortcuts or ignored (§6). |
 | **Edit** | caret in the title input of a row | click on the title text; Enter, F2 or `I` in Navigate; creating a new task | Esc (commit, then Navigate); click outside (commit); ↑/↓ moves the caret to the adjacent row (stays in Edit) |
 
-The pane (if open) always shows the **selected** row (D-29). Moving the selection with the pane open updates the pane without a route push: the URL is updated with `replace`.
+The pane (if open) always shows the **selected** row (D-29). Moving the selection with the pane open updates the pane without a route push: the URL is updated with `replace`. A task created while the pane is open takes the pane as soon as its title is committed; from the empty draft that Enter leaves below it, O, Tab+Enter and Tab+R act on that task (ADR 0064).
 
 ### 3.3 Selection & multi-select
 
@@ -274,6 +274,7 @@ The **cheat sheet** (`?`) is generated from the same keymap registry that dispat
   - Exception: when the Time or Start date sub-mode is active, the popover stays open until Enter or a click outside.
   - Esc closes without changes.
 - **Clearing:** the "No date" chip, or Backspace/Delete on a **focused date cell** (with undo). See "Focus wins" in §6. Clearing the date also pauses relative reminders (FR-REM-2); the undo toast says so, and undo restores the date and with it the reminders.
+- **Detail pane:** an X next to the due date clears it like "No date" (ADR 0064).
 - **Detail pane (P10):** a "Reminders" line under the due date lists the user's reminders with their resolved times and an "Add reminder" button that opens the same reminder section.
 - **Phone (P10):** the date sheet has the same reminder section, below the calendar.
 

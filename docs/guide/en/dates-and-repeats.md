@@ -40,7 +40,7 @@ Choosing a date closes the picker straight away. Below the calendar:
 
 While Time or Start date is open, the picker stays open until you press Enter or click outside. Esc closes it without changes.
 
-**To clear a date**, choose **No date**, or select the date cell and press Backspace or Delete. Undo puts it back.
+**To clear a date**, choose **No date**, select the date cell and press Backspace or Delete, or click the **×** next to the date in the detail pane. Undo puts it back.
 
 ## Typing dates in a title
 

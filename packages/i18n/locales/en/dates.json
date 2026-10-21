@@ -32,6 +32,9 @@
     "suggestions": "Suggested times",
     "remove": "Remove time"
   },
+  "dueDate": {
+    "remove": "Remove due date"
+  },
   "startDate": {
     "add": "Start date",
     "label": "Start date",

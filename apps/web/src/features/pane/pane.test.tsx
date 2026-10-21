@@ -200,6 +200,64 @@ describe('detail pane (02 §9)', () => {
   });
 });
 
+describe('the pane and new tasks (ADR 0064)', () => {
+  test('a task created while the pane is open takes the pane; Tab+R writes its description', async () => {
+    const { sent } = await setup();
+    fireEvent.click(rowOf('Alpha'));
+    await waitFor(() => expect(screen.getByTestId('pane-title')).toHaveProperty('value', 'Alpha'));
+    await waitFor(() => expect(document.activeElement).toBe(titleOf('Alpha')));
+    press('Enter');
+    press('Enter');
+    type('Gamma');
+    press('Enter');
+    await waitFor(() => expect(screen.getByTestId('pane-title')).toHaveProperty('value', 'Gamma'));
+    const create = sent.find((op) => op.kind === 'task.create');
+    expect(create?.payload).toMatchObject({ title: 'Gamma' });
+    // The caret waits in the next, empty row; Tab+R still reaches the new task's description.
+    const draft = activeInput();
+    fireEvent.keyDown(draft, { key: 'Tab' });
+    fireEvent.keyDown(draft, { key: 'r' });
+    fireEvent.keyUp(draft, { key: 'Tab' });
+    await waitFor(() =>
+      expect(screen.getByTestId('description-field').contains(document.activeElement)).toBe(true),
+    );
+    expect(screen.getByTestId('pane-title')).toHaveProperty('value', 'Gamma');
+  });
+
+  test('Esc after typing a new title also moves the pane to the new task', async () => {
+    await setup();
+    fireEvent.click(rowOf('Beta'));
+    await waitFor(() => expect(screen.getByTestId('pane-title')).toHaveProperty('value', 'Beta'));
+    await waitFor(() => expect(document.activeElement).toBe(titleOf('Beta')));
+    press('Enter');
+    press('Enter');
+    type('Delta');
+    press('Escape');
+    await waitFor(() => expect(screen.getByTestId('pane-title')).toHaveProperty('value', 'Delta'));
+  });
+
+  test('the X next to the due date clears it like "No date"', async () => {
+    const today = todayIn(fixtureMe.user.timezone, Date.now());
+    const { sent } = await setup({
+      timezone: fixtureMe.user.timezone,
+      tasks: { 1: [{ title: 'Dated', dueDate: today }] },
+    });
+    fireEvent.click(rowOf('Dated'));
+    await screen.findByTestId('pane-title');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove due date' }));
+    await waitFor(() => expect(sent.some((op) => op.kind === 'task.patch')).toBe(true));
+    expect(sent.find((op) => op.kind === 'task.patch')?.payload).toMatchObject({
+      dueDate: null,
+      dueTime: null,
+      startDate: null,
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Remove due date' })).toBeNull(),
+    );
+    expect(useUndoStore.getState().undo.length).toBeGreaterThan(0);
+  });
+});
+
 describe('subtasks in the list (02 §3.1)', () => {
   test('Enter in an expanded subtask creates a sibling subtask, and → / ← walk the tree', async () => {
     const { sent, transport } = await setup({

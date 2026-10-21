@@ -40,7 +40,7 @@ När du väljer ett datum stängs väljaren direkt. Under kalendern finns:
 
 Så länge Tid eller Startdatum är öppet stannar väljaren kvar tills du trycker på Enter eller klickar utanför. Esc stänger utan att ändra något.
 
-**För att ta bort ett datum** väljer du **Inget datum**, eller markerar datumcellen och trycker på backsteg eller Delete. Ångra lägger tillbaka det.
+**För att ta bort ett datum** väljer du **Inget datum**, markerar datumcellen och trycker på backsteg eller Delete, eller klickar på **×** bredvid datumet i detaljpanelen. Ångra lägger tillbaka det.
 
 ## Skriva datum i uppgiftens namn
 
