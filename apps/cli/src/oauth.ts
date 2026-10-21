@@ -158,7 +158,21 @@ async function post(
       body: new URLSearchParams(params).toString(),
     }),
   );
-  const data = (await response.json().catch(() => ({}))) as unknown;
+  let text: string;
+  try {
+    text = await response.text();
+  } catch {
+    // The headers arrived but the body didn't (the connection closed, the timeout hit): the
+    // server may have acted (a rotated refresh token), so this is a lost answer, exit 6 like
+    // any network failure, never a malformed one (`isLostRefresh`).
+    throw new CliError(EXIT.network, t('error.network', { server }));
+  }
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = {};
+  }
   return {
     status: response.status,
     data:

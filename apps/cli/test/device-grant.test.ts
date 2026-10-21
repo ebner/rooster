@@ -172,7 +172,7 @@ describe('AC-12.4 rooster login on the device grant', () => {
   }, 60_000);
 
   it('a refresh whose answer was lost is sent again at once and stores the second pair', async () => {
-    for (const lostAs of ['network', 'status'] as const) {
+    for (const lostAs of ['network', 'status', 'body'] as const) {
       const oauth = fakeOAuth({ loginExpiresIn: 30, loseRefreshResponses: 1, lostAs });
       const sleeps: number[] = [];
       cli = cliHarness(

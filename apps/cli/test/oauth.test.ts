@@ -7,6 +7,7 @@ import {
   formatUserCode,
   GrantEndedError,
   isLoopbackHost,
+  isLostRefresh,
   pollDeviceToken,
   refreshTokens,
   revokeToken,
@@ -285,6 +286,37 @@ describe('refresh and revocation', () => {
     const down = scripted([new Response('', { status: 502 })]);
     expect(
       (await failure(refreshTokens(down.send, SERVER, 'rooster_rt_1', RESOURCE, () => 0))).exitCode,
+    ).toBe(EXIT.network);
+  });
+
+  it('a body cut off after a 200 is a lost answer (exit 6, retried), never a malformed one', async () => {
+    const cut = () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"access_token":'));
+            controller.error(new TypeError('terminated'));
+          },
+        }),
+        { status: 200 },
+      );
+    const refresh = scripted([cut]);
+    const error = await failure(
+      refreshTokens(refresh.send, SERVER, 'rooster_rt_1', RESOURCE, () => 0),
+    );
+    expect(error.exitCode).toBe(EXIT.network);
+    expect(isLostRefresh(error)).toBe(true);
+    // A complete body that isn't JSON is still a malformed answer, not a lost one.
+    const garbage = scripted([new Response('<html>', { status: 200 })]);
+    const malformed = await failure(
+      refreshTokens(garbage.send, SERVER, 'rooster_rt_1', RESOURCE, () => 0),
+    );
+    expect(malformed.message).toContain('invalid_token_response');
+    expect(isLostRefresh(malformed)).toBe(false);
+    // The device poll: exit 6 too (the code redeems once, so a new login is needed).
+    const poll = scripted([cut]);
+    expect(
+      (await failure(pollDeviceToken(poll.send, SERVER, AUTH, RESOURCE, fakeClock()))).exitCode,
     ).toBe(EXIT.network);
   });
 

@@ -20,7 +20,7 @@ export interface FakeOAuthOptions {
    * but lose the answer: the client sees a network failure.
    */
   loseRefreshResponses?: number;
-  lostAs?: 'network' | 'status';
+  lostAs?: 'network' | 'status' | 'body';
   /** Fail every refresh with this status, without rotating. */
   refreshStatus?: number;
   scope?: string;
@@ -120,6 +120,18 @@ export function fakeOAuth(options: FakeOAuthOptions = {}) {
         if (lose > 0) {
           lose -= 1;
           if (options.lostAs === 'status') return new Response('', { status: 503 });
+          if (options.lostAs === 'body') {
+            // 200 and the headers, then the connection drops mid-body.
+            return new Response(
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(new TextEncoder().encode('{"access_token":"rooster_at_'));
+                  controller.error(new TypeError('terminated'));
+                },
+              }),
+              { status: 200, headers: { 'content-type': 'application/json' } },
+            );
+          }
           throw new TypeError('fetch failed: the connection was reset');
         }
         return issue(options.refreshExpiresIn ?? 900);
