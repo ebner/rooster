@@ -162,10 +162,14 @@ async function post(
   try {
     text = await response.text();
   } catch {
-    // The headers arrived but the body didn't (the connection closed, the timeout hit): the
-    // server may have acted (a rotated refresh token), so this is a lost answer, exit 6 like
-    // any network failure, never a malformed one (`isLostRefresh`).
-    throw new CliError(EXIT.network, t('error.network', { server }));
+    // The headers arrived but the body didn't (the connection closed, the timeout hit). Only
+    // a success may have been acted on (a rotated refresh token): that is a lost answer,
+    // exit 6 like any network failure (`isLostRefresh`). Any other status keeps its class,
+    // with an empty body: a 4xx or 429 is never retried, a 5xx is a server error.
+    if (response.status >= 200 && response.status < 300) {
+      throw new CliError(EXIT.network, t('error.network', { server }));
+    }
+    text = '';
   }
   let data: unknown;
   try {

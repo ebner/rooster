@@ -417,7 +417,8 @@
       "client": "Which client to configure (default print)",
       "allowDelete": "Also ask for permission to delete tasks (they go to Trash)",
       "relogin": "Sign the profile in again even if it already has a login",
-      "remote": "Connect the client to the server’s MCP endpoint instead of running rooster mcp on this computer"
+      "remote": "Connect the client to the server’s MCP endpoint instead of running rooster mcp on this computer",
+      "headerServer": "The server this client was set up for (for this header)"
     },
     "noGrant": "Can’t read what this credential may do; sign in again with rooster login.",
     "noTools": "This credential allows none of the MCP tools; the agent will see an empty tool list.",
@@ -464,6 +465,9 @@
       "desktop": "{app} connects to remote servers as connectors, which sign in through the browser: Settings → Connectors → Add custom connector, with the URL {url}.",
       "noHelper": "{app} can’t run a header helper, so it needs an MCP token: a personal access token for the MCP endpoint. Create one in Settings → Connected apps → New token (Works with: MCP), or with rooster token create agent --audience mcp, and add:",
       "tokenHint": "Replace {placeholder} with the token. It works only at {url}, and you can revoke it in Settings → Connected apps."
+    },
+    "header": {
+      "otherServer": "Profile {profile} is now signed in to {server}, not {expected}, which this client was set up for. Run rooster mcp setup --remote again for this client."
     }
   },
   "skill": {

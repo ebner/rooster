@@ -417,7 +417,8 @@
       "client": "Vilken klient som ska konfigureras (standard print)",
       "allowDelete": "Be även om lov att ta bort uppgifter (de hamnar i papperskorgen)",
       "relogin": "Logga in profilen på nytt även om den redan har en inloggning",
-      "remote": "Anslut klienten till serverns MCP-slutpunkt i stället för att köra rooster mcp på den här datorn"
+      "remote": "Anslut klienten till serverns MCP-slutpunkt i stället för att köra rooster mcp på den här datorn",
+      "headerServer": "Servern som klienten konfigurerades för (för det här huvudet)"
     },
     "noGrant": "Det går inte att läsa vad inloggningen får göra; logga in igen med rooster login.",
     "noTools": "Inloggningen tillåter inga av MCP-verktygen; agenten får en tom verktygslista.",
@@ -464,6 +465,9 @@
       "desktop": "{app} ansluter till fjärrservrar som kopplingar, som loggar in via webbläsaren: Inställningar → Kopplingar → Lägg till anpassad koppling, med adressen {url}.",
       "noHelper": "{app} kan inte köra en header helper och behöver därför en MCP-token: en personlig åtkomsttoken för MCP-slutpunkten. Skapa en under Inställningar → Anslutna appar → Ny token (Fungerar med: MCP), eller med rooster token create agent --audience mcp, och lägg till:",
       "tokenHint": "Byt ut {placeholder} mot token. Den fungerar bara på {url}, och du kan återkalla den under Inställningar → Anslutna appar."
+    },
+    "header": {
+      "otherServer": "Profilen {profile} är nu inloggad på {server}, inte {expected}, som klienten konfigurerades för. Kör rooster mcp setup --remote igen för den här klienten."
     }
   },
   "skill": {

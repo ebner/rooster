@@ -172,7 +172,8 @@ describe('AC-12.4 the CLI on the device grant', () => {
       };
       expect(entry.type).toBe('http');
       expect(entry.url).toBe(`${server.url}/mcp`);
-      expect(entry.headersHelper).toMatch(/ mcp header --profile agent$/);
+      expect(entry.headersHelper).toMatch(/ mcp header --server \S+ --profile agent$/);
+      expect(entry.headersHelper).toContain(server.url);
       expect(printed).not.toMatch(/rooster_(at|rt)_/);
 
       const header = await home.run(['mcp', 'header']);

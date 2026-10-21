@@ -320,6 +320,31 @@ describe('refresh and revocation', () => {
     ).toBe(EXIT.network);
   });
 
+  it('a cut-off body keeps the class of its status: only a 2xx or a 5xx is lost', async () => {
+    const cut = (status: number) => () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"error":"inv'));
+            controller.error(new TypeError('terminated'));
+          },
+        }),
+        { status },
+      );
+    for (const [status, exit, lost] of [
+      [400, EXIT.auth, false],
+      [401, EXIT.auth, false],
+      [403, EXIT.auth, false],
+      [429, EXIT.network, false],
+      [503, EXIT.network, true],
+      [200, EXIT.network, true],
+    ] as const) {
+      const { send } = scripted([cut(status)]);
+      const error = await failure(refreshTokens(send, SERVER, 'rooster_rt_1', RESOURCE, () => 0));
+      expect([status, error.exitCode, isLostRefresh(error)]).toEqual([status, exit, lost]);
+    }
+  });
+
   it('revokes the refresh token (RFC 7009) without a resource', async () => {
     const { send, sent } = scripted([new Response(null, { status: 200 })]);
     expect(await revokeToken(send, SERVER, 'rooster_rt_1')).toBe(true);

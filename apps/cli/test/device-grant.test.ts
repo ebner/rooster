@@ -459,7 +459,9 @@ describe('AC-12.4 rooster mcp setup --remote and rooster mcp header', () => {
     expect(Object.keys(entry)).toEqual(['type', 'url', 'headersHelper']);
     expect(entry.type).toBe('http');
     expect(entry.url).toBe(`${SERVER}/mcp`);
-    expect(entry.headersHelper).toMatch(/^\/\S+ (\S+ )?mcp header --profile agent$/);
+    expect(entry.headersHelper).toMatch(
+      /^\/\S+ (\S+ )?mcp header --server https:\/\/rooster\.test --profile agent$/,
+    );
     expect(line).toMatch(/^claude mcp add-json --scope user rooster '/);
     expect(`${run.stdout}${run.stderr}`).not.toMatch(/rooster_(at|rt)_|Bearer/);
     // A remote-only profile, never the default.
@@ -482,6 +484,37 @@ describe('AC-12.4 rooster mcp setup --remote and rooster mcp header', () => {
       env: { ROOSTER_TOKEN: 'rooster_pat_other', ROOSTER_SERVER: 'https://elsewhere.test' },
     });
     expect(explicit.stdout).toBe('{"Authorization":"Bearer rooster_at_mcp_1"}\n');
+  });
+
+  it('a helper set up for one server refuses once the profile is signed in to another', async () => {
+    const oauth = fakeOAuth();
+    const { h } = await remoteSetup(oauth);
+    // The helper Claude Code was given for rooster.test:
+    const forA = ['mcp', 'header', '--server', SERVER, '--profile', 'agent'];
+    expect((await h.run(forA)).stdout).toBe('{"Authorization":"Bearer rooster_at_mcp_1"}\n');
+    // The same profile is set up again for another server.
+    const other = 'https://other.test';
+    const again = await h.run([
+      'mcp',
+      'setup',
+      '--remote',
+      '--client',
+      'claude-code',
+      '--relogin',
+      '--no-browser',
+      '--server',
+      other,
+    ]);
+    expect(again.code).toBe(0);
+    expect(again.stdout).toContain(`mcp header --server ${other} --profile agent`);
+    const stale = await h.run(forA);
+    expect(stale.code).toBe(3);
+    expect(stale.stdout).toBe('');
+    expect(stale.stderr).toContain(other);
+    expect(stale.stderr).not.toMatch(/rooster_(at|rt)_/);
+    // The new helper works.
+    const fresh = await h.run(['mcp', 'header', '--server', other, '--profile', 'agent']);
+    expect(fresh.code).toBe(0);
   });
 
   it('mcp header refreshes a token with less than five minutes left', async () => {

@@ -399,18 +399,20 @@ async function remoteSetup(runtime: Runtime, options: RemoteSetupOptions): Promi
     explainMcpTokens(runtime, client, key, server);
     return;
   }
-  // Before signing in: a helper command that cannot start would make the login useless.
-  const helper = headersHelperCommand(
-    launchEntry(runtime, profile, ['header']),
-    runtime.io.platform,
-  );
-  if (helper === null) throw new CliError(EXIT.usage, t('mcp.remote.unquotable'));
   const agent = runtime.forProfile(profile);
   await withRuntime(agent, async () => {
     const server = serverFrom(
       agent,
       options.server ?? agent.profile.server ?? runtime.serverOrNull() ?? undefined,
     );
+    // The helper names the server it is for: if the profile is later signed in to another
+    // server, this client's helper refuses rather than hand that server's token to this one.
+    // Built before signing in: a helper command that cannot start would make the login useless.
+    const helper = headersHelperCommand(
+      launchEntry(runtime, profile, ['header', '--server', server]),
+      runtime.io.platform,
+    );
+    if (helper === null) throw new CliError(EXIT.usage, t('mcp.remote.unquotable'));
     const reuse = !options.relogin && (await reusableRemoteLogin(agent, server, options));
     if (reuse) agent.out.notice(t('mcp.setup.reusing', { profile }));
     else {
@@ -508,15 +510,20 @@ function explainMcpTokens(
 
 const headerCommand = defineCommand({
   meta: () => ({ name: 'header', description: t('mcp.cmd.header') }),
+  args: () => ({
+    server: { type: 'string', valueHint: 'url', description: t('mcp.arg.headerServer') },
+  }),
   /**
    * The header helper (11 §9.6): stdout is exactly `{"Authorization":"Bearer <token>"}`, the
    * JSON object of strings Claude Code's `headersHelper` expects, with a `/mcp` access token
    * of the profile's own login (refreshed under the profile's lock when due). Anything else
    * goes to stderr, and a failure exits non-zero with nothing on stdout.
    */
-  async run() {
+  async run({ args }) {
     const runtime = rt();
     const profile = runtime.globals.profile ?? MCP_DEFAULT_PROFILE;
+    const expected =
+      typeof args.server === 'string' && args.server !== '' ? normalizeServer(args.server) : null;
     if (!PROFILE_NAME_RE.test(profile)) {
       throw new CliError(EXIT.usage, t('mcp.setup.badProfile', { profile }));
     }
@@ -528,7 +535,12 @@ const headerCommand = defineCommand({
       if (configured === undefined) {
         throw new CliError(EXIT.auth, t('auth.notRemoteProfile', { profile }));
       }
-      return agent.token(normalizeServer(configured), {
+      const server = normalizeServer(configured);
+      // The client's helper is for one server: never another server's token.
+      if (expected !== null && expected !== server) {
+        throw new CliError(EXIT.auth, t('mcp.header.otherServer', { profile, expected, server }));
+      }
+      return agent.token(server, {
         audience: 'mcp',
         minValidityMs: HEADER_MIN_VALIDITY_MS,
         ignoreEnv: true,
