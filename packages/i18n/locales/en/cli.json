@@ -400,7 +400,8 @@
   },
   "error": {
     "network": "Can’t reach {server}. Check the address and your connection.",
-    "unexpected": "Something went wrong: {message}"
+    "unexpected": "Something went wrong: {message}",
+    "redirect": "{server} answered with a redirect to {location}. rooster doesn’t follow redirects, so nothing was sent there; if the server has moved, sign in again with its new address (--server)."
   },
   "version": {
     "server": "server {version}",

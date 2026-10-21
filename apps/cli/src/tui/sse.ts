@@ -143,6 +143,8 @@ export class SseClient {
       const response = await this.options.fetch(this.options.url, {
         headers: { ...headers, Accept: 'text/event-stream', 'Cache-Control': 'no-cache' },
         signal: controller.signal,
+        // Never followed (the credential stays on the profile's server): a 3xx is not ok.
+        redirect: 'manual',
       });
       if (response.status === 401 || response.status === 403) {
         await response.body?.cancel().catch(() => {});

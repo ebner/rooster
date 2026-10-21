@@ -278,6 +278,47 @@ describe('AC-12.4 rooster login on the device grant', () => {
     },
   );
 
+  it('a redirect to another origin is never followed: no token or code leaves the server', async () => {
+    const elsewhere: string[] = [];
+    const other = await serveFetch(async (request) => {
+      elsewhere.push(`${request.method} ${new URL(request.url).pathname} ${await request.text()}`);
+      return Response.json({ access_token: 'rooster_at_evil', refresh_token: 'rooster_rt_evil' });
+    });
+    const oauth = fakeOAuth({ loginExpiresIn: 30 });
+    const redirectOn = new Set<string>();
+    const served = await serveFetch(async (request) => {
+      const path = new URL(request.url).pathname;
+      if (redirectOn.has(path)) {
+        return new Response(null, { status: 308, headers: { location: `${other.url}${path}` } });
+      }
+      return oauth.handler(request);
+    });
+    cli = cliHarness({}, { sleep: async () => {} });
+    try {
+      // The refresh: answered with a 308 to another origin.
+      expect((await cli.run(['login', '--no-browser', '--server', served.url])).code).toBe(0);
+      const [before] = storedSecrets(cli.home);
+      redirectOn.add('/api/auth/oauth2/token');
+      const who = await cli.run(['whoami']);
+      expect(who.code).toBe(6);
+      expect(who.stderr).toContain('doesn’t follow redirects');
+      expect(who.stderr).toContain(other.url);
+      expect(oauth.state.refreshRequests).toHaveLength(0);
+      expect(storedSecrets(cli.home)).toEqual([before]);
+      // Logout's revocation and a new login's device code request: refused the same way.
+      redirectOn.add('/api/auth/oauth2/revoke');
+      redirectOn.add('/api/auth/oauth2/device-authorization');
+      expect((await cli.run(['logout'])).stderr).toContain('Couldn’t revoke');
+      const relogin = await cli.run(['login', '--no-browser', '--server', served.url]);
+      expect(relogin.code).toBe(6);
+      expect(storedSecrets(cli.home)).toEqual([]);
+      expect(elsewhere).toEqual([]);
+    } finally {
+      await served.close();
+      await other.close();
+    }
+  });
+
   it('a lock left behind by a dead process does not stop the refresh', async () => {
     const oauth = fakeOAuth({ loginExpiresIn: 30 });
     const h = harness(oauth);

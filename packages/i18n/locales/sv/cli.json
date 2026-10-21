@@ -400,7 +400,8 @@
   },
   "error": {
     "network": "Når inte {server}. Kontrollera adressen och din anslutning.",
-    "unexpected": "Något gick fel: {message}"
+    "unexpected": "Något gick fel: {message}",
+    "redirect": "{server} svarade med en omdirigering till {location}. rooster följer inte omdirigeringar, så inget skickades dit; om servern har flyttat, logga in igen med dess nya adress (--server)."
   },
   "version": {
     "server": "server {version}",

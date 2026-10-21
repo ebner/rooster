@@ -73,23 +73,53 @@ export function cliFetch(options: Pick<ApiOptions, 'io' | 'verbose' | 'server'>)
       if (!headers.has('X-Rooster-Edit-Time')) headers.set('X-Rooster-Edit-Time', String(io.now()));
     }
     const started = io.now();
+    let response: Response;
     try {
-      const response = await io.fetch(
-        new Request(request, { headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) }),
+      response = await io.fetch(
+        new Request(request, {
+          headers,
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+          // Never followed: a 307/308 re-sends the body (a refresh token, a device code)
+          // to wherever it points, and only `Authorization` would be dropped.
+          redirect: 'manual',
+        }),
       );
-      if (options.verbose) {
-        io.stderr.write(
-          `${request.method} ${new URL(request.url).pathname} → ${response.status} (${io.now() - started} ms)\n`,
-        );
-      }
-      return response;
     } catch (error) {
       if (options.verbose) {
         io.stderr.write(`${request.method} ${request.url}: ${clean(String(error))}\n`);
       }
       throw new CliError(EXIT.network, t('error.network', { server: options.server }));
     }
+    if (options.verbose) {
+      io.stderr.write(
+        `${request.method} ${new URL(request.url).pathname} → ${response.status} (${io.now() - started} ms)\n`,
+      );
+    }
+    if (REDIRECT_STATUSES.has(response.status) || response.type === 'opaqueredirect') {
+      await response.body?.cancel().catch(() => {});
+      throw new CliError(
+        EXIT.network,
+        t('error.redirect', {
+          server: options.server,
+          location: redirectOrigin(response.headers.get('location'), request.url),
+        }),
+        'redirect',
+      );
+    }
+    return response;
   };
+}
+
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+/** Where a redirect points, as an origin only (it is printed); `?` when unreadable. */
+function redirectOrigin(location: string | null, base: string): string {
+  if (location === null) return '?';
+  try {
+    return new URL(location, base).origin;
+  } catch {
+    return '?';
+  }
 }
 
 /** The typed client (`@rooster/api-client`) with the CLI's identity and credential. */
