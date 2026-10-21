@@ -235,9 +235,14 @@ This file is the entry point for every agent and must describe the repository **
 Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to them. A PR that changes any of the above without updating `AGENTS.md` is not done.
 
 ## Status
-- **Current phase:** Phase 12, headless agent access: the OAuth device grant and MCP tokens (09 Phase 12, 11 §9, ADR 0065). Started 2026-10-21; the contract is in `packages/core/src/schemas/grants.ts` and `collab.ts`.
+- **Current phase:** none scheduled. The next work is the backlog (09 §Backlog).
 - **Latest release:** 1.7.2 (a follower takes over from a leader that answers but never sends, ADR 0019 §9; Reload goes past a stuck queue once every op is stored, ADR 0021 amendment), after 1.7.1 (the sync queue no longer waits without limit for IndexedDB: outbox reads and writes get 4 s, then ops are sent anyway; ADR 0019 §8), after 1.7.0 (on touch screens a tap on a description link shows a link card, ADR 0062; on phones a swipe or press-and-slide on the header's org name switches orgs and keeps the view, ADR 0063; the release workflow keeps the CLI binaries artifact for a day), after 1.6.2 (tomorrow's date label is blue, the desktop scale stops at 112.5 %; ADR 0061), 1.6.1 (a row's date picker no longer opens the pane, a larger email logo) and 1.6.0 (search in the guide and the palette's Help section, the TUI's screenshot, the emails' logo, Admin → System's test email, whole tag chips in narrow rows, a lighter favicon; ADRs 0058, 0059), and 1.5.0 (Phase 11: the security audit, accessibility, 2,000-task performance, the guide at /help, Admin → System, the storage quota, removed sign-ins, apps without colleagues' emails; ADRs 0052–0056).
-- **Last completed phase:** Phase 11, hardening (2026-10-10; released in 1.5.0):
+- **Last completed phase:** Phase 12, headless agent access (2026-10-21; not yet released, planned as 1.8.0 together with ADR 0064):
+  - the OAuth device grant (RFC 8628) behind `ROOSTER_OAUTH_DEVICE` (default `first-party`), the full-context `/device` page (the code is always typed; delete and admin start unticked), the browser-only `device_connected` notice;
+  - MCP tokens (PATs with an `mcp` audience) and the CLI on the device grant (`rooster mcp header`, `mcp setup --remote`), with a 60 s refresh-token grace;
+  - the security review: 23 findings, 21 fixed, 2 accepted (`docs/security/security-review.md` §Phase 12).
+  - AC-12.1 to AC-12.4. ADRs 0065, 0066. Migration `0016_p12_device_grant`.
+- **Before that:** Phase 11, hardening (2026-10-10; released in 1.5.0):
   - the security audit of every trust boundary: 107 findings, 102 fixed, 5 accepted or refuted (`docs/security/security-review.md`, ADR 0056);
   - the ASVS L2 map (`docs/security/asvs.md`); `pnpm audit` and gitleaks in CI;
   - accessibility: axe on every screen, a keyboard-only journey, accessible list names, and a manual screen-reader checklist;
@@ -247,7 +252,7 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
   - the header ⋯ menu with print, and the Behaviour settings;
   - removed sign-ins stay blocked; apps never see colleagues' emails; approvals are bound to the session that showed them.
   - AC-11.1 to AC-11.7. ADRs 0052 to 0056. Migrations `0012` to `0015`.
-- **Before that:** Phase 10, recurrence, task reminders, attachments and iCal (2026-10-10; released in 1.4.0):
+- Phase 10, recurrence, task reminders, attachments and iCal (2026-10-10; released in 1.4.0):
   - recurring tasks: the RRULE subset in core; the next instance is created on complete or skip, directly below; "this / this and following" on delete;
   - personal task reminders: `!15m` tokens, the picker section, the pane line and the row bell; the claim-then-send job; inbox, push and email;
   - attachments: local or S3, sniffed types, sharp thumbnails, lightbox, paste and drop, blob GC through a trigger;
