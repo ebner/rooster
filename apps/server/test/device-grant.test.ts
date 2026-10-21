@@ -861,3 +861,93 @@ describe('the refresh grace (11 §2.4): a lost token response may be retried onc
     expect(grantRow(ctx, login.grant.id)?.revokedAt).not.toBeNull();
   });
 });
+
+describe('revoking a refresh token (RFC 7009) ends only what it names', () => {
+  const revoke = (ctx: OAuthCtx, token: string, clientId: string) =>
+    ctx.app.request('/api/auth/oauth2/revoke', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        token,
+        token_type_hint: 'refresh_token',
+        client_id: clientId,
+      }).toString(),
+    });
+  const refreshWith = (ctx: OAuthCtx, token: string, clientId: string) =>
+    tokenRequest(ctx, { grant_type: 'refresh_token', refresh_token: token, client_id: clientId });
+  const grantRow = (ctx: OAuthCtx, id: string) =>
+    ctx.db.orm.select().from(accessGrant).where(eq(accessGrant.id, id)).get();
+
+  it('a stale rooster-cli refresh token logs out that login only, not the other machine', async () => {
+    const ctx = ctxFor('first-party');
+    const user = ctx.user('a@example.com');
+    const laptop = await connectCli(ctx, user);
+    const desktop = await connectCli(ctx, user);
+    // The laptop's token rotates; `rooster logout` then sends the one it still had.
+    const rotated = await refreshWith(ctx, laptop.refresh, 'rooster-cli');
+    expect(rotated.status).toBe(200);
+    const res = await revoke(ctx, laptop.refresh, 'rooster-cli');
+    expect(res.status).toBe(200);
+    expect(grantRow(ctx, laptop.grant.id)?.revokedAt).not.toBeNull();
+    expect(
+      (await withToken(ctx, rotated.body.access_token as string, 'GET', '/api/v1/me')).status,
+    ).toBe(401);
+    // The desktop's login is untouched.
+    expect(grantRow(ctx, desktop.grant.id)?.revokedAt).toBeNull();
+    expect((await withToken(ctx, desktop.access, 'GET', '/api/v1/me')).status).toBe(200);
+    expect((await refreshWith(ctx, desktop.refresh, 'rooster-cli')).status).toBe(200);
+  });
+
+  it('an app’s stale refresh token revokes nothing else of the app', async () => {
+    const ctx = ctxFor('all');
+    const user = ctx.user('a@example.com');
+    // The same app on two machines: one grant, two refresh chains.
+    const chains = [];
+    for (const _ of [1, 2]) {
+      const code = await startDevice(ctx, { client_id: APP_ID, resource: MCP_RESOURCE });
+      await approve(user, code.user_code, { scopes: ['tasks:read'] });
+      const token = await poll(ctx, code.device_code, APP_ID, MCP_RESOURCE);
+      expect(token.status).toBe(200);
+      chains.push(token.body);
+    }
+    const [one, two] = chains as [Record<string, unknown>, Record<string, unknown>];
+    expect((await refreshWith(ctx, one.refresh_token as string, APP_ID)).status).toBe(200);
+    expect((await revoke(ctx, one.refresh_token as string, APP_ID)).status).toBe(200);
+    expect((await refreshWith(ctx, two.refresh_token as string, APP_ID)).status).toBe(200);
+  });
+
+  it('an app’s current refresh token is revoked alone, and the grant stays', async () => {
+    const ctx = ctxFor('all');
+    const user = ctx.user('a@example.com');
+    const code = await startDevice(ctx, { client_id: APP_ID, resource: MCP_RESOURCE });
+    const grant = await approve(user, code.user_code, { scopes: ['tasks:read'] });
+    const token = await poll(ctx, code.device_code, APP_ID, MCP_RESOURCE);
+    expect((await revoke(ctx, token.body.refresh_token as string, APP_ID)).status).toBe(200);
+    expect(grantRow(ctx, grant.id)?.revokedAt).toBeNull();
+    expect(
+      (await withToken(ctx, token.body.access_token as string, 'GET', '/mcp')).status,
+    ).not.toBe(200);
+    expect((await refreshWith(ctx, token.body.refresh_token as string, APP_ID)).status).toBe(400);
+  });
+});
+
+it('a CLI admin login may refresh with the scope it was given, admin included', async () => {
+  const ctx = ctxFor('first-party');
+  const admin = ctx.user('admin@example.com');
+  const code = await startDevice(ctx, {
+    client_id: 'rooster-cli',
+    scope: 'tasks:read admin',
+    resource: API_RESOURCE,
+  });
+  await approve(admin, code.user_code, { scopes: ['tasks:read', 'admin'] });
+  const token = await poll(ctx, code.device_code, 'rooster-cli', API_RESOURCE);
+  expect(token.body.scope).toBe('tasks:read admin offline_access');
+  const refreshed = await tokenRequest(ctx, {
+    grant_type: 'refresh_token',
+    refresh_token: token.body.refresh_token as string,
+    client_id: 'rooster-cli',
+    scope: token.body.scope as string,
+  });
+  expect(refreshed.status, JSON.stringify(refreshed.body)).toBe(200);
+  expect(refreshed.body.scope).toBe('tasks:read admin offline_access');
+});

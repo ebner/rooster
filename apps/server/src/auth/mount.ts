@@ -6,7 +6,11 @@ import type { AppEnv } from '../lib/context.ts';
 import { problemResponse } from '../lib/errors.ts';
 import { type RateLimitOptions, SlidingWindowLimiter } from '../lib/rate-limit.ts';
 import { hashDeviceSecret } from '../services/device-codes.ts';
-import { CLI_CLIENT_ID, DEVICE_CODE_GRANT_TYPE } from '../services/grant-service.ts';
+import {
+  CLI_CLIENT_ID,
+  DEVICE_CODE_GRANT_TYPE,
+  OAUTH_REFRESH_PREFIX,
+} from '../services/grant-service.ts';
 import type { Services } from '../services/index.ts';
 import type { SignInRejection } from '../services/sign-in-policy.ts';
 import { AUTH_BASE_PATH, type Auth, CLIENT_IP_HEADER, IDENTITY_UNLINKED } from './auth.ts';
@@ -344,10 +348,19 @@ async function sealLegacyDeviceCodes(
   return res;
 }
 
+/** RFC 7009 §2.2: the revocation answer, empty. */
+function revoked(): Response {
+  return new Response(null, { status: 200, headers: { 'cache-control': 'no-store' } });
+}
+
 /**
- * `POST /api/auth/oauth2/revoke` (RFC 7009). A `rooster-cli` login through the device grant
- * is one grant per refresh chain, so revoking its refresh token (`rooster logout`, 11 §9.6)
- * ends the grant too, once the provider has accepted the revocation.
+ * `POST /api/auth/oauth2/revoke` (RFC 7009) of a refresh token, serialised with the refreshes of
+ * its grant. Revoking a refresh token revokes that token only (11 §9.4); a `rooster-cli` login
+ * through the device grant is one grant per refresh chain, so revoking its refresh token, even a
+ * stale one (`rooster logout`, 11 §9.6), ends that grant and nothing else. A stale token of any
+ * other client has nothing left to revoke. The provider sees neither: for a rotated token it
+ * would delete every token of the client and user (the user's other CLI logins, an app's other
+ * chains).
  */
 async function revokeRequest(
   body: ArrayBuffer,
@@ -355,18 +368,22 @@ async function revokeRequest(
   forward: () => Promise<Response>,
   services: Services,
 ): Promise<Response> {
-  let grantId: string | null = null;
-  if (/^application\/x-www-form-urlencoded\b/i.test(headers.get('content-type') ?? '')) {
-    const form = new URLSearchParams(new TextDecoder().decode(body));
-    const token = form.getAll('token');
-    const clientId = form.getAll('client_id');
-    if (token.length === 1 && clientId.length === 1) {
-      grantId = services.grants.cliLoginOfRefreshToken(token[0] as string, clientId[0]);
-    }
+  if (!/^application\/x-www-form-urlencoded\b/i.test(headers.get('content-type') ?? '')) {
+    return forward();
   }
-  const res = await forward();
-  if (grantId !== null && res.status === 200) services.grants.endCliLogin(grantId);
-  return res;
+  const form = new URLSearchParams(new TextDecoder().decode(body));
+  const tokens = form.getAll('token');
+  const clientIds = form.getAll('client_id');
+  const token = tokens.length === 1 ? (tokens[0] as string) : undefined;
+  if (token === undefined || !token.startsWith(OAUTH_REFRESH_PREFIX) || clientIds.length > 1) {
+    return forward();
+  }
+  return refreshLocks.run(services.grants.refreshLockKey(token), async () => {
+    const decision = services.grants.refreshRevocation(token, clientIds[0]);
+    if (decision === null) return forward();
+    if (decision.kind === 'cli') services.grants.endCliLogin(decision.grantId);
+    return revoked();
+  });
 }
 
 /** Headers that carry a non-browser credential (a session token as bearer, a PAT, an API key). */

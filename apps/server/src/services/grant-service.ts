@@ -629,19 +629,21 @@ export class GrantService {
    */
   oauthScopeCovered(grantId: string, scope: string): boolean {
     const row = this.deps.db.orm
-      .select({ scopes: accessGrant.scopes })
+      .select({ scopes: accessGrant.scopes, kind: accessGrant.kind })
       .from(accessGrant)
       .where(eq(accessGrant.id, grantId))
       .get();
     if (row === undefined) return false;
     const covered = expandScopes(parseScopes(row.scopes));
+    // A CLI login may hold `admin` (an instance admin's, as its token responses report); an
+    // app never does.
+    const excluded: readonly GrantScope[] = row.kind === 'device' ? [] : OAUTH_EXCLUDED_SCOPES;
     return scope
       .split(' ')
       .filter((s) => s !== '')
       .every(
         (s) =>
-          s === 'offline_access' ||
-          (isGrantScope(s) && !OAUTH_EXCLUDED_SCOPES.includes(s) && covered.has(s)),
+          s === 'offline_access' || (isGrantScope(s) && !excluded.includes(s) && covered.has(s)),
       );
   }
 
@@ -1941,29 +1943,42 @@ export class GrantService {
   }
 
   /**
-   * RFC 7009 revocation of a `rooster-cli` refresh token (`rooster logout`, 11 §9.6): the login
-   * is one grant per refresh chain, so the grant ends with it. Returns the grant to end once the
-   * provider has accepted the revocation, or null when the token is not such a login's.
+   * How rooster answers an RFC 7009 revocation of a refresh token itself, rather than through the
+   * provider, whose answer to an already rotated token deletes every token of the client and
+   * user (all of a user's CLI logins, or every chain of an app):
+   * - `cli`: a `rooster-cli` login's token, current or stale (`rooster logout`, 11 §9.6): the
+   *   login is one grant, which ends with it, and nothing else does;
+   * - `stale`: any other already rotated or revoked token: nothing left to revoke (RFC 7009 §2.2
+   *   answers 200 for a token that is no longer valid);
+   * - null: the provider revokes the token (only that token, 11 §9.4).
    */
-  cliLoginOfRefreshToken(refreshToken: string, clientId: string | undefined): string | null {
-    if (clientId !== CLI_CLIENT_ID || !refreshToken.startsWith(OAUTH_REFRESH_PREFIX)) return null;
+  refreshRevocation(
+    refreshToken: string,
+    clientId: string | undefined,
+  ): { kind: 'cli'; grantId: string } | { kind: 'stale' } | null {
+    if (!refreshToken.startsWith(OAUTH_REFRESH_PREFIX)) return null;
     const hash = hashOAuthToken(refreshToken.slice(OAUTH_REFRESH_PREFIX.length));
     const token = this.deps.db.orm
       .select()
       .from(oauthRefreshToken)
       .where(eq(oauthRefreshToken.token, hash))
       .get();
-    if (token === undefined || token.clientId !== CLI_CLIENT_ID || token.referenceId === null) {
-      return null;
+    if (token === undefined) return null;
+    if (
+      clientId === CLI_CLIENT_ID &&
+      token.clientId === CLI_CLIENT_ID &&
+      token.referenceId !== null
+    ) {
+      const grant = this.deps.db.orm
+        .select()
+        .from(accessGrant)
+        .where(eq(accessGrant.id, token.referenceId))
+        .get();
+      if (grant !== undefined && grant.kind === 'device' && grant.userId === token.userId) {
+        return { kind: 'cli', grantId: grant.id };
+      }
     }
-    const grant = this.deps.db.orm
-      .select()
-      .from(accessGrant)
-      .where(eq(accessGrant.id, token.referenceId))
-      .get();
-    return grant !== undefined && grant.kind === 'device' && grant.userId === token.userId
-      ? grant.id
-      : null;
+    return token.revoked === null ? null : { kind: 'stale' };
   }
 
   /** Ends a `rooster-cli` login whose refresh token was revoked (`cliLoginOfRefreshToken`). */
