@@ -319,6 +319,90 @@ describe('AC-12.4 rooster login on the device grant', () => {
     }
   });
 
+  describe('a keychain that answers the read-back late', () => {
+    /** An in-memory keychain; after a write, the next `failReads` reads fail (NoReply). */
+    function keychain() {
+      const entries = new Map<string, string>();
+      const state = { failReadsAfterSet: 0, pending: 0, failSet: false };
+      const load = async () => (_service: string, account: string) => ({
+        getPassword: async () => {
+          if (state.pending > 0) {
+            state.pending -= 1;
+            throw new Error('org.freedesktop.DBus.Error.NoReply: Did not receive a reply');
+          }
+          return entries.get(account) ?? null;
+        },
+        setPassword: async (password: string) => {
+          if (state.failSet) throw new Error('Secret Service: object locked');
+          entries.set(account, password);
+          state.pending = state.failReadsAfterSet;
+        },
+        deletePassword: async () => entries.delete(account),
+      });
+      const stored = () =>
+        JSON.parse([...entries.values()][0] ?? 'null') as Record<string, unknown>;
+      const expire = () => {
+        const [account, value] = [...entries.entries()][0] ?? [];
+        if (account === undefined || value === undefined) return;
+        entries.set(account, JSON.stringify({ ...JSON.parse(value), expiresAt: Date.now() - 1 }));
+      };
+      return { state, load, stored, expire };
+    }
+
+    async function keychainLogin(oauth: ReturnType<typeof fakeOAuth>) {
+      const kc = keychain();
+      cli = cliHarness({ loadKeyring: kc.load }, { fetch: oauth.fetch, sleep: async () => {} });
+      const env = { ROOSTER_KEYRING: '' };
+      expect((await cli.run(['login', '--server', SERVER], { env })).code).toBe(0);
+      expect(kc.stored()).toMatchObject({ refreshToken: 'rooster_rt_1' });
+      return { kc, env, h: cli };
+    }
+
+    it('one failed read-back is tried again; the rotated pair is kept', async () => {
+      const oauth = fakeOAuth({ loginExpiresIn: 30 });
+      const { kc, env, h } = await keychainLogin(oauth);
+      kc.state.failReadsAfterSet = 1;
+      const who = await h.run(['whoami', '--quiet'], { env });
+      expect(who.code).toBe(0);
+      expect(who.stderr).toBe('');
+      expect(kc.stored()).toMatchObject({ refreshToken: 'rooster_rt_2' });
+    });
+
+    it('a read-back that keeps failing keeps the new login (never the spent token) and warns', async () => {
+      const oauth = fakeOAuth({ loginExpiresIn: 30 });
+      const { kc, env, h } = await keychainLogin(oauth);
+      kc.state.failReadsAfterSet = 2;
+      const who = await h.run(['whoami', '--quiet'], { env });
+      expect(who.code).toBe(0);
+      expect(who.stderr).toContain('reading it back failed');
+      expect(who.stderr).not.toContain('previous login was kept');
+      expect(kc.stored()).toMatchObject({ refreshToken: 'rooster_rt_2' });
+      // The next refresh uses the new token: the grant survives.
+      kc.state.failReadsAfterSet = 0;
+      kc.expire();
+      expect((await h.run(['whoami', '--quiet'], { env })).code).toBe(0);
+      expect(oauth.state.refreshRequests.map((r) => r.refresh_token)).toEqual([
+        'rooster_rt_1',
+        'rooster_rt_2',
+      ]);
+      expect(oauth.state.revoked).toBe(false);
+    });
+
+    it('a write that fails keeps the previous login, which a rerun redeems in the grace period', async () => {
+      const oauth = fakeOAuth({ loginExpiresIn: 30 });
+      const { kc, env, h } = await keychainLogin(oauth);
+      kc.state.failSet = true;
+      const who = await h.run(['whoami'], { env });
+      expect(who.code).toBe(3);
+      expect(who.stderr).toContain('previous login was kept');
+      expect(kc.stored()).toMatchObject({ refreshToken: 'rooster_rt_1' });
+      kc.state.failSet = false;
+      expect((await h.run(['whoami', '--quiet'], { env })).code).toBe(0);
+      expect(oauth.state.graceRedemptions).toBe(1);
+      expect(oauth.state.revoked).toBe(false);
+    });
+  });
+
   it('a lock left behind by a dead process does not stop the refresh', async () => {
     const oauth = fakeOAuth({ loginExpiresIn: 30 });
     const h = harness(oauth);

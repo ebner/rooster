@@ -297,11 +297,11 @@ export class CredentialStore {
     credential: CredentialRef,
     login: StoredLogin,
     previous: StoredLogin,
-  ): Promise<void> {
+  ): Promise<{ verified: boolean }> {
     if (credential.store === 'file') {
       // Atomic: on failure the previous file is untouched.
       writeFileAtomic(this.pathOf(credential.ref), `${encodeLogin(login)}\n`, 0o600);
-      return;
+      return { verified: true };
     }
     const factory = await this.factory();
     if (factory === null) throw new CredentialStoreUnavailable();
@@ -309,15 +309,23 @@ export class CredentialStore {
     try {
       entry = factory(SERVICE, credential.ref);
       await entry.setPassword(encodeLogin(login));
-      if (!sameLogin(decodeLogin(await entry.getPassword()), login)) {
-        throw new Error('The keychain did not return the stored login.');
-      }
     } catch (error) {
-      // Put the previous login back (best effort), so a rerun can still redeem its refresh
-      // token within the server's grace period.
+      // The write failed: put the previous login back (best effort), so a rerun can still
+      // redeem its refresh token within the server's grace period.
       await entry?.setPassword(encodeLogin(previous)).catch(() => {});
       throw new CredentialStoreUnavailable(error);
     }
+    // The write succeeded. The read-back is only a check, tried twice: a store that answers
+    // late (Secret Service `NoReply`) must never bring back the spent refresh token, so a
+    // check that still fails keeps the new login and is only reported.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        if (sameLogin(decodeLogin(await entry.getPassword()), login)) return { verified: true };
+      } catch {
+        // Tried again below.
+      }
+    }
+    return { verified: false };
   }
 
   /**

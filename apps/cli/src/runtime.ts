@@ -346,8 +346,9 @@ export class Runtime {
         };
         // Stored before anything else happens: the old refresh token is spent now. If that
         // fails, the previous login stays stored, and a rerun within a minute redeems it again.
+        let stored: { verified: boolean };
         try {
-          await this.credentials.replace(credential, next, login);
+          stored = await this.credentials.replace(credential, next, login);
         } catch (error) {
           throw new CliError(
             EXIT.auth,
@@ -356,6 +357,9 @@ export class Runtime {
               reason: (error as Error).message,
             }),
           );
+        }
+        if (!stored.verified) {
+          this.out.warn(t('auth.refreshUnverified', { profile: this.profileName }));
         }
         return next;
       });
