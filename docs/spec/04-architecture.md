@@ -244,7 +244,6 @@ All config comes from env vars, validated by a zod schema at boot. On a validati
   - Cookie-authenticated unsafe methods require `Origin` to be equal to `ROOSTER_BASE_URL`. JSON-only bodies are accepted (`Content-Type: application/json` or multipart for uploads).
   - Bearer-authenticated requests are exempt.
 - **Input:** zod everywhere. Titles and names are trimmed and control characters stripped. Markdown is stored raw and rendered **without raw HTML**. Links get `rel="noopener noreferrer nofollow"`.
-- **Secrets:** PATs, device codes and iCal tokens are stored hashed (SHA-256), compared in constant time, and displayed once.
 - **Dependencies:** `pnpm audit` runs in CI. Renovate or Dependabot config is recommended.
 - **Trusted proxy:** `ROOSTER_TRUST_PROXY=true` makes the server honour `X-Forwarded-*` for the client IP (rate limits, logs) and protocol.
 

@@ -41,8 +41,8 @@ The better-auth CLI generates these through the Drizzle adapter, and they are ke
 | `organization` | id, name, slug (unique), logo, metadata, createdAt | `is_personal INTEGER NOT NULL DEFAULT 0` · `avatar_emoji TEXT` · `color TEXT` (tag palette name) · `task_seq INTEGER NOT NULL DEFAULT 0` · `deleted_at INTEGER` |
 | `member` | id, organizationId, userId, role (`owner`, `member`), createdAt | — |
 | `invitation` | id, organizationId, email, role, status, expiresAt, inviterId (**email invites only**) | — |
-| `apikey` | PATs (hashed key, prefix, name, expiresAt, metadata JSON `{grantId}`) | — |
-| `deviceCode` | device authorisation grants | — |
+| `apikey` | PATs (hashed key, prefix, name, expiresAt, metadata JSON `{grantId}`; backlog 11 §9.7 adds `audience: 'api' \| 'mcp'`, absent = `api`) | — |
+| `deviceCode` | device authorisation grants | `grant_id TEXT` · `user_agent TEXT`; backlog 11 §9: `oauth_client_id TEXT` (NULL for the legacy CLI flow) · `resource TEXT` · `request_ip TEXT` · codes stored as SHA-256 hashes |
 | `oauthClient`, `oauthAccessToken`, `oauthRefreshToken`, `oauthConsent` (P9) | better-auth OAuth 2.1 Provider tables (exact names per the plugin version). Access and refresh tokens are stored hashed and carry the `access_grant.id` in the plugin's `referenceId` (ADR 0041). | — |
 
 Invariant: an org with `is_personal = 1` has exactly one `member` row (role `owner`). This is enforced in `OrgService` and checked by a test.
@@ -185,7 +185,7 @@ CREATE TABLE notification (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
   org_id     TEXT NOT NULL,
-  type       TEXT NOT NULL,   -- assigned|comment|mention|completed|due_changed|invite_accepted|reminder (P10)
+  type       TEXT NOT NULL,   -- assigned|comment|mention|completed|due_changed|invite_accepted|reminder (P10)|device_connected (backlog 11 §9.4: the user's personal org, no task, not in the preference matrix)
   task_id    TEXT REFERENCES task(id) ON DELETE CASCADE,
   actor_id   TEXT REFERENCES user(id),
   data       TEXT NOT NULL DEFAULT '{}',

@@ -39,8 +39,8 @@
 | GET `/avatars/:userId` | Serves an avatar to any user sharing an org with that user. | 10 |
 | GET `/me/sessions` · DELETE `/me/sessions/:id` | List and revoke sessions. | 1 |
 | GET `/me/grants` · PATCH `/me/grants/:id` · DELETE `/me/grants/:id` | Connected apps (11 §3.2): every PAT, CLI device and OAuth client grant. PATCH edits `{label?, scopes?, constraints?, expiresAt?}` (narrowing an OAuth client's scopes is allowed, widening is not). DELETE revokes. PATCH needs the browser session. A PAT or device may list grants and revoke **its own** (`rooster logout`, `apps ls`). | 8/9 |
-| POST `/me/tokens` | A PAT `{name, scopes, constraints, expiresInDays?}` → `{token, grant}` (the token is shown once). From the browser, or from a CLI device session for a subset of its own grant (`422 widening_not_allowed` otherwise); never from a PAT. | 8 |
-| `/api/auth/*` | better-auth: sign-in/social, oauth2 callbacks, sign-out, and the device flow's `/device/code` and `/device/token`. **Browser cookie only**: any `Authorization` or API-key credential gets `403`, except on the two device endpoints, which the CLI calls before it has a session (ADR 0037). Device review, approve and deny are rooster routes: `GET /device/:userCode`, `POST /device/:userCode/approve`, `POST /device/:userCode/deny`. | 1/8 |
+| POST `/me/tokens` | A PAT `{name, scopes, constraints, expiresInDays?, audience?}` → `{token, grant}` (the token is shown once; `audience` `api` by default or `mcp`, backlog 11 §9.7). From the browser, or from a CLI device session for a subset of its own grant (`422 widening_not_allowed` otherwise); never from a PAT. | 8 |
+| `/api/auth/*` | better-auth: sign-in/social, oauth2 callbacks, sign-out, and the device flow's `/device/code` and `/device/token`. **Browser cookie only**: any `Authorization` or API-key credential gets `403`, except on the two device endpoints, which the CLI calls before it has a session (ADR 0037). Device review, approve and deny are rooster routes: `GET /device/:userCode`, `POST /device/:userCode/approve`, `POST /device/:userCode/deny`. Backlog 11 §9 adds the OAuth device grant: `POST /api/auth/oauth2/device-authorization` and the device grant type at `/api/auth/oauth2/token`, both without credentials; the review response gains the client's verification state and host, the request IP and its age. | 1/8 |
 
 ### 2.2 Orgs, members, invites
 | Method & path | Description | P |
@@ -144,7 +144,7 @@
 | GET `/api/auth/oauth2/authorize` | The authorization endpoint (better-auth OAuth 2.1 Provider; PKCE S256 required, `resource` required). It redirects a signed-in user to the consent screen, the SPA route `/oauth/consent` (11 §3.1, ADR 0041). |
 | POST `/api/auth/oauth2/token` · POST `/api/auth/oauth2/revoke` | Code and refresh-token grants (refresh rotation); RFC 7009 revocation. |
 | POST `/api/auth/oauth2/register` | Dynamic Client Registration, only with `ROOSTER_OAUTH_DCR=on` (deprecated in MCP). |
-| POST/GET/DELETE `/mcp` | The remote MCP endpoint (Streamable HTTP, protocol 2026-07-28). OAuth bearer tokens with audience `<host>/mcp` only. |
+| POST/GET/DELETE `/mcp` | The remote MCP endpoint (Streamable HTTP, protocol 2026-07-28). OAuth bearer tokens with audience `<host>/mcp` only; backlog 11 §9.7 adds PATs with audience `mcp`. |
 | GET `/.well-known/oauth-authorization-server/api/auth` | RFC 8414 metadata for the issuer `<base>/api/auth`. |
 | GET `/.well-known/oauth-protected-resource/mcp` · `…/api/v1` | RFC 9728 resource metadata (11 §5.2). |
 | GET `/mcp/server-card` (MCP Server Card, SEP-2127) · `/.well-known/ai-catalog.json` · `/.well-known/agent-skills/index.json` · `/.well-known/agent-skills/rooster/SKILL.md` · `/llms.txt` | Discovery (11 §6); off with `ROOSTER_AGENT_DISCOVERY=off`. |
