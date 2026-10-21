@@ -15,7 +15,7 @@ import {
 } from '../src/db/schema/index.ts';
 import { IN_PROCESS_ACTOR } from '../src/lib/in-process.ts';
 import { pat } from './grant-helpers.ts';
-import { BASE_URL, testConfig } from './helpers.ts';
+import { asJar, BASE_URL, testConfig } from './helpers.ts';
 import { createTask, groupNamed, inboxOf } from './list-helpers.ts';
 import {
   API_RESOURCE,
@@ -854,5 +854,34 @@ describe('an app named like rooster (security audit F5)', () => {
     const grants = await user.ok<Grant[]>('GET', '/api/v1/me/grants');
     expect(grants[0]?.client?.name).toBe('app.example.com');
     expect(grants[0]?.label).toBe('app.example.com');
+  });
+});
+
+describe('the refresh grace never revives a revocation it did not make', () => {
+  it('a refused retry leaves an access token revoked by sign-out revoked', async () => {
+    const ctx = oauthCtx();
+    const user = ctx.user('ada@example.com');
+    const tokens = await connect(ctx, user, { resource: API_RESOURCE });
+    const rotated = await refresh(ctx, tokens.refresh ?? '');
+    expect(rotated.status).toBe(200);
+    const access = String(rotated.body.access_token);
+    expect((await withToken(ctx, access, 'GET', '/api/v1/me')).status).toBe(200);
+    // Signing out of the browser revokes the session's access tokens (the provider's
+    // back-channel logout), and keeps the offline refresh token.
+    const out = await ctx.app.request(
+      '/api/auth/sign-out',
+      asJar(user.jar, { method: 'POST', body: '{}' }),
+    );
+    expect(out.status).toBe(200);
+    expect((await withToken(ctx, access, 'GET', '/api/v1/me')).status).toBe(401);
+    // A retry of the old refresh token within the grace, refused for its resource.
+    const retry = await tokenRequest(ctx, {
+      grant_type: 'refresh_token',
+      refresh_token: tokens.refresh ?? '',
+      client_id: CLIENT_ID,
+      resource: MCP_RESOURCE,
+    });
+    expect(retry.status).toBe(400);
+    expect((await withToken(ctx, access, 'GET', '/api/v1/me')).status).toBe(401);
   });
 });

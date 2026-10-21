@@ -158,6 +158,8 @@ export interface GraceRetry {
   revoked: Date | null;
   rotatedAt: Date;
   successorId: string;
+  /** The successor's access tokens the retry revoked (those that were live until then). */
+  accessTokenIds: string[];
   at: Date;
 }
 
@@ -938,12 +940,22 @@ export class GrantService {
       const at = new Date(now);
       tx.update(oauthRefreshToken)
         .set({ revoked: at })
-        .where(eq(oauthRefreshToken.id, successor.id))
+        .where(and(eq(oauthRefreshToken.id, successor.id), isNull(oauthRefreshToken.revoked)))
         .run();
-      tx.update(oauthAccessToken)
-        .set({ revoked: at })
-        .where(eq(oauthAccessToken.refreshId, successor.id))
-        .run();
+      // Only access tokens still live are revoked (and recorded): one revoked before (a sign-out,
+      // an RFC 7009 revocation) keeps its revocation, also if the retry is undone.
+      const accessTokenIds = tx
+        .select({ id: oauthAccessToken.id })
+        .from(oauthAccessToken)
+        .where(and(eq(oauthAccessToken.refreshId, successor.id), isNull(oauthAccessToken.revoked)))
+        .all()
+        .map((r) => r.id);
+      if (accessTokenIds.length > 0) {
+        tx.update(oauthAccessToken)
+          .set({ revoked: at })
+          .where(inArray(oauthAccessToken.id, accessTokenIds))
+          .run();
+      }
       const reopened = tx
         .update(oauthRefreshToken)
         .set({ revoked: null, rotatedAt: null, successorId: null, graceUsedAt: at })
@@ -956,7 +968,14 @@ export class GrantService {
         )
         .run();
       if (reopened.changes !== 1) throw new Error('refresh grace: the token changed meanwhile');
-      return { tokenId: row.id, revoked: row.revoked, rotatedAt, successorId: successor.id, at };
+      return {
+        tokenId: row.id,
+        revoked: row.revoked,
+        rotatedAt,
+        successorId: successor.id,
+        accessTokenIds,
+        at,
+      };
     });
   }
 
@@ -984,15 +1003,17 @@ export class GrantService {
           and(eq(oauthRefreshToken.id, grace.successorId), eq(oauthRefreshToken.revoked, grace.at)),
         )
         .run();
-      tx.update(oauthAccessToken)
-        .set({ revoked: null })
-        .where(
-          and(
-            eq(oauthAccessToken.refreshId, grace.successorId),
-            eq(oauthAccessToken.revoked, grace.at),
-          ),
-        )
-        .run();
+      if (grace.accessTokenIds.length > 0) {
+        tx.update(oauthAccessToken)
+          .set({ revoked: null })
+          .where(
+            and(
+              inArray(oauthAccessToken.id, grace.accessTokenIds),
+              eq(oauthAccessToken.revoked, grace.at),
+            ),
+          )
+          .run();
+      }
     });
   }
 
