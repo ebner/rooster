@@ -71,10 +71,16 @@ test('AC-8.1 rooster login on a headless machine is approved from a phone; whoam
     expect(login.stderr()).toContain(`${server}/device`);
 
     // On the phone: the consent page with the same code, then Approve.
-    await page.goto(`/device?user_code=${encodeURIComponent(code)}`);
-    await expect(page.getByRole('heading', { name: /Connect .*rooster/i })).toBeVisible();
-    await expect(page.getByText(code.replace(/[^A-Z0-9]/gi, '').slice(0, 4))).toBeVisible();
-    await page.getByRole('button', { name: 'Approve' }).click();
+    // The user types the code (11 §9.2).
+    await page.goto('/device');
+    await page.getByRole('textbox', { name: 'Code' }).fill(code);
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page.getByRole('heading', { name: 'Connect a device' })).toBeVisible();
+    await expect(page.getByTestId('device-client-name')).toHaveText('rooster CLI');
+    await expect(page.getByTestId('device-user-code')).toContainText(
+      code.replace(/[^A-Z0-9]/gi, '').slice(0, 4),
+    );
+    await page.getByRole('button', { name: 'Allow' }).click();
     await expect(page.getByRole('heading', { name: /is connected/ })).toBeVisible();
 
     // The CLI's next poll gets the token (the device flow polls every few seconds).

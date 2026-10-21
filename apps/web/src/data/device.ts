@@ -70,11 +70,15 @@ export function useDenyDevice(): MutationResult<{ userCode: string; decisionNonc
   });
 }
 
-export type DeviceErrorKind = 'notFound' | 'expired' | 'used' | 'failed';
+export type DeviceErrorKind = 'notFound' | 'expired' | 'used' | 'tooMany' | 'failed';
 
-/** Maps the server's problem codes to what the page explains. */
+/**
+ * Maps the server's problem codes to what the page explains. `429`: too many wrong codes, code
+ * entry is locked for the rest of the window (11 §9.2).
+ */
 export function deviceErrorKind(error: unknown): DeviceErrorKind {
   if (!(error instanceof ApiError)) return 'failed';
+  if (error.status === 429) return 'tooMany';
   const code = error.code;
   if (code.includes('expired') || error.status === 410) return 'expired';
   if (/used|already|approved|denied|processed/.test(code) || error.status === 409) return 'used';

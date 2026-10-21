@@ -1,4 +1,5 @@
 import type {
+  DeviceRequest,
   Grant,
   LinkedIdentity,
   OAuthConsentRequest,
@@ -104,7 +105,7 @@ export function fixtureGrants(now: number): Grant[] {
       lastUsedAt: now - 2 * day,
       lastUsedIp: '10.0.0.14',
       current: false,
-      audience: null,
+      audience: 'api',
     },
     {
       id: '0192f5d0-7a1e-7c3a-9f10-00000000c003',
@@ -157,9 +158,99 @@ export function fixtureGrants(now: number): Grant[] {
       lastUsedAt: now - 31 * day,
       lastUsedIp: '192.168.1.20',
       current: false,
-      audience: null,
+      audience: 'api',
+    },
+    // Phase 12 (11 §9.7): an MCP token, accepted only at `/mcp`.
+    {
+      id: '0192f5d0-7a1e-7c3a-9f10-00000000c005',
+      kind: 'pat',
+      clientId: null,
+      label: 'Claude Code on build-box',
+      scopes: ['tasks:write'],
+      constraints: {
+        orgs: [{ orgId: fixtureIds.personalOrg, read: 'all', write: 'all' }],
+      },
+      tokenPrefix: 'rooster_pat_m7q2',
+      createdAt: now - 1 * day,
+      updatedAt: now - 1 * day,
+      expiresAt: now + 89 * day,
+      idleTimeoutMs: null,
+      client: null,
+      lastUsedAt: now - 3 * minute,
+      lastUsedIp: '10.0.0.21',
+      current: false,
+      audience: 'mcp',
     },
   ];
+}
+
+/**
+ * Device-grant requests (Phase 12, 11 §9.3): rooster's CLI, a third-party app (always
+ * Unverified, its logo never shown) and that app asking for more (step-up).
+ */
+export function fixtureDeviceRequests(now: number): {
+  cli: DeviceRequest;
+  app: DeviceRequest;
+  stepUp: DeviceRequest;
+} {
+  const app: DeviceRequest = {
+    userCode: 'KXRT49WM',
+    clientId: 'https://agent.acme.example/oauth/client.json',
+    clientName: 'Acme Agent',
+    requestedScopes: ['tasks:write', 'tasks:delete'],
+    expiresAt: now + 9 * minute,
+    firstParty: false,
+    client: {
+      name: 'Acme Agent',
+      domain: 'agent.acme.example',
+      // Never shown on `/device`: nothing ties the client id to the device (11 §9.1).
+      logoUri: 'https://agent.acme.example/logo.png',
+      clientUri: 'https://agent.acme.example',
+      verified: false,
+      dynamic: false,
+    },
+    resource: 'mcp',
+    requestIp: '203.0.113.7',
+    requestedAt: now - minute,
+    existing: null,
+    offerSessionOnly: true,
+    decisionNonce: 'fixture-device-nonce-app',
+  };
+  return {
+    cli: {
+      ...app,
+      userCode: fixtureUserCode,
+      clientId: 'rooster-cli',
+      clientName: 'rooster CLI',
+      requestedScopes: ['tasks:delete', 'comments:write', 'groups:write', 'notifications:read'],
+      firstParty: true,
+      client: null,
+      resource: 'api',
+      requestIp: '83.250.12.7',
+      requestedAt: now - 2 * minute,
+      offerSessionOnly: false,
+      decisionNonce: 'fixture-device-nonce-cli',
+    },
+    app,
+    stepUp: {
+      ...app,
+      userCode: 'PQ7MZT3C',
+      requestedScopes: ['tasks:write', 'comments:write'],
+      existing: {
+        scopes: ['tasks:read'],
+        constraints: {
+          orgs: [
+            {
+              orgId: fixtureIds.personalOrg,
+              read: { groups: [fixtureGroupIds.personalInbox, fixtureGroupIds.personalHome] },
+              write: 'none',
+            },
+          ],
+        },
+      },
+      decisionNonce: 'fixture-device-nonce-step-up',
+    },
+  };
 }
 
 export const fixtureUserCode = 'WDJBMJHT';

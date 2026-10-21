@@ -28,10 +28,15 @@
     "due_removed": "tog bort förfallodatumet för din uppgift",
     "invite_accepted": "gick med i {org}",
     "reminder": "Påminnelse",
-    "device_connected": "anslöt en app till ditt konto"
+    "device_connected": "anslöts till ditt konto"
   },
   "reminder": {
     "due": "förfaller",
     "late": "skickades sent"
+  },
+  "deviceConnected": {
+    "from": "anslöts från {ip}",
+    "hint": "Inte du? Återkalla den under Inställningar → Anslutna appar.",
+    "account": "Ditt konto"
   }
 }

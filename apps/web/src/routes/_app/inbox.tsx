@@ -36,9 +36,11 @@ function InboxRoute() {
     const org = orgs.find((o) => o.id === notification.orgId);
     const slug = org ? orgUrlSlug(org) : notification.orgSlug;
     const href =
-      notification.type === 'invite_accepted' || !notification.task
-        ? `${paths.orgSettings(slug)}#members`
-        : paths.task(slug, notification.task.id);
+      notification.type === 'device_connected'
+        ? paths.connectedApps(notification.data.grantId)
+        : notification.type === 'invite_accepted' || !notification.task
+          ? `${paths.orgSettings(slug)}#members`
+          : paths.task(slug, notification.task.id);
     void navigate({ href });
   };
 

@@ -1,5 +1,5 @@
 import type { Grant } from '@rooster/core/schemas';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiError, useDisplayPrefs, useMe, useRevokeSession, useSessions } from '../../data';
@@ -102,6 +102,9 @@ function LinkedIdentities({ now }: { now: number }) {
 
 function ConnectedApps({ now }: { now: number }) {
   const { t } = useTranslation('settings');
+  // `#grant-<id>`: the `device_connected` notice links to the grant it names (11 §9.4).
+  const hash = useLocation({ select: (location) => location.hash });
+  const focusGrantId = hash.startsWith('grant-') ? hash.slice('grant-'.length) : null;
   const prefs = useDisplayPrefs();
   const me = useMe();
   const grants = useGrants();
@@ -132,6 +135,7 @@ function ConnectedApps({ now }: { now: number }) {
       confirmOrgs={confirmed.confirm}
       onEditingChange={setEditing}
       isAdmin={me.data?.user.isAdmin === true}
+      focusGrantId={focusGrantId}
       prefs={prefs}
       now={now}
       onCreateToken={(input) =>

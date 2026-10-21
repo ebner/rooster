@@ -431,7 +431,7 @@ describe('/device', () => {
 
   test('errors explain what to do', () => {
     renderDevice({ state: { kind: 'enter', code: fixtureUserCode, error: 'expired' } });
-    expect(screen.getByRole('alert').textContent).toContain('Run rooster login again');
+    expect(screen.getByRole('alert').textContent).toContain('run rooster login again');
   });
 
   test('approve sends the narrowed grant; the requested scopes are the ceiling', async () => {

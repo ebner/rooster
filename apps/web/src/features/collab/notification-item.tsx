@@ -1,7 +1,7 @@
 import { commentToPlainText, parseCommentMarkdown } from '@rooster/core/comment-markdown';
 import type { Notification } from '@rooster/core/schemas';
 import type { Locale } from '@rooster/i18n/core';
-import { Bell, Mail, MailOpen } from 'lucide-react';
+import { Bell, Mail, MailOpen, ShieldAlert } from 'lucide-react';
 import { Button as AriaButton } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { primaryKeys } from '../../keymap';
@@ -10,6 +10,7 @@ import { formatTimeAgo } from '../../lib/format';
 import { Avatar } from '../../ui/avatar';
 import { iconStrokeWidth } from '../../ui/button';
 import { IconButton } from '../../ui/icon-button';
+import { cleanClientText, displayDomain } from '../access/client-display';
 import type { ViewerDateContext } from '../dates';
 import { DueText } from './due-text';
 
@@ -40,6 +41,19 @@ export function NotificationSentence({
       </>
     ) : (
       t('type.due_removed')
+    );
+  }
+  if (type === 'device_connected') {
+    // 11 §9.4: "<client> was connected from <IP>". The name and host come from the client.
+    const client = cleanClientText(data.clientName ?? '');
+    const host = data.clientHost ? displayDomain(data.clientHost) : '';
+    const ip = data.ip ? cleanClientText(data.ip, 64) : '';
+    return (
+      <>
+        {client && <span className="font-semibold text-text">{client}</span>}
+        {host && <span className="font-mono text-xs"> ({host})</span>}{' '}
+        {ip ? t('deviceConnected.from', { ip }) : t('type.device_connected')}
+      </>
     );
   }
   if (type === 'invite_accepted') {
@@ -79,7 +93,8 @@ export function excerptText(excerpt: string): string {
 /**
  * One inbox entry (FR-NOT-1): unread dot, the actor's avatar, the sentence, the task title, a
  * comment excerpt, then org and time. The row opens the task (and marks it read); the trailing
- * button toggles read (U).
+ * button toggles read (U). A `device_connected` notice (11 §9.4) has no actor or task: a shield,
+ * "<client> was connected from <IP>", and the way to revoke it; it opens Connected apps.
  */
 export function NotificationItem({
   notification,
@@ -96,6 +111,8 @@ export function NotificationItem({
   const actor = notification.actor;
   const actorName = actor?.name ?? t('system');
   const reminder = notification.type === 'reminder';
+  // A security notice about the account (11 §9.4): no actor, no task, no org of its own.
+  const device = notification.type === 'device_connected';
   const ago = formatTimeAgo(notification.createdAt, now, locale, t('justNow'));
   return (
     <div
@@ -127,6 +144,13 @@ export function NotificationItem({
           >
             <Bell className="size-4" strokeWidth={iconStrokeWidth} />
           </span>
+        ) : device ? (
+          <span
+            aria-hidden
+            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-bg-warning-subtle text-text-warning"
+          >
+            <ShieldAlert className="size-4" strokeWidth={iconStrokeWidth} />
+          </span>
         ) : (
           <Avatar
             id={actor?.id ?? notification.id}
@@ -140,7 +164,7 @@ export function NotificationItem({
           {unread && <span className="sr-only">{t('unread')}</span>}
           <span className={cn('text-sm text-text-secondary', unread && 'text-text')}>
             {/* A reminder is the user's own (FR-REM-3): no actor in front of it. */}
-            {!reminder && (
+            {!reminder && !device && (
               <>
                 <span className="font-semibold text-text">{actorName}</span>{' '}
               </>
@@ -152,13 +176,18 @@ export function NotificationItem({
               {notification.task.title}
             </span>
           )}
+          {device && (
+            <span className="text-sm text-text-secondary" data-testid="device-connected-hint">
+              {t('deviceConnected.hint')}
+            </span>
+          )}
           {notification.data.excerpt && (
             <span className="line-clamp-2 text-sm text-text-secondary">
               {t('excerpt', { text: excerptText(notification.data.excerpt) })}
             </span>
           )}
           <span className="text-xs text-text-muted">
-            {orgName} · {ago}
+            {device ? t('deviceConnected.account') : orgName} · {ago}
           </span>
         </span>
       </AriaButton>

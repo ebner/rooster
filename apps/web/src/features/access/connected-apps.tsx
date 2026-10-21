@@ -1,6 +1,6 @@
 import type { Grant, GrantPatch, TokenCreate } from '@rooster/core/schemas';
 import { AppWindow, Copy, KeyRound, type LucideIcon, Plus, SquareTerminal } from 'lucide-react';
-import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { Input } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
@@ -18,6 +18,7 @@ import {
   isVerifiedClient,
 } from './client-display';
 import { ConstraintEditor } from './constraint-editor';
+import { ChoiceGroup } from './controls';
 import {
   ceilingForGrant,
   defaultTokenValue,
@@ -26,7 +27,9 @@ import {
   type GrantValue,
   grantIssues,
   reconcileGrant,
+  type TokenAudience,
   toGrantPatch,
+  tokenScopes,
   toTokenCreate,
   valueFromGrant,
 } from './grant-model';
@@ -75,6 +78,13 @@ export interface ConnectedAppsSectionProps {
   onEditingChange?: ((grant: Grant | null) => void) | undefined;
   /** Instance admin: new tokens may get the `admin` capability (ADR 0041/0042). */
   isAdmin?: boolean | undefined;
+  /**
+   * A grant to bring into view and mark, e.g. from the `device_connected` notice
+   * (`/settings/security#grant-<id>`, 11 §9.4). Ignored when no such grant is listed.
+   */
+  focusGrantId?: string | null | undefined;
+  /** The instance's origin for the MCP setup lines; default: this page's. */
+  baseUrl?: string | undefined;
 }
 
 const kindIcons = { pat: KeyRound, device: SquareTerminal, oauth: AppWindow } as const;
@@ -98,6 +108,8 @@ export function ConnectedAppsSection({
   confirmOrgs,
   onEditingChange,
   isAdmin = false,
+  focusGrantId,
+  baseUrl,
 }: ConnectedAppsSectionProps) {
   const { t } = useTranslation('settings');
   const [mode, setMode] = useState<ConnectedAppsMode>(initialMode ?? { kind: 'idle' });
@@ -138,7 +150,12 @@ export function ConnectedAppsSection({
         />
       )}
       {mode.kind === 'created' && (
-        <TokenReveal created={mode.created} onDone={idle} autoFocus={mode !== initialMode} />
+        <TokenReveal
+          created={mode.created}
+          onDone={idle}
+          autoFocus={mode !== initialMode}
+          baseUrl={baseUrl}
+        />
       )}
       {error ? (
         <Banner tone="danger" role="alert">
@@ -162,6 +179,7 @@ export function ConnectedAppsSection({
               confirmedOrgs={confirmedOrgs}
               confirmOrgs={confirmOrgs}
               isAdmin={isAdmin}
+              focused={grant.id === focusGrantId}
             />
           ))}
         </ul>
@@ -182,8 +200,11 @@ function GrantRow({
   confirmedOrgs,
   confirmOrgs,
   isAdmin,
+  focused = false,
 }: {
   grant: Grant;
+  /** Brought into view and marked once (the `device_connected` notice's link). */
+  focused?: boolean;
   orgs: readonly GrantOrgOption[];
   confirmedOrgs: readonly GrantOrgOption[] | undefined;
   confirmOrgs: (() => Promise<readonly GrantOrgOption[]>) | undefined;
@@ -197,6 +218,10 @@ function GrantRow({
 }) {
   const { t } = useTranslation('settings');
   const [pending, setPending] = useState(false);
+  const rowRef = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (focused) rowRef.current?.scrollIntoView?.({ block: 'center' });
+  }, [focused]);
   const Icon = kindIcons[grant.kind];
   const editing = mode.kind === 'editing' && mode.id === grant.id;
   const confirming = mode.kind === 'confirming' && mode.id === grant.id;
@@ -227,8 +252,14 @@ function GrantRow({
 
   return (
     <li
-      className="flex flex-col gap-3 border-b border-border py-3 last:border-b-0"
+      ref={rowRef}
+      id={`grant-${grant.id}`}
+      className={cn(
+        'flex flex-col gap-3 border-b border-border py-3 last:border-b-0',
+        focused && '-mx-2 rounded-md bg-bg-accent-subtle px-2',
+      )}
       data-testid={`grant-${grant.id}`}
+      data-focused={focused || undefined}
     >
       <div className="flex flex-col gap-3 tablet:flex-row tablet:items-start">
         <div className="flex min-w-0 flex-1 gap-3">
@@ -237,6 +268,11 @@ function GrantRow({
             <span className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="truncate text-sm font-medium">{name}</span>
               <Chip>{t(`access.kind.${grant.kind}`)}</Chip>
+              {grant.audience && (
+                <Chip color={grant.audience === 'mcp' ? 'indigo' : 'gray'}>
+                  {t(`access.audience.${grant.audience}`)}
+                </Chip>
+              )}
               {client &&
                 (isVerifiedClient(client) ? (
                   <Chip color="green">{t('access.apps.verified')}</Chip>
@@ -505,10 +541,13 @@ export function NewTokenForm({
   onCancel,
   onCreate,
   initialValue,
+  initialAudience = 'api',
 }: {
   orgs: readonly GrantOrgOption[];
-  /** Instance admins only: the `admin` capability, unticked (ADR 0041/0042). */
+  /** Instance admins only: the `admin` capability, unticked (ADR 0041/0042); never for MCP. */
   offerAdmin?: boolean | undefined;
+  /** Kitchen sink: start as an MCP token. */
+  initialAudience?: TokenAudience | undefined;
   prefs: DisplayPrefs;
   now: number;
   onCancel: () => void;
@@ -518,6 +557,7 @@ export function NewTokenForm({
   const { t } = useTranslation('settings');
   const [value, setValue] = useState<GrantValue>(() => initialValue ?? defaultTokenValue(orgs));
   const [name, setName] = useState('');
+  const [audience, setAudience] = useState<TokenAudience>(initialAudience);
   const [pending, setPending] = useState(false);
   const blocked = grantIssues(value).length > 0 || name.trim() === '';
   return (
@@ -530,7 +570,7 @@ export function NewTokenForm({
           if (blocked) return;
           setPending(true);
           try {
-            await onCreate(toTokenCreate(value, name));
+            await onCreate(toTokenCreate(value, name, audience));
           } catch {
             // The caller reports the failure; the form keeps what was typed.
           } finally {
@@ -543,7 +583,8 @@ export function NewTokenForm({
           value={value}
           onChange={setValue}
           orgs={orgs}
-          offerAdmin={offerAdmin}
+          // An MCP token never carries `admin` (11 §9.7).
+          offerAdmin={offerAdmin && audience === 'api'}
           prefs={prefs}
           now={now}
         >
@@ -556,6 +597,24 @@ export function NewTokenForm({
             isRequired
             autoFocus
           />
+          <div className="flex flex-col gap-1">
+            <ChoiceGroup<TokenAudience>
+              label={t('access.audience.label')}
+              options={[
+                { id: 'api', label: t('access.audience.api') },
+                { id: 'mcp', label: t('access.audience.mcp') },
+              ]}
+              value={audience}
+              onChange={(next) => {
+                setAudience(next);
+                setValue((current) => ({ ...current, scopes: tokenScopes(current.scopes, next) }));
+              }}
+              data-testid="token-audience"
+            />
+            <p className="text-sm text-text-muted">
+              {t(audience === 'mcp' ? 'access.audience.mcpHint' : 'access.audience.apiHint')}
+            </p>
+          </div>
         </ConstraintEditor>
         <div className="flex flex-wrap gap-2">
           <Button type="submit" variant="primary" isLoading={pending} isDisabled={blocked}>
@@ -573,10 +632,13 @@ export function TokenReveal({
   created,
   onDone,
   autoFocus = true,
+  baseUrl,
 }: {
   created: CreatedToken;
   onDone: () => void;
   autoFocus?: boolean;
+  /** The instance's origin for the MCP setup lines; default: this page's. */
+  baseUrl?: string | undefined;
 }) {
   const { t } = useTranslation('settings');
   const [copied, setCopied] = useState(false);
@@ -621,11 +683,95 @@ export function TokenReveal({
           {copied ? t('access.reveal.copied') : t('access.reveal.copy')}
         </Button>
       </div>
+      {created.grant.audience === 'mcp' && (
+        <McpSetup token={created.token} baseUrl={baseUrl ?? globalThis.location?.origin ?? ''} />
+      )}
       <div>
         <Button variant="primary" onPress={onDone}>
           {t('access.reveal.done')}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** Copy-ready setup for common MCP clients (11 §9.7), each line with the token in it. */
+export function mcpSetupLines(
+  token: string,
+  baseUrl: string,
+): { id: 'claude' | 'codex' | 'codexEnv'; text: string }[] {
+  const url = `${baseUrl.replace(/\/+$/, '')}/mcp`;
+  return [
+    {
+      id: 'claude',
+      text: `claude mcp add --transport http rooster ${url} --header "Authorization: Bearer ${token}"`,
+    },
+    {
+      id: 'codex',
+      text: `[mcp_servers.rooster]\nurl = "${url}"\nbearer_token_env_var = "ROOSTER_MCP_TOKEN"`,
+    },
+    { id: 'codexEnv', text: `export ROOSTER_MCP_TOKEN="${token}"` },
+  ];
+}
+
+function McpSetup({ token, baseUrl }: { token: string; baseUrl: string }) {
+  const { t } = useTranslation('settings');
+  const titleId = useId();
+  const url = `${baseUrl.replace(/\/+$/, '')}/mcp`;
+  return (
+    <section
+      aria-labelledby={titleId}
+      className="flex flex-col gap-3 border-t border-border pt-3"
+      data-testid="mcp-setup"
+    >
+      <div className="flex flex-col gap-0.5">
+        <h3 id={titleId} className="text-sm font-medium">
+          {t('access.setup.title')}
+        </h3>
+        <p className="text-sm text-text-muted">{t('access.setup.body')}</p>
+      </div>
+      {mcpSetupLines(token, baseUrl).map((line) => (
+        <SetupLine key={line.id} label={t(`access.setup.${line.id}`)} text={line.text} />
+      ))}
+      <p className="text-sm text-text-secondary">{t('access.setup.other', { url })}</p>
+    </section>
+  );
+}
+
+function SetupLine({ label, text }: { label: string; text: string }) {
+  const { t } = useTranslation('settings');
+  const [copied, setCopied] = useState(false);
+  const codeRef = useRef<HTMLPreElement>(null);
+  return (
+    <div className="flex flex-col gap-1" data-testid="mcp-setup-line">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm text-text-secondary">{label}</span>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={Copy}
+          aria-label={t('access.setup.copyNamed', { name: label })}
+          onPress={async () => {
+            try {
+              await navigator.clipboard.writeText(text);
+              setCopied(true);
+            } catch {
+              // No clipboard (an insecure origin, a denied permission): select it to copy by hand.
+              const node = codeRef.current;
+              const selection = globalThis.getSelection?.();
+              if (node && selection) selection.selectAllChildren(node);
+            }
+          }}
+        >
+          {copied ? t('access.setup.copied') : t('access.setup.copy')}
+        </Button>
+      </div>
+      <pre
+        ref={codeRef}
+        className="rounded-sm bg-bg-subtle px-3 py-2 font-mono text-xs break-all whitespace-pre-wrap text-text"
+      >
+        {text}
+      </pre>
     </div>
   );
 }

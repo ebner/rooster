@@ -47,8 +47,17 @@ test('AC-8.1 /device on a phone: sign in, check the code, narrow to Prio, approv
   const prio = await groupId(page, orgId, 'Prio');
   const today = await groupId(page, orgId, 'Today');
 
+  // The link's code only pre-fills the field (11 §9.2): the user confirms it with Continue.
+  const field = page.getByRole('textbox', { name: 'Code' });
+  await expect(field).toHaveValue(`${code.user_code.slice(0, 4)}-${code.user_code.slice(4)}`);
+  await expect(page.getByTestId('device-request')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Continue' }).tap();
+
   const requestForm = page.getByTestId('device-request');
-  await expect(requestForm.getByRole('heading', { name: 'Connect rooster CLI?' })).toBeVisible();
+  await expect(requestForm.getByRole('heading', { name: 'Connect a device' })).toBeVisible();
+  await expect(page.getByTestId('device-client-name')).toHaveText('rooster CLI');
+  await expect(page.getByTestId('device-unverified')).toHaveCount(0);
+  await expect(page.getByTestId('device-warning')).toBeVisible();
   await expect(page.getByTestId('device-user-code')).toHaveText(
     `${code.user_code.slice(0, 4)}-${code.user_code.slice(4)}`,
   );
@@ -123,6 +132,7 @@ test('AC-8.1 /device on a phone: sign in, check the code, narrow to Prio, approv
 
   // The code is used up: opening it again explains so.
   await page.goto(verify.pathname + verify.search);
+  await page.getByRole('button', { name: 'Continue' }).tap();
   await expect(page.getByRole('alert')).toContainText(/already been used|expired|doesn’t match/);
 });
 
@@ -133,8 +143,8 @@ test('/device: a wrong code is explained, and a code can be typed in', async ({ 
   });
   await page.getByRole('textbox', { name: 'Code' }).fill('zzzz-zzzz');
   await page.getByRole('button', { name: 'Continue' }).tap();
-  await expect(page).toHaveURL(/\/device\?user_code=ZZZZZZZZ$/);
   await expect(page.getByRole('alert')).toContainText('That code doesn’t match');
+  await expect(page.getByRole('textbox', { name: 'Code' })).toHaveValue('ZZZZ-ZZZZ');
 });
 
 test('Connected apps on a phone: choosing "Only these groups" keeps the screen in place', async ({

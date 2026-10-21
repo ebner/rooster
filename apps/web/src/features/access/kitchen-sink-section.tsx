@@ -11,6 +11,7 @@ import { DevicePage, type DevicePageState } from './device-page';
 import {
   cliDeviceRequestFields,
   fixtureConsentRequests,
+  fixtureDeviceRequests,
   fixtureGrantOrgs,
   fixtureGrants,
   fixtureGroupIds,
@@ -18,7 +19,13 @@ import {
   fixtureRemovedIdentities,
   fixtureUserCode,
 } from './fixtures';
-import { ceilingForGrant, defaultTokenValue, type GrantValue, valueFromGrant } from './grant-model';
+import {
+  ceilingForGrant,
+  defaultTokenValue,
+  deviceStart,
+  type GrantValue,
+  valueFromGrant,
+} from './grant-model';
 
 const noop = async () => undefined;
 
@@ -70,17 +77,32 @@ export function AccessKitchenSection() {
     expiresAt: now + 10 * 60 * 1000,
     decisionNonce: 'fixture-device-nonce',
   };
-  const deviceStates: [string, DevicePageState][] = [
+  const devices = useMemo(() => fixtureDeviceRequests(now), [now]);
+  const deviceStates: [string, DevicePageState, GrantValue?][] = [
     [t('access.dev.deviceEnter'), { kind: 'enter' }],
+    [t('access.dev.devicePrefilled'), { kind: 'enter', code: fixtureUserCode, prefilled: true }],
     [t('access.dev.deviceExpired'), { kind: 'enter', code: fixtureUserCode, error: 'expired' }],
+    [t('access.dev.deviceTooMany'), { kind: 'enter', code: fixtureUserCode, error: 'tooMany' }],
     [
       t('access.dev.deviceRequest'),
       { kind: 'request', request: { ...request, requestedScopes: [...request.requestedScopes] } },
     ],
+    [t('access.dev.deviceCli'), { kind: 'request', request: devices.cli }],
+    [t('access.dev.deviceApp'), { kind: 'request', request: devices.app }],
+    [t('access.dev.deviceStepUp'), { kind: 'request', request: devices.stepUp }],
+    [
+      t('access.dev.deviceSessionOnly'),
+      { kind: 'request', request: devices.app },
+      { ...deviceStart(devices.app, orgs).value, expiry: 'session' },
+    ],
     [t('access.dev.deviceApproved'), { kind: 'approved', clientName: request.clientName }],
-    [t('access.dev.deviceDenied'), { kind: 'denied', clientName: request.clientName }],
+    [
+      t('access.dev.deviceDenied'),
+      { kind: 'denied', clientName: devices.app.clientName, app: true },
+    ],
   ];
   const created = grants[1];
+  const mcpToken = grants.find((grant) => grant.audience === 'mcp');
   const consent = useMemo(() => fixtureConsentRequests(now), [now]);
   const consentStates: [string, ConsentPageState][] = [
     [t('access.dev.consentVerified'), { kind: 'request', request: consent.verified }],
@@ -130,10 +152,11 @@ export function AccessKitchenSection() {
         </div>
       </Group>
       <Group title={t('access.dev.device')} className="grid gap-6 desktop:grid-cols-2">
-        {deviceStates.map(([label, state]) => (
-          <figure key={label} className="flex flex-col gap-2">
+        {deviceStates.map(([label, state, initialValue]) => (
+          <figure key={label} className="flex flex-col gap-2" data-testid="device-specimen">
             <DevicePage
               state={state}
+              initialValue={initialValue}
               account="jannik@example.com"
               orgs={orgs}
               prefs={prefs}
@@ -192,6 +215,19 @@ export function AccessKitchenSection() {
           <NewTokenForm
             orgs={orgs}
             offerAdmin
+            prefs={prefs}
+            now={now}
+            onCancel={() => undefined}
+            onCreate={noop}
+          />
+        </div>
+      </Group>
+      <Group title={t('access.dev.newTokenMcp')} className="block">
+        <div className="max-w-pane-max">
+          <NewTokenForm
+            orgs={orgs}
+            offerAdmin
+            initialAudience="mcp"
             prefs={prefs}
             now={now}
             onCancel={() => undefined}
@@ -287,6 +323,29 @@ export function AccessKitchenSection() {
               initialMode={{
                 kind: 'created',
                 created: { token: 'rooster_pat_ab12Xk9fQ2mLr7TzW4vHsN8cJd3Pe6Yb', grant: created },
+              }}
+              onCreateToken={async () => {
+                throw new Error('kitchen sink');
+              }}
+              onUpdate={noop}
+              onRevoke={noop}
+            />
+          )}
+        </div>
+      </Group>
+      <Group title={t('access.dev.tokenCreatedMcp')} className="block">
+        <div className="max-w-pane-max">
+          {mcpToken && (
+            <ConnectedAppsSection
+              id="dev-mcp-token-created"
+              grants={[mcpToken]}
+              orgs={orgs}
+              prefs={prefs}
+              now={now}
+              baseUrl="https://rooster.example.com"
+              initialMode={{
+                kind: 'created',
+                created: { token: 'rooster_pat_m7q2Hd8sK3pXw9TfL2vRnB6cJy4Qe1Za', grant: mcpToken },
               }}
               onCreateToken={async () => {
                 throw new Error('kitchen sink');

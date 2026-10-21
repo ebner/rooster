@@ -163,6 +163,9 @@ test('AC-11.3 axe: the device approval and OAuth consent pages', async ({ page, 
     startAt: verify.pathname + verify.search,
     landing: /\/device\?user_code=/,
   });
+  await expect(page.getByTestId('device-code-form')).toBeVisible();
+  await expectAxeClean(page, 'device code');
+  await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByTestId('device-request')).toBeVisible();
   await expectAxeClean(page, 'device approval');
 

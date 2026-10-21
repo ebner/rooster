@@ -213,6 +213,39 @@ describe('InboxPage (FR-NOT-1)', () => {
     expect(within(late).getByTestId('reminder-late').textContent).toContain('sent late');
   });
 
+  test('Phase 12: a device_connected notice names the client and IP, with no actor or task', () => {
+    renderInbox();
+    const row = screen
+      .getAllByTestId('notification')
+      .find((node) => node.textContent?.includes('Acme Agent')) as HTMLElement;
+    expect(row.textContent).toContain('Acme Agent (agent.acme.example) was connected from 203.0.113.7');
+    expect(row.textContent).toContain('Not you? Revoke it in Settings → Connected apps.');
+    expect(row.textContent).toContain('Your account');
+    expect(row.textContent).not.toContain('Rooster');
+    expect(row.textContent).not.toContain('Brightwater');
+  });
+
+  test('Phase 12: a device_connected notice without an IP, with hostile text cleaned', () => {
+    const notice = items.find((n) => n.type === 'device_connected');
+    if (!notice) throw new Error('fixture');
+    renderInbox({
+      items: [
+        { ...notice, data: { ...notice.data, ip: undefined, clientName: 'Evil\u202e Agent' } },
+      ],
+    });
+    const row = screen.getByTestId('notification');
+    expect(row.textContent).toContain('Evil Agent (agent.acme.example) was connected to your account');
+  });
+
+  test('Phase 12: the notice leads to the grant in Connected apps', async () => {
+    const { paths } = await import('../shell/paths');
+    expect(paths.connectedApps('0192f5d0-7a1e-7c3a-9f10-00000000c003')).toBe(
+      '/settings/security#grant-0192f5d0-7a1e-7c3a-9f10-00000000c003',
+    );
+    expect(paths.connectedApps(undefined)).toBe('/settings/security#connected-apps');
+    expect(paths.connectedApps('../evil')).toBe('/settings/security#connected-apps');
+  });
+
   test('J/↓ move, Enter opens, U toggles read, Shift+U marks all read', () => {
     const props = renderInbox();
     act(() => {

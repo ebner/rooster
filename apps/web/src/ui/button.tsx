@@ -1,6 +1,6 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import { LoaderCircle, type LucideIcon } from 'lucide-react';
-import type { ReactNode, Ref } from 'react';
+import { type ReactNode, type Ref, useEffect, useId, useRef } from 'react';
 import { Button as AriaButton, type ButtonProps as AriaButtonProps } from 'react-aria-components';
 import { cn } from '../lib/cn';
 
@@ -70,9 +70,26 @@ export function Button({
   children,
   ...props
 }: ButtonProps) {
+  const fallbackId = useId();
+  const id = props.id ?? fallbackId;
+  const everLoading = useRef(false);
+  if (isLoading) everLoading.current = true;
+  // React Aria announces a focused button's pending state through a live-region node labelled
+  // by the button's id, kept for seconds. A button that goes away while pending (a form that
+  // closes on success) leaves that node pointing at nothing, an unnamed role="img": remove it.
+  useEffect(
+    () => () => {
+      if (!everLoading.current) return;
+      dropPendingAnnouncements(id);
+      // The page's first announcement is added 100 ms late (React Aria waits for the region).
+      setTimeout(() => dropPendingAnnouncements(id), announceDelayMs);
+    },
+    [id],
+  );
   return (
     <AriaButton
       {...props}
+      id={id}
       isPending={isLoading}
       className={cn(buttonVariants({ variant, size }), className)}
     >
@@ -83,6 +100,17 @@ export function Button({
       </span>
     </AriaButton>
   );
+}
+
+/** Longer than React Aria's delay before the first announcement of a page. */
+const announceDelayMs = 250;
+
+/** Removes React Aria's live-region announcements that are labelled by the button `id`. */
+function dropPendingAnnouncements(id: string): void {
+  if (typeof document === 'undefined') return;
+  for (const node of document.querySelectorAll('[data-live-announcer] [aria-labelledby]')) {
+    if (node.getAttribute('aria-labelledby')?.split(' ').includes(id)) node.remove();
+  }
 }
 
 /** Lucide stroke width for every Coop icon (03 §2.9). */

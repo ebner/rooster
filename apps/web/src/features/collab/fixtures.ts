@@ -219,5 +219,22 @@ export function fixtureNotifications(now: number): Notification[] {
       readAt: at(10),
       createdAt: at(6900),
     },
+    // Phase 12 (11 §9.4): a device-grant approval; no actor, no task, the personal org.
+    {
+      id: id(58),
+      orgId: fixtureIds.personalOrg,
+      orgSlug: 'personal',
+      type: 'device_connected',
+      task: null,
+      actor: null,
+      data: {
+        grantId: '0192f5d0-7a1e-7c3a-9f10-00000000c003',
+        clientName: 'Acme Agent',
+        clientHost: 'agent.acme.example',
+        ip: '203.0.113.7',
+      },
+      readAt: null,
+      createdAt: at(8000),
+    },
   ];
 }

@@ -27,6 +27,12 @@ export const paths = {
   /** Phones: the settings index; tablet and up redirect to the first section. */
   settingsIndex: '/settings',
   settings: (section: SettingsSection) => `/settings/${section}`,
+  /**
+   * Settings → Connected apps, at one grant when given (`#grant-<id>`): where the
+   * `device_connected` notice leads, to revoke it (11 §9.4).
+   */
+  connectedApps: (grantId?: string) =>
+    `/settings/security#${grantId && /^[0-9a-f-]{36}$/i.test(grantId) ? `grant-${grantId}` : 'connected-apps'}`,
   admin: '/admin',
   /** The notification inbox (P6, FR-NOT-1): one list across every org. */
   inbox: '/inbox',

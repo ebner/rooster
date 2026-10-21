@@ -486,7 +486,33 @@
       "identitiesLast": "Linked identities: only one left",
       "identitiesConfirm": "Linked identities: confirm unlinking",
       "identitiesRemoved": "Linked identities: with removed sign-ins",
-      "identitiesAllowConfirm": "Linked identities: confirm allowing again"
+      "identitiesAllowConfirm": "Linked identities: confirm allowing again",
+      "deviceCli": "Approve the CLI (device grant: request IP and age)",
+      "devicePrefilled": "A code from a link, to confirm",
+      "deviceTooMany": "Too many wrong codes",
+      "deviceApp": "Approve a third-party app (Unverified, with its domain)",
+      "deviceStepUp": "A third-party app asking for more (step-up)",
+      "deviceSessionOnly": "A third-party app, “This session only” chosen",
+      "newTokenMcp": "New token for MCP",
+      "tokenCreatedMcp": "MCP token created, with setup lines"
+    },
+    "audience": {
+      "label": "Works with",
+      "api": "API",
+      "mcp": "MCP",
+      "apiHint": "Scripts and other programs that use the rooster API.",
+      "mcpHint": "AI agents that connect over MCP, with the token in a fixed HTTP header. An MCP token can’t administer the server."
+    },
+    "setup": {
+      "title": "Connect an MCP client",
+      "body": "Each line contains the token. Run or paste it where only you can see it.",
+      "claude": "Claude Code",
+      "codex": "Codex: add to ~/.codex/config.toml",
+      "codexEnv": "Codex: set the token in the shell that starts it",
+      "other": "Other clients: connect to {url} and send the header Authorization: Bearer followed by the token.",
+      "copy": "Copy",
+      "copyNamed": "Copy: {name}",
+      "copied": "Copied"
     }
   }
 }

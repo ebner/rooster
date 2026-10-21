@@ -176,14 +176,19 @@ test('desktop screens', async ({ page, demo, request }, testInfo) => {
   });
 
   await run.take('device-consent', async () => {
-    // What `rooster login` does: ask for a device code, then send the user to /device.
-    const res = await request.post('/api/auth/device/code', {
-      form: { client_id: 'rooster-cli', scope: 'tasks:write comments:write groups:write' },
+    // What `rooster login` does: ask for a device code; the user types it on /device (11 §9.2).
+    const res = await request.post('/api/auth/oauth2/device-authorization', {
+      form: {
+        client_id: 'rooster-cli',
+        scope: 'tasks:write comments:write groups:write',
+        resource: `${DEMO.baseURL}/api/v1`,
+      },
     });
     expect(res.status(), await res.text()).toBe(200);
-    const code = (await res.json()) as { verification_uri_complete: string };
-    const verify = new URL(code.verification_uri_complete);
-    await page.goto(verify.pathname + verify.search);
+    const code = (await res.json()) as { user_code: string };
+    await page.goto('/device');
+    await page.getByRole('textbox', { name: 'Code' }).fill(code.user_code);
+    await page.getByRole('button', { name: 'Continue' }).click();
     await expect(page.getByTestId('device-request')).toBeVisible();
     await shot(page, testInfo, 'device-consent');
     await page.getByTestId('device-approve').click();

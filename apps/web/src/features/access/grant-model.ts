@@ -377,20 +377,44 @@ export function toGrantInput(value: GrantValue): {
   };
 }
 
-/** `POST /me/tokens`. */
-export function toTokenCreate(value: GrantValue, name: string): TokenCreate {
-  return { name: name.trim(), ...toGrantInput(value) } as TokenCreate;
+/** Where a new token works (11 §9.7): the REST API or the MCP endpoint, never both. */
+export type TokenAudience = 'api' | 'mcp';
+
+/**
+ * The scopes a token for `audience` may carry: an MCP token never has `admin` (11 §9.7: MCP has
+ * no admin tools; the server answers `422 admin_not_for_mcp`).
+ */
+export function tokenScopes(scopes: readonly GrantScope[], audience: TokenAudience): GrantScope[] {
+  return audience === 'mcp' ? scopes.filter((scope) => scope !== ADMIN_SCOPE) : [...scopes];
+}
+
+/** `POST /me/tokens`, with its audience (11 §9.7). */
+export function toTokenCreate(
+  value: GrantValue,
+  name: string,
+  audience: TokenAudience = 'api',
+): TokenCreate {
+  const scoped = { ...value, scopes: tokenScopes(value.scopes, audience) };
+  return { name: name.trim(), ...toGrantInput(scoped), audience } as TokenCreate;
 }
 
 /**
  * `POST /device/:userCode/approve`, with the request's `decisionNonce` unchanged: it binds the
- * approval to the session the request was shown to.
+ * approval to the session the request was shown to. "This session only" is `sessionOnly`, which
+ * excludes a day count (11 §9.3).
  */
 export function toDeviceApprove(
   value: GrantValue,
-  request: Pick<DeviceRequest, 'decisionNonce'>,
+  request: Pick<DeviceRequest, 'decisionNonce'> & Partial<Pick<DeviceRequest, 'offerSessionOnly'>>,
 ): DeviceApprove {
-  return { decisionNonce: request.decisionNonce, ...toGrantInput(value) } as DeviceApprove;
+  const { scopes, constraints, expiresInDays: days } = toGrantInput(value);
+  const sessionOnly = value.expiry === 'session' && request.offerSessionOnly === true;
+  return {
+    decisionNonce: request.decisionNonce,
+    scopes,
+    constraints,
+    ...(sessionOnly ? { sessionOnly: true } : days ? { expiresInDays: days } : {}),
+  } as DeviceApprove;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -449,6 +473,16 @@ export function deviceScopes(
 // OAuth consent (11 §3.1, ADR 0041/0042)
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * What the consent defaults read from a request: the OAuth consent request, or (Phase 12) a
+ * third-party device request, whose `existing` has no idle timeout.
+ */
+export interface ConsentShape {
+  requestedScopes: readonly GrantScope[];
+  prefill: OAuthConsentRequest['prefill'];
+  existing: (Pick<Grant, 'scopes' | 'constraints'> & { idleTimeoutMs?: number | null }) | null;
+}
+
 /** The OAuth default expiry (11 §2.4: 90 days for OAuth clients). */
 export const OAUTH_DEFAULT_EXPIRY = 90 satisfies ExpiryChoice;
 
@@ -456,7 +490,7 @@ export const OAUTH_DEFAULT_EXPIRY = 90 satisfies ExpiryChoice;
  * What the consent screen may offer: the requested scopes, never `admin` (ADR 0041), which
  * the server already leaves out; filtered here too so a server slip can't put it on screen.
  */
-export function consentScopes(request: Pick<OAuthConsentRequest, 'requestedScopes'>): GrantScope[] {
+export function consentScopes(request: Pick<ConsentShape, 'requestedScopes'>): GrantScope[] {
   return request.requestedScopes.filter((scope) => !OAUTH_EXCLUDED_SCOPES.includes(scope));
 }
 
@@ -465,7 +499,7 @@ export function consentScopes(request: Pick<OAuthConsentRequest, 'requestedScope
  * grant (ADR 0045 §5), so these can't be taken away here: the screen shows them checked and
  * fixed, and narrowing happens in Settings → Connected apps.
  */
-export function retainedScopes(request: Pick<OAuthConsentRequest, 'existing'>): GrantScope[] {
+export function retainedScopes(request: Pick<ConsentShape, 'existing'>): GrantScope[] {
   return (request.existing?.scopes ?? []).filter((scope) => !OAUTH_EXCLUDED_SCOPES.includes(scope));
 }
 
@@ -480,9 +514,7 @@ export function keepsScopes(scopes: readonly GrantScope[], fixed: readonly Grant
  * has, and the client's `authorization_details`, which pre-fill the screen and may only be
  * narrowed (11 §2.2).
  */
-export function consentCeiling(
-  request: Pick<OAuthConsentRequest, 'requestedScopes' | 'prefill' | 'existing'>,
-): GrantCeiling {
+export function consentCeiling(request: ConsentShape): GrantCeiling {
   return {
     scopes: minimalScopes([...consentScopes(request), ...retainedScopes(request)]),
     ...(request.prefill ? { constraints: request.prefill as GrantConstraints } : {}),
@@ -501,7 +533,7 @@ export function consentCeiling(
  * `orgs` must have the personal org's groups loaded, or the write default stays "nothing".
  */
 export function defaultConsentValue(
-  request: Pick<OAuthConsentRequest, 'requestedScopes' | 'prefill' | 'existing'>,
+  request: ConsentShape,
   orgs: readonly GrantOrgOption[],
 ): GrantValue {
   const requested = consentScopes(request);
@@ -542,7 +574,7 @@ export function defaultConsentValue(
  * what was dropped, for the note.
  */
 export function consentStart(
-  request: Pick<OAuthConsentRequest, 'requestedScopes' | 'prefill' | 'existing'>,
+  request: ConsentShape,
   orgs: readonly GrantOrgOption[],
 ): { value: GrantValue; stale: StaleIds } {
   return reconcileGrant(defaultConsentValue(request, orgs), orgs);
@@ -643,6 +675,64 @@ export function ceilingForGrant(
 ): GrantCeiling | undefined {
   if (grant.kind !== 'oauth') return undefined;
   return { scopes: grant.scopes, constraints: grant.constraints as GrantConstraints };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The device grant (11 §9.3, ADR 0065)
+// ---------------------------------------------------------------------------------------------
+
+type DeviceRequestShape = Pick<DeviceRequest, 'firstParty' | 'requestedScopes' | 'existing'>;
+
+/**
+ * On a third-party step-up, what the client's grant already allows. The approval updates the
+ * same grant as the browser flow (11 §9.4), so these are kept, as on the consent screen.
+ */
+export function deviceRetainedScopes(request: Pick<DeviceRequest, 'existing'>): GrantScope[] {
+  return retainedScopes({ existing: request.existing });
+}
+
+/** Step-up: the requested capabilities the existing grant lacks, marked "new" (11 §9.3). */
+export function deviceNewScopes(
+  request: Pick<DeviceRequest, 'existing' | 'requestedScopes' | 'firstParty'>,
+): GrantScope[] {
+  if (!request.existing || request.firstParty) return [];
+  const had = expandScopes(request.existing.scopes);
+  const asked = request.firstParty
+    ? request.requestedScopes
+    : consentScopes({ requestedScopes: request.requestedScopes });
+  return asked.filter((scope) => !had.has(scope));
+}
+
+/** The editor's ceiling on `/device`: what was asked for (plus, on step-up, what is kept). */
+export function deviceCeiling(
+  request: DeviceRequestShape,
+  options: { isAdmin?: boolean | undefined } = {},
+): GrantCeiling {
+  if (request.firstParty) return { scopes: deviceScopes(request.requestedScopes, options) };
+  return consentCeiling({ ...request, prefill: null });
+}
+
+/**
+ * Where `/device` starts (11 §9.3):
+ * - `rooster-cli`: what the CLI asked for, everywhere, never expiring (07 §2), `admin` only for
+ *   instance admins.
+ * - A third-party app: the consent screen's least-privilege defaults (every current org, read
+ *   only, writing only in the personal Inbox, delete unticked, 90 days), or on step-up the
+ *   existing grant's constraints, without orgs and groups that are gone (`stale` says so).
+ */
+export function deviceStart(
+  request: DeviceRequestShape,
+  orgs: readonly GrantOrgOption[],
+  options: { isAdmin?: boolean | undefined } = {},
+): { value: GrantValue; stale: StaleIds } {
+  // Each CLI login is a grant of its own (11 §9.4): nothing to step up from.
+  if (request.firstParty) {
+    return {
+      value: defaultDeviceValue(request.requestedScopes, options),
+      stale: { orgs: 0, groups: 0 },
+    };
+  }
+  return consentStart({ ...request, prefill: null }, orgs);
 }
 
 /** Normalizes a user code the way better-auth does: letters and digits, upper case. */

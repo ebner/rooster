@@ -486,7 +486,33 @@
       "identitiesLast": "Länkade identiteter: bara en kvar",
       "identitiesConfirm": "Länkade identiteter: bekräfta borttagning av länk",
       "identitiesRemoved": "Länkade identiteter: med borttagna inloggningar",
-      "identitiesAllowConfirm": "Länkade identiteter: bekräfta att tillåta igen"
+      "identitiesAllowConfirm": "Länkade identiteter: bekräfta att tillåta igen",
+      "deviceCli": "Godkänn CLI:t (enhetsflödet: begärans IP-adress och ålder)",
+      "devicePrefilled": "En kod från en länk, att bekräfta",
+      "deviceTooMany": "För många felaktiga koder",
+      "deviceApp": "Godkänn en tredjepartsapp (overifierad, med sin domän)",
+      "deviceStepUp": "En tredjepartsapp som ber om mer (utökad åtkomst)",
+      "deviceSessionOnly": "En tredjepartsapp, ”Bara den här sessionen” vald",
+      "newTokenMcp": "Ny token för MCP",
+      "tokenCreatedMcp": "MCP-token skapad, med inställningsrader"
+    },
+    "audience": {
+      "label": "Fungerar med",
+      "api": "API",
+      "mcp": "MCP",
+      "apiHint": "Skript och andra program som använder roosters API.",
+      "mcpHint": "AI-agenter som ansluter via MCP, med token i ett fast HTTP-huvud. En MCP-token kan inte administrera servern."
+    },
+    "setup": {
+      "title": "Anslut en MCP-klient",
+      "body": "Varje rad innehåller token. Kör eller klistra in den där bara du ser den.",
+      "claude": "Claude Code",
+      "codex": "Codex: lägg till i ~/.codex/config.toml",
+      "codexEnv": "Codex: ange token i skalet som startar den",
+      "other": "Andra klienter: anslut till {url} och skicka huvudet Authorization: Bearer följt av token.",
+      "copy": "Kopiera",
+      "copyNamed": "Kopiera: {name}",
+      "copied": "Kopierad"
     }
   }
 }

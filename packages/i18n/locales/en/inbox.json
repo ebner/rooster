@@ -28,10 +28,15 @@
     "due_removed": "removed the due date of your task",
     "invite_accepted": "joined {org}",
     "reminder": "Reminder",
-    "device_connected": "connected an app to your account"
+    "device_connected": "was connected to your account"
   },
   "reminder": {
     "due": "due",
     "late": "sent late"
+  },
+  "deviceConnected": {
+    "from": "was connected from {ip}",
+    "hint": "Not you? Revoke it in Settings → Connected apps.",
+    "account": "Your account"
   }
 }

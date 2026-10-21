@@ -24,6 +24,7 @@ import {
   toDeviceApprove,
   toGrantPatch,
   toggleScope,
+  tokenScopes,
   toTokenCreate,
   valueFromGrant,
   withinCeiling,
@@ -50,7 +51,20 @@ describe('grant model', () => {
         ],
       },
       expiresInDays: 90,
+      audience: 'api',
     });
+  });
+
+  test('Phase 12: an MCP token says so and never carries admin (11 §9.7)', () => {
+    const value = { ...defaultTokenValue(orgs), scopes: ['tasks:write', 'admin'] as const };
+    const body = toTokenCreate({ ...value, scopes: [...value.scopes] }, 'Agent', 'mcp');
+    expect(body.audience).toBe('mcp');
+    expect(body.scopes).toEqual(['tasks:write']);
+    expect(toTokenCreate({ ...value, scopes: [...value.scopes] }, 'Ops').scopes).toEqual([
+      'tasks:write',
+      'admin',
+    ]);
+    expect(tokenScopes(['admin'], 'mcp')).toEqual([]);
   });
 
   test('the device default is what the CLI asked for, everywhere, never expiring', () => {

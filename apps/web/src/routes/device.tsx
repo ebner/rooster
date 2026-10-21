@@ -1,6 +1,6 @@
 import { isLocale } from '@rooster/i18n/core';
 import { useQueryClient } from '@tanstack/react-query';
-import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiError, meQueryOptions, useDisplayPrefs, useMe } from '../data';
@@ -11,8 +11,8 @@ import {
   useDenyDevice,
   useDeviceRequest,
 } from '../data/device';
-import { useGrantOrgs } from '../data/grants';
-import { DevicePage, type DevicePageState } from '../features/access/device-page';
+import { confirmGrantOrgs, useGrantOrgsState } from '../data/grants';
+import { DevicePage, type DevicePageState, deviceClientName } from '../features/access/device-page';
 import { setLocale } from '../lib/i18n';
 import { safeRedirectPath } from '../lib/safe-redirect';
 import { toast } from '../ui/toast';
@@ -22,8 +22,13 @@ interface DeviceSearch {
 }
 
 /**
- * `/device` (07 §2, 11 §3.1, AC-8.1): the CLI's verification URI. Signed in, outside the app
- * frame: a focused consent page that works the same on a phone. Signed out → `/login` and back.
+ * `/device` (07 §2, 11 §9.3, AC-8.1, AC-12.1): the device grant's verification URI, for the CLI
+ * and for apps. Signed in, outside the app frame: a focused consent page that works the same on
+ * a phone. Signed out → `/login` and back.
+ *
+ * The user types the code. A `?user_code=` (older CLIs still open such a link) only pre-fills
+ * the field: the request is looked up once the user confirms it with Continue, never straight
+ * from the link (11 §9.2: a pre-filled link is the device-code phishing vector, RFC 10027).
  */
 export const Route = createFileRoute('/device')({
   validateSearch: (search: Record<string, unknown>): DeviceSearch => {
@@ -48,16 +53,17 @@ export const Route = createFileRoute('/device')({
   component: DeviceRoute,
 });
 
-type Outcome = { kind: 'approved' | 'denied'; clientName: string };
+type Outcome = { kind: 'approved' | 'denied'; clientName: string; app: boolean };
 
 function DeviceRoute() {
   const { t, i18n } = useTranslation('auth');
-  const { user_code: userCode } = Route.useSearch();
-  const navigate = useNavigate();
+  const { user_code: linkCode } = Route.useSearch();
   const queryClient = useQueryClient();
   const me = useMe();
   const prefs = useDisplayPrefs();
-  const orgs = useGrantOrgs();
+  const { orgs, ready } = useGrantOrgsState();
+  // The code the user confirmed with Continue: the only one ever looked up.
+  const [userCode, setUserCode] = useState<string | undefined>(undefined);
   const request = useDeviceRequest(userCode);
   const approve = useApproveDevice();
   const deny = useDenyDevice();
@@ -73,12 +79,12 @@ function DeviceRoute() {
   const state: DevicePageState = outcome
     ? outcome
     : !userCode
-      ? { kind: 'enter' }
+      ? { kind: 'enter', code: linkCode, prefilled: Boolean(linkCode) }
       : lateError
         ? { kind: 'enter', code: userCode, error: lateError }
         : request.error
           ? { kind: 'enter', code: userCode, error: deviceErrorKind(request.error) }
-          : request.data
+          : request.data && ready
             ? { kind: 'request', request: request.data }
             : { kind: 'loading', code: userCode };
 
@@ -87,10 +93,18 @@ function DeviceRoute() {
     if (kind === 'failed') toast({ message: fallback, tone: 'danger' });
     else setLateError(kind);
   };
+  const finish = (kind: Outcome['kind']) => {
+    if (!request.data) return;
+    setOutcome({
+      kind,
+      clientName: deviceClientName(request.data, t('device.request.cli')),
+      app: !request.data.firstParty,
+    });
+  };
 
   return (
     <DevicePage
-      // A new code starts the code step afresh (its field is seeded from the URL).
+      // A new code starts the code step afresh (its field is seeded from the code).
       key={`${state.kind}:${userCode ?? ''}`}
       state={state}
       account={me.data?.user.email ?? ''}
@@ -99,18 +113,19 @@ function DeviceRoute() {
       prefs={prefs}
       now={Date.now()}
       homeHref="/"
+      confirmOrgs={() => confirmGrantOrgs(orgs.map((org) => org.id))}
       onSubmitCode={(code) => {
         setLateError(null);
-        // The same code again (after fixing a typo elsewhere, or a hiccup): ask once more.
+        // The same code again (after a hiccup or an error): ask once more.
         if (code === userCode)
           void queryClient.resetQueries({ queryKey: deviceKeys.request(code) });
-        void navigate({ to: '/device', search: { user_code: code }, replace: true });
+        setUserCode(code);
       }}
       onApprove={async (body) => {
         if (!userCode || !request.data) return;
         try {
           await approve.mutateAsync({ userCode, body });
-          setOutcome({ kind: 'approved', clientName: request.data.clientName });
+          finish('approved');
         } catch (error) {
           settle(error, t('device.approveFailed'));
         }
@@ -119,7 +134,7 @@ function DeviceRoute() {
         if (!userCode || !request.data) return;
         try {
           await deny.mutateAsync({ userCode, decisionNonce: request.data.decisionNonce });
-          setOutcome({ kind: 'denied', clientName: request.data.clientName });
+          finish('denied');
         } catch (error) {
           settle(error, t('device.denyFailed'));
         }

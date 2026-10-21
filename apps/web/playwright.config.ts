@@ -11,9 +11,8 @@ import { RESPONSE_CONTRACT_SERVERS_ENV } from './e2e/support/response-contract';
  * so Vite's origin is ROOSTER_BASE_URL (cookies, OAuth callback, CSRF origin).
  */
 const webPort = 5181;
-const apiPort = 3181;
 const baseURL = `http://localhost:${webPort}`;
-const { idpIssuer, idpPort } = e2eEnv;
+const { apiPort, idpIssuer, idpPort } = e2eEnv;
 
 // One zone for the runner, its workers, the servers and the browsers, as on the UTC CI runners,
 // so a local run in another zone can't hide (or invent) a date bug.

@@ -1,8 +1,22 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
 import { Button, buttonVariants } from './button';
 
 describe('Button', () => {
+  test('a focused button that goes away while loading leaves no unnamed announcement behind', () => {
+    const { rerender, unmount } = render(<Button>Create</Button>);
+    const button = screen.getByRole('button', { name: 'Create' });
+    act(() => button.focus());
+    rerender(<Button isLoading>Create</Button>);
+    const pending = () =>
+      [...document.querySelectorAll('[data-live-announcer] [aria-labelledby]')].filter((node) =>
+        node.getAttribute('aria-labelledby')?.split(' ').includes(button.id),
+      );
+    expect(pending().length).toBeGreaterThan(0);
+    unmount();
+    expect(pending()).toHaveLength(0);
+  });
+
   test.each([
     ['primary', 'bg-bg-accent', 'text-text-on-accent'],
     ['secondary', 'bg-bg-elevated', 'border-border'],

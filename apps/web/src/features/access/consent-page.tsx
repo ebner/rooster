@@ -1,13 +1,5 @@
 import type { OAuthConsentDecision, OAuthConsentRequest } from '@rooster/core/schemas';
-import {
-  AppWindow,
-  BadgeCheck,
-  CircleCheck,
-  CircleX,
-  Globe,
-  Laptop,
-  ShieldAlert,
-} from 'lucide-react';
+import { AppWindow, BadgeCheck, CircleCheck, CircleX, Globe, Laptop } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
@@ -24,7 +16,7 @@ import {
   isVerifiedClient,
   resourceKind,
 } from './client-display';
-import { ConsentActions, ConsentFrame } from './consent-frame';
+import { ConsentActions, ConsentFrame, UnverifiedBadge } from './consent-frame';
 import { ConstraintEditor } from './constraint-editor';
 import {
   consentCeiling,
@@ -194,13 +186,7 @@ function ClientIdentity({ request }: { request: OAuthConsentRequest }) {
               {t('consent.verified')}
             </span>
           ) : (
-            <span
-              className="inline-flex h-chip items-center gap-0.5 rounded-xs bg-bg-warning-subtle px-1.5 text-xs font-medium text-text-warning"
-              data-testid="consent-unverified"
-            >
-              <ShieldAlert className="size-3" strokeWidth={iconStrokeWidth} aria-hidden />
-              {t('consent.unverified')}
-            </span>
+            <UnverifiedBadge label={t('consent.unverified')} data-testid="consent-unverified" />
           )}
         </span>
         <span className="text-sm text-text-secondary">

@@ -1,6 +1,7 @@
+import { ShieldAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '../../lib/cn';
-import { Button } from '../../ui/button';
+import { Button, iconStrokeWidth } from '../../ui/button';
 import { Logo } from '../../ui/logo';
 
 /**
@@ -78,5 +79,24 @@ export function ConsentActions({
         </Button>
       </div>
     </div>
+  );
+}
+
+/** "Unverified": a client whose identity rooster couldn't check (11 §3.1, §9.1). */
+export function UnverifiedBadge({
+  label,
+  'data-testid': testId,
+}: {
+  label: string;
+  'data-testid'?: string;
+}) {
+  return (
+    <span
+      className="inline-flex h-chip items-center gap-0.5 rounded-xs bg-bg-warning-subtle px-1.5 text-xs font-medium text-text-warning"
+      {...(testId ? { 'data-testid': testId } : {})}
+    >
+      <ShieldAlert className="size-3" strokeWidth={iconStrokeWidth} aria-hidden />
+      {label}
+    </span>
   );
 }
