@@ -231,6 +231,51 @@ describe('/device: the full-context request (11 §9.3)', () => {
     );
   });
 
+  test('reconnect: what the grant already has is shown, but only what this request covers is sent', async () => {
+    // The server checks the approval against this request and merges the grant's own scopes
+    // (11 §9.4); sending `comments:write` here was refused as widening, with no way out.
+    const reconnect = {
+      ...requests.stepUp,
+      requestedScopes: ['tasks:write' as const],
+      existing: {
+        scopes: ['comments:write' as const],
+        constraints: { orgs: [{ orgId: personal, read: 'all' as const, write: 'all' as const }] },
+      },
+    };
+    const props = renderDevice({ state: { kind: 'request', request: reconnect } });
+    const comment = screen.getByRole('checkbox', { name: /Comment/ }) as HTMLInputElement;
+    expect(comment.checked).toBe(true);
+    expect(comment.disabled).toBe(true);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('device-approve'));
+    });
+    expect(props.onApprove).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: ['tasks:write'] }),
+    );
+    expect(toDeviceApprove(deviceStart(reconnect, orgs).value, reconnect).scopes).toEqual([
+      'tasks:write',
+    ]);
+  });
+
+  test('reconnect: approving nothing this request asks for is blocked and explained', () => {
+    const reconnect = {
+      ...requests.stepUp,
+      requestedScopes: ['notifications:read' as const],
+      existing: {
+        scopes: ['comments:write' as const],
+        constraints: { orgs: [{ orgId: personal, read: 'all' as const, write: 'all' as const }] },
+      },
+    };
+    const props = renderDevice({ state: { kind: 'request', request: reconnect } });
+    expect(screen.queryByTestId('device-nothing-new')).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Read notifications/ }));
+    expect(screen.getByTestId('device-nothing-new').textContent).toContain(
+      'Approve at least one capability',
+    );
+    expect((screen.getByTestId('device-approve') as HTMLButtonElement).disabled).toBe(true);
+    expect(props.onApprove).not.toHaveBeenCalled();
+  });
+
   test('step-up: banner, new capabilities marked, what it has is kept', () => {
     renderDevice({ state: { kind: 'request', request: requests.stepUp } });
     expect(screen.getByText(/already has access and is asking for more/)).toBeTruthy();

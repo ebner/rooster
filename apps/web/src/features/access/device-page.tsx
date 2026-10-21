@@ -12,6 +12,7 @@ import { cleanClientText, clientName, displayDomain } from './client-display';
 import { ConsentActions, ConsentFrame, UnverifiedBadge } from './consent-frame';
 import { ConstraintEditor } from './constraint-editor';
 import {
+  approvableScopes,
   deviceCeiling,
   deviceNewScopes,
   deviceRetainedScopes,
@@ -292,7 +293,10 @@ function RequestStep({
   const [pending, setPending] = useState<'approve' | 'deny' | null>(null);
   const titleId = useId();
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const blocked = grantIssues(value).length > 0;
+  // Only what this request covers is sent (the server keeps the rest): approving nothing new
+  // is not an approval, so it is blocked here and explained.
+  const nothingNew = approvableScopes(value.scopes, request.requestedScopes).length === 0;
+  const blocked = grantIssues(value).length > 0 || nothingNew;
   const newScopes = deviceNewScopes(request);
   const stepUp = app && request.existing !== null && newScopes.length > 0;
   const fixedScopes = app && request.existing ? deviceRetainedScopes(request) : undefined;
@@ -383,6 +387,11 @@ function RequestStep({
         now={now}
         data-testid="device-editor"
       />
+      {nothingNew && grantIssues(value).length === 0 && (
+        <p className="text-sm text-text-danger" data-testid="device-nothing-new">
+          {t('consent.nothingApproved')}
+        </p>
+      )}
       {saveIssue && (
         <p role="alert" className="text-sm text-text-danger" data-testid="device-issue">
           {saveIssue.kind === 'noScopes'

@@ -399,19 +399,35 @@ export function toTokenCreate(
 }
 
 /**
+ * What an approval may send: the scopes within the current request (implied ones count). On a
+ * third-party step-up the editor shows the grant's existing capabilities ticked and fixed, but
+ * the server checks the approval against this request alone and merges the grant's own scopes
+ * itself (11 §9.4), so sending them would be refused as widening.
+ */
+export function approvableScopes(
+  scopes: readonly GrantScope[],
+  requested: readonly GrantScope[],
+): GrantScope[] {
+  const allowed = expandScopes(requested);
+  return minimalScopes([...expandScopes(scopes)].filter((scope) => allowed.has(scope)));
+}
+
+/**
  * `POST /device/:userCode/approve`, with the request's `decisionNonce` unchanged: it binds the
  * approval to the session the request was shown to. "This session only" is `sessionOnly`, which
- * excludes a day count (11 §9.3).
+ * excludes a day count (11 §9.3). With `requestedScopes`, only what the request covers is sent
+ * (`approvableScopes`); the constraints still follow everything the grant will hold.
  */
 export function toDeviceApprove(
   value: GrantValue,
-  request: Pick<DeviceRequest, 'decisionNonce'> & Partial<Pick<DeviceRequest, 'offerSessionOnly'>>,
+  request: Pick<DeviceRequest, 'decisionNonce'> &
+    Partial<Pick<DeviceRequest, 'offerSessionOnly' | 'requestedScopes'>>,
 ): DeviceApprove {
   const { scopes, constraints, expiresInDays: days } = toGrantInput(value);
   const sessionOnly = value.expiry === 'session' && request.offerSessionOnly === true;
   return {
     decisionNonce: request.decisionNonce,
-    scopes,
+    scopes: request.requestedScopes ? approvableScopes(scopes, request.requestedScopes) : scopes,
     constraints,
     ...(sessionOnly ? { sessionOnly: true } : days ? { expiresInDays: days } : {}),
   } as DeviceApprove;
