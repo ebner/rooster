@@ -45,6 +45,7 @@ const grantExample = {
   lastUsedAt: 1767312000000,
   lastUsedIp: '203.0.113.7',
   current: false,
+  audience: 'api',
 };
 
 export const GrantConstraintsSchema = named(grantConstraintsSchema, 'GrantConstraints', {
@@ -111,6 +112,13 @@ export const DeviceRequestSchema = named(deviceRequestSchema, 'DeviceRequest', {
       'notifications:read',
     ],
     expiresAt: 1767226200000,
+    firstParty: true,
+    client: null,
+    resource: 'api',
+    requestIp: '203.0.113.7',
+    requestedAt: 1767225600000,
+    existing: null,
+    offerSessionOnly: false,
     decisionNonce: 'pT8x2Lk0…',
   },
 });

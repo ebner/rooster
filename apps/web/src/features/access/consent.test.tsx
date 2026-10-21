@@ -16,6 +16,7 @@ import { NewTokenForm } from './connected-apps';
 import { ConsentPage, type ConsentPageProps } from './consent-page';
 import { DevicePage } from './device-page';
 import {
+  cliDeviceRequestFields,
   deletedGroupId,
   fixtureConsentRequests,
   fixtureGrantOrgs,
@@ -323,6 +324,7 @@ describe('/oauth/consent', () => {
 
 describe('admin capability (ADR 0041/0042)', () => {
   const request = {
+    ...cliDeviceRequestFields,
     userCode: fixtureUserCode,
     clientId: 'rooster-cli',
     clientName: 'rooster CLI',

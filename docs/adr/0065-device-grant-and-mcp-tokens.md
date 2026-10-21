@@ -1,6 +1,6 @@
 # ADR 0065: Headless agent access through the OAuth device grant and MCP tokens
 
-- Status: accepted (specified; unscheduled, 09 §Backlog)
+- Status: accepted (scheduled as Phase 12, 09)
 - Date: 2026-10-21
 - Amends: 11 §4.1, §4.2, §7 (adds §9); 04 §4; 05; 06; 07 §2, §4
 - Spec: 11 §9

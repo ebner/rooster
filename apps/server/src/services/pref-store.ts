@@ -12,13 +12,18 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { notificationPref, user } from '../db/schema/index.ts';
 import type { Tx } from './context.ts';
 
-/** Whether a cell of the user's matrix is on: their stored row, else the default (ADR 0033). */
+/**
+ * Whether a cell of the user's matrix is on: their stored row, else the default (ADR 0033).
+ * The `device_connected` security notice (11 §9.4) is outside the matrix: always in-app and by
+ * email, never pushed.
+ */
 export function prefEnabled(
   tx: Tx,
   userId: string,
-  type: NotificationPrefType,
+  type: NotificationPrefType | 'device_connected',
   channel: NotificationPrefChannel,
 ): boolean {
+  if (type === 'device_connected') return channel !== 'push';
   const row = tx
     .select({ enabled: notificationPref.enabled })
     .from(notificationPref)

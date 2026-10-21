@@ -9,6 +9,7 @@ import { ConsentPage, type ConsentPageState } from './consent-page';
 import { ConstraintEditor } from './constraint-editor';
 import { DevicePage, type DevicePageState } from './device-page';
 import {
+  cliDeviceRequestFields,
   fixtureConsentRequests,
   fixtureGrantOrgs,
   fixtureGrants,
@@ -55,6 +56,7 @@ export function AccessKitchenSection() {
   const [phone, setPhone] = useState<GrantValue>(() => defaultTokenValue(orgs));
 
   const request = {
+    ...cliDeviceRequestFields,
     userCode: fixtureUserCode,
     clientId: 'rooster-cli',
     clientName: 'rooster CLI',

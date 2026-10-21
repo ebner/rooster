@@ -225,10 +225,10 @@ Scopes can't say "write only in Prio" (RFC 9396 §1), so each grant also stores 
   - The OAuth AS (§4).
   - The remote MCP endpoint and the stdio MCP server sharing `packages/mcp` (§5).
   - Discovery documents and the skill (§6).
-- **Backlog:** the device grant and MCP tokens (§9, ADR 0065; 09 §Backlog).
+- **Phase 12:** the device grant and MCP tokens (§9, ADR 0065).
 - **Settled for P9** (ADR 0041): better-auth's provider carries the grant through `referenceId` with adapters; `tasks:delete` reaches MCP only by an explicit consent checkbox; the consent screen offers "this session only".
 
-## 9. Headless access: the device grant and MCP tokens (backlog, ADR 0065)
+## 9. Headless access: the device grant and MCP tokens (Phase 12, ADR 0065)
 
 Agents often run where no browser can receive an OAuth redirect: an SSH session, a container, a CI-like runner. Two additions serve them. They were researched on 2026-10-21, and the choices were settled the same day (ADR 0065).
 

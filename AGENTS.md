@@ -232,7 +232,7 @@ This file is the entry point for every agent and must describe the repository **
 Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to them. A PR that changes any of the above without updating `AGENTS.md` is not done.
 
 ## Status
-- **Current phase:** none scheduled. Phase 11 was the last phase in 09; the next work is the backlog (09 §Backlog).
+- **Current phase:** Phase 12, headless agent access: the OAuth device grant and MCP tokens (09 Phase 12, 11 §9, ADR 0065). Started 2026-10-21; the contract is in `packages/core/src/schemas/grants.ts` and `collab.ts`.
 - **Latest release:** 1.7.2 (a follower takes over from a leader that answers but never sends, ADR 0019 §9; Reload goes past a stuck queue once every op is stored, ADR 0021 amendment), after 1.7.1 (the sync queue no longer waits without limit for IndexedDB: outbox reads and writes get 4 s, then ops are sent anyway; ADR 0019 §8), after 1.7.0 (on touch screens a tap on a description link shows a link card, ADR 0062; on phones a swipe or press-and-slide on the header's org name switches orgs and keeps the view, ADR 0063; the release workflow keeps the CLI binaries artifact for a day), after 1.6.2 (tomorrow's date label is blue, the desktop scale stops at 112.5 %; ADR 0061), 1.6.1 (a row's date picker no longer opens the pane, a larger email logo) and 1.6.0 (search in the guide and the palette's Help section, the TUI's screenshot, the emails' logo, Admin → System's test email, whole tag chips in narrow rows, a lighter favicon; ADRs 0058, 0059), and 1.5.0 (Phase 11: the security audit, accessibility, 2,000-task performance, the guide at /help, Admin → System, the storage quota, removed sign-ins, apps without colleagues' emails; ADRs 0052–0056).
 - **Last completed phase:** Phase 11, hardening (2026-10-10; released in 1.5.0):
   - the security audit of every trust boundary: 107 findings, 102 fixed, 5 accepted or refuted (`docs/security/security-review.md`, ADR 0056);
@@ -257,7 +257,7 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
 - Phase 7, notification delivery (2026-10-09; released in 1.2.0): Web Push per device, SMTP email (invites, immediate or batched notifications, the daily digest, confirm-then-POST unsubscribe), the due reminder, and the full preference matrix. AC-7.1 to AC-7.3 pass. ADRs 0033 to 0035. Migration `0006_delivery`.
 - Phase 6, collaboration (2026-10-09; released in 1.2.0): assignment, Everyone's tasks, comments and activity, followers, the in-app inbox. AC-6.1 to AC-6.4 pass at the API level and in the e2e suite. ADRs 0028 to 0032. Migration `0005_collab`.
 - Phase 5, smart views, search, palette, export and Trash (2026-10-06), released as **v1.0.0**. AC-5.1 to AC-5.3 pass on desktop and the phone projects. ADRs 0012 to 0016 record the decisions; ADR 0016 relaxed the initial-bundle budget to 450 KB.
-- **Backlog** (`docs/spec/09-phases.md` §Backlog): the dark theme, the open ASVS gaps, headless agent access (the OAuth device grant and MCP tokens, 11 §9, ADR 0065), and the Phase 11 follow-ups. Do not build an item unless it is scheduled.
+- **Backlog** (`docs/spec/09-phases.md` §Backlog): the dark theme, the open ASVS gaps, and the Phase 11 follow-ups. Do not build an item unless it is scheduled.
 - **E2E:** never run two Playwright suites at once; they share ports 9400, 3181, 5181 and 3182.
 - **Git:** commit locally; **do not push to origin unless the maintainer explicitly asks.**
 - **Deferred to later phases** (from ADRs 0003–0011; pick them up in the phase named):

@@ -1,5 +1,10 @@
 import { type DateFormat, formatRelative, type TimeFormat } from '@rooster/core/dates';
-import type { MailTestResult, UnsubscribeCategory } from '@rooster/core/schemas';
+import {
+  type MailTestResult,
+  type NotificationType,
+  UNSUBSCRIBE_CATEGORIES,
+  type UnsubscribeCategory,
+} from '@rooster/core/schemas';
 import type { Locale } from '@rooster/i18n';
 import { and, asc, eq, gt, inArray, isNull, min, sql } from 'drizzle-orm';
 import type { ReactElement } from 'react';
@@ -330,11 +335,11 @@ export class MailService {
         subject:
           claimed.notification.taskId === null ? item.event : `${item.event}: ${item.subject}`,
         element: NotificationEmail({
-          ...this.frame(recipient, [claimed.notification.type]),
+          ...this.frame(recipient, unsubscribable(claimed.notification.type)),
           item,
           url: this.url(item.path),
         }),
-        unsubscribe: { userId: recipient.id, category: claimed.notification.type },
+        ...unsubscribeHeader(recipient.id, claimed.notification.type),
       });
     } catch (err) {
       releaseEmails(this.deps, [id], now);
@@ -411,7 +416,7 @@ export class MailService {
     }));
     const first = rows[0];
     if (first === undefined) return false;
-    const categories = rows.map((r) => r.type);
+    const categories = rows.flatMap((r) => unsubscribable(r.type));
     const frame = this.frame(recipient, categories);
     try {
       if (items.length === 1 && items[0] !== undefined) {
@@ -420,7 +425,7 @@ export class MailService {
           to: recipient.email,
           subject: first.taskId === null ? item.event : `${item.event}: ${item.subject}`,
           element: NotificationEmail({ ...frame, item, url: this.url(item.path) }),
-          unsubscribe: { userId, category: first.type },
+          ...unsubscribeHeader(userId, first.type),
         });
       } else {
         await this.send({
@@ -431,7 +436,7 @@ export class MailService {
             items: items.map((i) => ({ ...i, url: this.url(i.path) })),
             inboxUrl: this.url('/inbox'),
           }),
-          unsubscribe: { userId, category: first.type },
+          ...unsubscribeHeader(userId, first.type),
         });
       }
     } catch (err) {
@@ -643,4 +648,19 @@ function afterCommitSend(tx: Tx, send: () => unknown): void {
   afterCommit(tx, () => {
     void send();
   });
+}
+
+/** The unsubscribe category of a notification type: none for the security notice (11 §9.4). */
+function unsubscribable(type: NotificationType): UnsubscribeCategory[] {
+  return (UNSUBSCRIBE_CATEGORIES as readonly string[]).includes(type)
+    ? [type as UnsubscribeCategory]
+    : [];
+}
+
+function unsubscribeHeader(
+  userId: string,
+  type: NotificationType,
+): { unsubscribe?: { userId: string; category: UnsubscribeCategory } } {
+  const [category] = unsubscribable(type);
+  return category === undefined ? {} : { unsubscribe: { userId, category } };
 }

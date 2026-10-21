@@ -1856,7 +1856,8 @@ export interface components {
          *       "client": null,
          *       "lastUsedAt": 1767312000000,
          *       "lastUsedIp": "203.0.113.7",
-         *       "current": false
+         *       "current": false,
+         *       "audience": "api"
          *     }
          */
         Grant: {
@@ -1885,6 +1886,8 @@ export interface components {
             lastUsedAt: number | null;
             lastUsedIp: string | null;
             current: boolean;
+            /** @enum {string|null} */
+            audience: "api" | "mcp" | null;
         };
         /**
          * @description Where a grant may act (11 §2.2): `orgs: "all"` (including orgs joined later) or a list of orgs, each with `read` (`"all"` or `{groups}`) and `write` (`"none"`, `"all"` or `{groups}`). Groups are the user’s own groups; a task counts as being in the group where it sits in the user’s My tasks (a subtask: where its row sits).
@@ -1947,6 +1950,8 @@ export interface components {
             constraints: components["schemas"]["GrantConstraints"];
             /** @description Omitted: the token never expires. */
             expiresInDays?: number;
+            /** @enum {string} */
+            audience?: "api" | "mcp";
         };
         /**
          * @example {
@@ -1980,7 +1985,8 @@ export interface components {
          *         "client": null,
          *         "lastUsedAt": 1767312000000,
          *         "lastUsedIp": "203.0.113.7",
-         *         "current": false
+         *         "current": false,
+         *         "audience": "api"
          *       }
          *     }
          */
@@ -2001,6 +2007,13 @@ export interface components {
          *         "notifications:read"
          *       ],
          *       "expiresAt": 1767226200000,
+         *       "firstParty": true,
+         *       "client": null,
+         *       "resource": "api",
+         *       "requestIp": "203.0.113.7",
+         *       "requestedAt": 1767225600000,
+         *       "existing": null,
+         *       "offerSessionOnly": false,
          *       "decisionNonce": "pT8x2Lk0…"
          *     }
          */
@@ -2010,6 +2023,36 @@ export interface components {
             clientName: string;
             requestedScopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read" | "admin")[];
             expiresAt: number;
+            firstParty: boolean;
+            client: {
+                name: string;
+                domain: string;
+                /** Format: uri */
+                logoUri: string | null;
+                /** Format: uri */
+                clientUri: string | null;
+                verified: boolean;
+                dynamic: boolean;
+            } | null;
+            /** @enum {string|null} */
+            resource: "api" | "mcp" | null;
+            requestIp: string | null;
+            requestedAt: number;
+            existing: {
+                scopes: ("tasks:read" | "tasks:write" | "comments:write" | "tasks:assign" | "groups:write" | "tasks:delete" | "notifications:read" | "admin")[];
+                constraints: {
+                    orgs: "all" | {
+                        orgId: string;
+                        read: "all" | {
+                            groups: string[];
+                        };
+                        write: "none" | "all" | {
+                            groups: string[];
+                        };
+                    }[];
+                };
+            } | null;
+            offerSessionOnly: boolean;
             decisionNonce: string;
         };
         /**
@@ -2044,6 +2087,7 @@ export interface components {
             label?: string;
             /** @description Omitted: the grant does not expire. */
             expiresInDays?: number;
+            sessionOnly?: boolean;
         };
         /**
          * @description `decisionNonce` is the one `GET /device/{userCode}` returned, unchanged.
@@ -4493,7 +4537,7 @@ export interface components {
             orgId: string;
             orgSlug: string;
             /** @enum {string} */
-            type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted" | "reminder";
+            type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted" | "reminder" | "device_connected";
             task: {
                 id: string;
                 seq: number | null;
@@ -4519,6 +4563,10 @@ export interface components {
                 reminderId?: string;
                 fireAt?: number;
                 late?: boolean;
+                grantId?: string;
+                clientName?: string;
+                clientHost?: string;
+                ip?: string;
             };
             readAt: number | null;
             createdAt: number;

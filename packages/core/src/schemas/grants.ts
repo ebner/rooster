@@ -26,6 +26,14 @@ export const GRANT_KINDS = ['pat', 'device', 'oauth'] as const;
 export const grantKindSchema = z.enum(GRANT_KINDS);
 
 /**
+ * Phase 12 (11 §9): where a credential works. A PAT is `api` (the default) or `mcp` (an MCP
+ * token, 11 §9.7); a CLI login through the OAuth device grant is bound to the `resource` it
+ * asked for (11 §9.6).
+ */
+export const CREDENTIAL_AUDIENCES = ['api', 'mcp'] as const;
+export const credentialAudienceSchema = z.enum(CREDENTIAL_AUDIENCES);
+
+/**
  * P9: how an OAuth client presents itself (11 §3.1), from its Client ID Metadata Document or
  * its Dynamic Client Registration.
  */
@@ -67,6 +75,12 @@ export const grantSchema = z.object({
   lastUsedIp: z.string().nullable(),
   /** True for the grant behind the request (`GET /me/grants` from the CLI). */
   current: z.boolean(),
+  /**
+   * Phase 12 (11 §9): where the credential works. PATs: `api` or `mcp`. CLI logins through
+   * the device grant: their resource. Null for OAuth grants (each token carries its own
+   * resource) and for CLI device sessions from before Phase 12.
+   */
+  audience: credentialAudienceSchema.nullable(),
 });
 export const grantListSchema = z.array(grantSchema);
 
@@ -93,6 +107,11 @@ export const tokenCreateSchema = z.object({
   constraints: grantConstraintsSchema,
   /** Omitted = never expires. */
   expiresInDays: z.int().min(1).max(3650).optional(),
+  /**
+   * Phase 12 (11 §9.7): `mcp` makes an MCP token, accepted only at `/mcp` (and never with
+   * `admin`: `422 admin_not_for_mcp`). Default `api`.
+   */
+  audience: credentialAudienceSchema.optional(),
 });
 export const tokenCreatedSchema = z.object({
   /** `rooster_pat_…`, shown once. */
@@ -112,6 +131,28 @@ export const deviceRequestSchema = z.object({
   requestedScopes: z.array(grantScopeSchema),
   expiresAt: timestampSchema,
   /**
+   * Phase 12 (11 §9.3): `rooster-cli` (shown as "rooster CLI") or a third-party client, which
+   * is always shown as Unverified with `client.domain` (the client id's host) and no logo.
+   */
+  firstParty: z.boolean(),
+  /** Phase 12: the third-party client's presentation (`verified` is always false); null for `rooster-cli`. */
+  client: oauthClientInfoSchema.nullable(),
+  /** Phase 12: where the tokens will work; null for the legacy CLI device flow (a bearer session). */
+  resource: credentialAudienceSchema.nullable(),
+  /** Phase 12: the IP address the device authorization request came from (11 §9.3). */
+  requestIp: z.string().nullable(),
+  /** Phase 12: when the device authorization request was made. */
+  requestedAt: timestampSchema,
+  /**
+   * Phase 12: the user's live grant for this third-party client, for step-up: the page
+   * pre-fills its constraints and marks the capabilities it lacks as "new". Null otherwise.
+   */
+  existing: z
+    .object({ scopes: z.array(grantScopeSchema), constraints: grantConstraintsSchema })
+    .nullable(),
+  /** Phase 12: offer "This session only" (third-party clients only, 11 §9.3). */
+  offerSessionOnly: z.boolean(),
+  /**
    * Binds the decision to the user and session this request was shown to: send it back
    * unchanged as the approval's or denial's `decisionNonce`. Reload after a session change.
    */
@@ -129,6 +170,11 @@ export const deviceApproveSchema = z.object({
   /** Default: "rooster CLI on <device>" from the request's user agent. */
   label: z.string().trim().min(1).max(100).optional(),
   expiresInDays: z.int().min(1).max(3650).optional(),
+  /**
+   * Phase 12: "This session only" (11 §2.4). Only when the request offers it
+   * (`offerSessionOnly`), else `422 session_only_not_offered`; excludes `expiresInDays`.
+   */
+  sessionOnly: z.boolean().optional(),
 });
 
 /** POST /device/:userCode/deny. */

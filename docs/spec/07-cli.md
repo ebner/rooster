@@ -36,7 +36,7 @@ The `rooster` binary lives in `apps/cli`. It uses only the public REST API (`pac
   The `/device` approval page is the consent screen of 11 §3.1. The user sees the CLI's requested capabilities and chooses orgs, groups and an expiry, so every CLI profile carries a **grant** (11 §2). `rooster login` requests every capability (it is the user's own terminal), and `--scope` requests less. The device code request carries scopes only, so orgs and groups are chosen on the `/device` page. `--org` sets only the profile's default org.
 - `rooster login --with-token` reads a PAT from stdin (for CI).
 - `rooster logout` revokes the device session server-side and deletes the local secret.
-- **Backlog (11 §9.6):** `rooster login` moves to the OAuth device grant (`resource` = the API, a rotated refresh token in the keychain; legacy device sessions keep working until revoked), and the device code response has no pre-filled link, so the CLI prints the URL and the code and opens `/device` without it.
+- **Phase 12 (11 §9.6):** `rooster login` moves to the OAuth device grant (`resource` = the API, a rotated refresh token in the keychain; legacy device sessions keep working until revoked), and the device code response has no pre-filled link, so the CLI prints the URL and the code and opens `/device` without it.
 
 ## 3. Task references
 Commands that take `<ref>` accept:
@@ -68,11 +68,11 @@ Global flags: `--org <slug>`, `--profile <name>`, `--json`, `--quiet` (IDs only)
 | `rooster search <query…>` | `--all-orgs`. |
 | `rooster open [ref]` | Opens the web UI (task deep link, or My tasks). |
 | `rooster org ls` / `rooster org use <slug>` | List orgs or set the profile's default org. |
-| `rooster token create <name> [--scope tasks:read,…] [--org <slug>] [--group <org>/<name>]… [--write-group <org>/<name>]… [--expires 90d\|never]` / `ls` / `revoke <id>` | PATs with a grant (11 §2). The default is `tasks:read` for 90 days. `--read-only` is an alias for `--scope tasks:read`. `create` works from a device login only (not from a PAT), and the token must be a subset of that login's grant (ADR 0037). `revoke` revokes the current grant; others need the browser. Backlog (11 §9.7): `--audience mcp` creates an MCP token for `/mcp`. |
+| `rooster token create <name> [--scope tasks:read,…] [--org <slug>] [--group <org>/<name>]… [--write-group <org>/<name>]… [--expires 90d\|never]` / `ls` / `revoke <id>` | PATs with a grant (11 §2). The default is `tasks:read` for 90 days. `--read-only` is an alias for `--scope tasks:read`. `create` works from a device login only (not from a PAT), and the token must be a subset of that login's grant (ADR 0037). `revoke` revokes the current grant; others need the browser. Phase 12 (11 §9.7): `--audience mcp` creates an MCP token for `/mcp`. |
 | `rooster apps ls` / `rooster apps revoke <id>` | Connected apps (every grant: PATs, devices, OAuth clients; 11 §3.2). |
 | `rooster mcp [--read-only] [--profile agent]` | Starts the MCP server on stdio (§6), using the profile's grant. |
-| `rooster mcp setup [--client claude-code\|claude-desktop\|cursor\|print] [--profile agent] [--allow-delete] [--relogin] [--yes]` | Creates a dedicated agent profile through the device flow (its own, narrower grant; 11 §5.1) and writes or prints the MCP client config. Backlog (11 §9.6): `--remote` creates the profile for `/mcp` and configures the client for the remote endpoint with `rooster mcp header` as its header helper. |
-| `rooster mcp header [--profile agent]` (backlog, 11 §9.6) | Prints `{"Authorization": "Bearer …"}` with a fresh `/mcp` access token for the profile, refreshing it when needed. |
+| `rooster mcp setup [--client claude-code\|claude-desktop\|cursor\|print] [--profile agent] [--allow-delete] [--relogin] [--yes]` | Creates a dedicated agent profile through the device flow (its own, narrower grant; 11 §5.1) and writes or prints the MCP client config. Phase 12 (11 §9.6): `--remote` creates the profile for `/mcp` and configures the client for the remote endpoint with `rooster mcp header` as its header helper. |
+| `rooster mcp header [--profile agent]` (Phase 12, 11 §9.6) | Prints `{"Authorization": "Bearer …"}` with a fresh `/mcp` access token for the profile, refreshing it when needed. |
 | `rooster skill print` / `rooster skill install [--target claude\|agents] [--project]` | Prints or installs the rooster agent skill (`SKILL.md`, 11 §6.2). |
 | `rooster completion bash\|zsh\|fish\|powershell` | Shell completions, including dynamic completion of group and tag names (cached for 60 s). |
 | `rooster admin reindex` | Rebuilds the search index (`POST /admin/search/reindex`). Needs a login or PAT with the `admin` capability, which only instance admins can grant (ADR 0041). P9. |

@@ -7,6 +7,20 @@ import type {
 import { fixtureIds } from '../shell/fixtures';
 import type { GrantOrgOption } from './grant-model';
 
+/**
+ * Phase 12 fields of a device request from the CLI's legacy flow (11 §9.3): first-party, no
+ * client presentation, a bearer session rather than OAuth tokens.
+ */
+export const cliDeviceRequestFields = {
+  firstParty: true,
+  client: null,
+  resource: null,
+  requestIp: null,
+  requestedAt: 0,
+  existing: null,
+  offerSessionOnly: false,
+} as const;
+
 /** Kitchen-sink and test fixtures for the grant UI (P8, WP 8.2). */
 export const fixtureGroupIds = {
   personalInbox: '0192f5d0-7a1e-7c3a-9f10-00000000b001',
@@ -63,6 +77,7 @@ export function fixtureGrants(now: number): Grant[] {
       lastUsedAt: now - 5 * minute,
       lastUsedIp: '83.250.12.7',
       current: false,
+      audience: null,
     },
     {
       id: '0192f5d0-7a1e-7c3a-9f10-00000000c002',
@@ -89,6 +104,7 @@ export function fixtureGrants(now: number): Grant[] {
       lastUsedAt: now - 2 * day,
       lastUsedIp: '10.0.0.14',
       current: false,
+      audience: null,
     },
     {
       id: '0192f5d0-7a1e-7c3a-9f10-00000000c003',
@@ -121,6 +137,7 @@ export function fixtureGrants(now: number): Grant[] {
       lastUsedAt: null,
       lastUsedIp: null,
       current: false,
+      audience: null,
     },
     {
       id: '0192f5d0-7a1e-7c3a-9f10-00000000c004',
@@ -140,6 +157,7 @@ export function fixtureGrants(now: number): Grant[] {
       lastUsedAt: now - 31 * day,
       lastUsedIp: '192.168.1.20',
       current: false,
+      audience: null,
     },
   ];
 }

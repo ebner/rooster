@@ -840,6 +840,7 @@ export class GrantService {
       lastUsedAt: row.lastUsedAt,
       lastUsedIp: row.lastUsedIp,
       current: actor.grant?.id === row.id,
+      audience: row.kind === 'pat' ? 'api' : null,
     };
   }
 
@@ -1231,6 +1232,13 @@ export class GrantService {
         clientName: CLI_CLIENT_NAME,
         requestedScopes: minimalScopes(this.requestedScopes(actor, row.scope)),
         expiresAt: row.expiresAt.getTime(),
+        firstParty: true,
+        client: null,
+        resource: null,
+        requestIp: null,
+        requestedAt: row.expiresAt.getTime() - 10 * 60_000,
+        existing: null,
+        offerSessionOnly: false,
         decisionNonce: this.decisionNonce('rooster-device-approval', actor, row.id),
       };
     });

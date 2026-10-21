@@ -303,6 +303,30 @@ Phase 11 changes no API contract, so it is a minor release (ADR 0052). v2.0 wait
 
 ---
 
+## Phase 12: Headless agent access (the device grant and MCP tokens)
+
+Specified 2026-10-21 (11 §9, ADR 0065) and scheduled the same day. A minor release (1.8.0): everything is additive, and the legacy CLI device flow stays until the next major.
+
+| WP | Content |
+|---|---|
+| 12.1 Device grant (server) | One better-auth `deviceAuthorization` with a combined rooster grant extension. It branches on `rooster-cli` without `resource` (the legacy session flow) versus an OAuth device request, which stores `oauth_client_id`, `resource` and `request_ip`. `POST /api/auth/oauth2/device-authorization`; the device grant type registered on `/api/auth/oauth2/token` through `extendOAuthProvider`, redeeming with `redeemDeviceCode` and issuing through `issueTokens` with the grant id as `referenceId`. In the mount, the token request handles the new grant (live-grant check, `withGrantScope`). Also: `ROOSTER_OAUTH_DEVICE`; CIMD device clients without `redirect_uris`; hashed codes; the rate limits; no `verification_uri_complete`; the AS metadata in `all` mode; `resolveOAuthToken` accepting `kind:'device'` for `rooster-cli`; the extended review, approve and deny routes; the `device_connected` notice. Migration for the `deviceCode` columns (11 §9.1–9.5). |
+| 12.2 Approval page and Connected apps (web) | The `/device` page in the "Full context" layout (11 §9.3) for the CLI and apps: Unverified with the host, the code to compare, the request IP and age, the warning, "This session only" for apps, Deny first. The `device_connected` notice in the inbox. Connected apps' New token with "Works with: API · MCP" and the setup lines (11 §9.7). |
+| 12.3 MCP tokens (server) | PAT `audience` (`api`/`mcp`): `POST /me/tokens`, `/mcp` accepting MCP PATs with the scope pre-check, per-grant rate limits and the no-step-up error, `/api/v1` refusing them, no `admin` (11 §9.7). |
+| 12.4 CLI | `rooster login` on the device grant (refresh serialised per profile across processes), `rooster logout` revoking the refresh token, `rooster mcp header`, `rooster mcp setup --remote`, `rooster token create --audience mcp`, and the fallback to the legacy flow when the server answers `unauthorized_client` (11 §9.6). |
+
+**Acceptance criteria**
+- AC-12.1 With `ROOSTER_OAUTH_DEVICE=all`:
+  - A CIMD client listing the device grant (and no `redirect_uris`) starts a flow with `resource=<host>/mcp`. The response has no `verification_uri_complete`. Polling yields `authorization_pending`, and `slow_down` when it polls too fast.
+  - The user types the code at `/device` and sees the client as Unverified with its host, the request IP and the warning. They allow `tasks:read` on one org.
+  - The client gets an access and a refresh token and lists that org's tasks at `/mcp`. The token is refused by `/api/v1`. The device code can't be redeemed twice. A refresh reused after rotation revokes the grant.
+  - The user gets a `device_connected` notice (and an email with SMTP).
+  - With `first-party`, the same client gets `unauthorized_client` and the AS metadata lists no device endpoint. With `off`, `rooster-cli` gets it too.
+- AC-12.2 Ten wrong codes within 10 minutes lock code entry for that user with `429`. Codes are stored only as hashes. Approve and deny with another session's nonce are refused.
+- AC-12.3 A PAT created with audience `mcp` and `tasks:read` lists tasks at `/mcp` from a client given only a static `Authorization` header, gets `403` naming `tasks:write` for `create_task`, and is refused by `/api/v1`. An `api` PAT is refused by `/mcp`. Revoking the token fails the next call with `401`.
+- AC-12.4 `rooster login` on a new instance completes through the device grant, survives an access-token expiry by refreshing (two concurrent commands don't revoke the grant), and `rooster logout` revokes it. A CLI device session created by 1.7 still works. `rooster mcp setup --remote --client claude-code` writes a config with `rooster mcp header` as the header helper, and `rooster mcp header` prints a working `/mcp` token.
+
+---
+
 ## Backlog
 
 Work that is specified but not scheduled into a phase. Pick an item up by moving it into a phase (or a minor release after v1.0) and renumbering its WP and AC IDs.
@@ -311,28 +335,6 @@ Work that is specified but not scheduled into a phase. Pick an item up by moving
 ### Dark theme (D-22, Q-03)
 
 Moved here on 2026-10-10 (ADR 0052). Every colour is already a semantic token, so dark mode redefines the semantic layer under `[data-theme="dark"]` (03 §1). The work: a contrast-tested dark token set, a System / Light / Dark choice in Settings → Profile, the PWA theme colour, the brand assets on dark grounds, axe in both themes, and the dark screenshots (the `docs:screenshots` dark projects are ready and skip themselves until then).
-
-### Headless agent access: the device grant and MCP tokens (11 §9, ADR 0065)
-
-Specified 2026-10-21. A minor release: everything is additive, and the legacy CLI device flow stays until the next major.
-
-| WP | Content |
-|---|---|
-| B.3 Device grant (server) | One better-auth `deviceAuthorization` with a combined rooster grant extension. It branches on `rooster-cli` without `resource` (the legacy session flow) versus an OAuth device request, which stores `oauth_client_id`, `resource` and `request_ip`. `POST /api/auth/oauth2/device-authorization`; the device grant type registered on `/api/auth/oauth2/token` through `extendOAuthProvider`, redeeming with `redeemDeviceCode` and issuing through `issueTokens` with the grant id as `referenceId`. In the mount, the token request handles the new grant (live-grant check, `withGrantScope`). Also: `ROOSTER_OAUTH_DEVICE`; CIMD device clients without `redirect_uris`; hashed codes; the rate limits; no `verification_uri_complete`; the AS metadata in `all` mode; `resolveOAuthToken` accepting `kind:'device'` for `rooster-cli`; the extended review, approve and deny routes; the `device_connected` notice. Migration for the `deviceCode` columns (11 §9.1–9.5). |
-| B.4 Approval page and Connected apps (web) | The `/device` page in the "Full context" layout (11 §9.3) for the CLI and apps: Unverified with the host, the code to compare, the request IP and age, the warning, "This session only" for apps, Deny first. The `device_connected` notice in the inbox. Connected apps' New token with "Works with: API · MCP" and the setup lines (11 §9.7). |
-| B.5 MCP tokens (server) | PAT `audience` (`api`/`mcp`): `POST /me/tokens`, `/mcp` accepting MCP PATs with the scope pre-check, per-grant rate limits and the no-step-up error, `/api/v1` refusing them, no `admin` (11 §9.7). |
-| B.6 CLI | `rooster login` on the device grant (refresh serialised per profile across processes), `rooster logout` revoking the refresh token, `rooster mcp header`, `rooster mcp setup --remote`, `rooster token create --audience mcp`, and the fallback to the legacy flow when the server answers `unauthorized_client` (11 §9.6). |
-
-**Acceptance criteria**
-- AC-B.3 With `ROOSTER_OAUTH_DEVICE=all`:
-  - A CIMD client listing the device grant (and no `redirect_uris`) starts a flow with `resource=<host>/mcp`. The response has no `verification_uri_complete`. Polling yields `authorization_pending`, and `slow_down` when it polls too fast.
-  - The user types the code at `/device` and sees the client as Unverified with its host, the request IP and the warning. They allow `tasks:read` on one org.
-  - The client gets an access and a refresh token and lists that org's tasks at `/mcp`. The token is refused by `/api/v1`. The device code can't be redeemed twice. A refresh reused after rotation revokes the grant.
-  - The user gets a `device_connected` notice (and an email with SMTP).
-  - With `first-party`, the same client gets `unauthorized_client` and the AS metadata lists no device endpoint. With `off`, `rooster-cli` gets it too.
-- AC-B.4 Ten wrong codes within 10 minutes lock code entry for that user with `429`. Codes are stored only as hashes. Approve and deny with another session's nonce are refused.
-- AC-B.5 A PAT created with audience `mcp` and `tasks:read` lists tasks at `/mcp` from a client given only a static `Authorization` header, gets `403` naming `tasks:write` for `create_task`, and is refused by `/api/v1`. An `api` PAT is refused by `/mcp`. Revoking the token fails the next call with `401`.
-- AC-B.6 `rooster login` on a new instance completes through the device grant, survives an access-token expiry by refreshing (two concurrent commands don't revoke the grant), and `rooster logout` revokes it. A CLI device session created by 1.7 still works. `rooster mcp setup --remote --client claude-code` writes a config with `rooster mcp header` as the header helper, and `rooster mcp header` prints a working `/mcp` token.
 
 ### Security hardening (the open ASVS L2 gaps)
 

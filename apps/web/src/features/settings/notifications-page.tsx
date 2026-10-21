@@ -23,8 +23,9 @@ import { useIsMobile } from '../../ui/use-media';
 import { SettingsSection } from './settings-section';
 
 /**
- * The seven event rows, in `NOTIFICATION_TYPES` order. Spelled out here because the value lives
- * in the zod schemas module, which this lazy route would otherwise pull in whole.
+ * The seven event rows, in `NOTIFICATION_EVENT_TYPES` order. Spelled out here because the value
+ * lives next to the zod schemas, which this lazy route would otherwise pull in whole. The
+ * `device_connected` security notice is outside the matrix (11 §9.4).
  */
 export const notificationTypes = [
   'assigned',

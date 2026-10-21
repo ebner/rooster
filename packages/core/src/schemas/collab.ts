@@ -174,6 +174,12 @@ export const NOTIFICATION_TYPES = [
   'invite_accepted',
   /** P10 (FR-REM-3): one of the user's own task reminders fired. */
   'reminder',
+  /**
+   * Phase 12 (11 §9.4): a device-grant approval connected a client. A security notice: not in
+   * the preference matrix, always in-app, emailed when SMTP is configured. `orgId` is the
+   * user's personal org, `task` and `actor` are null.
+   */
+  'device_connected',
 ] as const;
 export const notificationTypeSchema = z.enum(NOTIFICATION_TYPES);
 
@@ -206,6 +212,11 @@ export const notificationSchema = z.object({
     reminderId: idSchema.optional(),
     fireAt: timestampSchema.optional(),
     late: z.boolean().optional(),
+    /** Phase 12 device_connected: the grant, the client's display name and host, the request IP. */
+    grantId: idSchema.optional(),
+    clientName: z.string().optional(),
+    clientHost: z.string().optional(),
+    ip: z.string().optional(),
   }),
   readAt: timestampSchema.nullable(),
   createdAt: timestampSchema,

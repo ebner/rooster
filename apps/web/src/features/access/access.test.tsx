@@ -7,7 +7,13 @@ import { fixtureIds } from '../shell/fixtures';
 import { ConnectedAppsSection, type ConnectedAppsSectionProps } from './connected-apps';
 import { ConstraintEditor } from './constraint-editor';
 import { DevicePage, type DevicePageProps } from './device-page';
-import { fixtureGrantOrgs, fixtureGrants, fixtureUserCode, fixtureGroupIds as g } from './fixtures';
+import {
+  cliDeviceRequestFields,
+  fixtureGrantOrgs,
+  fixtureGrants,
+  fixtureUserCode,
+  fixtureGroupIds as g,
+} from './fixtures';
 import { defaultTokenValue, type GrantCeiling, type GrantValue } from './grant-model';
 
 const prefs: DisplayPrefs = {
@@ -433,6 +439,7 @@ describe('/device', () => {
       state: {
         kind: 'request',
         request: {
+          ...cliDeviceRequestFields,
           userCode: fixtureUserCode,
           clientId: 'rooster-cli',
           clientName: 'rooster CLI',

@@ -141,6 +141,17 @@
           },
           "current": {
             "type": "boolean"
+          },
+          "audience": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "api",
+              "mcp",
+              null
+            ]
           }
         },
         "required": [
@@ -158,7 +169,8 @@
           "client",
           "lastUsedAt",
           "lastUsedIp",
-          "current"
+          "current",
+          "audience"
         ],
         "description": "One PAT, CLI device or (Phase 9) OAuth client authorization: capabilities (`scopes`) plus `constraints`.",
         "example": {
@@ -190,7 +202,8 @@
           "client": null,
           "lastUsedAt": 1767312000000,
           "lastUsedIp": "203.0.113.7",
-          "current": false
+          "current": false,
+          "audience": "api"
         }
       },
       "GrantConstraints": {
@@ -384,6 +397,13 @@
             "minimum": 1,
             "maximum": 3650,
             "description": "Omitted: the token never expires."
+          },
+          "audience": {
+            "type": "string",
+            "enum": [
+              "api",
+              "mcp"
+            ]
           }
         },
         "required": [
@@ -447,7 +467,8 @@
             "client": null,
             "lastUsedAt": 1767312000000,
             "lastUsedIp": "203.0.113.7",
-            "current": false
+            "current": false,
+            "audience": "api"
           }
         }
       },
@@ -483,6 +504,200 @@
             "type": "integer",
             "minimum": 0
           },
+          "firstParty": {
+            "type": "boolean"
+          },
+          "client": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "domain": {
+                "type": "string"
+              },
+              "logoUri": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "clientUri": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "verified": {
+                "type": "boolean"
+              },
+              "dynamic": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "domain",
+              "logoUri",
+              "clientUri",
+              "verified",
+              "dynamic"
+            ]
+          },
+          "resource": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "api",
+              "mcp",
+              null
+            ]
+          },
+          "requestIp": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requestedAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "existing": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "scopes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "tasks:read",
+                    "tasks:write",
+                    "comments:write",
+                    "tasks:assign",
+                    "groups:write",
+                    "tasks:delete",
+                    "notifications:read",
+                    "admin"
+                  ]
+                }
+              },
+              "constraints": {
+                "type": "object",
+                "properties": {
+                  "orgs": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "all"
+                        ]
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "orgId": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                            },
+                            "read": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "all"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "groups": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 100
+                                    }
+                                  },
+                                  "required": [
+                                    "groups"
+                                  ]
+                                }
+                              ]
+                            },
+                            "write": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "none"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "all"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "groups": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                      },
+                                      "minItems": 1,
+                                      "maxItems": 100
+                                    }
+                                  },
+                                  "required": [
+                                    "groups"
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "orgId",
+                            "read",
+                            "write"
+                          ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 50
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "orgs"
+                ]
+              }
+            },
+            "required": [
+              "scopes",
+              "constraints"
+            ]
+          },
+          "offerSessionOnly": {
+            "type": "boolean"
+          },
           "decisionNonce": {
             "type": "string"
           }
@@ -493,6 +708,13 @@
           "clientName",
           "requestedScopes",
           "expiresAt",
+          "firstParty",
+          "client",
+          "resource",
+          "requestIp",
+          "requestedAt",
+          "existing",
+          "offerSessionOnly",
           "decisionNonce"
         ],
         "example": {
@@ -507,6 +729,13 @@
             "notifications:read"
           ],
           "expiresAt": 1767226200000,
+          "firstParty": true,
+          "client": null,
+          "resource": "api",
+          "requestIp": "203.0.113.7",
+          "requestedAt": 1767225600000,
+          "existing": null,
+          "offerSessionOnly": false,
           "decisionNonce": "pT8x2Lk0…"
         }
       },
@@ -552,6 +781,9 @@
             "minimum": 1,
             "maximum": 3650,
             "description": "Omitted: the grant does not expire."
+          },
+          "sessionOnly": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -6848,7 +7080,8 @@
               "completed",
               "due_changed",
               "invite_accepted",
-              "reminder"
+              "reminder",
+              "device_connected"
             ]
           },
           "task": {
@@ -6976,6 +7209,19 @@
               },
               "late": {
                 "type": "boolean"
+              },
+              "grantId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "clientName": {
+                "type": "string"
+              },
+              "clientHost": {
+                "type": "string"
+              },
+              "ip": {
+                "type": "string"
               }
             }
           },

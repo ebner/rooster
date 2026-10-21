@@ -288,9 +288,9 @@ describe('Sidebar Inbox (02 §2)', () => {
 });
 
 describe('Settings → Notifications', () => {
-  test('the matrix rows are the schema’s notification types', async () => {
-    const { NOTIFICATION_TYPES } = await import('@rooster/core/schemas');
+  test('the matrix rows are the preference matrix’s event types', async () => {
+    const { NOTIFICATION_EVENT_TYPES } = await import('@rooster/core/notification-prefs');
     const { notificationTypes } = await import('../settings/notifications-page');
-    expect([...notificationTypes]).toEqual([...NOTIFICATION_TYPES]);
+    expect([...notificationTypes]).toEqual([...NOTIFICATION_EVENT_TYPES]);
   });
 });
