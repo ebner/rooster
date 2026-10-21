@@ -488,13 +488,13 @@
       "identitiesRemoved": "Länkade identiteter: med borttagna inloggningar",
       "identitiesAllowConfirm": "Länkade identiteter: bekräfta att tillåta igen",
       "deviceCli": "Godkänn CLI:t (enhetsflödet: begärans IP-adress och ålder)",
-      "devicePrefilled": "En kod från en länk, att bekräfta",
       "deviceTooMany": "För många felaktiga koder",
       "deviceApp": "Godkänn en tredjepartsapp (overifierad, med sin domän)",
       "deviceStepUp": "En tredjepartsapp som ber om mer (utökad åtkomst)",
       "deviceSessionOnly": "En tredjepartsapp, ”Bara den här sessionen” vald",
       "newTokenMcp": "Ny token för MCP",
-      "tokenCreatedMcp": "MCP-token skapad, med inställningsrader"
+      "tokenCreatedMcp": "MCP-token skapad, med inställningsrader",
+      "deviceLinkCode": "En länk med en kod (ignoreras)"
     },
     "audience": {
       "label": "Fungerar med",

@@ -80,7 +80,7 @@ export function AccessKitchenSection() {
   const devices = useMemo(() => fixtureDeviceRequests(now), [now]);
   const deviceStates: [string, DevicePageState, GrantValue?][] = [
     [t('access.dev.deviceEnter'), { kind: 'enter' }],
-    [t('access.dev.devicePrefilled'), { kind: 'enter', code: fixtureUserCode, prefilled: true }],
+    [t('access.dev.deviceLinkCode'), { kind: 'enter', codeInLink: true }],
     [t('access.dev.deviceExpired'), { kind: 'enter', code: fixtureUserCode, error: 'expired' }],
     [t('access.dev.deviceTooMany'), { kind: 'enter', code: fixtureUserCode, error: 'tooMany' }],
     [

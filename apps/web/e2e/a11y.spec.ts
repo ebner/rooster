@@ -157,7 +157,7 @@ test('AC-11.3 axe: the device approval and OAuth consent pages', async ({ page, 
     form: { client_id: 'rooster-cli', scope: 'tasks:delete comments:write groups:write' },
   });
   expect(codeRes.status(), await codeRes.text()).toBe(200);
-  const code = (await codeRes.json()) as { verification_uri_complete: string };
+  const code = (await codeRes.json()) as { verification_uri_complete: string; user_code: string };
   const verify = new URL(code.verification_uri_complete);
   await signInAs(page, uniqueEmail('a11y.device'), undefined, {
     startAt: verify.pathname + verify.search,
@@ -165,6 +165,7 @@ test('AC-11.3 axe: the device approval and OAuth consent pages', async ({ page, 
   });
   await expect(page.getByTestId('device-code-form')).toBeVisible();
   await expectAxeClean(page, 'device code');
+  await page.getByRole('textbox', { name: 'Code' }).fill(code.user_code);
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByTestId('device-request')).toBeVisible();
   await expectAxeClean(page, 'device approval');

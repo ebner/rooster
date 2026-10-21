@@ -64,11 +64,35 @@ describe('device grant defaults (11 §9.3)', () => {
     });
   });
 
-  test('rooster CLI starts with what it asked for, everywhere, never expiring', () => {
+  test('rooster CLI starts with what it asked for, everywhere, never expiring; delete and admin unticked', () => {
     const { value } = deviceStart(requests.cli, orgs);
     expect(value.constraints).toEqual({ orgs: 'all' });
     expect(value.expiry).toBe('never');
-    expect(value.scopes).toContain('tasks:delete');
+    // 11 §9.3: "Allow deleting tasks" is never pre-ticked, and neither is admin.
+    expect(value.scopes).not.toContain('tasks:delete');
+    expect(value.scopes).toContain('tasks:write');
+    const admin = deviceStart(
+      { ...requests.cli, requestedScopes: ['tasks:delete', 'admin'] },
+      orgs,
+      { isAdmin: true },
+    ).value;
+    expect(admin.scopes).toEqual(['tasks:write']);
+  });
+
+  test('rooster CLI on the page: delete and admin offered but unticked', () => {
+    renderDevice({
+      isAdmin: true,
+      state: {
+        kind: 'request',
+        request: { ...requests.cli, requestedScopes: ['tasks:delete', 'admin'] },
+      },
+    });
+    const del = screen.getByRole('checkbox', { name: /Allow deleting tasks/ }) as HTMLInputElement;
+    const admin = screen.getByRole('checkbox', {
+      name: /Administer the server/,
+    }) as HTMLInputElement;
+    expect(del.checked).toBe(false);
+    expect(admin.checked).toBe(false);
   });
 
   test('admin: only for rooster CLI and an instance admin, never for an app', () => {
@@ -300,15 +324,17 @@ describe('/device: the full-context request (11 §9.3)', () => {
 });
 
 describe('/device: the code (11 §9.2: typed, never auto-submitted from a link)', () => {
-  test('a code from the link is shown to confirm, and looked up only on Continue', () => {
-    const props = renderDevice({
-      state: { kind: 'enter', code: 'kxrt49wm', prefilled: true },
-    });
-    expect(props.onSubmitCode).not.toHaveBeenCalled();
+  test('a code in the link is ignored: the field stays empty and the page says why', () => {
+    const props = renderDevice({ state: { kind: 'enter', codeInLink: true } });
     const field = screen.getByRole('textbox', { name: 'Code' }) as HTMLInputElement;
-    expect(field.value).toBe('KXRT-49WM');
-    expect(screen.getByText(/Continue only if your device shows the same code/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(field.value).toBe('');
+    expect(screen.getByTestId('device-link-code').textContent).toBe(
+      'Type the code your device shows. Codes in links aren’t accepted.',
+    );
+    const continueButton = screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement;
+    expect(continueButton.disabled).toBe(true);
+    fireEvent.change(field, { target: { value: 'kxrt-49wm' } });
+    fireEvent.click(continueButton);
     expect(props.onSubmitCode).toHaveBeenCalledWith('KXRT49WM');
   });
 

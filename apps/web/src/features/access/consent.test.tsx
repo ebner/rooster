@@ -353,7 +353,7 @@ describe('admin capability (ADR 0041/0042)', () => {
     expect(screen.queryByRole('checkbox', { name: /Administer the server/ })).toBeNull();
   });
 
-  test('an admin sees it ticked when the CLI asked, and delete starts as requested', async () => {
+  test('an admin is offered admin and delete unticked when the CLI asked; ticking sends them', async () => {
     const onApprove = vi.fn(async () => undefined);
     render(
       <DevicePage
@@ -375,9 +375,12 @@ describe('admin capability (ADR 0041/0042)', () => {
     const admin = screen.getByRole('checkbox', {
       name: /Administer the server/,
     }) as HTMLInputElement;
-    expect(admin.checked).toBe(true);
+    expect(admin.checked).toBe(false);
     const del = screen.getByRole('checkbox', { name: /Allow deleting tasks/ }) as HTMLInputElement;
-    expect(del.checked).toBe(true);
+    expect(del.checked).toBe(false);
+    // 11 §9.3: never pre-ticked; a deliberate tick grants them.
+    fireEvent.click(admin);
+    fireEvent.click(del);
     await act(async () => {
       fireEvent.click(screen.getByTestId('device-approve'));
     });

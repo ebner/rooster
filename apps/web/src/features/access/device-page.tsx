@@ -32,13 +32,14 @@ export type DeviceError = 'notFound' | 'expired' | 'used' | 'tooMany' | 'failed'
 export type DevicePageState =
   | {
       kind: 'enter';
+      /** What the user typed before (after an error); never a code from a link. */
       code?: string | undefined;
       error?: DeviceError | undefined;
       /**
-       * The code came with the link (`?user_code=`), not from the user's hands: it is shown
-       * for the user to compare and confirm, never looked up on its own (11 §9.3, RFC 10027).
+       * The link carried a code (`?user_code=`). It is ignored, not even pre-filled (11 §9.2,
+       * RFC 10027): the page says that links don't carry codes, and the user types it.
        */
-      prefilled?: boolean | undefined;
+      codeInLink?: boolean | undefined;
     }
   | { kind: 'loading'; code: string }
   | { kind: 'request'; request: DeviceRequest }
@@ -103,7 +104,7 @@ function CodeStep({
   const [code, setCode] = useState(state.code ? formatUserCode(state.code) : '');
   const clean = normalizeUserCode(code);
   const error = state.kind === 'enter' ? state.error : undefined;
-  const prefilled = state.kind === 'enter' && state.prefilled === true && !error;
+  const codeInLink = state.kind === 'enter' && state.codeInLink === true;
   return (
     <form
       className="flex flex-col gap-6 pb-6 tablet:pb-8"
@@ -122,6 +123,11 @@ function CodeStep({
           {t(`device.error.${error}.body`)}
         </Banner>
       )}
+      {codeInLink && !error && (
+        <Banner>
+          <span data-testid="device-link-code">{t('device.enter.linkCode')}</span>
+        </Banner>
+      )}
       <TextField
         label={t('device.enter.label')}
         placeholder={t('device.enter.placeholder')}
@@ -132,7 +138,6 @@ function CodeStep({
         spellCheck="false"
         maxLength={20}
         inputClassName="font-mono uppercase tracking-wide"
-        {...(prefilled ? { description: t('device.enter.prefilled') } : {})}
       />
       <Button
         type="submit"

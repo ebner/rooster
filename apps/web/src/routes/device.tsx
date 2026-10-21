@@ -26,19 +26,15 @@ interface DeviceSearch {
  * and for apps. Signed in, outside the app frame: a focused consent page that works the same on
  * a phone. Signed out → `/login` and back.
  *
- * The user types the code. A `?user_code=` (older CLIs still open such a link) only pre-fills
- * the field: the request is looked up once the user confirms it with Continue, never straight
- * from the link (11 §9.2: a pre-filled link is the device-code phishing vector, RFC 10027).
+ * The user always types the code (11 §9.2, ADR 0065): a code in the link (`?user_code=`, which
+ * older CLIs still open) is never used, not even to pre-fill the field, since a pre-filled code
+ * is the device-code phishing vector (RFC 10027). The page only says that links don't carry
+ * codes.
  */
 export const Route = createFileRoute('/device')({
-  validateSearch: (search: Record<string, unknown>): DeviceSearch => {
-    // Like `normalizeUserCode`, inlined: the route options load with the app, the page lazily.
-    const code =
-      typeof search.user_code === 'string'
-        ? search.user_code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
-        : '';
-    return code ? { user_code: code.slice(0, 32) } : {};
-  },
+  validateSearch: (search: Record<string, unknown>): DeviceSearch =>
+    // Only whether a code came with the link, never the code itself.
+    search.user_code !== undefined && search.user_code !== '' ? { user_code: 'link' } : {},
   beforeLoad: async ({ context, location }) => {
     try {
       await context.queryClient.ensureQueryData({ ...meQueryOptions, revalidateIfStale: true });
@@ -79,7 +75,7 @@ function DeviceRoute() {
   const state: DevicePageState = outcome
     ? outcome
     : !userCode
-      ? { kind: 'enter', code: linkCode, prefilled: Boolean(linkCode) }
+      ? { kind: 'enter', codeInLink: Boolean(linkCode) }
       : lateError
         ? { kind: 'enter', code: userCode, error: lateError }
         : request.error

@@ -47,10 +47,12 @@ test('AC-8.1 /device on a phone: sign in, check the code, narrow to Prio, approv
   const prio = await groupId(page, orgId, 'Prio');
   const today = await groupId(page, orgId, 'Today');
 
-  // The link's code only pre-fills the field (11 §9.2): the user confirms it with Continue.
+  // The link's code is ignored (11 §9.2): the field stays empty and the user types the code.
   const field = page.getByRole('textbox', { name: 'Code' });
-  await expect(field).toHaveValue(`${code.user_code.slice(0, 4)}-${code.user_code.slice(4)}`);
+  await expect(field).toHaveValue('');
+  await expect(page.getByTestId('device-link-code')).toBeVisible();
   await expect(page.getByTestId('device-request')).toHaveCount(0);
+  await field.fill(code.user_code);
   await page.getByRole('button', { name: 'Continue' }).tap();
 
   const requestForm = page.getByTestId('device-request');
@@ -62,12 +64,13 @@ test('AC-8.1 /device on a phone: sign in, check the code, narrow to Prio, approv
     `${code.user_code.slice(0, 4)}-${code.user_code.slice(4)}`,
   );
   // The CLI's request is the default and the ceiling: nothing beyond it is offered.
-  // Deleting is its own checkbox, ticked as the CLI asked (ADR 0042 §4).
-  await expect(requestForm.getByRole('checkbox', { name: /Allow deleting tasks/ })).toBeChecked();
+  // Deleting is its own checkbox, offered as the CLI asked but never pre-ticked (11 §9.3).
+  await expect(
+    requestForm.getByRole('checkbox', { name: /Allow deleting tasks/ }),
+  ).not.toBeChecked();
   await expect(requestForm.getByRole('checkbox', { name: /Read notifications/ })).toHaveCount(0);
 
-  // Narrow: only the personal org, writing only in Prio, without delete.
-  await requestForm.getByText('Allow deleting tasks', { exact: true }).tap();
+  // Narrow: only the personal org, writing only in Prio (delete stays unticked).
   await requestForm.getByText('All organisations', { exact: true }).tap();
   await requestForm
     .getByTestId(`write-${orgId}`)
@@ -132,6 +135,7 @@ test('AC-8.1 /device on a phone: sign in, check the code, narrow to Prio, approv
 
   // The code is used up: opening it again explains so.
   await page.goto(verify.pathname + verify.search);
+  await page.getByRole('textbox', { name: 'Code' }).fill(code.user_code);
   await page.getByRole('button', { name: 'Continue' }).tap();
   await expect(page.getByRole('alert')).toContainText(/already been used|expired|doesn’t match/);
 });

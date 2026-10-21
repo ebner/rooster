@@ -67,13 +67,18 @@ describe('grant model', () => {
     expect(tokenScopes(['admin'], 'mcp')).toEqual([]);
   });
 
-  test('the device default is what the CLI asked for, everywhere, never expiring', () => {
+  test('the device default is what the CLI asked for, everywhere, never expiring, delete unticked', () => {
     const value = defaultDeviceValue(['tasks:read', 'tasks:write', 'tasks:delete']);
     expect(toDeviceApprove(value, { decisionNonce: 'n' })).toEqual({
       decisionNonce: 'n',
-      scopes: ['tasks:delete'],
+      scopes: ['tasks:write'],
       constraints: { orgs: 'all' },
     });
+    // 11 §9.3: never pre-ticked, for any client; asking for delete alone still starts writing.
+    expect(defaultDeviceValue(['tasks:delete']).scopes).toEqual(['tasks:write']);
+    expect(defaultDeviceValue(['tasks:read', 'admin'], { isAdmin: true }).scopes).toEqual([
+      'tasks:read',
+    ]);
     expect(defaultDeviceValue([]).scopes).toEqual(['tasks:read']);
   });
 

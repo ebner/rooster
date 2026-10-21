@@ -148,7 +148,7 @@ test('AC-12.1 /device: the CLI on the device grant, typed code, full context, Al
   await expect(page.getByTestId(`grant-${grant?.id}`)).toBeInViewport();
 });
 
-test('AC-12.1 /device: a code that came with a link is only pre-filled, never looked up on its own', async ({
+test('AC-12.1 /device: a code in the link is ignored; the user types it', async ({
   page,
   request,
   baseURL,
@@ -158,12 +158,14 @@ test('AC-12.1 /device: a code that came with a link is only pre-filled, never lo
     startAt: `/device?user_code=${flow.user_code}`,
     landing: /\/device\?user_code=/,
   });
-  await expect(page.getByRole('textbox', { name: 'Code' })).toHaveValue(
-    /^[A-Z0-9]{4}-[A-Z0-9]{4}$/,
+  // Not even pre-filled (11 §9.2, RFC 10027): the page says links don't carry codes.
+  await expect(page.getByRole('textbox', { name: 'Code' })).toHaveValue('');
+  await expect(page.getByTestId('device-link-code')).toHaveText(
+    'Type the code your device shows. Codes in links aren’t accepted.',
   );
-  await expect(page.getByText(/Continue only if your device shows the same code/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
   await expect(page.getByTestId('device-request')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Continue' }).click();
+  await enterCode(page, flow.user_code);
   await expect(page.getByTestId('device-request')).toBeVisible();
   await page.getByTestId('device-deny').click();
   await expect(page.getByTestId('device-done')).toContainText('Access denied');

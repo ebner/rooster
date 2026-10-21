@@ -488,13 +488,13 @@
       "identitiesRemoved": "Linked identities: with removed sign-ins",
       "identitiesAllowConfirm": "Linked identities: confirm allowing again",
       "deviceCli": "Approve the CLI (device grant: request IP and age)",
-      "devicePrefilled": "A code from a link, to confirm",
       "deviceTooMany": "Too many wrong codes",
       "deviceApp": "Approve a third-party app (Unverified, with its domain)",
       "deviceStepUp": "A third-party app asking for more (step-up)",
       "deviceSessionOnly": "A third-party app, “This session only” chosen",
       "newTokenMcp": "New token for MCP",
-      "tokenCreatedMcp": "MCP token created, with setup lines"
+      "tokenCreatedMcp": "MCP token created, with setup lines",
+      "deviceLinkCode": "A link with a code (ignored)"
     },
     "audience": {
       "label": "Works with",

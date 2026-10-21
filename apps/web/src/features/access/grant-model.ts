@@ -461,17 +461,21 @@ export function defaultTokenValue(orgs: readonly GrantOrgOption[]): GrantValue {
 }
 
 /**
- * `/device`: what the CLI asked for, everywhere, no expiry (07 §2: the user's own terminal).
- * "Delete" starts as requested (ADR 0042 §4: asked for explicitly in the terminal). `admin`
- * only for instance admins; for anyone else the server drops it, so the page never shows it.
+ * `/device`: what the CLI asked for, everywhere, no expiry (07 §2: the user's own terminal),
+ * except that "Allow deleting tasks" and `admin` start unticked (11 §9.3: never pre-ticked;
+ * anyone can start a flow, so a deliberate tick is what grants them). Both stay offered when
+ * asked for; `admin` only to instance admins (for anyone else the server drops it).
  */
 export function defaultDeviceValue(
   requested: readonly GrantScope[],
   options: { isAdmin?: boolean | undefined } = {},
 ): GrantValue {
-  const scopes = deviceScopes(requested, options);
+  const offered = deviceScopes(requested, options);
+  const scopes = [...expandScopes(offered)].filter(
+    (scope) => scope !== 'tasks:delete' && scope !== ADMIN_SCOPE,
+  );
   return {
-    scopes: minimalScopes(scopes.length > 0 ? scopes : ['tasks:read']),
+    scopes: minimalScopes(offered.length > 0 ? scopes : ['tasks:read']),
     constraints: { orgs: 'all' },
     expiry: 'never',
   };
