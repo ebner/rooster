@@ -4,6 +4,8 @@ Vad som har ändrats för dig i varje version av rooster, med den senaste först
 
 ## Unreleased
 
+- **Logga in på datorer utan webbläsare.** `rooster login` och AI-agenter som ställs in med `rooster mcp setup --remote` visar en kod; skriv in den på roosters sida **Anslut en enhet** på valfri enhet. Sidan visar vem som frågar och varifrån, och inkorgen berättar när en enhet har anslutits.
+- **MCP-token för AI-agenter.** Skapa en token som fungerar med MCP under Inställningar → Säkerhet → Anslutna appar → Ny token, och klistra in raden som rooster visar i Claude Code eller Codex.
 - **Nya uppgifter öppnas i detaljpanelen.** När panelen är öppen visas en uppgift du lägger till där så fort du trycker på Enter, så att du direkt kan skriva beskrivningen.
 - **Ta bort ett förfallodatum med ett klick.** Ett **×** bredvid förfallodatumet i detaljpanelen tar bort det.
 

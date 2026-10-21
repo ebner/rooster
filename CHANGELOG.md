@@ -7,13 +7,18 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 ## [Unreleased]
 
 ### Added
+- **The OAuth device grant (RFC 8628)** for machines without a browser (Phase 12, 11 §9, ADRs 0065, 0066). `POST /api/auth/oauth2/device-authorization` (with `resource`, no `verification_uri_complete`) and the device grant type at `/api/auth/oauth2/token`. New setting `ROOSTER_OAUTH_DEVICE=off|first-party|all` (default `first-party`: only rooster's CLI). Third-party clients need a Client ID Metadata Document listing the grant and are always shown as Unverified with their domain. Codes are hashed (the legacy CLI flow's too), live 10 minutes, and code entry locks for 10 minutes after 10 wrong codes. Every approval sends the user a `device_connected` notice, emailed when SMTP is configured.
+- **The `/device` approval page** shows the client and its domain, the code to compare, the requesting IP and its age, and a phishing warning; the user always types the code.
+- **MCP tokens:** personal access tokens get an audience, `api` (default) or `mcp`. An MCP token works only at `/mcp` and is refused by `/api/v1`, never carries `admin`, and comes with setup lines for Claude Code and Codex.
+- **CLI:** `rooster login` uses the device grant with rotating refresh tokens (refresh serialised per profile across processes; logins from 1.7 keep working). New `rooster mcp header` (a `headersHelper` for Claude Code) and `rooster mcp setup --remote`; `rooster token create --audience mcp`.
 - An × next to the due date in the detail pane (desktop and the phone sheet) clears it like "No date" (ADR 0064).
 
 ### Changed
+- **Refresh-token reuse has a 60 s grace period:** the previous refresh token may be redeemed once more within 60 s of a rotation if its successor is unused, so a lost response no longer revokes the grant. Any other reuse still revokes it (ADR 0066).
 - A task created while the detail pane is open takes the pane as soon as its title is committed. Before, the pane kept showing the previous task until another row was selected. From the empty row Enter leaves below, O, Tab+Enter and Tab+R act on the new task (ADR 0064).
 
 ### Migrations
-- None.
+- `0016_p12_device_grant`: device code columns (`oauth_client_id`, `resource`, `request_ip`, `created_at`), `access_grant.audience`, and the refresh-token grace columns (`successor_id`, `grace_used_at`). Existing device codes are pending logins at most 10 minutes old; their plaintext codes stop working after the upgrade (start `rooster login` again).
 
 ## [1.7.2] - 2026-10-19
 

@@ -87,7 +87,7 @@ Scopes can't say "write only in Prio" (RFC 9396 §1), so each grant also stores 
 
 ### 2.4 Lifetimes and revocation
 - **Grants:** an optional expiry (7, 30 or 90 days, a date, never, or **this session only** for OAuth clients: the grant ends once no token has been issued for it for 24 hours, `idle_timeout_ms`, ADRs 0041, 0045; default 90 days for OAuth clients and PATs, never for CLI devices). Revocable in Settings → Connected apps, and by the CLI (`rooster logout`, `rooster token revoke`).
-- **OAuth access tokens:** 15 minutes, audience-bound (§4.3). **Refresh tokens:** rotated on every use, with reuse detection that revokes the whole grant. Editing a grant's constraints takes effect on the next request, because the resource server reads the grant each time (§4.3).
+- **OAuth access tokens:** 15 minutes, audience-bound (§4.3). **Refresh tokens:** rotated on every use, with reuse detection that revokes the whole grant. Phase 12 adds a **grace period** for a lost response: for 60 s after a rotation the previous refresh token may be redeemed once more, if its successor hasn't been used; that issues a fresh pair and revokes the unused successor. Any other reuse revokes the grant (ADR 0066). Editing a grant's constraints takes effect on the next request, because the resource server reads the grant each time (§4.3).
 - **PATs** (`rooster_pat_…`) are grant-backed API keys (better-auth `apiKey`), hashed at rest and shown once.
 - **Device sessions** (CLI login) are grant-backed bearer sessions.
 - `last_used_at` and the last client IP are kept per grant, for the management screen.
@@ -255,15 +255,15 @@ Agents often run where no browser can receive an OAuth redirect: an SSH session,
   - `client_id`: `rooster-cli` or a CIMD URL.
   - `scope`: the capabilities requested (§2.1), at most 512 bytes. `admin` is accepted from `rooster-cli` only, and dropped silently for non-admins (as today). `offline_access` is implied: a device client always gets a refresh token.
   - `resource` (RFC 8707): **required**, exactly one value, `https://<host>/mcp` or `https://<host>/api/v1`. A missing, repeated or foreign value is `invalid_target`. The tokens issued later are bound to it (§4.3).
-  - `authorization_details` (RFC 9396, `rooster_access`): optional, pre-fills the approval page as in §2.2.
-- **Response:** `device_code`, `user_code`, `verification_uri` (`https://<host>/device`), `expires_in` (600), `interval` (5). **No `verification_uri_complete`:** the user always types the code on the page (§9.3). A pre-filled link is the main phishing vector (RFC 10027), and leaving it out costs one step.
+  - `authorization_details` is not supported for the device grant (Phase 12): the user picks everything on the approval page.
+- **Response:** `device_code`, `user_code`, `verification_uri` (`https://<host>/device`), `expires_in` (600), `interval` (5). **No `verification_uri_complete`:** the user always types the code on the page (§9.3). A pre-filled link is the main phishing vector (RFC 10027), and leaving it out costs one step. A `?user_code=` that older CLIs put in the link is ignored too: the field stays empty, with a note that codes in links aren't accepted.
 - **Token endpoint:** the existing `POST /api/auth/oauth2/token` with `grant_type=urn:ietf:params:oauth:grant-type:device_code`, `device_code`, `client_id` and `resource` (it must equal the one stored with the code). The answers follow RFC 8628 §3.5: `authorization_pending`, `slow_down` (a poll sooner than `interval` adds 5 s to it), `access_denied`, `expired_token`.
   - On approval it issues an **access token** (15 minutes, audience-bound) and a **refresh token** (rotated, reuse revokes the grant), exactly as the code grant does (§2.4, §4.3). Both carry the grant id as `referenceId`.
   - A device code redeems exactly once. Redeeming, approving and denying are compare-and-swap on the code's status.
 - **Codes:**
   - The user code has 8 characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (40 bits), shown as `XXXX-XXXX`. Input ignores case, spaces and dashes.
   - The device code has at least 256 bits.
-  - Both are **stored hashed** (SHA-256), as 04 §4 already requires; a lookup hashes the normalised input.
+  - Both are **stored hashed**, as 04 §4 already requires: the user code as an HMAC keyed with the auth secret (40 bits would fall to an offline search of a database copy), the device code as SHA-256. A lookup hashes the normalised input. The request log redacts user codes in paths.
   - A code lives 10 minutes. Expired codes are purged by the retention job.
 - **Rate limits** (on top of the per-IP `/api/auth` limit):
   - Device authorization requests: 10 per 10 minutes per IP, and 30 per hour per third-party client (`rooster-cli` is shared by every user, so it has only the per-IP limit).
@@ -298,7 +298,7 @@ Access, orgs and groups, expiry   (the editor of §3.1)
 - **What, where, how long:** the editor of §3.1 with the same rules:
   - least-privilege defaults;
   - "Allow deleting tasks" only when requested and never pre-ticked;
-  - `admin` only for `rooster-cli` and instance admins;
+  - `admin` only for `rooster-cli` and instance admins, and never pre-ticked either: anyone can start a `rooster-cli` flow;
   - "This session only" for third-party apps;
   - expiry defaults: 90 days for apps, never for `rooster-cli`.
 - **Deny** is as prominent as Allow and comes first in the reading order.
@@ -310,7 +310,7 @@ Access, orgs and groups, expiry   (the editor of §3.1)
 - **`rooster-cli`:** each approval creates a new `kind:'device'` grant, one per login, labelled from the User-Agent and the host name the CLI sends. The CLI's grant now holds OAuth tokens instead of a bearer session.
 - **A third-party client:** the approval creates or updates the user's `kind:'oauth'` grant for that `client_id`, the same grant the browser flow uses (one live grant per client and user). Approving the same client on a second machine updates that grant, and revoking it ends both.
 - Token resolution (`resolveOAuthToken`) accepts a `kind:'device'` grant for `rooster-cli` alongside `kind:'oauth'`. Audience, expiry, idle and revocation checks are unchanged.
-- **Security notice:** every approval through the device grant creates a `device_connected` notification for the user: "\<client\> was connected from \<IP\>. Not you? Revoke it in Settings → Connected apps", with a link. It is emailed when SMTP is configured, and it can't be turned off (it isn't in the preference matrix). Approvals in the browser flow don't notify, because they happen on the device in front of the user.
+- **Security notice:** every approval through the device grant creates a `device_connected` notification for the user: "\<client\> was connected from \<IP\>. Not you? Revoke it in Settings → Connected apps", with a link. The client is "rooster CLI" or the app's presented name, never a device name the client reports; the IP is the one the server saw. Only the browser session can see or acknowledge it, so the credential it reports can't hide it. It is emailed when SMTP is configured, and it can't be turned off (it isn't in the preference matrix). Approvals in the browser flow don't notify, because they happen on the device in front of the user.
 
 ### 9.5 Security
 - **The RFC 10027 §2 risk assessment** is in ADR 0065. The flow's mitigations (§6.1 of that RFC):

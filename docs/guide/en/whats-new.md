@@ -4,6 +4,8 @@ What changed for you in each version of rooster, newest first. After an update, 
 
 ## Unreleased
 
+- **Sign in on machines without a browser.** `rooster login` and AI agents set up with `rooster mcp setup --remote` show a code; type it on rooster's **Connect a device** page on any device. The page shows who is asking and from where, and your Inbox tells you when a device was connected.
+- **MCP tokens for AI agents.** Create a token that works with MCP under Settings → Security → Connected apps → New token, and paste the setup line rooster shows into Claude Code or Codex.
 - **New tasks open in the detail pane.** When the pane is open, a task you add shows there as soon as you press Enter, so you can write its description right away.
 - **Clear a due date with one click.** An **×** next to the due date in the detail pane removes it.
 

@@ -221,3 +221,44 @@ These are also recorded in ADR 0056.
 - **The nesting bound may add an escape backslash** inside code samples nested more than 20 levels deep.
 - **`/members/resolve`** confirms that an address the caller already knows belongs to a member. It is rate-limited, and inherent to assigning by email.
 - **Requests sent before a tab learns of an account switch** carry the new cookie (ADR 0051).
+
+## Phase 12: the device grant, MCP tokens and the CLI login (2026-10-21)
+
+Reviewed commits: 705a3e0 (contract), 719e8fa (server), 1d00b60 (CLI), fad2f0c (web), and the fixes after them.
+
+**Method:**
+- **Independent review:** a structured review of every commit, and a focused review per part (server, CLI, web).
+- **Audit:** a second, adversarial security review ran over the server, CLI and web commits. Its findings are marked "audit" below.
+- **Every fix carries a regression test** that fails without it.
+
+| # | Part | Severity | Finding | Source | Outcome |
+|---|---|---|---|---|---|
+| 1 | Server | P2 | Revoking a stale `rooster-cli` refresh token ran better-auth's client-wide cleanup and ended every CLI login of the user | structured | Fixed in 7aa8145 |
+| 2 | Server | P2 | A CLI admin login refreshing with the `admin` scope it was given got `invalid_scope` | structured | Fixed in 7aa8145 |
+| 3 | CLI | P2 | A 200 token response whose body was cut off wasn't retried, so the grace window was missed | structured | Fixed in 52b262a |
+| 4 | Web | P2 | A device reconnect sent retained scopes and failed with `422 widening_not_allowed` | structured and focused | Fixed in f19df2f |
+| 5 | Web | Medium | `?user_code=` pre-filled the code, so approval was "Enter, then Allow" | audit | Fixed in 1fbb81d (ADR 0066 §13) |
+| 6 | Web | Medium | Delete and admin started ticked for `rooster-cli` requests, and anyone can start one | audit | Fixed in 1fbb81d (ADR 0066 §13a) |
+| 7 | CLI | Low | Credential POSTs followed redirects; a 307/308 re-sends the body cross-origin | audit | Fixed in 07f5b0a |
+| 8 | Server | Low | The `device_connected` notice named the device the CLI reports, which an attacker chooses | audit | Fixed in 861a152 |
+| 9 | Server | Low | A third-party app could call itself "rooster CLI" | audit | Fixed in 861a152 |
+| 10 | Server | Low | Pending user codes appeared in the request log | audit | Fixed in 861a152 |
+| 11 | Server | Low | User codes (40 bits) were hashed with plain SHA-256, crackable from a database copy | audit | Fixed in 861a152 (HMAC with the auth secret) |
+| 12 | Server | Low | The per-client limiter stored arbitrary `client_id` strings | audit | Fixed in 861a152 |
+| 13 | Server | P2 | `PATCH /me/grants/:id` could add `admin` to an MCP token or `/mcp` login | focused, audit | Fixed in 861a152 |
+| 14 | Server | P1 | A refused grace retry (wrong `resource`) revived the old refresh token for good | focused | Fixed in 861a152 |
+| 15 | Server | P1 | A revoked, rotated app refresh token stayed redeemable through the grace window | focused | Fixed in 861a152 |
+| 16 | Server | P2 | `token=Bearer <rt>` on revoke bypassed the per-grant handling and ran the client-wide cleanup | focused | Fixed in 861a152 |
+| 17 | Server | P2 | A new grant with `notifications:read` could mark its own `device_connected` notice as read | focused | Fixed in 861a152 (the notice is browser-only) |
+| 18 | CLI | P1 | `mcp header` was bound only to the profile, so a client set up for server A could receive server B's token | focused | Fixed in a797ec3 (`--server`) |
+| 19 | CLI | P2 | A 4xx or 429 whose body was cut off counted as a lost refresh and was retried | focused | Fixed in a797ec3 |
+| 20 | CLI | P2 | A keychain read-back that failed after a successful write restored the spent refresh token | focused | Fixed in 816cbab |
+| 21 | Server | P2 | The grace rollback cleared revocations it hadn't made, reviving an access token that sign-out had revoked | structured | Fixed in b6c23e4 |
+| 22 | CLI | P2 | Three or more processes taking over an abandoned lock at once can briefly overlap | Structured and focused | Accepted |
+| 23 | CLI | P2 | A live lock holder paused for over 120 s (SIGSTOP, a hung keychain) is taken over by age | Focused | Accepted |
+
+
+### Accepted risks (Phase 12)
+- **Lock takeover races (22, 23).** They need a crashed or paused CLI process, plus concurrent commands at the moment of takeover. The worst case is a revoked grant, so the user logs in again; no credential is exposed. An OS advisory lock would fix it structurally, but Node has none without a native dependency.
+- **The refresh grace window (ADR 0066).** A thief who uses a stolen refresh token within 60 s of a rotation, before the real client uses its successor, gets one pair. The theft surfaces as a revoked grant at the real client's next refresh.
+- **Device-code phishing in general (ADR 0065).** A user who types a code an attacker started and approves it anyway. Mitigated by the typed code, the warning, the defaults, the browser-only notice and the operator switch.

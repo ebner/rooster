@@ -14,15 +14,18 @@ Check it with `rooster --version`.
 rooster login --server https://rooster.example.com
 ```
 
-1. The tool shows a code and opens rooster's approval page in your browser. On a machine without a browser, add `--no-browser` and open the printed address on any device, your phone included.
-2. Check that the code matches, then choose what the command line may do and where: which organisations, and which groups it may read and change. See [What a connection may do](#what-a-connection-may-do).
-3. Choose **Approve**. The terminal continues on its own.
+1. The tool shows a code and opens rooster's **Connect a device** page in your browser. On a machine without a browser, add `--no-browser` and open the printed address on any device, your phone included.
+2. Type the code shown in the terminal and choose **Continue**. Check that the page shows the same code, then choose what the command line may do and where: which organisations, and which groups it may read and change. See [What a connection may do](#what-a-connection-may-do).
+3. Choose **Allow**. The terminal continues on its own, and your Inbox gets a note that a device was connected.
+
+Only enter a code that you just got from your own terminal or app. rooster never asks you for a code by mail, chat or phone; someone who does is trying to get into your account.
 
 ![The approval page for the command line, with capabilities, organisations and groups](../../screenshots/device-consent.desktop.light.png)
 
 The login is stored in your system's keychain, or in a file only you can read where there is no keychain. `rooster whoami` shows who you are signed in as and what the login may do; `rooster logout` signs out and revokes the login.
 
 - **Several servers or accounts:** add `--profile work` to any command. Settings live in `~/.config/rooster/config.toml`.
+- The login renews itself in the background. After about a month unused, sign in again.
 - **For scripts and CI:** pipe a personal access token into `rooster login --with-token`, or set `ROOSTER_TOKEN`. `ROOSTER_SERVER`, `ROOSTER_ORG` and `ROOSTER_PROFILE` also override the settings, and `NO_COLOR` turns colours off.
 
 ## Everyday commands
@@ -115,6 +118,13 @@ https://<your rooster>/mcp
 
 The agent finds everything else on its own. Your browser then opens rooster's approval page, which shows who is asking and where you will be sent back to. Choose what it may do (see below), then **Allow**. If the agent later needs more, for example to post comments, it asks again and the new capabilities are marked **New**.
 
+### Remote, from a machine without a browser
+
+Agents normally sign in to `https://<your rooster>/mcp` through a browser window on the same machine. On a server, over SSH or in a container there is none. Two ways work there:
+
+- **With the rooster command line installed:** `rooster mcp setup --remote --client claude-code` signs the agent in with a code you approve on any device, and prints the command that adds rooster to Claude Code. Claude Code then asks `rooster mcp header` for a fresh key whenever it connects.
+- **With any agent:** create an **MCP token** (see [Personal access tokens](#personal-access-tokens)) and give it to the agent as a header. rooster shows the lines to paste for Claude Code and Codex.
+
 ### Local: `rooster mcp setup`
 
 For agents that run on your computer, such as Claude Code, Claude Desktop or Cursor:
@@ -155,6 +165,8 @@ rooster token create backup --scope tasks:read --expires 30d
 ```
 
 The token is shown once. Use it as `Authorization: Bearer <token>`, or with `rooster login --with-token`.
+
+A token works either with the **API** (scripts, the command line) or with **MCP** (AI agents), chosen under **Works with** when you create it, or with `--audience mcp`. An MCP token only works at `https://<your rooster>/mcp`, and after creating one rooster shows the setup lines for common agents. An MCP token can't ask for more access by itself: if the agent needs more, edit the token in Connected apps.
 
 ## See and revoke access
 

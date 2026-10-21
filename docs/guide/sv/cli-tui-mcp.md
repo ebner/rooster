@@ -14,15 +14,18 @@ Kontrollera installationen med `rooster --version`.
 rooster login --server https://rooster.example.com
 ```
 
-1. Verktyget visar en kod och öppnar roosters godkännandesida i webbläsaren. På en dator utan webbläsare lägger du till `--no-browser` och öppnar den utskrivna adressen på valfri enhet, till exempel mobilen.
-2. Kontrollera att koden stämmer och välj sedan vad kommandoraden får göra och var: vilka organisationer, och vilka grupper den får läsa och ändra. Se [Vad en anslutning får göra](#vad-en-anslutning-får-göra).
-3. Välj **Godkänn**. Terminalen fortsätter av sig själv.
+1. Verktyget visar en kod och öppnar roosters sida **Anslut en enhet** i webbläsaren. På en dator utan webbläsare lägger du till `--no-browser` och öppnar den utskrivna adressen på valfri enhet, till exempel mobilen.
+2. Skriv in koden som terminalen visar och välj **Fortsätt**. Kontrollera att sidan visar samma kod, och välj sedan vad kommandoraden får göra och var: vilka organisationer, och vilka grupper den får läsa och ändra. Se [Vad en anslutning får göra](#vad-en-anslutning-får-göra).
+3. Välj **Tillåt**. Terminalen fortsätter av sig själv, och din inkorg får ett meddelande om att en enhet har anslutits.
+
+Skriv bara in en kod som du precis fick från din egen terminal eller app. rooster ber dig aldrig om en kod via e-post, chatt eller telefon; den som gör det försöker komma åt ditt konto.
 
 ![Godkännandesidan för kommandoraden, med behörigheter, organisationer och grupper](../../screenshots/device-consent.desktop.light.png)
 
 Inloggningen sparas i systemets nyckelring, eller i en fil som bara du kan läsa där det inte finns någon nyckelring. `rooster whoami` visar vem du är inloggad som och vad inloggningen får göra, och `rooster logout` loggar ut och återkallar inloggningen.
 
 - **Flera servrar eller konton:** lägg till `--profile jobb` på valfritt kommando. Inställningarna finns i `~/.config/rooster/config.toml`.
+- Inloggningen förnyas av sig själv i bakgrunden. Efter ungefär en månad utan användning loggar du in igen.
 - **I skript och CI:** skicka en personlig åtkomsttoken till `rooster login --with-token` via standard in, eller sätt `ROOSTER_TOKEN`. `ROOSTER_SERVER`, `ROOSTER_ORG` och `ROOSTER_PROFILE` går också före inställningarna, och `NO_COLOR` stänger av färgerna.
 
 ## Vanliga kommandon
@@ -115,6 +118,13 @@ https://<din rooster>/mcp
 
 Resten hittar agenten själv. Webbläsaren öppnar sedan roosters godkännandesida, som visar vem som frågar och vart du skickas tillbaka. Välj vad agenten får göra (se nedan) och sedan **Tillåt**. Om agenten senare behöver mer, till exempel för att skriva kommentarer, frågar den igen, och de nya behörigheterna är märkta **Ny**.
 
+### På distans, från en dator utan webbläsare
+
+Agenter loggar vanligtvis in på `https://<din rooster>/mcp` via ett webbläsarfönster på samma dator. På en server, över SSH eller i en container finns inget sådant. Där fungerar två sätt:
+
+- **Med roosters kommandoradsverktyg installerat:** `rooster mcp setup --remote --client claude-code` loggar in agenten med en kod som du godkänner på valfri enhet, och skriver ut kommandot som lägger till rooster i Claude Code. Claude Code ber sedan `rooster mcp header` om en färsk nyckel varje gång den ansluter.
+- **Med vilken agent som helst:** skapa en **MCP-token** (se [Personliga åtkomsttoken](#personliga-åtkomsttoken)) och ge den till agenten i ett HTTP-huvud. rooster visar raderna att klistra in för Claude Code och Codex.
+
 ### Lokalt: `rooster mcp setup`
 
 För agenter som körs på din dator, som Claude Code, Claude Desktop eller Cursor:
@@ -155,6 +165,8 @@ rooster token create backup --scope tasks:read --expires 30d
 ```
 
 Token visas en enda gång. Använd den som `Authorization: Bearer <token>`, eller med `rooster login --with-token`.
+
+En token fungerar antingen med **API:t** (skript, kommandoraden) eller med **MCP** (AI-agenter). Det väljer du under **Fungerar med** när du skapar den, eller med `--audience mcp`. En MCP-token fungerar bara på `https://<din rooster>/mcp`, och när du har skapat en visar rooster raderna att klistra in för vanliga agenter. En MCP-token kan inte själv be om mer åtkomst: behöver agenten mer redigerar du token under Anslutna appar.
 
 ## Se och återkalla åtkomst
 

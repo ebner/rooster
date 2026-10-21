@@ -53,7 +53,12 @@ Decided while writing the spec (no question to the user):
   - the full-context approval page with the warning, no pre-filled link and Unverified labels;
   - the `device_connected` notice for detection, and revocation in Connected apps;
   - the operator switch, defaulting to first-party.
-- **Residual risk:** a user who ignores the warning on a third-party request in `all` mode. Accepted, because the operator opts in to `all`, and the default lets only rooster's own CLI start a flow.
+- **Residual risk:** a user who ignores the warning and approves a request someone else started. `first-party` mode limits only which client a flow names. `rooster-cli` is a public client, so anyone can start a flow in its name (the legacy CLI flow allowed the same since Phase 8). What protects the user is therefore the approval page, for every client:
+  - the code must be typed;
+  - delete and admin start unticked;
+  - the notice names the client and the server-observed IP, not a self-reported device name.
+
+  This was corrected after the Phase 12 security review (ADR 0066 §13–13b). A warning when the requesting IP differs from the approving browser's was considered and left out: approving a terminal on another machine (SSH, a server) is the flow's normal use.
 
 ## Considered
 - **The device grant only:** few clients would use it, so headless MCP would stay impractical.
