@@ -928,10 +928,14 @@ describe('round 9 regressions', () => {
       await until(() => h.grantsGate.asked);
       const paused = h.grantsGate.current;
       h.grantsGate.current = null;
-      expect((await h.login('tok-2')).code).toBe(0);
+      // The new login publishes now; retiring the old ref waits for logout's profile lock.
+      const login = h.login('tok-2');
+      const k1 = h.profile().credential_ref;
+      await until(() => h.profile().credential_ref !== k1);
       const newer = h.profile().credential_ref as string;
       paused.release();
       const result = await logout;
+      expect((await login).code).toBe(0);
       expect(result.code).toBe(5);
       expect(result.stderr).toContain('newer login was kept');
       expect(result.stderr).not.toContain('Signed out');
@@ -963,11 +967,13 @@ describe('round 9 regressions', () => {
       // A logs in to the keychain; its cleanup of K1 pauses.
       const loginA = h.login('tok-2');
       await until(() => deleting);
-      // B logs in with ROOSTER_KEYRING=off: a file login of its own, published.
-      expect((await h.login('tok-3', { ROOSTER_KEYRING: 'off' })).code).toBe(0);
-      expect(h.profile().credential_store).toBe('file');
+      // B logs in with ROOSTER_KEYRING=off: a file login of its own, published (its cleanup
+      // of A's login waits for A's, under the profile lock).
+      const loginB = h.login('tok-3', { ROOSTER_KEYRING: 'off' });
+      await until(() => h.profile().credential_store === 'file');
       paused.release();
       expect((await loginA).code).toBe(0);
+      expect((await loginB).code).toBe(0);
       h.bearers.length = 0;
       expect((await h.cli.run(['whoami', '--quiet'], { env: h.env })).stdout).toBe(
         'ada@example.com\n',
@@ -1096,10 +1102,13 @@ describe('round 10 regressions', () => {
       const logout = cli.run(['logout'], { env });
       await until(() => reading);
       h.keychain.state.beforeGet = null;
-      // A new login is published while logout reads its captured credential.
-      expect((await h.login('tok-2')).code).toBe(0);
+      // A new login is published while logout reads its captured credential (its cleanup of
+      // the old ref waits for logout's profile lock).
+      const login = h.login('tok-2');
+      await until(() => h.profile().credential_ref !== k1);
       paused.release();
       const result = await logout;
+      expect((await login).code).toBe(0);
       expect(result.code).toBe(5);
       expect(deleted).not.toContain('/api/v1/me/grants/grant-new');
       expect(h.profile().credential_ref).not.toBe(k1);

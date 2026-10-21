@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto';
 import { unlinkSync } from 'node:fs';
 import { join } from 'node:path';
+import { GRANT_SCOPES, type GrantScope } from '@rooster/core/grants';
 import { uuidv7 } from '@rooster/core/ids';
+import { isBearerToken } from './api.ts';
 import { readIfExists, writeFileAtomic } from './config.ts';
+import { AUDIENCES, type Audience } from './oauth.ts';
 
 /**
  * Where a profile's login lives (07 §2). Exactly one store per profile, chosen at login and
@@ -12,10 +15,29 @@ import { readIfExists, writeFileAtomic } from './config.ts';
  */
 export type StoreKind = 'keychain' | 'file';
 
-/** A stored login: the token and the server origin it was issued by (sent only there). */
+/**
+ * A stored login: the token and the server origin it was issued by (sent only there).
+ * - A bearer session from the legacy device flow, or a PAT (`login --with-token`): `token`
+ *   alone, used as it is until revoked (the format of 1.7 and earlier, read unchanged).
+ * - An OAuth login through the device grant (11 §9.6): `token` is the current access token,
+ *   and `oauth` holds the rotating refresh token, the access token's expiry and the resource
+ *   (audience) both are bound to.
+ */
 export interface StoredLogin {
   token: string;
   server: string;
+  oauth?: OAuthLogin;
+}
+
+export interface OAuthLogin {
+  refreshToken: string;
+  /** Epoch ms when `token` expires. */
+  expiresAt: number;
+  audience: Audience;
+  /** The exact `resource` the tokens were issued for (sent with every refresh). */
+  resource: string;
+  /** The capabilities granted, as the token endpoint reported them. */
+  scopes: GrantScope[];
 }
 
 /** The recorded keychain can't be read (locked, denied, gone): never a fallback to a file. */
@@ -116,21 +138,73 @@ export function serverOrigin(server: string): string {
   return new URL(server).origin;
 }
 
-function encode(login: StoredLogin): string {
-  return JSON.stringify({ token: login.token, server: login.server });
+/**
+ * The stored text. A bearer login keeps the 1.7 shape `{token, server}`; an OAuth login is
+ * `{v: 2, kind: "oauth", token, server, refreshToken, expiresAt, audience, resource, scopes}`,
+ * so an older CLI reading it still finds `token` (the access token) and fails cleanly once it
+ * expires.
+ */
+export function encodeLogin(login: StoredLogin): string {
+  if (login.oauth === undefined)
+    return JSON.stringify({ token: login.token, server: login.server });
+  const { refreshToken, expiresAt, audience, resource, scopes } = login.oauth;
+  return JSON.stringify({
+    v: 2,
+    kind: 'oauth',
+    token: login.token,
+    server: login.server,
+    refreshToken,
+    expiresAt,
+    audience,
+    resource,
+    scopes,
+  });
 }
 
-function decode(raw: string | undefined | null): StoredLogin | undefined {
+function decodeOAuth(value: Record<string, unknown>): OAuthLogin | undefined {
+  const { refreshToken, expiresAt, audience, resource, scopes } = value;
+  if (
+    typeof refreshToken !== 'string' ||
+    !isBearerToken(refreshToken) ||
+    typeof expiresAt !== 'number' ||
+    !Number.isFinite(expiresAt) ||
+    !AUDIENCES.includes(audience as Audience) ||
+    typeof resource !== 'string' ||
+    !Array.isArray(scopes)
+  ) {
+    return undefined;
+  }
+  return {
+    refreshToken,
+    expiresAt,
+    audience: audience as Audience,
+    resource,
+    scopes: GRANT_SCOPES.filter((s) => scopes.includes(s)),
+  };
+}
+
+export function decodeLogin(raw: string | undefined | null): StoredLogin | undefined {
   if (raw === undefined || raw === null || raw.trim() === '') return undefined;
   try {
     const value = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof value.token === 'string' && value.token !== '' && typeof value.server === 'string') {
+    if (typeof value.token !== 'string' || value.token === '' || typeof value.server !== 'string') {
+      return undefined;
+    }
+    if (value.kind === undefined && value.v === undefined) {
       return { token: value.token, server: value.server };
     }
+    // A newer format this CLI doesn't know, or a broken one: never guessed at.
+    if (value.v !== 2 || value.kind !== 'oauth') return undefined;
+    const oauth = decodeOAuth(value);
+    return oauth === undefined ? undefined : { token: value.token, server: value.server, oauth };
   } catch {
     // Not ours: never sent anywhere.
   }
   return undefined;
+}
+
+function sameLogin(a: StoredLogin | undefined, b: StoredLogin): boolean {
+  return a !== undefined && encodeLogin(a) === encodeLogin(b);
 }
 
 /** A stored login's exact identity: the store and the one ref (account or file) holding it. */
@@ -196,9 +270,9 @@ export class CredentialStore {
       }
       if (entry !== undefined) {
         try {
-          await entry.setPassword(encode(login));
-          const back = decode(await entry.getPassword());
-          if (back?.token !== login.token || back.server !== login.server) {
+          await entry.setPassword(encodeLogin(login));
+          const back = decodeLogin(await entry.getPassword());
+          if (!sameLogin(back, login)) {
             throw new Error('The keychain did not return the stored login.');
           }
           return { store: 'keychain', ref: account };
@@ -209,8 +283,41 @@ export class CredentialStore {
       }
     }
     const ref = newFileRef(profile);
-    writeFileAtomic(this.pathOf(ref), `${encode(login)}\n`, 0o600);
+    writeFileAtomic(this.pathOf(ref), `${encodeLogin(login)}\n`, 0o600);
     return { store: 'file', ref };
+  }
+
+  /**
+   * Overwrites the login at an existing ref in place: a refresh storing the rotated tokens.
+   * Only under the profile's lock (`profile-lock.ts`), after checking that the profile still
+   * points at this ref. The keychain is read back; anything short of the new login stored is
+   * an error, since the spent refresh token must not be the only one left.
+   */
+  async replace(
+    credential: CredentialRef,
+    login: StoredLogin,
+    previous: StoredLogin,
+  ): Promise<void> {
+    if (credential.store === 'file') {
+      // Atomic: on failure the previous file is untouched.
+      writeFileAtomic(this.pathOf(credential.ref), `${encodeLogin(login)}\n`, 0o600);
+      return;
+    }
+    const factory = await this.factory();
+    if (factory === null) throw new CredentialStoreUnavailable();
+    let entry: KeyringEntry | undefined;
+    try {
+      entry = factory(SERVICE, credential.ref);
+      await entry.setPassword(encodeLogin(login));
+      if (!sameLogin(decodeLogin(await entry.getPassword()), login)) {
+        throw new Error('The keychain did not return the stored login.');
+      }
+    } catch (error) {
+      // Put the previous login back (best effort), so a rerun can still redeem its refresh
+      // token within the server's grace period.
+      await entry?.setPassword(encodeLogin(previous)).catch(() => {});
+      throw new CredentialStoreUnavailable(error);
+    }
   }
 
   /**
@@ -220,13 +327,13 @@ export class CredentialStore {
   async load(credential: CredentialRef): Promise<StoredLogin | undefined> {
     if (credential.store === 'file') {
       return isFileRef(credential.ref)
-        ? decode(readIfExists(this.pathOf(credential.ref)))
+        ? decodeLogin(readIfExists(this.pathOf(credential.ref)))
         : undefined;
     }
     const factory = await this.factory();
     if (factory === null) throw new CredentialStoreUnavailable();
     try {
-      return decode(await factory(SERVICE, credential.ref).getPassword());
+      return decodeLogin(await factory(SERVICE, credential.ref).getPassword());
     } catch (error) {
       throw new CredentialStoreUnavailable(error);
     }

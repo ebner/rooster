@@ -16,7 +16,10 @@ interface ServerApp {
 }
 interface Helpers {
   BASE_URL: string;
-  createTestApp(options?: { env?: Record<string, string> }): { app: ServerApp; db: unknown };
+  createTestApp(options?: { env?: Record<string, string>; deviceIntervalSec?: number }): {
+    app: ServerApp;
+    db: unknown;
+  };
   createUserWithSession(
     app: ServerApp,
     db: unknown,
@@ -47,11 +50,24 @@ export interface RoosterServer {
   close(): Promise<void>;
 }
 
-export async function startServer(): Promise<RoosterServer> {
+export interface StartOptions {
+  /** Server env, e.g. `ROOSTER_OAUTH_DEVICE: 'off'` (11 §9.1). */
+  env?: Record<string, string>;
+  /**
+   * The device grant's polling interval (seconds). Tests poll in real time, since the server
+   * answers `slow_down` to early polls, so it is short by default.
+   */
+  deviceIntervalSec?: number;
+}
+
+export async function startServer(options: StartOptions = {}): Promise<RoosterServer> {
   const helpers = (await import(
     /* @vite-ignore */ new URL(HELPERS, import.meta.url).href
   )) as Helpers;
-  const { app, db } = helpers.createTestApp();
+  const { app, db } = helpers.createTestApp({
+    ...(options.env === undefined ? {} : { env: options.env }),
+    deviceIntervalSec: options.deviceIntervalSec ?? 1,
+  });
   const served = await serveFetch((request) => app.fetch(request));
   return {
     url: served.url,

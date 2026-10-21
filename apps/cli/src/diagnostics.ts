@@ -1,8 +1,12 @@
 import { clean } from './output/color.ts';
 import type { Runtime } from './runtime.ts';
 
-/** A PAT, or whatever follows `Bearer ` up to a quote: an exception may quote a header. */
-const CREDENTIAL_RE = /rooster_pat_[A-Za-z0-9]+|\bBearer\s[^"']*/gi;
+/**
+ * A PAT, an OAuth access or refresh token (11 §9.6), a `refresh_token=` form value, or
+ * whatever follows `Bearer ` up to a quote: an exception may quote a header or a body.
+ */
+const CREDENTIAL_RE =
+  /rooster_(pat|at|rt)_[A-Za-z0-9_-]+|\b(refresh_token|access_token|device_code)=[^&\s"']*|\bBearer\s[^"']*/gi;
 
 /**
  * Diagnostic text as it may be printed: the credentials this invocation used (each line of

@@ -39,7 +39,10 @@ function envFor(home: string): Record<string, string> {
  * the requested scopes, every org.
  */
 async function setupAgent(user: TestUser, home: string, extra: string[] = []) {
-  const io = fakeIo(home, { sleep: (ms) => new Promise((r) => setTimeout(r, Math.min(ms, 20))) });
+  const io = fakeIo(home, {
+    // The server's own interval: it answers slow_down to polls that come sooner.
+    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+  });
   const setup = runCli(['mcp', 'setup', '--no-browser', '--server', server.url, ...extra], io);
   let code: string | undefined;
   for (let i = 0; i < 300 && code === undefined; i++) {

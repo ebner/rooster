@@ -27,7 +27,15 @@ export function fakeApi(routes: Record<string, Handler | unknown>) {
       method: input.method,
       path: url.pathname,
       search: url.search,
-      body: text === '' ? undefined : JSON.parse(text),
+      // OAuth endpoints are form-encoded (RFC 6749); everything else is JSON.
+      body:
+        text === ''
+          ? undefined
+          : (input.headers.get('content-type') ?? '').startsWith(
+                'application/x-www-form-urlencoded',
+              )
+            ? Object.fromEntries(new URLSearchParams(text))
+            : JSON.parse(text),
     };
     calls.push(call);
     const route = compiled.find((r) => r.method === input.method && r.re.test(url.pathname));

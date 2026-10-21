@@ -74,6 +74,7 @@ export const VALUE_SOURCES: readonly { when: string; words: string }[] = [
       'list:tasks:read tasks:write comments:write tasks:assign groups:write tasks:delete notifications:read admin',
   },
   { when: 'flag:--client', words: 'list:claude-code claude-desktop cursor print' },
+  { when: 'flag:--audience', words: 'list:api mcp' },
   { when: 'flag:--target', words: 'list:claude agents' },
   { when: 'cmd:group add:--after', words: 'dyn:groups' },
   { when: 'cmd:group mv:--after', words: 'dyn:groups' },
@@ -119,6 +120,7 @@ const VALUE_FLAGS = [
   '--target',
   '--remind',
   '--repeat',
+  '--audience',
 ] as const;
 
 /**

@@ -40,6 +40,8 @@ async function printGrants(runtime: Runtime, grants: readonly Grant[]): Promise<
     );
     const facts = [
       t(`grant.kind.${grant.kind}`),
+      // 11 §9.7: an MCP token (or a remote MCP login) works only at `/mcp`.
+      ...(grant.audience === 'mcp' ? [t('grant.mcpOnly')] : []),
       ...(grant.tokenPrefix === null ? [] : [`${clean(grant.tokenPrefix)}…`]),
       scopeSummary(grant.scopes),
     ];
@@ -106,6 +108,7 @@ const tokenCreateArgs = () =>
       description: t('token.arg.writeGroup'),
     },
     expires: { type: 'string', valueHint: '90d|never', description: t('token.arg.expires') },
+    audience: { type: 'string', valueHint: 'api|mcp', description: t('token.arg.audience') },
   }) as const;
 
 const tokenCreate = defineCommand({
@@ -124,6 +127,15 @@ const tokenCreate = defineCommand({
       throw new CliError(EXIT.usage, t('token.readOnlyAndScope'));
     }
     const scopes = requested.length === 0 ? (['tasks:read'] as const) : parseScopes(requested);
+    // 11 §9.7: an MCP token works only at `/mcp`, and MCP has no admin tools.
+    const audiences = all('audience');
+    const audience = audiences[0] ?? 'api';
+    if (audiences.length > 1 || (audience !== 'api' && audience !== 'mcp')) {
+      throw new CliError(EXIT.usage, t('token.badAudience', { audience: audiences.join(', ') }));
+    }
+    if (audience === 'mcp' && (scopes as readonly string[]).includes('admin')) {
+      throw new CliError(EXIT.usage, t('token.adminNotForMcp'));
+    }
     const constraints = await buildConstraints(
       runtime,
       {
@@ -143,6 +155,8 @@ const tokenCreate = defineCommand({
         scopes: [...scopes],
         constraints: constraints as TokenCreate['constraints'],
         ...(expiresInDays === undefined ? {} : { expiresInDays }),
+        // Only when asked: a server from before Phase 12 doesn't know the field.
+        ...(audience === 'mcp' ? { audience } : {}),
       }),
       'token.browserOnly',
     );
@@ -156,6 +170,9 @@ const tokenCreate = defineCommand({
     out.notice(t('token.shownOnce'));
     out.notice(`${scopeSummary(created.grant.scopes)}`);
     for (const line of await constraintLines(runtime, created.grant.constraints)) out.notice(line);
+    if (audience === 'mcp') {
+      out.notice(t('token.mcpHint', { url: `${runtime.server()}/mcp` }));
+    }
   },
 });
 

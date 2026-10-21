@@ -236,12 +236,16 @@
       "org": "Only this organisation (repeatable)",
       "group": "Read only these groups: org/Group (repeatable)",
       "writeGroup": "Write only in these groups: org/Group (repeatable)",
-      "expires": "Lifetime: 7d, 30d, 90d (default), 365d or never"
+      "expires": "Lifetime: 7d, 30d, 90d (default), 365d or never",
+      "audience": "Where the token works: api (default) or mcp (only the MCP endpoint)"
     },
     "nameMissing": "Give the token a name: rooster token create ci",
     "readOnlyAndScope": "Use either --read-only or --scope.",
     "shownOnce": "This is the only time the token is shown. Store it somewhere safe.",
-    "browserOnly": "A personal access token can’t create tokens. Use a CLI login (rooster login) or Settings → Connected apps → New token."
+    "browserOnly": "A personal access token can’t create tokens. Use a CLI login (rooster login) or Settings → Connected apps → New token.",
+    "badAudience": "--audience takes api or mcp, once (got {audience}).",
+    "adminNotForMcp": "An MCP token can’t have the admin capability: MCP has no admin tools.",
+    "mcpHint": "This MCP token works only at {url}. Send it as the header Authorization: Bearer followed by the token."
   },
   "apps": {
     "cmd": {
@@ -273,7 +277,8 @@
       "pat": "Personal access token",
       "device": "CLI device",
       "oauth": "App"
-    }
+    },
+    "mcpOnly": "MCP only"
   },
   "denied": {
     "scope": "This credential lacks the “{scope}” capability.",
@@ -312,7 +317,14 @@
     "otherServer": "This profile’s login is for {stored}, not {server}. Run rooster login --server {server} (or use another --profile).",
     "keychainUnavailable": "This profile’s login is stored in the system keychain, which can’t be read now (it may be locked). Unlock it and try again, or sign in again with rooster login (with ROOSTER_KEYRING=off the new login is stored in a file).",
     "keychainRefused": "The system keychain refused to store the login ({reason}). Unlock it and run rooster login again, or set ROOSTER_KEYRING=off to store the login in a file (readable only by you).",
-    "credentialsChanging": "The stored login is being changed by another rooster process; try again."
+    "credentialsChanging": "The stored login is being changed by another rooster process; try again.",
+    "loginEnded": "The login of profile {profile} has ended: it was revoked or expired, or its refresh token was used twice. Run rooster login --profile {profile} again.",
+    "remoteLoginEnded": "The MCP login of profile {profile} has ended: it was revoked or expired, or its refresh token was used twice. Run rooster mcp setup --remote --relogin --profile {profile}.",
+    "refreshFailed": "Couldn’t renew the login: {error}",
+    "notRemoteProfile": "Profile {profile} isn’t signed in for the MCP endpoint. Run rooster mcp setup --remote --profile {profile}.",
+    "remoteOnlyProfile": "Profile {profile} is signed in for the MCP endpoint only (rooster mcp header). Use another profile, or sign it in for the API with rooster login --profile {profile}.",
+    "profileLocked": "Another rooster process is renewing this profile’s login ({path}, process {pid}). Try again; if no rooster process is running, delete that file.",
+    "refreshNotStored": "The renewed login of profile {profile} couldn’t be stored ({reason}). The previous login was kept: run the command again within a minute to renew it, or run rooster login."
   },
   "login": {
     "arg": {
@@ -396,13 +408,15 @@
   },
   "mcp": {
     "cmd": {
-      "setup": "Set up an AI agent: a dedicated profile and grant, plus the client config"
+      "setup": "Set up an AI agent: a dedicated profile and grant, plus the client config",
+      "header": "Print an Authorization header with a fresh token for the MCP endpoint (for a client’s header helper)"
     },
     "arg": {
       "readOnly": "Offer only the tools that read (list, get, search)",
       "client": "Which client to configure (default print)",
       "allowDelete": "Also ask for permission to delete tasks (they go to Trash)",
-      "relogin": "Sign the profile in again even if it already has a login"
+      "relogin": "Sign the profile in again even if it already has a login",
+      "remote": "Connect the client to the server’s MCP endpoint instead of running rooster mcp on this computer"
     },
     "noGrant": "Can’t read what this credential may do; sign in again with rooster login.",
     "noTools": "This credential allows none of the MCP tools; the agent will see an empty tool list.",
@@ -438,6 +452,17 @@
       },
       "fromSource": "Run from TypeScript sources ({script}), the agent’s client couldn’t start this rooster. Run setup with a built or installed rooster, e.g. node apps/cli/dist/rooster.mjs mcp setup.",
       "leftovers": "Files from this attempt were left where they were created, because their folder was moved or replaced meanwhile: {paths}"
+    },
+    "remote": {
+      "noDeviceGrant": "This server doesn’t let the rooster CLI sign in to its MCP endpoint. Use an MCP token instead: Settings → Connected apps → New token (Works with: MCP), or rooster token create agent --audience mcp.",
+      "unquotable": "The path of this rooster can’t be written safely as a shell command. Install it under a plain path, or use rooster mcp setup without --remote.",
+      "replacesLogin": "Profile {profile} has a login for the local MCP server. Signing it in for the MCP endpoint replaces that login, so clients that run rooster mcp --profile {profile} stop working.",
+      "printJson": "Add this to your MCP client’s configuration (Claude Code’s format):",
+      "helperNote": "The client runs rooster mcp header --profile {profile} for a fresh token on every connection; no token is stored in its configuration.",
+      "otherClients": "Clients without a header helper can use an MCP token as a fixed header instead: create one in Settings → Connected apps → New token (Works with: MCP), or with rooster token create agent --audience mcp, and send it to {url} as Authorization: Bearer followed by the token.",
+      "desktop": "{app} connects to remote servers as connectors, which sign in through the browser: Settings → Connectors → Add custom connector, with the URL {url}.",
+      "noHelper": "{app} can’t run a header helper, so it needs an MCP token: a personal access token for the MCP endpoint. Create one in Settings → Connected apps → New token (Works with: MCP), or with rooster token create agent --audience mcp, and add:",
+      "tokenHint": "Replace {placeholder} with the token. It works only at {url}, and you can revoke it in Settings → Connected apps."
     }
   },
   "skill": {

@@ -106,6 +106,20 @@ describe('rooster without a server', () => {
 });
 
 describe('[P2] safeDiagnostic', () => {
+  it('redacts OAuth tokens and token-shaped form values it was never told about (11 §9.6)', async () => {
+    const { safeDiagnostic } = await import('../src/diagnostics.ts');
+    const runtime = { io: { env: {} }, usedTokens: new Set<string>() } as unknown as Parameters<
+      typeof safeDiagnostic
+    >[1];
+    const text = safeDiagnostic(
+      'rooster_at_Abc-12_x rooster_rt_Zz9 grant_type=refresh_token&refresh_token=secret1&device_code=secret2',
+      runtime,
+    );
+    for (const secret of ['Abc-12_x', 'Zz9', 'secret1', 'secret2']) {
+      expect(text).not.toContain(secret);
+    }
+  });
+
   it('redacts used credentials (line by line), PAT and Bearer shapes, and control characters', async () => {
     const { safeDiagnostic } = await import('../src/diagnostics.ts');
     const used = 'sessiontoken123\ninjected-line';

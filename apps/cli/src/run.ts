@@ -9,6 +9,7 @@ import { describeApiError } from './grant-info.ts';
 import { localeFromEnv, resolveLocale, t, withLocale } from './i18n.ts';
 import type { Io } from './io.ts';
 import { stripAnsi } from './output/color.ts';
+import { ProfileLockTimeout } from './profile-lock.ts';
 import { NO_GLOBALS, Runtime, withRuntime } from './runtime.ts';
 import {
   CredentialStoreUnavailable,
@@ -80,6 +81,11 @@ async function report(runtime: Runtime, error: unknown): Promise<ExitCode> {
     failure = new CliError(
       EXIT.conflict,
       t('config.locked', { path: error.lockPath, pid: String(error.holderPid ?? '?') }),
+    );
+  } else if (error instanceof ProfileLockTimeout) {
+    failure = new CliError(
+      EXIT.conflict,
+      t('auth.profileLocked', { path: error.lockPath, pid: String(error.holderPid ?? '?') }),
     );
   } else if (error instanceof KeychainRefused) {
     failure = new CliError(EXIT.auth, t('auth.keychainRefused', { reason: error.message }));

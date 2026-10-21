@@ -236,12 +236,16 @@
       "org": "Bara den här organisationen (kan upprepas)",
       "group": "Läs bara de här grupperna: org/Grupp (kan upprepas)",
       "writeGroup": "Skriv bara i de här grupperna: org/Grupp (kan upprepas)",
-      "expires": "Giltighetstid: 7d, 30d, 90d (standard), 365d eller never"
+      "expires": "Giltighetstid: 7d, 30d, 90d (standard), 365d eller never",
+      "audience": "Var token fungerar: api (standard) eller mcp (bara MCP-slutpunkten)"
     },
     "nameMissing": "Ge token ett namn: rooster token create ci",
     "readOnlyAndScope": "Använd antingen --read-only eller --scope.",
     "shownOnce": "Det här är enda gången token visas. Spara den på ett säkert ställe.",
-    "browserOnly": "En personlig åtkomsttoken kan inte skapa token. Använd en CLI-inloggning (rooster login) eller Inställningar → Anslutna appar → Ny token."
+    "browserOnly": "En personlig åtkomsttoken kan inte skapa token. Använd en CLI-inloggning (rooster login) eller Inställningar → Anslutna appar → Ny token.",
+    "badAudience": "--audience tar api eller mcp, en gång (fick {audience}).",
+    "adminNotForMcp": "En MCP-token kan inte ha administratörsbehörighet: MCP har inga administrationsverktyg.",
+    "mcpHint": "Den här MCP-token fungerar bara på {url}. Skicka den i huvudet Authorization: Bearer följt av token."
   },
   "apps": {
     "cmd": {
@@ -273,7 +277,8 @@
       "pat": "Personlig åtkomsttoken",
       "device": "CLI-enhet",
       "oauth": "App"
-    }
+    },
+    "mcpOnly": "bara MCP"
   },
   "denied": {
     "scope": "Inloggningen saknar behörigheten ”{scope}”.",
@@ -312,7 +317,14 @@
     "otherServer": "Profilens inloggning gäller {stored}, inte {server}. Kör rooster login --server {server} (eller använd en annan --profile).",
     "keychainUnavailable": "Profilens inloggning finns i systemets nyckelring, som inte går att läsa nu (den kan vara låst). Lås upp den och försök igen, eller logga in igen med rooster login (med ROOSTER_KEYRING=off sparas den nya inloggningen i en fil).",
     "keychainRefused": "Systemets nyckelring vägrade spara inloggningen ({reason}). Lås upp den och kör rooster login igen, eller sätt ROOSTER_KEYRING=off för att spara inloggningen i en fil (bara läsbar för dig).",
-    "credentialsChanging": "Den sparade inloggningen ändras av en annan rooster-process; försök igen."
+    "credentialsChanging": "Den sparade inloggningen ändras av en annan rooster-process; försök igen.",
+    "loginEnded": "Inloggningen för profilen {profile} har upphört: den har återkallats eller gått ut, eller så användes dess förnyelsetoken två gånger. Kör rooster login --profile {profile} igen.",
+    "remoteLoginEnded": "MCP-inloggningen för profilen {profile} har upphört: den har återkallats eller gått ut, eller så användes dess förnyelsetoken två gånger. Kör rooster mcp setup --remote --relogin --profile {profile}.",
+    "refreshFailed": "Kunde inte förnya inloggningen: {error}",
+    "notRemoteProfile": "Profilen {profile} är inte inloggad för MCP-slutpunkten. Kör rooster mcp setup --remote --profile {profile}.",
+    "remoteOnlyProfile": "Profilen {profile} är bara inloggad för MCP-slutpunkten (rooster mcp header). Använd en annan profil, eller logga in den för API:t med rooster login --profile {profile}.",
+    "profileLocked": "En annan rooster-process förnyar profilens inloggning ({path}, process {pid}). Försök igen; om ingen rooster-process körs kan du ta bort filen.",
+    "refreshNotStored": "Den förnyade inloggningen för profilen {profile} kunde inte sparas ({reason}). Den tidigare inloggningen finns kvar: kör kommandot igen inom en minut för att förnya den, eller kör rooster login."
   },
   "login": {
     "arg": {
@@ -396,13 +408,15 @@
   },
   "mcp": {
     "cmd": {
-      "setup": "Konfigurera en AI-agent: en egen profil och behörighet, plus klientens konfiguration"
+      "setup": "Konfigurera en AI-agent: en egen profil och behörighet, plus klientens konfiguration",
+      "header": "Skriv ut ett Authorization-huvud med en färsk token för MCP-slutpunkten (för en klients header helper)"
     },
     "arg": {
       "readOnly": "Erbjud bara verktyg som läser (lista, hämta, söka)",
       "client": "Vilken klient som ska konfigureras (standard print)",
       "allowDelete": "Be även om lov att ta bort uppgifter (de hamnar i papperskorgen)",
-      "relogin": "Logga in profilen på nytt även om den redan har en inloggning"
+      "relogin": "Logga in profilen på nytt även om den redan har en inloggning",
+      "remote": "Anslut klienten till serverns MCP-slutpunkt i stället för att köra rooster mcp på den här datorn"
     },
     "noGrant": "Det går inte att läsa vad inloggningen får göra; logga in igen med rooster login.",
     "noTools": "Inloggningen tillåter inga av MCP-verktygen; agenten får en tom verktygslista.",
@@ -438,6 +452,17 @@
       },
       "fromSource": "Körd från TypeScript-källkoden ({script}) kan agentens klient inte starta den här rooster. Kör setup med en byggd eller installerad rooster, t.ex. node apps/cli/dist/rooster.mjs mcp setup.",
       "leftovers": "Filer från försöket ligger kvar där de skapades, eftersom mappen flyttades eller byttes ut under tiden: {paths}"
+    },
+    "remote": {
+      "noDeviceGrant": "Servern låter inte rooster-CLI:t logga in på MCP-slutpunkten. Använd en MCP-token i stället: Inställningar → Anslutna appar → Ny token (Fungerar med: MCP), eller rooster token create agent --audience mcp.",
+      "unquotable": "Sökvägen till den här rooster går inte att skriva säkert som ett skalkommando. Installera den under en enkel sökväg, eller använd rooster mcp setup utan --remote.",
+      "replacesLogin": "Profilen {profile} har en inloggning för den lokala MCP-servern. Loggas den in för MCP-slutpunkten ersätts den inloggningen, och klienter som kör rooster mcp --profile {profile} slutar fungera.",
+      "printJson": "Lägg till det här i MCP-klientens konfiguration (i Claude Codes format):",
+      "helperNote": "Klienten kör rooster mcp header --profile {profile} för att få en färsk token vid varje anslutning; ingen token sparas i dess konfiguration.",
+      "otherClients": "Klienter utan header helper kan i stället använda en MCP-token som ett fast huvud: skapa en under Inställningar → Anslutna appar → Ny token (Fungerar med: MCP), eller med rooster token create agent --audience mcp, och skicka den till {url} som Authorization: Bearer följt av token.",
+      "desktop": "{app} ansluter till fjärrservrar som kopplingar, som loggar in via webbläsaren: Inställningar → Kopplingar → Lägg till anpassad koppling, med adressen {url}.",
+      "noHelper": "{app} kan inte köra en header helper och behöver därför en MCP-token: en personlig åtkomsttoken för MCP-slutpunkten. Skapa en under Inställningar → Anslutna appar → Ny token (Fungerar med: MCP), eller med rooster token create agent --audience mcp, och lägg till:",
+      "tokenHint": "Byt ut {placeholder} mot token. Den fungerar bara på {url}, och du kan återkalla den under Inställningar → Anslutna appar."
     }
   },
   "skill": {

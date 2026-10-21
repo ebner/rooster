@@ -4,6 +4,7 @@ import {
   RoosterApiError,
   type RoosterClient,
   type Schemas,
+  type TokenSource,
   unwrap,
 } from '@rooster/api-client';
 import { uuidv7 } from '@rooster/core/ids';
@@ -46,7 +47,8 @@ export const REQUEST_TIMEOUT_MS = 30_000;
 
 export interface ApiOptions {
   server: string;
-  token: string | undefined;
+  /** A fixed token, or one read per request (refreshed when it is about to expire). */
+  token: TokenSource | undefined;
   io: Io;
   /** `X-Rooster-Client-Id`: one per process. */
   clientId: string;

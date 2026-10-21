@@ -350,7 +350,8 @@ describe('the device flow (07 §2)', () => {
     const home = mkdtempSync(join(tmpdir(), 'rooster-cli-'));
     try {
       const io = fakeIo(home, {
-        sleep: (ms) => new Promise((r) => setTimeout(r, Math.min(ms, 20))),
+        // The server's own interval: it answers slow_down to polls that come sooner.
+        sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
       });
       const login = runCli(['login', '--server', server.url, '--scope', 'tasks:write'], io);
       let code: string | undefined;
@@ -407,7 +408,8 @@ describe('the device flow (07 §2)', () => {
     const home = mkdtempSync(join(tmpdir(), 'rooster-cli-'));
     try {
       const io = fakeIo(home, {
-        sleep: (ms) => new Promise((r) => setTimeout(r, Math.min(ms, 20))),
+        // The server's own interval: it answers slow_down to polls that come sooner.
+        sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
       });
       const login = runCli(['login', '--no-browser', '--server', server.url], io);
       let code: string | undefined;

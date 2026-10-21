@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { GrantScope } from '@rooster/core/grants';
 import { uuidv7 } from '@rooster/core/ids';
 import {
+  cliFetch,
   createApi,
   type Group,
   isBearerToken,
@@ -26,7 +27,9 @@ import {
 import { CliError, EXIT } from './errors.ts';
 import { isLocale, setLocale, t } from './i18n.ts';
 import type { Io } from './io.ts';
+import { type Audience, GrantEndedError, isLostRefresh, refreshTokens } from './oauth.ts';
 import { Output } from './output/output.ts';
+import { deferSignals, type ProfileLockOptions, withProfileLock } from './profile-lock.ts';
 import {
   type CredentialRef,
   CredentialStore,
@@ -40,6 +43,31 @@ import { StateStore } from './state.ts';
 
 /** Fresh re-reads of a profile's credential ref before giving up (see `storedLogin`). */
 const REF_ATTEMPTS = 3;
+
+/** An OAuth access token is refreshed when less than this is left (clock skew, slow calls). */
+export const REFRESH_MARGIN_MS = 60_000;
+
+/** The pause before sending a lost refresh again, well inside the server's 60 s grace. */
+export const REFRESH_RETRY_MS = 1_000;
+
+/** What a credential is needed for (`token`). */
+export interface TokenOptions {
+  /** Where it will be sent: the REST API (default) or the remote MCP endpoint. */
+  audience?: Audience;
+  /** Refresh an OAuth access token unless it stays valid at least this long. */
+  minValidityMs?: number;
+  /** Use the profile's own login even when `ROOSTER_TOKEN` is set (`rooster mcp header`). */
+  ignoreEnv?: boolean;
+  /** How long to wait for another process refreshing the same profile. */
+  lockTimeoutMs?: number;
+}
+
+/** A stored login as read: the login, the origin the profile records, and its exact ref. */
+export interface StoredCredential {
+  login: StoredLogin;
+  origin: string;
+  credential: CredentialRef;
+}
 
 /** The exact credential a profile points at, or undefined when it has no login. */
 export function credentialOf(profile: Profile): CredentialRef | undefined {
@@ -85,6 +113,8 @@ export class Runtime {
   /** The capability the running command needs, for explaining `forbidden_scope`. */
   requiredScope: GrantScope | undefined;
   private client: RoosterClient | undefined;
+  /** The refresh in flight in this process, so parallel requests share it (`refreshed`). */
+  private refreshing: Promise<StoredLogin> | undefined;
   private pinnedProfile: string | undefined;
   private pinnedSettings: Profile | undefined;
   private meCache: Promise<Me> | undefined;
@@ -163,7 +193,7 @@ export class Runtime {
    * gives up (`CredentialsChanging`). A recorded keychain that can't be read is an error,
    * never a fallback.
    */
-  async storedLogin(): Promise<{ login: StoredLogin; origin: string } | undefined> {
+  async storedLogin(): Promise<StoredCredential | undefined> {
     const pinned = this.profile;
     for (let attempt = 0; attempt < REF_ATTEMPTS; attempt++) {
       // `peek`, not `reload`: only the credential fields are taken from the fresh file.
@@ -183,7 +213,7 @@ export class Runtime {
         continue;
       }
       if (login === undefined || login.server !== before.credential_origin) return undefined;
-      return { login, origin: before.credential_origin };
+      return { login, origin: before.credential_origin, credential };
     }
     throw new CredentialsChanging();
   }
@@ -202,21 +232,145 @@ export class Runtime {
    * The token for a request to `requestServer` (the origin the caller will actually send
    * to): `ROOSTER_TOKEN` (explicit, 07 §2), else the profile's stored login, only when the
    * stored origin, the profile's origin and the request origin are one. A login is never sent
-   * to another origin: exit 3 instead.
+   * to another origin: exit 3 instead. An OAuth login must be for `audience`, and its access
+   * token is refreshed first when it is about to expire.
    */
-  async token(requestServer: string): Promise<string | undefined> {
+  async token(requestServer: string, options: TokenOptions = {}): Promise<string | undefined> {
     const env = this.io.env.ROOSTER_TOKEN;
-    if (env !== undefined && env !== '') return this.wellFormed(env.trim());
+    if (options.ignoreEnv !== true && env !== undefined && env !== '') {
+      return this.wellFormed(env.trim());
+    }
     const stored = await this.storedLogin();
     if (stored === undefined) return undefined;
     const request = serverOrigin(requestServer);
-    if (stored.login.server !== request) {
-      throw new CliError(
-        EXIT.auth,
-        t('auth.otherServer', { stored: stored.login.server, server: request }),
-      );
+    const sameOrigin = (login: StoredLogin) => {
+      if (login.server !== request) {
+        throw new CliError(
+          EXIT.auth,
+          t('auth.otherServer', { stored: login.server, server: request }),
+        );
+      }
+    };
+    sameOrigin(stored.login);
+    const audience = options.audience ?? 'api';
+    let login = stored.login;
+    this.checkAudience(login, audience);
+    if (
+      login.oauth !== undefined &&
+      login.oauth.expiresAt - this.io.now() <= (options.minValidityMs ?? REFRESH_MARGIN_MS)
+    ) {
+      login = await this.refreshed(options, requestServer);
+      sameOrigin(login);
+      this.checkAudience(login, audience);
     }
-    return this.wellFormed(stored.login.token);
+    return this.wellFormed(login.token);
+  }
+
+  /** An OAuth login works only at its audience; a bearer login only at the API. */
+  private checkAudience(login: StoredLogin, audience: Audience): void {
+    if (login.oauth !== undefined) this.usedTokens.add(login.oauth.refreshToken);
+    const has = login.oauth?.audience ?? 'api';
+    if (has === audience) return;
+    throw new CliError(
+      EXIT.auth,
+      t(audience === 'mcp' ? 'auth.notRemoteProfile' : 'auth.remoteOnlyProfile', {
+        profile: this.profileName,
+      }),
+    );
+  }
+
+  /** Runs `fn` holding this profile's cross-process lock (refresh, logout, retiring a login). */
+  withProfileLock<T>(fn: () => Promise<T>, options: ProfileLockOptions = {}): Promise<T> {
+    return withProfileLock(this.config.dir, this.profileName, fn, options);
+  }
+
+  /**
+   * The profile's OAuth login with a fresh access token: one refresh per process at a time,
+   * and across processes under the profile's lock. Inside the lock the login is read again
+   * (ref and secret), since another process may have refreshed it already: its tokens are
+   * used and the spent refresh token is never sent twice (reuse revokes the grant, 11 §2.4).
+   */
+  private refreshed(options: TokenOptions, server: string): Promise<StoredLogin> {
+    this.refreshing ??= this.withProfileLock(() => this.refreshLocked(options, server), {
+      ...(options.lockTimeoutMs === undefined ? {} : { timeoutMs: options.lockTimeoutMs }),
+    }).finally(() => {
+      this.refreshing = undefined;
+    });
+    return this.refreshing;
+  }
+
+  /** `server`: the base URL the caller sends to, on the login's own origin (checked). */
+  private async refreshLocked(options: TokenOptions, server: string): Promise<StoredLogin> {
+    const stored = await this.storedLogin();
+    if (stored === undefined) throw new CliError(EXIT.auth, t('auth.notLoggedIn'));
+    const { login, credential } = stored;
+    const margin = options.minValidityMs ?? REFRESH_MARGIN_MS;
+    if (login.oauth === undefined || login.oauth.expiresAt - this.io.now() > margin) return login;
+    const oauth = login.oauth;
+    // The refresh token goes only to the authorization server on the login's own origin.
+    if (serverOrigin(server) !== login.server) {
+      throw new CliError(EXIT.auth, t('auth.otherServer', { stored: login.server, server }));
+    }
+    const base = server;
+    try {
+      return await deferSignals(async () => {
+        const attempt = () =>
+          refreshTokens(
+            cliFetch({ io: this.io, verbose: this.globals.verbose, server: base }),
+            base,
+            oauth.refreshToken,
+            oauth.resource,
+            () => this.io.now(),
+          );
+        let tokens: Awaited<ReturnType<typeof attempt>>;
+        try {
+          tokens = await attempt();
+        } catch (error) {
+          // The server may have rotated without the answer arriving: the same refresh once
+          // more, at once, lands in its grace period. Never after a refusal.
+          if (!isLostRefresh(error)) throw error;
+          await this.io.sleep(REFRESH_RETRY_MS);
+          tokens = await attempt();
+        }
+        this.usedTokens.add(tokens.accessToken);
+        this.usedTokens.add(tokens.refreshToken);
+        const next: StoredLogin = {
+          token: tokens.accessToken,
+          server: login.server,
+          oauth: {
+            ...oauth,
+            refreshToken: tokens.refreshToken,
+            expiresAt: tokens.expiresAt,
+            scopes: tokens.scopes.length > 0 ? tokens.scopes : oauth.scopes,
+          },
+        };
+        // Stored before anything else happens: the old refresh token is spent now. If that
+        // fails, the previous login stays stored, and a rerun within a minute redeems it again.
+        try {
+          await this.credentials.replace(credential, next, login);
+        } catch (error) {
+          throw new CliError(
+            EXIT.auth,
+            t('auth.refreshNotStored', {
+              profile: this.profileName,
+              reason: (error as Error).message,
+            }),
+          );
+        }
+        return next;
+      });
+    } catch (error) {
+      if (error instanceof GrantEndedError) {
+        throw new CliError(
+          EXIT.auth,
+          t(oauth.audience === 'mcp' ? 'auth.remoteLoginEnded' : 'auth.loginEnded', {
+            profile: this.profileName,
+          }),
+          'invalid_grant',
+        );
+      }
+      throw error;
+    }
   }
 
   /** `token` when it can be a bearer credential; exit 3 otherwise, without quoting it. */
@@ -237,7 +391,14 @@ export class Runtime {
       // The token is chosen for this exact origin, the one the client will send to.
       const token = await this.token(server);
       if (token === undefined) throw new CliError(EXIT.auth, t('auth.notLoggedIn'));
-      this.client = this.clientFor(server, token);
+      // Read per request: a long command (the TUI, `rooster mcp`) refreshes as it goes.
+      this.client = createApi({
+        server,
+        token: async () => this.token(server),
+        io: this.io,
+        clientId: this.clientId,
+        verbose: this.globals.verbose,
+      });
     }
     return this.client;
   }

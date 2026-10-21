@@ -79,10 +79,15 @@ export class SourceLaunchError extends Error {
  * - otherwise node plus the absolute script.
  * Absolute paths, so the client never resolves `rooster` through its own (different) PATH.
  */
-export function launchCommand(ctx: LaunchContext, profile: string): McpServerEntry {
+export function launchCommand(
+  ctx: LaunchContext,
+  profile: string,
+  /** Words after `mcp`: none for the stdio server, `header` for the header helper. */
+  sub: readonly string[] = [],
+): McpServerEntry {
   const realpath = ctx.realpath ?? defaultRealpath;
   const isExecutable = ctx.isExecutable ?? defaultIsExecutable;
-  const args = ['mcp', '--profile', profile];
+  const args = ['mcp', ...sub, '--profile', profile];
   if (ctx.script !== undefined && BUNFS_RE.test(ctx.script)) {
     return { command: ctx.execPath, args };
   }
@@ -254,4 +259,90 @@ export function claudeCodeCommand(
 /** The JSON snippet for clients configured by hand. */
 export function configSnippet(key: string, entry: McpServerEntry): string {
   return JSON.stringify({ mcpServers: { [key]: entry } }, null, 2);
+}
+
+// --- the remote endpoint (11 §9.6) ---------------------------------------------------------
+
+/**
+ * Claude Code's entry for the remote endpoint: Streamable HTTP (`type: "http"`) with a
+ * `headersHelper`, a command Claude Code runs in a shell on every connection (and again after
+ * a 401/403), whose stdout must be a JSON object of header names to strings. Never a token.
+ */
+export interface RemoteServerEntry {
+  type: 'http';
+  url: string;
+  headersHelper: string;
+}
+
+/**
+ * `rooster mcp header --profile <p>` as one shell command line, every word quoted for the
+ * platform's shells; null when a word can't be quoted safely there.
+ */
+export function headersHelperCommand(
+  entry: McpServerEntry,
+  platform: NodeJS.Platform,
+): string | null {
+  const quoted: string[] = [];
+  for (const word of [entry.command, ...entry.args]) {
+    const q = shellQuote(word, platform);
+    if (q === null) return null;
+    quoted.push(q);
+  }
+  return quoted.join(' ');
+}
+
+export function remoteEntry(server: string, headersHelper: string): RemoteServerEntry {
+  return { type: 'http', url: `${server}/mcp`, headersHelper };
+}
+
+/**
+ * Claude Code's official command for a JSON entry (`claude mcp add-json`, user scope), so its
+ * private files are never edited (ADR 0044 §5); null when the line can't be quoted safely
+ * (Windows shells can't take the JSON literally).
+ */
+export function claudeCodeAddJson(
+  key: string,
+  entry: RemoteServerEntry,
+  platform: NodeJS.Platform,
+): string | null {
+  const words = ['claude', 'mcp', 'add-json', '--scope', 'user', key, JSON.stringify(entry)];
+  const quoted: string[] = [];
+  for (const word of words) {
+    const q = shellQuote(word, platform);
+    if (q === null) return null;
+    quoted.push(q);
+  }
+  return quoted.join(' ');
+}
+
+/** The JSON snippet of a remote entry (Claude Code's `.mcp.json` format). */
+export function remoteConfigSnippet(key: string, entry: RemoteServerEntry): string {
+  return JSON.stringify({ mcpServers: { [key]: entry } }, null, 2);
+}
+
+/** A placeholder, never a real token: the user pastes their MCP token there. */
+export const MCP_TOKEN_PLACEHOLDER = '<MCP token>';
+
+/**
+ * The static-header form for clients without a header helper (11 §9.7). `type: "http"` is
+ * Claude Code's spelling; Cursor infers the transport from `url`.
+ */
+export function staticHeaderSnippet(
+  key: string,
+  server: string,
+  options: { type: boolean } = { type: true },
+): string {
+  return JSON.stringify(
+    {
+      mcpServers: {
+        [key]: {
+          ...(options.type ? { type: 'http' } : {}),
+          url: `${server}/mcp`,
+          headers: { Authorization: `Bearer ${MCP_TOKEN_PLACEHOLDER}` },
+        },
+      },
+    },
+    null,
+    2,
+  );
 }
