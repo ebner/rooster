@@ -11,7 +11,7 @@ import {
   PAGE_LIMIT_DEFAULT,
   type SseNotification,
 } from '@rooster/core/schemas';
-import { and, desc, eq, inArray, isNotNull, isNull, lt, or, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, lt, ne, or, type SQL, sql } from 'drizzle-orm';
 import { notification, organization, task, user } from '../db/schema/index.ts';
 import type { DirectMessage } from '../events/bus.ts';
 import {
@@ -26,6 +26,7 @@ import {
 import { decodeCursor, encodeCursor, isTimeIdCursor } from './cursor.ts';
 import { qk, selfAudience } from './event-audience.ts';
 import {
+  BROWSER_ONLY_NOTIFICATION,
   canReadNotification,
   reachedOrgIds,
   readableTaskCondition,
@@ -182,8 +183,9 @@ const inInbox = sql`json_extract(${notification.data}, '$.hidden') IS NULL`;
  */
 function readableNotificationSql(actor: Actor): SQL | undefined {
   if (actor.grant === null) return undefined;
+  const notSecurity = ne(notification.type, BROWSER_ONLY_NOTIFICATION);
   const orgIds = reachedOrgIds(actor);
-  if (orgIds === undefined) return undefined;
+  if (orgIds === undefined) return notSecurity;
   if (orgIds.length === 0) return sql`0`;
   const readable = readableTaskCondition(actor, orgIds);
   const taskReadable =
@@ -194,7 +196,7 @@ function readableNotificationSql(actor: Actor): SQL | undefined {
           sql`NOT EXISTS (SELECT 1 FROM ${task} WHERE ${task.id} = ${notification.taskId})`,
           readable(sql`${notification.taskId}`, sql`${notification.orgId}`),
         );
-  return and(inArray(notification.orgId, [...orgIds]), taskReadable);
+  return and(inArray(notification.orgId, [...orgIds]), taskReadable, notSecurity);
 }
 
 /** Notifications, their fan-out to every channel, and the preference matrix (FR-NOT-1–4). */
@@ -379,7 +381,11 @@ export class NotificationService {
       const orgIds = reachedOrgIds(actor);
       if (orgIds !== undefined && orgIds.length === 0) return 0;
       return t
-        .select({ orgId: notification.orgId, taskId: notification.taskId })
+        .select({
+          orgId: notification.orgId,
+          taskId: notification.taskId,
+          type: notification.type,
+        })
         .from(notification)
         .innerJoin(organization, eq(organization.id, notification.orgId))
         .where(
@@ -471,7 +477,12 @@ export class NotificationService {
         // A grant marks only notifications it may read, also for `{all: true}`. Readability
         // is decided per row, so the update runs over the allowed IDs in bounded chunks.
         const allowed = tx
-          .select({ id: notification.id, orgId: notification.orgId, taskId: notification.taskId })
+          .select({
+            id: notification.id,
+            orgId: notification.orgId,
+            taskId: notification.taskId,
+            type: notification.type,
+          })
           .from(notification)
           .where(
             and(

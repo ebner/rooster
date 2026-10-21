@@ -1,8 +1,9 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import type { OAuthDeviceMode } from '../config.ts';
 
 // The codes of the device authorization grant (RFC 8628, 11 §9.2) and the per-user limit on
-// code entry at `/device`. Both codes are stored only as SHA-256 hashes (04 §4).
+// code entry at `/device`. Both codes are stored only hashed (04 §4): the device code with
+// SHA-256, the short user code with an HMAC keyed by the server's secret.
 
 /** `rooster-cli`, the first-party client (07 §2). */
 const FIRST_PARTY_CLIENT = 'rooster-cli';
@@ -35,9 +36,15 @@ export function normalizeUserCode(code: string): string {
   return code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 }
 
-/** The stored form of a user code as typed: its normalised spelling, hashed. */
-export function userCodeHash(input: string): string {
-  return hashDeviceSecret(normalizeUserCode(input));
+/**
+ * The stored form of a user code as typed: its normalised spelling, keyed with the server's
+ * secret (`ROOSTER_AUTH_SECRET`, never in the database). A plain hash of 40 bits could be
+ * reversed from a copy of the database within minutes; the 256-bit device code needs no key.
+ */
+export function userCodeHash(secret: string, input: string): string {
+  return createHmac('sha256', secret)
+    .update(`rooster-device-user-code\n${normalizeUserCode(input)}`)
+    .digest('base64url');
 }
 
 /** 256 random bits, base64url (RFC 8628 §5.2: the device code must not be guessable). */

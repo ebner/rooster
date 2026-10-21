@@ -171,9 +171,12 @@ export function authorizeGroupTarget(
 export function canReadNotification(
   tx: Tx,
   actor: Actor,
-  item: { orgId: string; taskId: string | null },
+  item: { orgId: string; taskId: string | null; type?: string },
 ): boolean {
   if (actor.grant === null) return true;
+  // The security notice of a device connection is the browser's only (11 §9.4): a grant, the
+  // newly connected one included, may neither see nor acknowledge it.
+  if (item.type === BROWSER_ONLY_NOTIFICATION) return false;
   if (!grantsOrg(actor.grant.constraints, item.orgId)) return false;
   if (item.taskId === null || canRead(actor.grant.constraints, item.orgId, null)) return true;
   const row = tx
@@ -183,6 +186,9 @@ export function canReadNotification(
     .get();
   return row === undefined || canReadTask(tx, actor, row);
 }
+
+/** A notification type no grant may read or mark (`canReadNotification`). */
+export const BROWSER_ONLY_NOTIFICATION = 'device_connected';
 
 /**
  * The SSE query keys a grant's stream may receive (11 §2.3): nothing of an org it does not

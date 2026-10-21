@@ -1,4 +1,6 @@
+import { isCimdClientIdUrlCandidate } from '@better-auth/cimd';
 import type { OpenAPIHono } from '@hono/zod-openapi';
+import { stripAccessTokenAuthorizationScheme } from 'better-auth/oauth2';
 import type { Context } from 'hono';
 import type { Config } from '../config.ts';
 import { clientIp } from '../lib/client-ip.ts';
@@ -15,7 +17,7 @@ import type { Services } from '../services/index.ts';
 import type { SignInRejection } from '../services/sign-in-policy.ts';
 import { AUTH_BASE_PATH, type Auth, CLIENT_IP_HEADER, IDENTITY_UNLINKED } from './auth.ts';
 import { clearInviteCookie, isSecureBaseUrl } from './cookies.ts';
-import { DEVICE_AUTHORIZATION_PATH } from './device-grant.ts';
+import { CLIENT_ID_MAX, DEVICE_AUTHORIZATION_PATH } from './device-grant.ts';
 import { KeyedLock } from './keyed-lock.ts';
 import { resourceOf } from './oauth-metadata.ts';
 
@@ -279,12 +281,21 @@ async function tokenRequest(
       const scope = fields.get('scope');
       if (scope !== undefined && check.grantId !== null) {
         if (!services.grants.oauthScopeCovered(check.grantId, scope)) {
+          if (check.grace !== undefined) services.grants.undoGrace(check.grace);
           return tokenError('invalid_scope', 'The scope is wider than this authorization.');
         }
         fields.delete('scope');
         init.body = new URLSearchParams([...fields]).toString();
       }
-      const res = await forward();
+      // A grace retry the provider refuses (or that throws) is undone: it changes nothing.
+      let res: Response | null = null;
+      try {
+        res = await forward();
+      } finally {
+        if (check.grace !== undefined && res?.status !== 200) {
+          services.grants.undoGrace(check.grace);
+        }
+      }
       if (res.status === 200) {
         const rotated = (await res.clone().json()) as { refresh_token?: unknown };
         if (typeof rotated.refresh_token === 'string') {
@@ -368,18 +379,15 @@ async function revokeRequest(
   forward: () => Promise<Response>,
   services: Services,
 ): Promise<Response> {
-  if (!/^application\/x-www-form-urlencoded\b/i.test(headers.get('content-type') ?? '')) {
-    return forward();
-  }
-  const form = new URLSearchParams(new TextDecoder().decode(body));
-  const tokens = form.getAll('token');
-  const clientIds = form.getAll('client_id');
-  const token = tokens.length === 1 ? (tokens[0] as string) : undefined;
-  if (token === undefined || !token.startsWith(OAUTH_REFRESH_PREFIX) || clientIds.length > 1) {
-    return forward();
-  }
+  const fields = canonicalTokenFields(body, headers.get('content-type') ?? '');
+  if (!(fields instanceof Map)) return tokenError(fields.error, fields.description);
+  const raw = fields.get('token');
+  // Classified as the provider will read it: it drops an authorization scheme ("Bearer …") and
+  // surrounding space, so `token=Bearer rooster_rt_…` names the same refresh token.
+  const token = raw === undefined ? undefined : stripAccessTokenAuthorizationScheme(raw);
+  if (token === undefined || !token.startsWith(OAUTH_REFRESH_PREFIX)) return forward();
   return refreshLocks.run(services.grants.refreshLockKey(token), async () => {
-    const decision = services.grants.refreshRevocation(token, clientIds[0]);
+    const decision = services.grants.refreshRevocation(token, fields.get('client_id'));
     if (decision === null) return forward();
     if (decision.kind === 'cli') services.grants.endCliLogin(decision.grantId);
     return revoked();
@@ -484,8 +492,15 @@ export function registerAuthRoutes(
           : { error: 'invalid_request', description: 'The request has no parameters.' };
       if (!(fields instanceof Map)) return tokenError(fields.error, fields.description);
       const clientId = fields.get('client_id');
-      if (clientId !== undefined && clientId !== CLI_CLIENT_ID) {
-        const waitMs = devicePerClient.hit(clientId, clock());
+      // Counted only for client ids the endpoint could accept (bounded, CIMD-shaped), and by
+      // hash: an arbitrary id would only grow the limiter's memory.
+      if (
+        clientId !== undefined &&
+        clientId !== CLI_CLIENT_ID &&
+        clientId.length <= CLIENT_ID_MAX &&
+        isCimdClientIdUrlCandidate(clientId)
+      ) {
+        const waitMs = devicePerClient.hit(hashDeviceSecret(clientId), clock());
         if (waitMs > 0) return tooManyDeviceRequests(waitMs);
       }
       init.body = new URLSearchParams([...fields]).toString();

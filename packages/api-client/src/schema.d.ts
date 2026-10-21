@@ -571,7 +571,7 @@ export interface paths {
         head?: never;
         /**
          * Edit a grant’s label, scopes, constraints or expiry
-         * @description Browser session only. PATs and CLI devices change freely; an OAuth app’s access may only be narrowed (`422 widening_not_allowed`). Takes effect on the next request; the grant’s open event streams reconnect.
+         * @description Browser session only. PATs and CLI devices change freely, except that an MCP token or a CLI login for `/mcp` never gets `admin` (`422 admin_not_for_mcp`); an OAuth app’s access may only be narrowed (`422 widening_not_allowed`). Takes effect on the next request; the grant’s open event streams reconnect.
          */
         patch: operations["updateGrant"];
         trace?: never;
@@ -7756,7 +7756,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `widening_not_allowed`. */
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `widening_not_allowed`, `admin_not_for_mcp`. */
             422: {
                 headers: {
                     [name: string]: unknown;

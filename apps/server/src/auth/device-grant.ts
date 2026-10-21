@@ -47,7 +47,7 @@ const DEVICE_SCOPE_MAX_BYTES = 512;
 /** `authorization_details` are accepted (11 §9.2) but bounded like on the consent screen. */
 const AUTHORIZATION_DETAILS_MAX = 8192;
 /** A `client_id` longer than this is no CIMD URL rooster would fetch. */
-const CLIENT_ID_MAX = 2048;
+export const CLIENT_ID_MAX = 2048;
 /** A third party's request without `scope` asks for the least (as the code flow does). */
 const DEFAULT_APP_SCOPE = 'tasks:read';
 

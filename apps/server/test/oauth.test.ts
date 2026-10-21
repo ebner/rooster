@@ -840,3 +840,19 @@ describe('signing in during an authorization', () => {
     expect(back.searchParams.get('code')).not.toBeNull();
   });
 });
+
+describe('an app named like rooster (security audit F5)', () => {
+  it('is shown by its host on the consent screen and in Connected apps', async () => {
+    const ctx = oauthCtx({
+      cimd: fakeCimd({ [CLIENT_ID]: metadataDoc(CLIENT_ID, { client_name: 'Rooster CLI' }) }),
+    });
+    const user = ctx.user('ada@example.com');
+    const page = await authorize(ctx, user);
+    const request = await consentRequest(user, page);
+    expect(request.client).toMatchObject({ name: 'app.example.com', domain: 'app.example.com' });
+    await allow(user, page);
+    const grants = await user.ok<Grant[]>('GET', '/api/v1/me/grants');
+    expect(grants[0]?.client?.name).toBe('app.example.com');
+    expect(grants[0]?.label).toBe('app.example.com');
+  });
+});

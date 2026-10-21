@@ -7,10 +7,11 @@ const PROBE_PATHS = new Set(['/healthz', '/readyz']);
 
 /**
  * Tokens that are bearer secrets in the path: invites (the API routes and the web page),
- * unsubscribe links (P7, GET and POST), which act for a user without a session, and calendar
- * feeds (P10, `/ical/<token>.ics`).
+ * unsubscribe links (P7, GET and POST), which act for a user without a session, calendar
+ * feeds (P10, `/ical/<token>.ics`), and the user codes of pending device requests (Phase 12,
+ * `/api/v1/device/<userCode>` and its approve and deny).
  */
-const TOKEN_PATH = /^(\/api\/v1\/invites|\/invite|\/unsubscribe|\/ical)\/[^/]+/;
+const TOKEN_PATH = /^(\/api\/v1\/invites|\/api\/v1\/device|\/invite|\/unsubscribe|\/ical)\/[^/]+/;
 
 /** The path as logged: secrets in it replaced by their route parameter name. */
 export function loggablePath(path: string): string {

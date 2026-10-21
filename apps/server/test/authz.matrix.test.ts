@@ -898,7 +898,7 @@ async function fixture(): Promise<Fixture> {
     .values({
       id: uuidv7(),
       deviceCode: randomToken(),
-      userCode: userCodeHash(userCode),
+      userCode: userCodeHash(TEST_ENV.ROOSTER_AUTH_SECRET, userCode),
       expiresAt: new Date(now + 600_000),
       status: 'pending',
       pollingInterval: 5000,

@@ -12,9 +12,11 @@ import {
   notification,
   oauthRefreshToken,
 } from '../src/db/schema/index.ts';
+import { loggablePath } from '../src/lib/request-log.ts';
 import { hashDeviceSecret, userCodeHash } from '../src/services/device-codes.ts';
 import { SMTP_ENV } from './delivery-fakes.ts';
 import { ALL, deviceCode as legacyDeviceCode, personalOrgId, pollToken } from './grant-helpers.ts';
+import { TEST_ENV } from './helpers.ts';
 import type { Caller } from './list-helpers.ts';
 import { mcpClient } from './mcp-helpers.ts';
 import {
@@ -396,7 +398,7 @@ describe('the device authorization request (RFC 8628 §3.1, 11 §9.2)', () => {
     const code = await startDevice(ctx, { client_id: 'rooster-cli', resource: API_RESOURCE });
     const row = ctx.db.orm.select().from(deviceCode).get();
     expect(row?.deviceCode).toBe(hashDeviceSecret(code.device_code));
-    expect(row?.userCode).toBe(userCodeHash(code.user_code));
+    expect(row?.userCode).toBe(userCodeHash(TEST_ENV.ROOSTER_AUTH_SECRET, code.user_code));
     expect(JSON.stringify(row)).not.toContain(code.device_code);
     expect(JSON.stringify(row)).not.toContain(code.user_code.replace('-', ''));
     expect(row).toMatchObject({
@@ -413,7 +415,7 @@ describe('the device authorization request (RFC 8628 §3.1, 11 §9.2)', () => {
     const code = await legacyDeviceCode(ctx, 'tasks:read');
     const row = ctx.db.orm.select().from(deviceCode).get();
     expect(row?.deviceCode).toBe(hashDeviceSecret(code.device_code));
-    expect(row?.userCode).toBe(userCodeHash(code.user_code));
+    expect(row?.userCode).toBe(userCodeHash(TEST_ENV.ROOSTER_AUTH_SECRET, code.user_code));
     expect(row?.createdAt).not.toBeNull();
     const request = await review(user, code.user_code);
     expect(request).toMatchObject({ firstParty: true, resource: null, client: null });
@@ -516,18 +518,16 @@ describe('rooster-cli through the device grant (11 §9.4, §9.6)', () => {
       'api',
     ]);
 
-    // The notice, without a client host.
+    // The notice names the client, never the device name the device itself reported.
     const notices = ctx.db.orm
       .select()
       .from(notification)
       .all()
       .filter((n) => n.type === 'device_connected');
     expect(notices).toHaveLength(2);
-    expect(JSON.parse(notices[0]?.data ?? '{}')).toMatchObject({
-      grantId: login.grant.id,
-      clientName: 'rooster CLI on build-box',
-      ip: DEVICE_IP,
-    });
+    const data = JSON.parse(notices[0]?.data ?? '{}') as Record<string, unknown>;
+    expect(data).toEqual({ grantId: login.grant.id, clientName: 'rooster CLI', ip: DEVICE_IP });
+    expect(notices[0]?.data).not.toContain('build-box');
   });
 
   it('refreshes (with or without resource), can create a PAT, and logs out by revocation', async () => {
@@ -950,4 +950,266 @@ it('a CLI admin login may refresh with the scope it was given, admin included', 
   });
   expect(refreshed.status, JSON.stringify(refreshed.body)).toBe(200);
   expect(refreshed.body.scope).toBe('tasks:read admin offline_access');
+});
+
+describe('security notice and presentation hardening', () => {
+  it('emails a rooster-cli notice without the device’s self-reported name', async () => {
+    const ctx = ctxFor('first-party', SMTP_ENV);
+    const user = ctx.user('a@example.com');
+    await connectCli(ctx, user);
+    await ctx.app.services.deliveries.idle();
+    const [email] = ctx.mail.to('a@example.com');
+    expect(email?.subject).toBe(`rooster CLI was connected from ${DEVICE_IP}`);
+    expect(`${email?.html} ${email?.text}`).not.toContain('build-box');
+  });
+
+  it('an app named like rooster is shown by its host, on /device and in the notice', async () => {
+    for (const name of [
+      'rooster CLI',
+      'Rооster CLI',
+      'R o o s t e r',
+      'ｒｏｏｓｔｅｒ',
+      'r00ster',
+    ]) {
+      const ctx = oauthCtx({
+        env: { ROOSTER_OAUTH_DEVICE: 'all', ...PROXY_ENV },
+        cimd: fakeCimd({ [APP_ID]: { ...deviceDoc, client_name: name } }),
+      });
+      const user = ctx.user('a@example.com');
+      const code = await startDevice(ctx, { client_id: APP_ID, resource: MCP_RESOURCE });
+      const request = await review(user, code.user_code);
+      expect(request.clientName, name).toBe('agent.acme.example');
+      expect(request.client?.name, name).toBe('agent.acme.example');
+      expect(request.firstParty).toBe(false);
+      await approve(user, code.user_code, { scopes: ['tasks:read'] });
+      const notice = ctx.db.orm
+        .select()
+        .from(notification)
+        .all()
+        .find((n) => n.type === 'device_connected');
+      expect(JSON.parse(notice?.data ?? '{}')).toMatchObject({
+        clientName: 'agent.acme.example',
+        clientHost: 'agent.acme.example',
+      });
+    }
+  });
+});
+
+describe('second security review', () => {
+  it('A: the request log redacts the user code in /api/v1/device paths', () => {
+    expect(loggablePath('/api/v1/device/WDJB-MJHT')).toBe('/api/v1/device/:token');
+    expect(loggablePath('/api/v1/device/WDJBMJHT/approve')).toBe('/api/v1/device/:token/approve');
+    expect(loggablePath('/api/v1/device/WDJBMJHT/deny')).toBe('/api/v1/device/:token/deny');
+  });
+
+  it('B: user codes are keyed with the server secret, not a plain hash', async () => {
+    const ctx = ctxFor('first-party');
+    const code = await startDevice(ctx, { client_id: 'rooster-cli', resource: API_RESOURCE });
+    const stored = ctx.db.orm.select().from(deviceCode).get()?.userCode;
+    const plain = code.user_code.replace('-', '');
+    expect(stored).not.toBe(hashDeviceSecret(plain));
+    expect(stored).toBe(userCodeHash(TEST_ENV.ROOSTER_AUTH_SECRET, plain));
+    expect(stored).not.toBe(userCodeHash('another secret of enough length 0123456789', plain));
+  });
+
+  it('C: the per-client limit counts only client ids the endpoint could accept', async () => {
+    const ctx = ctxFor('all');
+    for (let i = 0; i < 35; i += 1) {
+      const ip = `198.51.100.${i}`;
+      const notAUrl = await requestCode(
+        ctx,
+        { client_id: 'not-a-cimd-url', resource: MCP_RESOURCE },
+        ip,
+      );
+      expect(notAUrl.status).toBe(400);
+    }
+    const long = `https://agent.acme.example/${'x'.repeat(3000)}`;
+    for (let i = 0; i < 35; i += 1) {
+      const res = await requestCode(
+        ctx,
+        { client_id: long, resource: MCP_RESOURCE },
+        `192.0.2.${i}`,
+      );
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it('D: admin cannot be added to an MCP token or a /mcp CLI login by PATCH', async () => {
+    const ctx = ctxFor('first-party');
+    const admin = ctx.user('admin@example.com');
+    const created = await admin.ok<{ grant: Grant }>(
+      'POST',
+      '/api/v1/me/tokens',
+      { name: 'Agent', scopes: ['tasks:read'], constraints: { orgs: 'all' }, audience: 'mcp' },
+      201,
+    );
+    const mcpPat = await admin.call('PATCH', `/api/v1/me/grants/${created.grant.id}`, {
+      scopes: ['tasks:read', 'admin'],
+    });
+    expect(mcpPat.status).toBe(422);
+    expect(((await mcpPat.json()) as { code: string }).code).toBe('admin_not_for_mcp');
+    const login = await connectCli(ctx, admin, MCP_RESOURCE);
+    const mcpLogin = await admin.call('PATCH', `/api/v1/me/grants/${login.grant.id}`, {
+      scopes: ['tasks:read', 'admin'],
+    });
+    expect(mcpLogin.status).toBe(422);
+    // An API token and an API login may still get it.
+    const apiPat = await admin.ok<{ grant: Grant }>(
+      'POST',
+      '/api/v1/me/tokens',
+      { name: 'Script', scopes: ['tasks:read'], constraints: { orgs: 'all' } },
+      201,
+    );
+    expect(
+      (
+        await admin.call('PATCH', `/api/v1/me/grants/${apiPat.grant.id}`, {
+          scopes: ['tasks:read', 'admin'],
+        })
+      ).status,
+    ).toBe(200);
+  });
+});
+
+describe('focused review of the refresh grace and revocation', () => {
+  const refreshWith = (ctx: OAuthCtx, token: string, extra: Record<string, string> = {}) =>
+    tokenRequest(ctx, {
+      grant_type: 'refresh_token',
+      refresh_token: token,
+      client_id: 'rooster-cli',
+      ...extra,
+    });
+  const age = (ctx: OAuthCtx) =>
+    ctx.db.sqlite
+      .prepare(
+        'UPDATE oauthRefreshToken SET rotated_at = rotated_at - 61000 WHERE rotated_at IS NOT NULL',
+      )
+      .run();
+  const grantRow = (ctx: OAuthCtx, id: string) =>
+    ctx.db.orm.select().from(accessGrant).where(eq(accessGrant.id, id)).get();
+
+  for (const [what, extra, error] of [
+    ['a wrong resource', { resource: MCP_RESOURCE }, 'invalid_target'],
+    ['a wider scope', { scope: 'tasks:delete' }, 'invalid_scope'],
+  ] as const) {
+    it(`S1: a grace retry refused for ${what} changes nothing`, async () => {
+      const ctx = ctxFor('first-party');
+      const user = ctx.user('a@example.com');
+      const login = await connectCli(ctx, user);
+      const lost = await refreshWith(ctx, login.refresh);
+      expect(lost.status).toBe(200);
+      const refused = await refreshWith(ctx, login.refresh, extra);
+      expect(refused.body.error).toBe(error);
+      // The successor still works, and the old token is still rotated: past the window its
+      // use is reuse.
+      expect(
+        (await withToken(ctx, lost.body.access_token as string, 'GET', '/api/v1/me')).status,
+      ).toBe(200);
+      age(ctx);
+      expect((await refreshWith(ctx, login.refresh)).body.error).toBe('invalid_grant');
+      expect(grantRow(ctx, login.grant.id)?.revokedAt).not.toBeNull();
+    });
+  }
+
+  it('S1: after a refused retry, a correct one within the window still works', async () => {
+    const ctx = ctxFor('first-party');
+    const user = ctx.user('a@example.com');
+    const login = await connectCli(ctx, user);
+    expect((await refreshWith(ctx, login.refresh)).status).toBe(200);
+    expect((await refreshWith(ctx, login.refresh, { resource: MCP_RESOURCE })).status).toBe(400);
+    expect((await refreshWith(ctx, login.refresh)).status).toBe(200);
+    expect(grantRow(ctx, login.grant.id)?.revokedAt).toBeNull();
+  });
+
+  it('S2: a rotated app refresh token revoked by name is never redeemed by the grace', async () => {
+    const ctx = ctxFor('all');
+    const user = ctx.user('a@example.com');
+    const chains: Record<string, unknown>[] = [];
+    for (const _ of [1, 2]) {
+      const code = await startDevice(ctx, { client_id: APP_ID, resource: MCP_RESOURCE });
+      await approve(user, code.user_code, { scopes: ['tasks:read'] });
+      chains.push((await poll(ctx, code.device_code, APP_ID, MCP_RESOURCE)).body);
+    }
+    const [one, two] = chains as [Record<string, unknown>, Record<string, unknown>];
+    const appRefresh = (token: string) =>
+      tokenRequest(ctx, { grant_type: 'refresh_token', refresh_token: token, client_id: APP_ID });
+    expect((await appRefresh(one.refresh_token as string)).status).toBe(200);
+    const revoke = await ctx.app.request('/api/auth/oauth2/revoke', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        token: one.refresh_token as string,
+        client_id: APP_ID,
+      }).toString(),
+    });
+    expect(revoke.status).toBe(200);
+    // The other chain is untouched by the revocation.
+    const other = await appRefresh(two.refresh_token as string);
+    expect(other.status).toBe(200);
+    // The revoked token is not a lost answer's retry.
+    expect((await appRefresh(one.refresh_token as string)).status).toBe(400);
+  });
+
+  it('S3: `token=Bearer <refresh token>` is the same token: one login ends, not every login', async () => {
+    const ctx = ctxFor('first-party');
+    const user = ctx.user('a@example.com');
+    const laptop = await connectCli(ctx, user);
+    const desktop = await connectCli(ctx, user);
+    expect((await refreshWith(ctx, laptop.refresh)).status).toBe(200);
+    const res = await ctx.app.request('/api/auth/oauth2/revoke', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        token: `Bearer ${laptop.refresh}`,
+        client_id: 'rooster-cli',
+      }).toString(),
+    });
+    expect(res.status).toBe(200);
+    expect(grantRow(ctx, laptop.grant.id)?.revokedAt).not.toBeNull();
+    expect((await refreshWith(ctx, desktop.refresh)).status).toBe(200);
+  });
+
+  it('S4: a grant can neither see nor acknowledge the device_connected notice', async () => {
+    const ctx = ctxFor('first-party');
+    const user = ctx.user('a@example.com');
+    const code = await startDevice(ctx, {
+      client_id: 'rooster-cli',
+      scope: 'tasks:read notifications:read',
+      resource: API_RESOURCE,
+    });
+    await approve(user, code.user_code, { scopes: ['tasks:read', 'notifications:read'] });
+    const token = await poll(ctx, code.device_code, 'rooster-cli', API_RESOURCE);
+    const access = token.body.access_token as string;
+    const listed = (await (
+      await withToken(ctx, access, 'GET', '/api/v1/notifications')
+    ).json()) as {
+      items: Notification[];
+      unreadCount: number;
+    };
+    expect(listed.items.map((n) => n.type)).not.toContain('device_connected');
+    expect(listed.unreadCount).toBe(0);
+    const marked = await withToken(ctx, access, 'POST', '/api/v1/notifications/read', {
+      all: true,
+    });
+    expect(marked.status).toBe(200);
+    const notice = ctx.db.orm
+      .select()
+      .from(notification)
+      .all()
+      .find((n) => n.type === 'device_connected');
+    expect(notice?.readAt).toBeNull();
+    const byId = await withToken(ctx, access, 'POST', '/api/v1/notifications/read', {
+      ids: [notice?.id],
+    });
+    expect(byId.status).toBe(200);
+    expect(
+      ctx.db.orm
+        .select()
+        .from(notification)
+        .where(eq(notification.id, notice?.id ?? ''))
+        .get()?.readAt,
+    ).toBeNull();
+    // The browser sees it.
+    const inbox = await user.ok<{ items: Notification[] }>('GET', '/api/v1/notifications');
+    expect(inbox.items.map((n) => n.type)).toContain('device_connected');
+  });
 });

@@ -73,11 +73,39 @@ function httpUrl(value: string | null): string | null {
   }
 }
 
+/** Look-alikes of the letters of "rooster" that NFKC leaves alone (Cyrillic, Greek). */
+const CONFUSABLES: Readonly<Record<string, string>> = {
+  '0': 'o',
+  о: 'o',
+  ο: 'o',
+  е: 'e',
+  ε: 'e',
+  ѕ: 's',
+  т: 't',
+  τ: 't',
+  г: 'r',
+};
+
+/**
+ * Whether a client's self-chosen name passes for rooster's own (the first-party "rooster CLI"):
+ * "rooster" in it after NFKC, case folding, the look-alikes above, and with everything but
+ * letters dropped (so "R o o s t e r", "rooster‌CLI" with a zero-width joiner and "rооster"
+ * with Cyrillic o's all count).
+ */
+export function impersonatesRooster(name: string): boolean {
+  const folded = [...name.normalize('NFKC').toLowerCase()]
+    .map((ch) => CONFUSABLES[ch] ?? ch)
+    .join('')
+    .replace(/[^a-z]/g, '');
+  return folded.includes('rooster');
+}
+
 /**
  * How the consent screen and Connected apps present a client (11 §3.1):
  * - CIMD: the metadata URL's host is the domain; "Verified" when the redirect host equals it
  *   (`redirectUri` given: that one; else every registered redirect URI).
  * - DCR (`dynamic`): the redirect host is the domain; never verified ("Unverified app").
+ * - A name that passes for rooster's own (`impersonatesRooster`) is replaced by the domain.
  */
 export function clientInfo(row: OAuthClientRow, redirectUri?: string): OAuthClientInfo {
   const cimd = row.clientDiscoveryId === CIMD_DISCOVERY_ID;
@@ -91,7 +119,9 @@ export function clientInfo(row: OAuthClientRow, redirectUri?: string): OAuthClie
     redirects.every((r) => hostOf(r) === metadataHost);
   const name = row.name?.trim();
   return {
-    name: name === undefined || name === '' ? domain : name.slice(0, 100),
+    // An app never takes rooster's own name: it is shown by its host instead.
+    name:
+      name === undefined || name === '' || impersonatesRooster(name) ? domain : name.slice(0, 100),
     domain,
     logoUri: httpUrl(row.icon),
     clientUri: httpUrl(row.uri),

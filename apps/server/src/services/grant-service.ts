@@ -134,13 +134,32 @@ const consentNotFound = () =>
     404,
     'That authorization request is unknown or has expired. Start again in the app.',
   );
+const adminNotForMcp = () =>
+  new AppError(
+    'admin_not_for_mcp',
+    422,
+    'An MCP token cannot have the "admin" permission; MCP has no admin tools.',
+    [{ path: 'scopes', message: 'Not available for MCP tokens' }],
+  );
 const adminOnly = () =>
   new AppError('admin_only_scope', 403, 'Only instance admins can grant the "admin" permission.');
 
 /** The outcome of an OAuth token request check (the mount answers `invalid_grant` on `false`). */
 export type OAuthTokenCheck =
-  | { ok: true; grantId: string | null }
+  | { ok: true; grantId: string | null; grace?: GraceRetry }
   | { ok: false; description: string };
+
+/**
+ * A refresh retry within the grace, as `reopenForGrace` staged it: what to put back
+ * (`undoGrace`) if the provider then refuses the exchange, so a failed retry changes nothing.
+ */
+export interface GraceRetry {
+  tokenId: string;
+  revoked: Date | null;
+  rotatedAt: Date;
+  successorId: string;
+  at: Date;
+}
 
 /** A provider `confirmation` column (JSON) that binds a token to a key (DPoP `jkt`). */
 function isBound(confirmation: string | null): boolean {
@@ -879,8 +898,10 @@ export class GrantService {
       }
     }
     if (retry) {
-      if (!this.reopenForGrace(row, now)) return reused();
+      const grace = this.reopenForGrace(row, now);
+      if (grace === null) return reused();
       this.deps.logger.info({ grantId: grant.id }, 'OAuth refresh token retried within the grace');
+      return { ok: true, grantId: grant.id, grace };
     }
     return { ok: true, grantId: grant.id };
   }
@@ -894,11 +915,12 @@ export class GrantService {
    * normally into a fresh pair; the retry is recorded, so a second one is reuse. All in one
    * transaction; the caller serialises refreshes per grant (auth/mount.ts).
    */
-  private reopenForGrace(row: RefreshRow, now: number): boolean {
+  private reopenForGrace(row: RefreshRow, now: number): GraceRetry | null {
     if (row.rotatedAt === null || row.graceUsedAt !== null || row.successorId === null) {
-      return false;
+      return null;
     }
-    if (now - row.rotatedAt.getTime() > REFRESH_GRACE_MS) return false;
+    if (now - row.rotatedAt.getTime() > REFRESH_GRACE_MS) return null;
+    const rotatedAt = row.rotatedAt;
     return immediate(this.deps.db, (tx) => {
       const successor = tx
         .select()
@@ -911,7 +933,7 @@ export class GrantService {
         successor.rotatedAt !== null ||
         successor.referenceId !== row.referenceId
       ) {
-        return false;
+        return null;
       }
       const at = new Date(now);
       tx.update(oauthRefreshToken)
@@ -934,7 +956,43 @@ export class GrantService {
         )
         .run();
       if (reopened.changes !== 1) throw new Error('refresh grace: the token changed meanwhile');
-      return true;
+      return { tokenId: row.id, revoked: row.revoked, rotatedAt, successorId: successor.id, at };
+    });
+  }
+
+  /**
+   * A grace retry the provider refused (a wrong `resource`, say): everything is put back as it
+   * was, the old token rotated, its successor and the successor's access tokens live, and the
+   * retry not spent, since nothing was issued. Only while the old token is still unrotated.
+   */
+  undoGrace(grace: GraceRetry): void {
+    immediate(this.deps.db, (tx) => {
+      const restored = tx
+        .update(oauthRefreshToken)
+        .set({
+          revoked: grace.revoked ?? grace.rotatedAt,
+          rotatedAt: grace.rotatedAt,
+          successorId: grace.successorId,
+          graceUsedAt: null,
+        })
+        .where(and(eq(oauthRefreshToken.id, grace.tokenId), isNull(oauthRefreshToken.revoked)))
+        .run();
+      if (restored.changes !== 1) return;
+      tx.update(oauthRefreshToken)
+        .set({ revoked: null })
+        .where(
+          and(eq(oauthRefreshToken.id, grace.successorId), eq(oauthRefreshToken.revoked, grace.at)),
+        )
+        .run();
+      tx.update(oauthAccessToken)
+        .set({ revoked: null })
+        .where(
+          and(
+            eq(oauthAccessToken.refreshId, grace.successorId),
+            eq(oauthAccessToken.revoked, grace.at),
+          ),
+        )
+        .run();
     });
   }
 
@@ -1257,6 +1315,18 @@ export class GrantService {
       .map((s) => s.id);
   }
 
+  /** Whether a PAT or a CLI login works at `/mcp` (its audience is `mcp`). */
+  private mcpAudience(tx: Tx, row: GrantRow): boolean {
+    if (row.kind === 'device') return row.audience === 'mcp';
+    if (row.kind !== 'pat') return false;
+    const key = tx
+      .select({ metadata: apikey.metadata })
+      .from(apikey)
+      .where(sql`json_extract(${apikey.metadata}, '$.grantId') = ${row.id}`)
+      .get();
+    return key !== undefined && patAudience(key.metadata)?.audience === 'mcp';
+  }
+
   /**
    * PATCH /me/grants/:id (browser session only). PATs and devices change freely; an OAuth
    * client's scopes, constraints and expiry may only narrow (`422 widening_not_allowed`).
@@ -1278,6 +1348,11 @@ export class GrantService {
         !actor.isAdmin
       ) {
         throw adminOnly();
+      }
+      // MCP has no admin tools: an MCP token or a CLI login for `/mcp` never gets `admin`
+      // (11 §9.7), not even from an instance admin.
+      if (patch.scopes?.includes(ADMIN_SCOPE) === true && this.mcpAudience(tx, row)) {
+        throw adminNotForMcp();
       }
       if (row.kind === 'oauth') {
         const widened: string[] = [];
@@ -1364,14 +1439,7 @@ export class GrantService {
   async createToken(actor: Actor, input: TokenCreate): Promise<TokenCreated> {
     if (actor.grant !== null && actor.grant.kind !== 'device') requireBrowserSession(actor);
     const audience: CredentialAudience = input.audience ?? 'api';
-    if (audience === 'mcp' && input.scopes.includes(ADMIN_SCOPE)) {
-      throw new AppError(
-        'admin_not_for_mcp',
-        422,
-        'An MCP token cannot have the "admin" permission; MCP has no admin tools.',
-        [{ path: 'scopes', message: 'Not available for MCP tokens' }],
-      );
-    }
+    if (audience === 'mcp' && input.scopes.includes(ADMIN_SCOPE)) throw adminNotForMcp();
     // `admin` only from an instance admin (ADR 0042 §1); a device must also hold it itself.
     if (input.scopes.includes(ADMIN_SCOPE) && !actor.isAdmin) throw adminOnly();
     const minted = await mintToken();
@@ -1463,7 +1531,7 @@ export class GrantService {
     const row = tx
       .select()
       .from(deviceCode)
-      .where(eq(deviceCode.userCode, userCodeHash(userCode)))
+      .where(eq(deviceCode.userCode, userCodeHash(this.deps.config.authSecret, userCode)))
       .get();
     if (
       row === undefined ||
@@ -1793,7 +1861,10 @@ export class GrantService {
         actorId: null,
         data: {
           grantId: grant.id,
-          clientName: client?.name ?? grant.label,
+          // The CLI's device name comes from the device itself, so a phisher could make it look
+          // like the user's own machine: the notice names only the client (and the IP rooster
+          // saw).
+          clientName: client?.name ?? CLI_CLIENT_NAME,
           ...(client === null ? {} : { clientHost: client.domain }),
           ...(row.requestIp === null ? {} : { ip: row.requestIp }),
         },
@@ -1840,7 +1911,7 @@ export class GrantService {
           .values({
             id: uuidv7(),
             deviceCode: hashDeviceSecret(codes.deviceCode),
-            userCode: userCodeHash(codes.userCode),
+            userCode: userCodeHash(this.deps.config.authSecret, codes.userCode),
             userId: null,
             expiresAt: new Date(now + DEVICE_CODE_TTL_MS),
             status: 'pending',
@@ -1877,7 +1948,7 @@ export class GrantService {
       .update(deviceCode)
       .set({
         deviceCode: hashDeviceSecret(plainDeviceCode),
-        userCode: userCodeHash(plainUserCode),
+        userCode: userCodeHash(this.deps.config.authSecret, plainUserCode),
         requestIp: ip,
         createdAt: new Date(this.now()),
       })
@@ -1948,8 +2019,8 @@ export class GrantService {
    * user (all of a user's CLI logins, or every chain of an app):
    * - `cli`: a `rooster-cli` login's token, current or stale (`rooster logout`, 11 §9.6): the
    *   login is one grant, which ends with it, and nothing else does;
-   * - `stale`: any other already rotated or revoked token: nothing left to revoke (RFC 7009 §2.2
-   *   answers 200 for a token that is no longer valid);
+   * - `stale`: any other already rotated or revoked token: it is no longer valid, and it is
+   *   marked so the refresh grace never redeems it either (RFC 7009 §2.2 answers 200);
    * - null: the provider revokes the token (only that token, 11 §9.4).
    */
   refreshRevocation(
@@ -1978,7 +2049,14 @@ export class GrantService {
         return { kind: 'cli', grantId: grant.id };
       }
     }
-    return token.revoked === null ? null : { kind: 'stale' };
+    if (token.revoked === null) return null;
+    // Revoked by name: the token may never come back through the refresh grace either.
+    this.deps.db.orm
+      .update(oauthRefreshToken)
+      .set({ graceUsedAt: new Date(this.now()) })
+      .where(and(eq(oauthRefreshToken.id, token.id), isNull(oauthRefreshToken.graceUsedAt)))
+      .run();
+    return { kind: 'stale' };
   }
 
   /** Ends a `rooster-cli` login whose refresh token was revoked (`cliLoginOfRefreshToken`). */

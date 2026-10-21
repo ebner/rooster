@@ -49,11 +49,11 @@ const patchGrant = createRoute({
   operationId: 'updateGrant',
   summary: 'Edit a grant’s label, scopes, constraints or expiry',
   description:
-    'Browser session only. PATs and CLI devices change freely; an OAuth app’s access may only be narrowed (`422 widening_not_allowed`). Takes effect on the next request; the grant’s open event streams reconnect.',
+    'Browser session only. PATs and CLI devices change freely, except that an MCP token or a CLI login for `/mcp` never gets `admin` (`422 admin_not_for_mcp`); an OAuth app’s access may only be narrowed (`422 widening_not_allowed`). Takes effect on the next request; the grant’s open event streams reconnect.',
   request: { params: z.object({ id: idParam('id', 'Grant ID') }), body: body(GrantPatchSchema) },
   responses: {
     200: json(GrantSchema, 'The updated grant'),
-    ...problems(...AUTHED, 404, 'widening_not_allowed', 'admin_only_scope'),
+    ...problems(...AUTHED, 404, 'widening_not_allowed', 'admin_only_scope', 'admin_not_for_mcp'),
   },
 });
 
