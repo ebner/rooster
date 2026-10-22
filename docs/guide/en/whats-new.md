@@ -2,7 +2,9 @@
 
 What changed for you in each version of rooster, newest first. After an update, rooster offers this page once. You can open it at any time from Settings or the guide's page list. The notes for whoever runs rooster (upgrades, settings, security) are in the [changelog](../../../CHANGELOG.md).
 
-## Unreleased
+## 1.8.0
+
+_2026-10-22_
 
 - **Sign in on machines without a browser.** `rooster login` and AI agents set up with `rooster mcp setup --remote` show a code; type it on rooster's **Connect a device** page on any device. The page shows who is asking and from where, and your Inbox tells you when a device was connected.
 - **MCP tokens for AI agents.** Create a token that works with MCP under Settings → Security → Connected apps → New token, and paste the setup line rooster shows into Claude Code or Codex.

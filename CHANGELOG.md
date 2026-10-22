@@ -6,6 +6,8 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-22
+
 ### Added
 - **The OAuth device grant (RFC 8628)** for machines without a browser (Phase 12, 11 §9, ADRs 0065, 0066). `POST /api/auth/oauth2/device-authorization` (with `resource`, no `verification_uri_complete`) and the device grant type at `/api/auth/oauth2/token`. New setting `ROOSTER_OAUTH_DEVICE=off|first-party|all` (default `first-party`: only rooster's CLI). Third-party clients need a Client ID Metadata Document listing the grant and are always shown as Unverified with their domain. Codes are hashed (the legacy CLI flow's too), live 10 minutes, and code entry locks for 10 minutes after 10 wrong codes. Every approval sends the user a `device_connected` notice, emailed when SMTP is configured.
 - **The `/device` approval page** shows the client and its domain, the code to compare, the requesting IP and its age, and a phishing warning; the user always types the code.

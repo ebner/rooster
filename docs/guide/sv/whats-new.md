@@ -2,7 +2,9 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
-## Unreleased
+## 1.8.0
+
+_2026-10-22_
 
 - **Logga in på datorer utan webbläsare.** `rooster login` och AI-agenter som ställs in med `rooster mcp setup --remote` visar en kod; skriv in den på roosters sida **Anslut en enhet** på valfri enhet. Sidan visar vem som frågar och varifrån, och inkorgen berättar när en enhet har anslutits.
 - **MCP-token för AI-agenter.** Skapa en token som fungerar med MCP under Inställningar → Säkerhet → Anslutna appar → Ny token, och klistra in raden som rooster visar i Claude Code eller Codex.
