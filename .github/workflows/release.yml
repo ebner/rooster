@@ -25,7 +25,7 @@ env:
 jobs:
   image:
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: tag matches package version
@@ -66,7 +66,7 @@ jobs:
           done <<< "$TAGS"
 
   cli-binaries:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: write
     steps:
@@ -103,8 +103,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Linux x64 runs on the org's self-hosted scale set like the other jobs; arm64, macOS and
+        # Windows need GitHub-hosted runners.
         include:
-          - { os: ubuntu-latest, target: linux-x64 }
+          - { os: self-hosted, target: linux-x64 }
           - { os: ubuntu-24.04-arm, target: linux-arm64 }
           - { os: macos-latest, target: darwin-arm64 }
           - { os: macos-15-intel, target: darwin-x64 }
@@ -138,7 +140,7 @@ jobs:
     needs: [image, cli-smoke]
     # A manual run skips the image; the release still waits for every smoke test.
     if: ${{ !failure() && !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: write
     steps:
