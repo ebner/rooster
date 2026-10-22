@@ -6,6 +6,12 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Changed
+- **The project lives at `github.com/201works/rooster`.** Images are published to `ghcr.io/201works/rooster`. The MCP Server Card's name is `io.github.201works/rooster`.
+
+### Migrations
+- None.
+
 ## [1.8.0] - 2026-10-22
 
 ### Added
