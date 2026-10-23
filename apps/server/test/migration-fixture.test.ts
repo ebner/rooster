@@ -11,7 +11,7 @@ import { hasPendingMigrations, MIGRATIONS_DIR, runMigrations } from '../src/db/m
 import { tempDir } from './helpers.ts';
 import { listCtx } from './list-helpers.ts';
 
-const FIXTURE = join(import.meta.dirname, 'fixtures', 'release-1.5.0.sql');
+const FIXTURE = join(import.meta.dirname, 'fixtures', 'release-1.8.0.sql');
 
 /** The fixture loaded into a private in-memory database (foreign keys checked afterwards). */
 function loadFixture(): AppDb {
@@ -50,7 +50,7 @@ const journalLength = () =>
 const userId = (db: AppDb, email: string) =>
   (db.sqlite.prepare('SELECT id FROM user WHERE email = ?').get(email) as { id: string }).id;
 
-describe('AC-11.5 migrating the previous release fixture database (1.5.0)', () => {
+describe('AC-11.5 migrating the previous release fixture database (1.8.0)', () => {
   it('migrates to the current schema with every row intact', () => {
     const db = loadFixture();
     expect(db.sqlite.pragma('foreign_key_check')).toEqual([]);
