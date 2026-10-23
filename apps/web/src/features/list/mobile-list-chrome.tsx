@@ -117,7 +117,8 @@ export function MobileListChrome({
       popover.kind === 'assign')
       ? popover.rowId === 'bulk' || selectionMode
         ? controller.selectedTaskIds()
-        : [popover.rowId]
+        : // A draft is no task: if its edit ended while its sheet was open, nothing opens here.
+          [popover.rowId].filter((id) => controller.task(id) !== undefined)
       : [];
   const sheetTasks = sheetIds.map((id) => controller.task(id));
   const subject =

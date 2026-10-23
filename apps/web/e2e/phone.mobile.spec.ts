@@ -242,6 +242,56 @@ test("a new row's calendar opens the date sheet while its name stays in edit", a
   );
 });
 
+test("a new row's calendar opens one sheet and keeps the edit when the click comes late (Android)", async ({
+  page,
+}) => {
+  await setup(page, 'draft.calendar.late', ['Already here']);
+  await page.getByRole('button', { name: 'New task' }).tap();
+  const input = page.locator('[data-list-input]');
+  await expect(input).toBeFocused();
+  const calendar = page
+    .getByTestId('task-row')
+    .filter({ has: input })
+    .getByRole('button', { name: 'Set due date' });
+  // A real Android tap: the click follows pointerup ~30 ms later, focus moving to the button
+  // in between. The draft's hold must last until that click, or the edit ends under the sheet.
+  const sheetsSeen = await calendar.evaluate(async (el) => {
+    const counts: number[] = [];
+    const watch = new MutationObserver(() => {
+      const n = document.querySelectorAll('[data-testid="quick-date-sheet"]').length;
+      if (counts.at(-1) !== n) counts.push(n);
+    });
+    watch.observe(document.body, { childList: true, subtree: true });
+    const r = el.getBoundingClientRect();
+    const at = {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clientX: r.x + r.width / 2,
+      clientY: r.y + r.height / 2,
+    };
+    const touch = { ...at, pointerId: 7, pointerType: 'touch', isPrimary: true };
+    el.dispatchEvent(new PointerEvent('pointerdown', touch));
+    await new Promise((done) => setTimeout(done, 60));
+    el.dispatchEvent(new PointerEvent('pointerup', touch));
+    await new Promise((done) => setTimeout(done, 40));
+    (el as HTMLElement).focus();
+    el.dispatchEvent(new MouseEvent('click', { ...at, detail: 1 }));
+    await new Promise((done) => setTimeout(done, 1200));
+    watch.disconnect();
+    return counts;
+  });
+  // The sheet appeared once and stayed: no close-and-reopen.
+  expect(sheetsSeen).toEqual([1]);
+  await expect(input).toHaveCount(1);
+  await page
+    .getByRole('dialog', { name: 'Due date' })
+    .getByRole('button', { name: /^Tomorrow/ })
+    .tap();
+  await expect(page.getByRole('dialog', { name: 'Due date' })).toHaveCount(0);
+  await expect(input).toBeFocused();
+});
+
 test('the detail sheet opens on tap and closes with back (history) and ‹', async ({ page }) => {
   await setup(page, 'sheet.open', ['Write Q4 plan']);
   await row(page, 'Write Q4 plan').click();

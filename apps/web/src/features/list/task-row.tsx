@@ -27,6 +27,9 @@ import { TitleInput, titleInputHandle } from './title-input';
 import { useKeyboardDragHandle } from './use-list-dnd';
 
 /** Clicks and drags on these never select the row or start a drag. */
+
+/** How long a press may take from pointerup to its click before the draft's hold ends anyway. */
+const clickGraceMs = 400;
 export const interactiveSelector = '[data-no-row-press],input,button,[role="checkbox"]';
 
 type CaretDocument = Document & {
@@ -186,6 +189,10 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
     // After the picker has closed and handed focus back (its exit can take a few frames).
     requestAnimationFrame(() => {
       if (controller.ui().suspendedEdit !== id) return;
+      // Phones send the press's click well after pointerup, so the sheet can open after this
+      // hand-back started. Once it is open it owns the edit and hands the caret back itself.
+      const { popover } = controller.ui();
+      if (popover?.kind === 'date' && popover.rowId === id) return;
       const active = document.activeElement;
       if (active?.closest('[role="dialog"]') && frames < 30) {
         resumeDraftEdit(frames + 1);
@@ -202,15 +209,25 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
   const holdDraftEdit = () => {
     if (controller.ui().editing?.rowId !== id) return;
     controller.ui().set({ suspendedEdit: id });
-    // A press that opens nothing (dragged off the cell) hands the caret back.
+    // A press that opens nothing (dragged off the cell) hands the caret back. The press opens
+    // the picker on its click, which phones send well after pointerup (Android: ~30 ms, with
+    // focus moving to the button in between), so the hold lasts until that click, or a while
+    // after pointerup when no click comes.
     const done = new AbortController();
     const settle = () => {
       done.abort();
+      clearTimeout(fallback);
       setTimeout(() => {
         if (controller.ui().popover?.rowId !== id) resumeDraftEdit();
       });
     };
-    window.addEventListener('pointerup', settle, { capture: true, signal: done.signal });
+    let fallback: ReturnType<typeof setTimeout> | undefined;
+    const onUp = () => {
+      clearTimeout(fallback);
+      fallback = setTimeout(settle, clickGraceMs);
+    };
+    window.addEventListener('click', settle, { capture: true, signal: done.signal });
+    window.addEventListener('pointerup', onUp, { capture: true, signal: done.signal });
     window.addEventListener('pointercancel', settle, { capture: true, signal: done.signal });
   };
   const onDraftDateOpen = (open: boolean) => {
