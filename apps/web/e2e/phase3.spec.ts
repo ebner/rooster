@@ -403,3 +403,28 @@ test('Settings → Tags renames, recolours, merges and deletes tags', async ({ p
   const results = await new AxeBuilder({ page }).include('#tags').analyze();
   expect(results.violations).toEqual([]);
 });
+
+test('a task created with the pane open takes the pane; the empty row below keeps the caret and goes when left (ADR 0064)', async ({
+  page,
+}) => {
+  const { orgId, today } = await setup(page, 'p3.created');
+  await createTask(page, orgId, { title: 'Alpha', groupId: today });
+  await page.reload();
+  await clickRowBody(page, 'Alpha');
+  await expect(page.getByTestId('pane-title')).toHaveValue('Alpha');
+  await row(page, 'Alpha').locator('[data-focus-target]').click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('Gamma');
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('pane-title')).toHaveValue('Gamma');
+  // The caret waits in the new, empty row below Gamma: the pane's selection sync must not
+  // end that edit and leave a row that is neither a task nor an input.
+  const input = page.locator('[data-list-input]');
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue('');
+  await pane(page).getByTestId('description-field').click();
+  await expect(input).toHaveCount(0);
+  await expect(page.getByTestId('task-row')).toHaveCount(2);
+  await expect(page.getByTestId('task-row').filter({ hasText: /^$/ })).toHaveCount(0);
+});

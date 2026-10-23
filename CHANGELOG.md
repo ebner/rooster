@@ -6,6 +6,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Fixed
+- With the detail pane open, creating a task left an empty row under it that was neither a task nor editable and couldn't be removed (until a reload). The pane's selection sync ended the new row's edit; it now never interrupts a title being typed (regression in 1.8.0, ADR 0064).
+
 ### Changed
 - **The project lives at `github.com/201works/rooster`.** Images are published to `ghcr.io/201works/rooster`. The MCP Server Card's name is `io.github.201works/rooster`.
 

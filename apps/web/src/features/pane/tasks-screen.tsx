@@ -165,9 +165,12 @@ export function TasksScreen({
     ).data === true;
   // Keyed on the task and its presence only (not the selection), so moving the selection
   // later never snaps it back; re-running is harmless (e.g. StrictMode's second mount pass).
+  // A title being typed keeps its edit: the pane follows a task just created while the caret
+  // waits in the new row below it (ADR 0064), and selecting would orphan that row.
   useEffect(() => {
     if (!taskId || !inList) return;
     const store = useListStore.getState();
+    if (store.editing !== null) return;
     if (store.cursor !== taskId && document.querySelector(`[data-row-id="${taskId}"]`)) {
       store.select(taskId);
     }
