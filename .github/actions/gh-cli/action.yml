@@ -1,0 +1,22 @@
+name: gh-cli
+description: The GitHub CLI, installed (pinned and checksum-verified) when the runner has none, as on the org's self-hosted runners
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_VERSION: '2.62.0'
+      run: |
+        if command -v gh >/dev/null; then gh --version | head -1; exit 0; fi
+        case "$(uname -m)" in
+          x86_64) arch=amd64 ;;
+          aarch64 | arm64) arch=arm64 ;;
+          *) echo "gh-cli: no Linux build for $(uname -m)" >&2; exit 1 ;;
+        esac
+        name="gh_${GH_VERSION}_linux_${arch}"
+        base="https://github.com/cli/cli/releases/download/v${GH_VERSION}"
+        cd "$RUNNER_TEMP"
+        curl -fsSLO "$base/${name}.tar.gz"
+        curl -fsSL "$base/gh_${GH_VERSION}_checksums.txt" | grep " ${name}.tar.gz\$" | sha256sum -c -
+        tar -xzf "${name}.tar.gz"
+        echo "$RUNNER_TEMP/${name}/bin" >> "$GITHUB_PATH"
