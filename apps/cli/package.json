@@ -1,6 +1,6 @@
 {
   "name": "@rooster/cli",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "The rooster command line: tasks from your terminal, scripts and CI (docs/spec/07-cli.md).",
   "type": "module",
   "bin": {

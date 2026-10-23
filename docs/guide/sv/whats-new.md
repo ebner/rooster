@@ -2,7 +2,9 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
-## Unreleased
+## 1.8.1
+
+_2026-10-23_
 
 - **Datumarket flimrar inte längre på Android.** Ett tryck på kalendern i en ny uppgifts rad öppnar datumarket en gång, och du kan fortsätta skriva uppgiftens namn efteråt.
 - **Inga fler tomma rader.** Med detaljpanelen öppen kunde en ny uppgift lämna en tom rad i listan som inte gick att ta bort förrän du laddade om sidan. Det är åtgärdat.

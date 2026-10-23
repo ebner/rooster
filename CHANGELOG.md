@@ -6,6 +6,8 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-10-23
+
 ### Fixed
 - On Android, tapping a new row's calendar made the date sheet flicker (open, close, open), and the row left edit mode, so its placeholder vanished. Android sends a tap's click about 30 ms after the finger lifts; the row ended its hold on the edit at pointerup, before the click opened the sheet. The hold now lasts until the click (or 400 ms), the hand-back stops once the sheet is open, and the task sheet never opens for a row that isn't a task.
 - With the detail pane open, creating a task left an empty row under it that was neither a task nor editable and couldn't be removed (until a reload). The pane's selection sync ended the new row's edit; it now never interrupts a title being typed (regression in 1.8.0, ADR 0064).
