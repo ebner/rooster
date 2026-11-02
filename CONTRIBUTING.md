@@ -147,6 +147,10 @@ pnpm docs:screenshots --project=phone-light         # extra arguments go to Play
 - To keep re-runs from churning the images, the local origin is shown as `https://rooster.example.com`, client addresses are fixed documentation addresses, and random codes (the device code, token prefixes) are replaced with fixed samples. Relative dates ("Today", "Mon") and "just now" still follow the day you run it.
 - A new screen: add a `run.take('<name>', …)` step to the right spec, call `shot()`, and reference the file from the guide.
 
+## License of contributions
+
+rooster is licensed under the [GNU Affero General Public License v3.0 only](LICENSE), with the additional permission for the Bun runtime that the [README](README.md#license) states. By contributing, you agree that your contribution is licensed under the same terms.
+
 ## Reporting security issues
 
 Please **don't open a public issue** for a vulnerability. Report it privately through GitHub's private vulnerability reporting on [201works/rooster](https://github.com/201works/rooster/security) (Security → Report a vulnerability).

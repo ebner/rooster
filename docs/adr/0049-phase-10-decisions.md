@@ -5,8 +5,7 @@
 - Amends: 01 FR-REC-3/4, FR-REM-2/3, FR-ATT-1/3, FR-CAL-1/2, FR-SET-1; 05 §3, §6; 06 §2.1, §2.4, §2.7, §2.8
 - Contract: ADR 0050
 
-Spec gaps settled before implementation. Implementation may refine details; every refinement is
-added below as an amendment.
+Spec gaps settled before implementation. Details refined during implementation are added below as amendments.
 
 ## 1. Recurrence (WP 10.1)
 1. **Storage.** The rule is stored normalised by `normalizeRule`: canonical part order, and the anchor made explicit from the due date (WEEKLY gets `BYDAY` of the due date's weekday, MONTHLY `BYMONTHDAY`, YEARLY `BYMONTH` + `BYMONTHDAY`). Month-end clamping therefore never drifts: a rule anchored on the 31st gives Feb 28/29 and then Mar 31 again. `BYMONTH` (YEARLY only) joins the subset of 05 §6. With basis `completion` only FREQ, INTERVAL and the end condition are kept.

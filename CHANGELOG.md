@@ -12,7 +12,8 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ### Changed
 - The MCP Server Card names no npm package: the CLI is installed from the release binaries or built from source.
-- rooster is licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`; `LICENSE`).
+- rooster is licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`; `LICENSE`), with an additional permission (section 7) for combining it with the Bun runtime, which the CLI binaries embed.
+- `THIRD-PARTY-NOTICES.txt` names where the source of the LGPL libraries in the image and the CLI binaries (libvips, Bun's JavaScriptCore and tinycc) is published. The release workflow builds the binaries with a pinned Bun (1.4.3).
 
 ## [1.9.0] - 2026-11-02
 

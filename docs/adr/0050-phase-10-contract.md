@@ -35,13 +35,10 @@
   - The i18n namespaces `attachments` and `calendar`.
 
 ## API surface (06)
-| Route | Owner |
-|---|---|
-| `POST /tasks/:id/complete {completed, nextId?}` → `{task, next?}` | server-tasks |
-| `POST /tasks/:id/skip {nextId?}` → `{next}` | server-tasks |
-| `POST /tasks/:id/reminders` (`ReminderCreate`) → `Reminder` (201; 200 for an identical one) · `DELETE /tasks/:id/reminders/:reminderId` → 204 | server-tasks |
-| Task create and PATCH `reminders`, `clearReminders`, `recurrence`, `recurrenceBasis`; `parse: true` reads recurrence phrases and `!` tokens | server-tasks |
-| `POST /tasks/:id/attachments` (multipart `file`) → `Attachment` 201 · `GET /attachments/:id[?inline=1]` · `GET /attachments/:id/thumb` · `DELETE /attachments/:id` | server-files |
-| `PUT /me/avatar` (multipart `file`) → `Me` · `DELETE /me/avatar` → `Me` · `GET /avatars/:userId` | server-files |
-| `GET/POST /me/ical-feeds` · `DELETE /me/ical-feeds/:id` · `GET /ical/:token.ics` (outside `/api/v1`) | server-files |
-
+- `POST /tasks/:id/complete {completed, nextId?}` → `{task, next?}`
+- `POST /tasks/:id/skip {nextId?}` → `{next}`
+- `POST /tasks/:id/reminders` (`ReminderCreate`) → `Reminder` (201; 200 for an identical one) · `DELETE /tasks/:id/reminders/:reminderId` → 204
+- Task create and PATCH `reminders`, `clearReminders`, `recurrence`, `recurrenceBasis`; `parse: true` reads recurrence phrases and `!` tokens
+- `POST /tasks/:id/attachments` (multipart `file`) → `Attachment` 201 · `GET /attachments/:id[?inline=1]` · `GET /attachments/:id/thumb` · `DELETE /attachments/:id`
+- `PUT /me/avatar` (multipart `file`) → `Me` · `DELETE /me/avatar` → `Me` · `GET /avatars/:userId`
+- `GET/POST /me/ical-feeds` · `DELETE /me/ical-feeds/:id` · `GET /ical/:token.ics` (outside `/api/v1`)
