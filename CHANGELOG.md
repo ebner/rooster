@@ -6,6 +6,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+- `SECURITY.md`: report vulnerabilities privately through GitHub's private vulnerability reporting.
+
 ### Changed
 - rooster is licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`; `LICENSE`).
 

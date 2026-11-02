@@ -103,6 +103,7 @@ Single-file binaries for Linux, macOS and Windows are attached to each [GitHub r
 - **[Operator guide](docs/operator.md):** installing, configuring and running an instance.
 - **[Sign-in setup](docs/oidc-setup.md):** Google and OIDC providers.
 - **[Changelog](CHANGELOG.md):** what changed in each release, with upgrade notes.
+- **[Security](SECURITY.md):** how to report a vulnerability privately.
 - **[Contributing](CONTRIBUTING.md):** development setup, tests, conventions and how to regenerate the screenshots.
 - **The specification** in [`docs/spec/`](docs/spec/00-overview.md) and the decisions in [`docs/adr/`](docs/adr/). The REST API is documented live at `/api/docs`.
 
