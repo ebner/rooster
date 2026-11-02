@@ -2,6 +2,10 @@
 
 What changed for you in each version of rooster, newest first. After an update, rooster offers this page once. You can open it at any time from Settings or the guide's page list. The notes for whoever runs rooster (upgrades, settings, security) are in the [changelog](../../../CHANGELOG.md).
 
+## Unreleased
+
+- **Drag a task while you're still typing it.** Once a new task has a name, grab its handle and drag it where it belongs; it's created as you drag.
+
 ## 1.8.2
 
 _2026-11-02_

@@ -330,7 +330,7 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
             />
           </button>
         )}
-        {!draft && dragEnabled && (
+        {dragEnabled && (
           <button
             type="button"
             data-drag-handle
@@ -343,10 +343,15 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
               // A parent's chevron owns this column; its rows still drag from the body.
               !expandable && 'group-hover/row:opacity-100',
               isSource && 'opacity-100',
+              // A new row drags (and is created by the drag) once its title has text.
+              draft && 'group-has-[[data-list-input]:placeholder-shown]/row:invisible',
             )}
             onClick={(e) => {
-              // A click on the handle selects the row (it does not edit).
+              // A click on the handle selects the row (it does not edit). A new row is created
+              // first; Safari leaves focus in its title, so no blur has done it.
               e.stopPropagation();
+              if (draft) titleInputHandle(id)?.blur();
+              if (!controller.task(id)) return;
               const store = controller.ui();
               if (!store.selected[id]) store.select(id);
             }}

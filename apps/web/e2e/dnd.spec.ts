@@ -339,3 +339,89 @@ test('subtasks reorder among their siblings and are never offered their own plac
   const subtasks = ((await detail.json()) as { subtasks: { title: string }[] }).subtasks;
   expect(subtasks.map((t) => t.title)).toEqual(['Sub 1', 'Sub 3', 'Sub 2']);
 });
+
+test('a new row with a title drags from its handle: the drag creates the task', async ({
+  page,
+}) => {
+  const { orgId } = await setup(page, 'dnd.draft', 3);
+  await page.getByRole('button', { name: 'Add task', exact: true }).first().click();
+  const draft = page.locator('[data-draft]');
+  const handle = draft.locator('[data-drag-handle]');
+  await draft.hover();
+  // An empty new row has nothing to create, so nothing to drag.
+  await expect(handle).toBeHidden();
+  await page.locator('[data-list-input]').fill('Dragged');
+  await draft.hover();
+  await expect(handle).toBeVisible();
+  const at = await box(handle);
+  const from = await box(draft);
+  await lift(page, draft, { x: at.x - from.x + at.width / 2, y: from.height / 2 });
+  const one = await box(row(page, 'Task 1'));
+  await page.mouse.move(700, one.y + one.height * 0.25, { steps: 4 });
+  await expect(page.getByTestId('drop-indicator')).toBeVisible();
+  await page.mouse.up();
+  await expect(page.locator('[data-draft]')).toHaveCount(0);
+  await expect(page.locator('[data-list-input]')).toHaveCount(0);
+  await expect(page.getByTestId('task-row').first()).toContainText('Dragged');
+  await waitForSync(page);
+  const list = (await (await apiCall(page, 'GET', `/api/v1/orgs/${orgId}/my-list`)).json()) as {
+    tasks: { title: string; placement: { position: string } | null }[];
+  };
+  const order = list.tasks
+    .filter((t) => t.placement)
+    .sort((a, b) => ((a.placement?.position ?? '') < (b.placement?.position ?? '') ? -1 : 1))
+    .map((t) => t.title);
+  expect(order).toEqual(['Dragged', 'Task 1', 'Task 2', 'Task 3']);
+
+  // Safari leaves focus in the title when a button is pressed, so no blur creates the task:
+  // the drag does, and so does a plain click on the handle.
+  await page.evaluate(() =>
+    document.addEventListener(
+      'mousedown',
+      (event) => {
+        if ((event.target as Element).closest('[data-drag-handle]')) event.preventDefault();
+      },
+      true,
+    ),
+  );
+  for (const [title, drag] of [
+    ['Kept focus', true],
+    ['Clicked', false],
+  ] as const) {
+    await page.getByRole('button', { name: 'Add task', exact: true }).first().click();
+    await page.locator('[data-list-input]').fill(title);
+    await draft.hover();
+    const grip = await box(handle);
+    if (drag) {
+      const r = await box(draft);
+      await lift(page, draft, { x: grip.x - r.x + grip.width / 2, y: r.height / 2 });
+      const top = await box(row(page, 'Dragged'));
+      await page.mouse.move(700, top.y + top.height * 0.25, { steps: 4 });
+      await expect(page.getByTestId('drop-indicator')).toBeVisible();
+      await page.mouse.up();
+      await expect(page.getByTestId('task-row').first()).toContainText(title);
+    } else {
+      await page.mouse.click(grip.x + grip.width / 2, grip.y + grip.height / 2);
+      await expect(row(page, title)).toHaveAttribute('aria-selected', 'true');
+    }
+    await expect(page.locator('[data-draft]')).toHaveCount(0);
+    await expect(page.locator('[data-list-input]')).toHaveCount(0);
+  }
+
+  // Keyboard: Shift+Tab creates the task (focus stays on its title, now in Navigate); the
+  // handle is two more steps back (handle, checkbox, title), and Space lifts it.
+  await page.getByRole('button', { name: 'Add task', exact: true }).first().click();
+  await page.locator('[data-list-input]').fill('By keyboard');
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.locator('[data-draft]')).toHaveCount(0);
+  const kept = row(page, 'By keyboard');
+  await expect(kept.locator('[data-focus-target]')).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(kept.getByRole('checkbox')).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(kept.locator('[data-drag-handle]')).toBeFocused();
+  await page.keyboard.press('Space');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('Space');
+  await expect(page.getByTestId('list-live')).toContainText('Moved');
+});

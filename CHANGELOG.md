@@ -6,6 +6,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Changed
+- A new task's row can be dragged from its handle once its title has text: the drag creates the task (as leaving the row would), then moves it. A click on the handle creates and selects it. An empty new row still has no handle (ADR 0067).
+
 ## [1.8.2] - 2026-11-02
 
 ### Fixed

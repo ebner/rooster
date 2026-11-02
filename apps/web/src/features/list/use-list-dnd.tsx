@@ -52,6 +52,7 @@ import {
   slotIndicator,
   slotIntent,
 } from './model/slots';
+import { titleInputHandle } from './title-input';
 
 /** 02 §5: pointer drags start after 4 px; touch after a 350 ms long-press. */
 export const dragDistancePx = 4;
@@ -322,8 +323,17 @@ function pressedRow(target: EventTarget | null): string | null {
   if (!id || (row?.dataset.testid !== 'task-row' && row?.dataset.testid !== 'group-header')) {
     return null;
   }
-  if (row?.dataset.draft || row?.dataset.inbox) return null;
+  if (row?.dataset.inbox || (row?.dataset.draft && !draftDraggable(row, target))) return null;
   return id;
+}
+
+/**
+ * A new row drags from its handle once its title has text: the drag creates the task first
+ * (`onDragStart`), so it then moves like any other.
+ */
+function draftDraggable(row: HTMLElement, target: Element): boolean {
+  if (!target.closest('[data-drag-handle]')) return false;
+  return (row.querySelector<HTMLInputElement>('[data-list-input]')?.value.trim() ?? '') !== '';
 }
 
 interface SurfaceProps {
@@ -579,6 +589,14 @@ export const ListDnd = memo(function ListDnd({
   const onDragStart = ({ active, activatorEvent }: DragStartEvent) => {
     const id = pressed.current;
     if (!id) return;
+    // A new row's title is committed as a blur would: the task keeps the row's id. The press
+    // may already have done so (the handle took focus), and a title that parses to nothing
+    // (only `#tag`) creates no task, which leaves nothing to drag.
+    if (controller.ui().drafts.some((d) => d.id === id)) titleInputHandle(id)?.blur();
+    if (!isGroupRowId(id) && !controller.task(id)) {
+      pressed.current = null;
+      return;
+    }
     const kind = isGroupRowId(id)
       ? 'group'
       : subtaskParent(rowsRef.current, id) !== null
