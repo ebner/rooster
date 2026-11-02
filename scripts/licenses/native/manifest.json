@@ -1,0 +1,1234 @@
+{
+  "$comment": [
+    "The libraries inside rooster's native bundles, with the upstream source of every vendored licence file.",
+    "fetch.mjs downloads the files (`node scripts/licenses/native/fetch.mjs [--verify]`); scripts/third-party-notices.mjs renders them.",
+    "`version` is what the bundle ships. `ref` is the revision the files were taken from: the shipped one, or the nearest one with `nearest` saying why.",
+    "`lines` takes those lines (1-based, inclusive; several ranges are joined by a `[...]` line) of a source file whose header comment is the notice. `standard` names texts in scripts/licenses/ that apply as well.",
+    "A sharp-libvips library's `key` is its name in the package's versions.json; the notices generator checks the versions against the installed package."
+  ],
+  "bundles": {
+    "bun": {
+      "version": "1.4.3",
+      "pins": "https://github.com/oven-sh/bun/tree/bun-v1.4.3/scripts/build/deps"
+    },
+    "sharp-libvips": {
+      "version": "1.3.4",
+      "pins": "https://github.com/lovell/sharp-libvips/blob/v1.3.4/versions.properties"
+    }
+  },
+  "polyfills": {
+    "bundle": "bun",
+    "lockfile": "https://raw.githubusercontent.com/oven-sh/bun/bun-v1.4.3/src/node-fallbacks/bun.lock",
+    "extra": [
+      "constants-browserify@1.0.0",
+      "os-browserify@0.3.0",
+      "path-browserify@1.0.1",
+      "stream-browserify@3.0.0",
+      "timers-browserify@2.0.12",
+      "tty-browserify@0.0.1",
+      "url@0.11.4",
+      "vm-browserify@1.1.2"
+    ],
+    "extraNote": "Listed in Bun's LICENSE.md but not in the polyfills' bun.lock (Bun keeps adapted copies in src/node-fallbacks); their files are taken from the latest npm release."
+  },
+  "libraries": [
+    {
+      "bundle": "bun",
+      "name": "JavaScriptCore and WebKit (WTF, bmalloc, WebCore parts)",
+      "version": "oven-sh/WebKit 0c06faadf65b",
+      "ref": "0c06faadf65bf8e8c8ad3a5a8aca83e1e9ed653f",
+      "license": "LGPL-2.0-or-later AND LGPL-2.1-or-later AND BSD-2-Clause",
+      "homepage": "https://github.com/oven-sh/WebKit",
+      "note": "WebKit has no central list of copyright holders: each source file names its own, most of them Apple Inc. under the BSD-style terms of LICENSE-APPLE, others under the LGPL. The third-party code inside WTF follows as separate entries.",
+      "standard": ["LGPL-2.0.txt", "LGPL-2.1.txt"],
+      "files": [
+        {
+          "name": "Source/WebCore/LICENSE-APPLE",
+          "path": "bun/webkit-LICENSE-APPLE.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/WebKit/0c06faadf65bf8e8c8ad3a5a8aca83e1e9ed653f/Source/WebCore/LICENSE-APPLE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "simdutf (in WebKit's WTF)",
+      "version": "as in oven-sh/WebKit 0c06faadf65b",
+      "ref": "0c06faadf65bf8e8c8ad3a5a8aca83e1e9ed653f",
+      "license": "MIT",
+      "homepage": "https://github.com/simdutf/simdutf",
+      "files": [
+        {
+          "name": "LICENSE-simdutf.txt",
+          "path": "bun/simdutf.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/WebKit/0c06faadf65bf8e8c8ad3a5a8aca83e1e9ed653f/Source/WTF/wtf/simdutf/LICENSE-simdutf.txt"
+        }
+      ],
+      "note": "WebKit carries the MIT licence; simdutf is also available under the Apache 2.0 licence."
+    },
+    {
+      "bundle": "bun",
+      "name": "fast_float (in WebKit's WTF)",
+      "version": "as in oven-sh/WebKit 0c06faadf65b",
+      "ref": "0c06faadf65bf8e8c8ad3a5a8aca83e1e9ed653f",
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/fastfloat/fast_float",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/fast_float.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/WebKit/0c06faadf65bf8e8c8ad3a5a8aca83e1e9ed653f/Source/WTF/wtf/fast_float/LICENSE"
+        }
+      ],
+      "note": "WebKit carries the Apache 2.0 licence; fast_float is also available under the MIT and Boost licences."
+    },
+    {
+      "bundle": "bun",
+      "name": "double-conversion (in WebKit's WTF, wtf/dtoa)",
+      "version": "as in oven-sh/WebKit 0c06faadf65b",
+      "ref": "0c06faadf65bf8e8c8ad3a5a8aca83e1e9ed653f",
+      "license": "BSD-3-Clause",
+      "homepage": "https://github.com/google/double-conversion",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/dtoa.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/WebKit/0c06faadf65bf8e8c8ad3a5a8aca83e1e9ed653f/Source/WTF/wtf/dtoa/LICENSE"
+        }
+      ],
+      "note": "wtf/dtoa/COPYING is the same text."
+    },
+    {
+      "bundle": "bun",
+      "name": "Dragonbox (in WebKit's WTF)",
+      "version": "as in oven-sh/WebKit 0c06faadf65b",
+      "ref": "0c06faadf65bf8e8c8ad3a5a8aca83e1e9ed653f",
+      "license": "Apache-2.0 WITH LLVM-exception OR BSL-1.0",
+      "homepage": "https://github.com/jk-jeon/dragonbox",
+      "files": [
+        {
+          "name": "LICENSE-dragonbox.txt",
+          "path": "bun/dragonbox.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/WebKit/0c06faadf65bf8e8c8ad3a5a8aca83e1e9ed653f/Source/WTF/LICENSE-dragonbox.txt"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "SIMDe (in WebKit's WTF)",
+      "version": "as in oven-sh/WebKit 0c06faadf65b",
+      "ref": "0c06faadf65bf8e8c8ad3a5a8aca83e1e9ed653f",
+      "license": "MIT",
+      "homepage": "https://github.com/simd-everywhere/simde",
+      "files": [
+        {
+          "name": "LICENSE-simde.txt",
+          "path": "bun/simde.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/WebKit/0c06faadf65bf8e8c8ad3a5a8aca83e1e9ed653f/Source/WTF/LICENSE-simde.txt"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "LLVM and libc++ code (in WebKit's WTF)",
+      "version": "as in oven-sh/WebKit 0c06faadf65b",
+      "ref": "0c06faadf65bf8e8c8ad3a5a8aca83e1e9ed653f",
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "homepage": "https://llvm.org",
+      "files": [
+        {
+          "name": "LICENSE-LLVM.txt",
+          "path": "bun/wtf-LICENSE-LLVM.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/WebKit/0c06faadf65bf8e8c8ad3a5a8aca83e1e9ed653f/Source/WTF/LICENSE-LLVM.txt"
+        },
+        {
+          "name": "LICENSE-libc++.txt",
+          "path": "bun/wtf-LICENSE-libc++.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/WebKit/0c06faadf65bf8e8c8ad3a5a8aca83e1e9ed653f/Source/WTF/LICENSE-libc%2B%2B.txt"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "ICU",
+      "version": "78",
+      "ref": "release-78.1",
+      "nearest": "Bun takes ICU 78 from its prebuilt WebKit and pins no minor version; the 78.1 licence is used.",
+      "license": "Unicode-3.0 AND ICU AND BSD-3-Clause AND others",
+      "homepage": "https://icu.unicode.org",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/icu.txt",
+          "url": "https://raw.githubusercontent.com/unicode-org/icu/release-78.1/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "BoringSSL",
+      "version": "oven-sh/boringssl 41bf9b59c2eb",
+      "ref": "41bf9b59c2ebf277a7aa427e1ecad5cc80dd4d4f",
+      "license": "Apache-2.0",
+      "homepage": "https://boringssl.googlesource.com/boringssl/",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/boringssl.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/boringssl/41bf9b59c2ebf277a7aa427e1ecad5cc80dd4d4f/LICENSE"
+        }
+      ],
+      "note": "The Go licence at the end of the file covers test code that is not compiled into BoringSSL."
+    },
+    {
+      "bundle": "bun",
+      "name": "Brotli",
+      "version": "1.2.0",
+      "ref": "028fb5a23661f123017c060daa546b55cf4bde29",
+      "license": "MIT",
+      "homepage": "https://github.com/google/brotli",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/brotli.txt",
+          "url": "https://raw.githubusercontent.com/google/brotli/028fb5a23661f123017c060daa546b55cf4bde29/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "c-ares",
+      "version": "c7a3138dcfe3",
+      "ref": "c7a3138dcfe3bb0eaaf10c0c24c36dc66dc790ab",
+      "license": "MIT",
+      "homepage": "https://c-ares.org",
+      "files": [
+        {
+          "name": "LICENSE.md",
+          "path": "bun/c-ares.txt",
+          "url": "https://raw.githubusercontent.com/c-ares/c-ares/c7a3138dcfe3bb0eaaf10c0c24c36dc66dc790ab/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "HdrHistogram_c",
+      "version": "18c7a324383d",
+      "ref": "18c7a324383dded1451d15621cd018b0048057d0",
+      "license": "CC0-1.0 OR BSD-2-Clause",
+      "homepage": "https://github.com/HdrHistogram/HdrHistogram_c",
+      "note": "Pinned in Bun's build but not listed in its LICENSE.md. Used under the BSD 2-Clause terms of LICENSE.txt.",
+      "files": [
+        {
+          "name": "LICENSE.txt",
+          "path": "bun/hdrhistogram.txt",
+          "url": "https://raw.githubusercontent.com/HdrHistogram/HdrHistogram_c/18c7a324383dded1451d15621cd018b0048057d0/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "Highway",
+      "version": "2607d3b5b011",
+      "ref": "2607d3b5b0113992fe84d3848859eae13b3b52c1",
+      "license": "Apache-2.0 OR BSD-3-Clause",
+      "homepage": "https://github.com/google/highway",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/highway.txt",
+          "url": "https://raw.githubusercontent.com/google/highway/2607d3b5b0113992fe84d3848859eae13b3b52c1/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "libarchive",
+      "version": "27cbc7827172",
+      "ref": "27cbc7827172698143e440801fc0ba39ccb4f1f5",
+      "license": "BSD-2-Clause AND others",
+      "homepage": "https://www.libarchive.org",
+      "files": [
+        {
+          "name": "COPYING",
+          "path": "bun/libarchive.txt",
+          "url": "https://raw.githubusercontent.com/libarchive/libarchive/27cbc7827172698143e440801fc0ba39ccb4f1f5/COPYING"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "libbase64",
+      "version": "not pinned in Bun's sources",
+      "ref": "v0.5.2",
+      "nearest": "Bun's LICENSE.md names the project without a version; the licence of its latest release is used.",
+      "license": "BSD-2-Clause",
+      "homepage": "https://github.com/aklomp/base64",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/libbase64.txt",
+          "url": "https://raw.githubusercontent.com/aklomp/base64/v0.5.2/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "libdeflate",
+      "version": "92e6a0db9fa8",
+      "ref": "92e6a0db9fa848d742f9eb286c92afc60f2c3dda",
+      "license": "MIT",
+      "homepage": "https://github.com/ebiggers/libdeflate",
+      "files": [
+        {
+          "name": "COPYING",
+          "path": "bun/libdeflate.txt",
+          "url": "https://raw.githubusercontent.com/ebiggers/libdeflate/92e6a0db9fa848d742f9eb286c92afc60f2c3dda/COPYING"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "libjpeg-turbo",
+      "version": "3.2.0",
+      "ref": "c85e6b905bf237038faa936dab160ebfc5da0344",
+      "license": "IJG AND BSD-3-Clause AND Zlib",
+      "homepage": "https://libjpeg-turbo.org",
+      "files": [
+        {
+          "name": "LICENSE.md",
+          "path": "bun/libjpeg-turbo-LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/libjpeg-turbo/libjpeg-turbo/c85e6b905bf237038faa936dab160ebfc5da0344/LICENSE.md"
+        },
+        {
+          "name": "README.ijg (LEGAL ISSUES)",
+          "path": "bun/libjpeg-turbo-README.ijg.txt",
+          "url": "https://raw.githubusercontent.com/libjpeg-turbo/libjpeg-turbo/c85e6b905bf237038faa936dab160ebfc5da0344/README.ijg",
+          "lines": [114, 163]
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "libspng",
+      "version": "0.7.4",
+      "ref": "fb768002d4288590083a476af628e51c3f1d47cd",
+      "license": "BSD-2-Clause",
+      "homepage": "https://libspng.org",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/libspng.txt",
+          "url": "https://raw.githubusercontent.com/randy408/libspng/fb768002d4288590083a476af628e51c3f1d47cd/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "libuv",
+      "version": "oven-sh/libuv 8023581113b2",
+      "ref": "8023581113b276e7c1aee3f82da57ca0893faab1",
+      "license": "MIT AND ISC AND BSD-2-Clause",
+      "homepage": "https://libuv.org",
+      "note": "In the Windows binary only.",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/libuv-LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/libuv/8023581113b276e7c1aee3f82da57ca0893faab1/LICENSE"
+        },
+        {
+          "name": "LICENSE-extra",
+          "path": "bun/libuv-LICENSE-extra.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/libuv/8023581113b276e7c1aee3f82da57ca0893faab1/LICENSE-extra"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "libwebp",
+      "version": "1.6.0",
+      "ref": "v1.6.0 (Bun pins its tag object, b7e29b9d75bd)",
+      "license": "BSD-3-Clause",
+      "homepage": "https://developers.google.com/speed/webp",
+      "files": [
+        {
+          "name": "COPYING",
+          "path": "bun/libwebp-COPYING.txt",
+          "url": "https://raw.githubusercontent.com/webmproject/libwebp/v1.6.0/COPYING"
+        },
+        {
+          "name": "PATENTS",
+          "path": "bun/libwebp-PATENTS.txt",
+          "url": "https://raw.githubusercontent.com/webmproject/libwebp/v1.6.0/PATENTS"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "lol-html",
+      "version": "oven-sh/lol-html 725ce499aa9b (on 2.7.2)",
+      "ref": "725ce499aa9b71e38b7a2d0a9fbb6d7294a4079e",
+      "license": "BSD-3-Clause",
+      "homepage": "https://github.com/cloudflare/lol-html",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/lol-html.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/lol-html/725ce499aa9b71e38b7a2d0a9fbb6d7294a4079e/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "ls-hpack",
+      "version": "cf0f70dd10b3",
+      "ref": "cf0f70dd10b352194c97448eb5d00b4aa484f531",
+      "license": "MIT",
+      "homepage": "https://github.com/litespeedtech/ls-hpack",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/ls-hpack.txt",
+          "url": "https://raw.githubusercontent.com/litespeedtech/ls-hpack/cf0f70dd10b352194c97448eb5d00b4aa484f531/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "ls-qpack",
+      "version": "91567706c41c",
+      "ref": "91567706c41c0d97ab8dc576873ecd472d7869fa",
+      "license": "MIT",
+      "homepage": "https://github.com/litespeedtech/ls-qpack",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/ls-qpack.txt",
+          "url": "https://raw.githubusercontent.com/litespeedtech/ls-qpack/91567706c41c0d97ab8dc576873ecd472d7869fa/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "lsquic",
+      "version": "f812ceb9529e",
+      "ref": "f812ceb9529e26717df78c6064a2ff648b949f3e",
+      "license": "MIT AND BSD-3-Clause",
+      "homepage": "https://github.com/litespeedtech/lsquic",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/lsquic-LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/litespeedtech/lsquic/f812ceb9529e26717df78c6064a2ff648b949f3e/LICENSE"
+        },
+        {
+          "name": "LICENSE.chrome",
+          "path": "bun/lsquic-LICENSE.chrome.txt",
+          "url": "https://raw.githubusercontent.com/litespeedtech/lsquic/f812ceb9529e26717df78c6064a2ff648b949f3e/LICENSE.chrome"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "mimalloc",
+      "version": "oven-sh/mimalloc 92ef6587c57b",
+      "ref": "92ef6587c57b262f6e6abf513f7776a2f8d12aeb",
+      "license": "MIT",
+      "homepage": "https://github.com/microsoft/mimalloc",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/mimalloc.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/mimalloc/92ef6587c57b262f6e6abf513f7776a2f8d12aeb/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "picohttpparser",
+      "version": "f4d94b48b31e",
+      "ref": "f4d94b48b31e0abae029ebeafcfd9ca0680ede58",
+      "license": "MIT OR Artistic-1.0-Perl",
+      "homepage": "https://github.com/h2o/picohttpparser",
+      "note": "The project has no licence file; the notice is the header of picohttpparser.c. Used under the MIT License.",
+      "files": [
+        {
+          "name": "picohttpparser.c (header)",
+          "path": "bun/picohttpparser.txt",
+          "url": "https://raw.githubusercontent.com/h2o/picohttpparser/f4d94b48b31e0abae029ebeafcfd9ca0680ede58/picohttpparser.c",
+          "lines": [1, 25]
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "SQLite",
+      "version": "3.53.4",
+      "ref": "bun-v1.4.3",
+      "license": "blessing",
+      "homepage": "https://sqlite.org",
+      "note": "SQLite is in the public domain. Pinned in Bun's build (src/jsc/bindings/sqlite) but not listed in its LICENSE.md.",
+      "files": [
+        {
+          "name": "sqlite3.c (the blessing in its header)",
+          "path": "bun/sqlite.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/bun/bun-v1.4.3/src/jsc/bindings/sqlite/sqlite3.c",
+          "lines": [35, 43]
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "tinycc",
+      "version": "oven-sh/tinycc 05f0fafaa3be",
+      "ref": "05f0fafaa3be31e31d7b4b5c17dc60f62c991171",
+      "license": "LGPL-2.1-or-later",
+      "homepage": "https://repo.or.cz/w/tinycc.git",
+      "standard": ["LGPL-2.1.txt"],
+      "files": [
+        {
+          "name": "tcc.h (header)",
+          "path": "bun/tinycc.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/tinycc/05f0fafaa3be31e31d7b4b5c17dc60f62c991171/tcc.h",
+          "lines": [1, 19]
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "uSockets",
+      "version": "as in Bun 1.4.3 (packages/bun-usockets)",
+      "ref": "bun-v1.4.3",
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/uNetworking/uSockets",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/usockets.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/bun/bun-v1.4.3/packages/bun-usockets/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "uWebSockets",
+      "version": "as in Bun 1.4.3 (packages/bun-uws)",
+      "ref": "bun-v1.4.3",
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/uNetworking/uWebSockets",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/uwebsockets.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/bun/bun-v1.4.3/packages/bun-uws/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "rust-argon2",
+      "version": "3.0.0",
+      "ref": "ed81866f163f0c7026aa6fd8388adf37242eb32a",
+      "license": "MIT OR Apache-2.0",
+      "homepage": "https://github.com/sru-systems/rust-argon2",
+      "note": "Pinned in Bun's build but not listed in its LICENSE.md. Used under the MIT License.",
+      "files": [
+        {
+          "name": "LICENSE-MIT",
+          "path": "bun/rust-argon2.txt",
+          "url": "https://raw.githubusercontent.com/sru-systems/rust-argon2/ed81866f163f0c7026aa6fd8388adf37242eb32a/LICENSE-MIT"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "clap (src/clap)",
+      "version": "as in Bun 1.4.3",
+      "ref": "bun-v1.4.3",
+      "license": "Unlicense",
+      "homepage": "https://github.com/Hejsil/zig-clap",
+      "note": "Bun's argument parser carries this licence file (src/clap/LICENSE).",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/clap.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/bun/bun-v1.4.3/src/clap/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "uucode",
+      "version": "not pinned in Bun's sources",
+      "ref": "v0.2.0",
+      "nearest": "Bun's LICENSE.md names the project without a version; the licence of its latest release is used.",
+      "license": "MIT AND Unicode-3.0",
+      "homepage": "https://github.com/jacobsandlund/uucode",
+      "files": [
+        {
+          "name": "LICENSE.md",
+          "path": "bun/uucode.txt",
+          "url": "https://raw.githubusercontent.com/jacobsandlund/uucode/v0.2.0/LICENSE.md"
+        },
+        {
+          "name": "licenses/LICENSE_Bjoern_Hoehrmann",
+          "path": "bun/uucode-LICENSE_Bjoern_Hoehrmann.txt",
+          "url": "https://raw.githubusercontent.com/jacobsandlund/uucode/v0.2.0/licenses/LICENSE_Bjoern_Hoehrmann"
+        },
+        {
+          "name": "licenses/LICENSE_unicode",
+          "path": "bun/uucode-LICENSE_unicode.txt",
+          "url": "https://raw.githubusercontent.com/jacobsandlund/uucode/v0.2.0/licenses/LICENSE_unicode"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "zlib-ng",
+      "version": "2.3.3",
+      "ref": "12731092979c6d07f42da27da673a9f6c7b13586",
+      "license": "Zlib",
+      "homepage": "https://github.com/zlib-ng/zlib-ng",
+      "files": [
+        {
+          "name": "LICENSE.md",
+          "path": "bun/zlib-ng.txt",
+          "url": "https://raw.githubusercontent.com/zlib-ng/zlib-ng/12731092979c6d07f42da27da673a9f6c7b13586/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "Zstandard",
+      "version": "f8745da6ff1a",
+      "ref": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+      "license": "BSD-3-Clause OR GPL-2.0-only",
+      "homepage": "https://facebook.github.io/zstd/",
+      "note": "Used under the BSD licence.",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/zstd.txt",
+          "url": "https://raw.githubusercontent.com/facebook/zstd/f8745da6ff1ad1e7bab384bd1f9d742439278e99/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "TigerBeetle (I/O code)",
+      "version": "532c8b70b914",
+      "ref": "532c8b70b9142c17e07737ab6d3da68d7500cbca",
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/tigerbeetle/tigerbeetle",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/tigerbeetle.txt",
+          "url": "https://raw.githubusercontent.com/tigerbeetle/tigerbeetle/532c8b70b9142c17e07737ab6d3da68d7500cbca/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "LLVM libc++abi (__cxa_thread_atexit fallback)",
+      "version": "19.1.0",
+      "ref": "llvmorg-19.1.0",
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "homepage": "https://libcxxabi.llvm.org",
+      "files": [
+        {
+          "name": "libcxxabi/LICENSE.TXT",
+          "path": "bun/libcxxabi.txt",
+          "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-19.1.0/libcxxabi/LICENSE.TXT"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "typescript-go (ported type checker, TypeScript's lib files and messages)",
+      "version": "not pinned in Bun's sources",
+      "ref": "89d5d5b2849a0db0957065889ca58536fa6d2e4a",
+      "nearest": "Bun's port names no typescript-go revision; the files are from its main branch on 2026-11-02.",
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/microsoft/typescript-go",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/typescript-go-LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/microsoft/typescript-go/89d5d5b2849a0db0957065889ca58536fa6d2e4a/LICENSE"
+        },
+        {
+          "name": "NOTICE.txt",
+          "path": "bun/typescript-go-NOTICE.txt",
+          "url": "https://raw.githubusercontent.com/microsoft/typescript-go/89d5d5b2849a0db0957065889ca58536fa6d2e4a/NOTICE.txt"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "esbuild (Bun's transpiler, CSS lexer and resolver are ports of it)",
+      "version": "not pinned in Bun's sources",
+      "ref": "v0.28.2",
+      "nearest": "A port, not a pinned dependency; the licence of esbuild's latest release is used.",
+      "license": "MIT",
+      "homepage": "https://esbuild.github.io",
+      "files": [
+        {
+          "name": "LICENSE.md",
+          "path": "bun/esbuild.txt",
+          "url": "https://raw.githubusercontent.com/evanw/esbuild/v0.28.2/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "acorn (REPL, vendored from Node.js 26.3.0)",
+      "version": "8.16.0",
+      "ref": "v26.3.0",
+      "license": "MIT",
+      "homepage": "https://github.com/acornjs/acorn",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/acorn.txt",
+          "url": "https://raw.githubusercontent.com/nodejs/node/v26.3.0/deps/acorn/acorn/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "acorn-walk (REPL, vendored from Node.js 26.3.0)",
+      "version": "8.3.5",
+      "ref": "v26.3.0",
+      "license": "MIT",
+      "homepage": "https://github.com/acornjs/acorn",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/acorn-walk.txt",
+          "url": "https://raw.githubusercontent.com/nodejs/node/v26.3.0/deps/acorn/acorn-walk/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "bun",
+      "name": "Node.js modules adapted in Bun's polyfills (path, url, util, net)",
+      "version": "as in Bun 1.4.3 (src/node-fallbacks)",
+      "ref": "bun-v1.4.3",
+      "license": "MIT",
+      "homepage": "https://github.com/oven-sh/bun/tree/bun-v1.4.3/src/node-fallbacks",
+      "note": "path.js, url.js, util.js and net.js carry this header, taken here from url.js.",
+      "files": [
+        {
+          "name": "url.js (header)",
+          "path": "bun/node-fallbacks-joyent.txt",
+          "url": "https://raw.githubusercontent.com/oven-sh/bun/bun-v1.4.3/src/node-fallbacks/url.js",
+          "lines": [1, 20]
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "libvips",
+      "key": "vips",
+      "version": "8.18.7",
+      "ref": "v8.18.7",
+      "license": "LGPL-2.1-or-later",
+      "homepage": "https://www.libvips.org",
+      "note": "No copyright file; the authors and licence notice are in the header of libvips/include/vips/vips.h.",
+      "files": [
+        {
+          "name": "libvips/include/vips/vips.h (header)",
+          "path": "sharp-libvips/vips.txt",
+          "url": "https://raw.githubusercontent.com/libvips/libvips/v8.18.7/libvips/include/vips/vips.h",
+          "lines": [[1, 3], [53, 72]]
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "libnsgif (in libvips)",
+      "version": "as in libvips 8.18.7",
+      "ref": "v8.18.7",
+      "license": "MIT",
+      "homepage": "https://www.netsurf-browser.org/projects/libnsgif/",
+      "files": [
+        {
+          "name": "libvips/foreign/libnsgif/COPYING",
+          "path": "sharp-libvips/libnsgif.txt",
+          "url": "https://raw.githubusercontent.com/libvips/libvips/v8.18.7/libvips/foreign/libnsgif/COPYING"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "aom",
+      "key": "aom",
+      "version": "3.15.1",
+      "ref": "v3.15.1",
+      "license": "BSD-2-Clause AND LicenseRef-AOM-Patent-License-1.0",
+      "homepage": "https://aomedia.googlesource.com/aom/",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "sharp-libvips/aom-LICENSE.txt",
+          "url": "https://aomedia.googlesource.com/aom/+/refs/tags/v3.15.1/LICENSE?format=TEXT",
+          "base64": true
+        },
+        {
+          "name": "PATENTS",
+          "path": "sharp-libvips/aom-PATENTS.txt",
+          "url": "https://aomedia.googlesource.com/aom/+/refs/tags/v3.15.1/PATENTS?format=TEXT",
+          "base64": true
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "cairo",
+      "key": "cairo",
+      "version": "1.18.6",
+      "ref": "1.18.6",
+      "license": "LGPL-2.1-only OR MPL-1.1",
+      "homepage": "https://cairographics.org",
+      "note": "Each file of cairo is available under either the LGPL 2.1 or the MPL 1.1 (COPYING below); the image uses it under the LGPL 2.1. Copyright holders are named in each source file, as in the header of src/cairo.h below.",
+      "standard": ["LGPL-2.1.txt"],
+      "files": [
+        {
+          "name": "COPYING",
+          "path": "sharp-libvips/cairo-COPYING.txt",
+          "url": "https://gitlab.freedesktop.org/cairo/cairo/-/raw/1.18.6/COPYING"
+        },
+        {
+          "name": "src/cairo.h (header)",
+          "path": "sharp-libvips/cairo-header.txt",
+          "url": "https://gitlab.freedesktop.org/cairo/cairo/-/raw/1.18.6/src/cairo.h",
+          "lines": [1, 36]
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "cgif",
+      "key": "cgif",
+      "version": "0.5.4",
+      "ref": "v0.5.4",
+      "license": "MIT",
+      "homepage": "https://github.com/dloebl/cgif",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "sharp-libvips/cgif.txt",
+          "url": "https://raw.githubusercontent.com/dloebl/cgif/v0.5.4/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "Expat",
+      "key": "expat",
+      "version": "2.8.5",
+      "ref": "R_2_8_5",
+      "license": "MIT",
+      "homepage": "https://libexpat.github.io",
+      "files": [
+        {
+          "name": "COPYING",
+          "path": "sharp-libvips/expat.txt",
+          "url": "https://raw.githubusercontent.com/libexpat/libexpat/R_2_8_5/expat/COPYING"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "fontconfig",
+      "key": "fontconfig",
+      "version": "2.18.3",
+      "ref": "2.18.3",
+      "license": "HPND-sell-variant AND MIT-Modern-Variant AND others",
+      "homepage": "https://www.freedesktop.org/wiki/Software/fontconfig/",
+      "files": [
+        {
+          "name": "COPYING",
+          "path": "sharp-libvips/fontconfig.txt",
+          "url": "https://gitlab.freedesktop.org/fontconfig/fontconfig/-/raw/2.18.3/COPYING"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "FreeType",
+      "key": "freetype",
+      "version": "2.14.3",
+      "ref": "VER-2-14-3",
+      "license": "FTL",
+      "homepage": "https://freetype.org",
+      "files": [
+        {
+          "name": "LICENSE.TXT",
+          "path": "sharp-libvips/freetype-LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/freetype/freetype/VER-2-14-3/LICENSE.TXT"
+        },
+        {
+          "name": "docs/FTL.TXT",
+          "path": "sharp-libvips/freetype-FTL.txt",
+          "url": "https://raw.githubusercontent.com/freetype/freetype/VER-2-14-3/docs/FTL.TXT"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "FriBidi",
+      "key": "fribidi",
+      "version": "1.0.17",
+      "ref": "v1.0.17",
+      "license": "LGPL-2.1-or-later",
+      "homepage": "https://github.com/fribidi/fribidi",
+      "files": [
+        {
+          "name": "AUTHORS",
+          "path": "sharp-libvips/fribidi-AUTHORS.txt",
+          "url": "https://raw.githubusercontent.com/fribidi/fribidi/v1.0.17/AUTHORS"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "GLib",
+      "key": "glib",
+      "version": "2.90.0",
+      "ref": "2.90.0",
+      "license": "LGPL-2.1-or-later",
+      "homepage": "https://gitlab.gnome.org/GNOME/glib",
+      "note": "GLib has no central list of copyright holders; the header of glib/glib.h is reproduced.",
+      "files": [
+        {
+          "name": "glib/glib.h (header)",
+          "path": "sharp-libvips/glib.txt",
+          "url": "https://raw.githubusercontent.com/GNOME/glib/2.90.0/glib/glib.h",
+          "lines": [1, 25]
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "HarfBuzz",
+      "key": "harfbuzz",
+      "version": "14.5.0",
+      "ref": "14.5.0",
+      "license": "MIT-Modern-Variant",
+      "homepage": "https://harfbuzz.github.io",
+      "files": [
+        {
+          "name": "COPYING",
+          "path": "sharp-libvips/harfbuzz.txt",
+          "url": "https://raw.githubusercontent.com/harfbuzz/harfbuzz/14.5.0/COPYING"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "Highway",
+      "key": "highway",
+      "version": "1.4.0",
+      "ref": "1.4.0",
+      "license": "Apache-2.0 OR BSD-3-Clause",
+      "homepage": "https://github.com/google/highway",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "sharp-libvips/highway.txt",
+          "url": "https://raw.githubusercontent.com/google/highway/1.4.0/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "lcms2 (Little CMS)",
+      "key": "lcms",
+      "version": "2.19.1",
+      "ref": "lcms2.19.1",
+      "license": "MIT",
+      "homepage": "https://www.littlecms.com",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "sharp-libvips/lcms.txt",
+          "url": "https://raw.githubusercontent.com/mm2/Little-CMS/lcms2.19.1/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "libarchive",
+      "key": "archive",
+      "version": "3.8.9",
+      "ref": "v3.8.9",
+      "license": "BSD-2-Clause AND others",
+      "homepage": "https://www.libarchive.org",
+      "files": [
+        {
+          "name": "COPYING",
+          "path": "sharp-libvips/libarchive.txt",
+          "url": "https://raw.githubusercontent.com/libarchive/libarchive/v3.8.9/COPYING"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "libexif",
+      "key": "exif",
+      "version": "0.6.26",
+      "ref": "v0.6.26",
+      "license": "LGPL-2.1-or-later",
+      "homepage": "https://libexif.github.io",
+      "files": [
+        {
+          "name": "AUTHORS",
+          "path": "sharp-libvips/libexif-AUTHORS.txt",
+          "url": "https://raw.githubusercontent.com/libexif/libexif/v0.6.26/AUTHORS"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "libffi",
+      "key": "ffi",
+      "version": "3.8.0",
+      "ref": "v3.8.0",
+      "license": "MIT",
+      "homepage": "https://sourceware.org/libffi/",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "sharp-libvips/libffi.txt",
+          "url": "https://raw.githubusercontent.com/libffi/libffi/v3.8.0/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "libheif",
+      "key": "heif",
+      "version": "1.23.5",
+      "ref": "v1.23.5",
+      "license": "LGPL-3.0-or-later",
+      "homepage": "https://github.com/strukturag/libheif",
+      "note": "COPYING is the LGPL 3.0 text with a preamble; the preamble is reproduced. The copyright holders are named in each source file.",
+      "files": [
+        {
+          "name": "COPYING (preamble)",
+          "path": "sharp-libvips/libheif.txt",
+          "url": "https://raw.githubusercontent.com/strukturag/libheif/v1.23.5/COPYING",
+          "lines": [1, 4]
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "libimagequant",
+      "key": "imagequant",
+      "version": "2.4.1",
+      "ref": "v2.4.1",
+      "license": "BSD-2-Clause",
+      "homepage": "https://github.com/lovell/libimagequant",
+      "files": [
+        {
+          "name": "COPYRIGHT",
+          "path": "sharp-libvips/imagequant.txt",
+          "url": "https://raw.githubusercontent.com/lovell/libimagequant/v2.4.1/COPYRIGHT"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "libpng",
+      "key": "png",
+      "version": "1.6.58",
+      "ref": "v1.6.58",
+      "license": "libpng-2.0 AND Libpng",
+      "homepage": "http://www.libpng.org/pub/png/libpng.html",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "sharp-libvips/libpng.txt",
+          "url": "https://raw.githubusercontent.com/pnggroup/libpng/v1.6.58/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "librsvg",
+      "key": "rsvg",
+      "version": "2.63.2",
+      "ref": "2.63.2",
+      "license": "LGPL-2.1-or-later",
+      "homepage": "https://gitlab.gnome.org/GNOME/librsvg",
+      "files": [
+        {
+          "name": "AUTHORS",
+          "path": "sharp-libvips/librsvg-AUTHORS.txt",
+          "url": "https://raw.githubusercontent.com/GNOME/librsvg/2.63.2/AUTHORS"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "libtiff",
+      "key": "tiff",
+      "version": "4.7.2",
+      "ref": "v4.7.2",
+      "license": "libtiff",
+      "homepage": "https://libtiff.gitlab.io/libtiff/",
+      "files": [
+        {
+          "name": "LICENSE.md",
+          "path": "sharp-libvips/libtiff.txt",
+          "url": "https://gitlab.com/libtiff/libtiff/-/raw/v4.7.2/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "libultrahdr",
+      "key": "uhdr",
+      "version": "2.0.2",
+      "ref": "v2.0.2",
+      "license": "MIT AND Apache-2.0",
+      "homepage": "https://github.com/google/libultrahdr",
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "sharp-libvips/uhdr.txt",
+          "url": "https://raw.githubusercontent.com/google/libultrahdr/v2.0.2/LICENSE"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "libwebp",
+      "key": "webp",
+      "version": "1.6.0",
+      "ref": "v1.6.0",
+      "license": "BSD-3-Clause",
+      "homepage": "https://developers.google.com/speed/webp",
+      "files": [
+        {
+          "name": "COPYING",
+          "path": "sharp-libvips/libwebp-COPYING.txt",
+          "url": "https://raw.githubusercontent.com/webmproject/libwebp/v1.6.0/COPYING"
+        },
+        {
+          "name": "PATENTS",
+          "path": "sharp-libvips/libwebp-PATENTS.txt",
+          "url": "https://raw.githubusercontent.com/webmproject/libwebp/v1.6.0/PATENTS"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "libxml2",
+      "key": "xml2",
+      "version": "2.15.4",
+      "ref": "v2.15.4",
+      "license": "MIT",
+      "homepage": "https://gitlab.gnome.org/GNOME/libxml2",
+      "files": [
+        {
+          "name": "Copyright",
+          "path": "sharp-libvips/libxml2.txt",
+          "url": "https://raw.githubusercontent.com/GNOME/libxml2/v2.15.4/Copyright"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "mozjpeg",
+      "key": "mozjpeg",
+      "version": "0826579",
+      "ref": "0826579",
+      "license": "IJG AND BSD-3-Clause AND Zlib",
+      "homepage": "https://github.com/mozilla/mozjpeg",
+      "files": [
+        {
+          "name": "LICENSE.md",
+          "path": "sharp-libvips/mozjpeg-LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/mozilla/mozjpeg/0826579/LICENSE.md"
+        },
+        {
+          "name": "README.ijg (LEGAL ISSUES)",
+          "path": "sharp-libvips/mozjpeg-README.ijg.txt",
+          "url": "https://raw.githubusercontent.com/mozilla/mozjpeg/0826579/README.ijg",
+          "lines": [112, 161]
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "Pango",
+      "key": "pango",
+      "version": "1.58.2",
+      "ref": "1.58.2",
+      "license": "LGPL-2.0-or-later",
+      "homepage": "https://gitlab.gnome.org/GNOME/pango",
+      "note": "Pango has no central list of copyright holders; the header of pango/pango.h is reproduced.",
+      "files": [
+        {
+          "name": "pango/pango.h (header)",
+          "path": "sharp-libvips/pango.txt",
+          "url": "https://raw.githubusercontent.com/GNOME/pango/1.58.2/pango/pango.h",
+          "lines": [1, 20]
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "pixman",
+      "key": "pixman",
+      "version": "0.46.4",
+      "ref": "pixman-0.46.4",
+      "license": "MIT",
+      "homepage": "https://pixman.org",
+      "files": [
+        {
+          "name": "COPYING",
+          "path": "sharp-libvips/pixman.txt",
+          "url": "https://gitlab.freedesktop.org/pixman/pixman/-/raw/pixman-0.46.4/COPYING"
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "proxy-libintl",
+      "key": "proxy-libintl",
+      "version": "0.5",
+      "ref": "0.5",
+      "license": "LGPL-2.0-or-later",
+      "homepage": "https://github.com/frida/proxy-libintl",
+      "files": [
+        {
+          "name": "libintl.c (header)",
+          "path": "sharp-libvips/proxy-libintl.txt",
+          "url": "https://raw.githubusercontent.com/frida/proxy-libintl/0.5/libintl.c",
+          "lines": [1, 18]
+        }
+      ]
+    },
+    {
+      "bundle": "sharp-libvips",
+      "name": "zlib-ng",
+      "key": "zlib-ng",
+      "version": "2.3.3",
+      "ref": "2.3.3",
+      "license": "Zlib",
+      "homepage": "https://github.com/zlib-ng/zlib-ng",
+      "files": [
+        {
+          "name": "LICENSE.md",
+          "path": "sharp-libvips/zlib-ng.txt",
+          "url": "https://raw.githubusercontent.com/zlib-ng/zlib-ng/2.3.3/LICENSE.md"
+        }
+      ]
+    }
+  ]
+}

@@ -11,7 +11,10 @@
 // built on, so the file is generated there (CI and the release host); elsewhere `--check` skips.
 //
 // Licence texts that packages do not ship, and the entries that are not npm packages (the
-// Fraunces outlines in the wordmark, the Bun runtime), live in scripts/licenses/.
+// Fraunces outlines in the wordmark, the Bun runtime), live in scripts/licenses/. The libraries
+// compiled into native code (the Bun runtime in the CLI binaries, the prebuilt libvips in the
+// image) are listed under those entries from scripts/licenses/native/: manifest.json names each
+// one with the upstream source of its files, which native/fetch.mjs downloads.
 import {
   existsSync,
   readdirSync,
@@ -26,6 +29,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const OUT = 'THIRD-PARTY-NOTICES.txt';
 const TEXTS = join(root, 'scripts/licenses');
+const NATIVE = join(TEXTS, 'native');
 const check = process.argv.includes('--check');
 const TARGET = { os: 'linux', cpu: 'x64', libc: 'glibc' };
 // The Bun the release workflow builds the binaries with; scripts/licenses/Bun-LICENSE.md is its
@@ -404,6 +408,43 @@ function compareVersions(a, b) {
 
 // ---- building the file ----
 
+/**
+ * The texts of an npm package: its licence files, or, when it ships none, the licence section of
+ * its README and the standard text of its licence. `readme` is read only when needed.
+ */
+function npmTexts({ name, version, license, author, files, readme }, problems) {
+  if (files.length === 0) {
+    const standard = standardTexts(license, author ?? `the authors of ${name}`);
+    if (!standard) {
+      problems.push(`${name}@${version}: no licence file and no standard text for ${license}`);
+    }
+    const section = readme();
+    const templated = (standard ?? []).some((f) => f.templated);
+    const holderNote = !templated
+      ? '.'
+      : author
+        ? ', with the copyright holder from the author field of its package.json.'
+        : '; its package.json names no author.';
+    const what = section
+      ? 'The licence section of its README and the standard text of its licence follow'
+      : 'The standard text of its licence follows';
+    return {
+      files: [...(section ? [section] : []), ...(standard ?? [])].map(({ name, text }) => ({
+        name,
+        text,
+      })),
+      note: wrap(`The package ships no licence file. ${what}${holderNote}`),
+    };
+  }
+  if (FULL_TEXT[license] && !files.some((f) => f.text.includes(FULL_TEXT[license]))) {
+    return {
+      files: [...files, ...standardTexts(license, '').map(({ name, text }) => ({ name, text }))],
+      note: wrap(`Its licence file is a short notice; the standard text of ${license} follows.`),
+    };
+  }
+  return { files, note: null };
+}
+
 function packageEntries() {
   const byKey = new Map();
   for (const dist of DISTRIBUTIONS) {
@@ -418,35 +459,19 @@ function packageEntries() {
   const entries = [...byKey.values()].map(({ dir, pkg, in: dists }) => {
     const license = licenceId(pkg);
     if (!license) problems.push(`${pkg.name}@${pkg.version}: no licence in package.json`);
-    let files = licenceFiles(dir);
-    let note = null;
-    if (files.length === 0) {
-      const author = personName(pkg.author) ?? personName(pkg.contributors?.[0]);
-      const holder = author ?? `the authors of ${pkg.name}`;
-      const standard = standardTexts(license, holder);
-      if (!standard) {
-        problems.push(
-          `${pkg.name}@${pkg.version}: no licence file and no standard text for ${license}`,
-        );
-      }
-      const readme = readmeLicence(dir);
-      files = [...(readme ? [readme] : []), ...(standard ?? [])];
-      const templated = (standard ?? []).some((f) => f.templated);
-      const holderNote = !templated
-        ? '.'
-        : author
-          ? ', with the copyright holder from the author field of its package.json.'
-          : '; its package.json names no author.';
-      const what = readme
-        ? 'The licence section of its README and the standard text of its licence follow'
-        : 'The standard text of its licence follows';
-      note = wrap(`The package ships no licence file. ${what}${holderNote}`);
-      files = files.map(({ name, text }) => ({ name, text }));
-    } else if (FULL_TEXT[license] && !files.some((f) => f.text.includes(FULL_TEXT[license]))) {
-      files.push(...standardTexts(license, '').map(({ name, text }) => ({ name, text })));
-      note = wrap(`Its licence file is a short notice; the standard text of ${license} follows.`);
-    }
+    const { files, note } = npmTexts(
+      {
+        name: pkg.name,
+        version: pkg.version,
+        license,
+        author: personName(pkg.author) ?? personName(pkg.contributors?.[0]),
+        files: licenceFiles(dir),
+        readme: () => readmeLicence(dir),
+      },
+      problems,
+    );
     return {
+      dir,
       name: pkg.name,
       versions: [pkg.version],
       license: license ?? 'UNKNOWN',
@@ -495,6 +520,133 @@ function manualEntries() {
   }));
 }
 
+// ---- libraries inside native bundles ----
+
+const SHARP_LIBVIPS = '@img/sharp-libvips-linux-x64';
+
+/** A library of scripts/licenses/native/manifest.json, as rendered under its bundle's entry. */
+function nativeLibrary(lib) {
+  return {
+    name: lib.name,
+    label: `${lib.name} (${lib.bundle === 'bun' ? 'Bun' : 'libvips'})`,
+    title: lib.name,
+    license: lib.license,
+    meta: [
+      `Version: ${lib.version}`,
+      `Licence: ${lib.license}`,
+      ...(lib.homepage ? [`Homepage: ${lib.homepage}`] : []),
+    ],
+    note: [lib.nearest, lib.note].filter(Boolean).flatMap((text) => wrap(text)),
+    files: [
+      ...lib.files.map((f) => ({
+        name: f.name,
+        source: f.url,
+        text: readText(join(NATIVE, f.path)),
+      })),
+      ...(lib.standard ?? []).map((file) => ({
+        name: `${file.replace(/\.txt$/, '')} (standard text)`,
+        text: readText(join(TEXTS, file)),
+      })),
+    ],
+  };
+}
+
+/** An npm package of Bun's Node.js polyfills (native/polyfills.json). */
+function polyfillLibrary(pkg, problems) {
+  const { files, note } = npmTexts(
+    {
+      ...pkg,
+      files: pkg.files.map((f) => ({ name: f.name, text: readText(join(NATIVE, f.path)) })),
+      readme: () =>
+        pkg.readme && { name: pkg.readme.name, text: readText(join(NATIVE, pkg.readme.path)) },
+    },
+    problems,
+  );
+  return {
+    name: pkg.name,
+    label: `${pkg.name} ${pkg.version}`,
+    title: `${pkg.name} ${pkg.version}`,
+    license: pkg.license ?? 'UNKNOWN',
+    meta: [`Licence: ${pkg.license}`, `Homepage: https://www.npmjs.com/package/${pkg.name}`],
+    note: [
+      ...(pkg.locked ? [] : wrap("Not in the polyfills' bun.lock; from the latest npm release.")),
+      ...(note ?? []),
+    ],
+    files,
+  };
+}
+
+/** Hangs the native libraries under the Bun runtime and the sharp-libvips entries. */
+function attachNative(manual, packages) {
+  const native = readJson(join(NATIVE, 'manifest.json'));
+  const polyfills = readJson(join(NATIVE, 'polyfills.json'));
+  const refresh = 'update scripts/licenses/native/manifest.json and run native/fetch.mjs';
+  if (native.bundles.bun.version !== BUN_VERSION) {
+    throw new Error(
+      `native licences are for Bun ${native.bundles.bun.version}, release.yml pins ${BUN_VERSION}: ${refresh}`,
+    );
+  }
+  if (polyfills.lockfile !== native.polyfills.lockfile) {
+    throw new Error(`native/polyfills.json is not from the manifest's lockfile: ${refresh}`);
+  }
+  const libvips = packages.find((p) => p.name === SHARP_LIBVIPS);
+  const shipped = readJson(join(libvips.dir, 'versions.json'));
+  if (native.bundles['sharp-libvips'].version !== libvips.versions[0]) {
+    throw new Error(
+      `native licences are for ${SHARP_LIBVIPS} ${native.bundles['sharp-libvips'].version}, ${libvips.versions[0]} is installed: ${refresh}`,
+    );
+  }
+  const sharpLibs = native.libraries.filter((lib) => lib.bundle === 'sharp-libvips');
+  const keyed = new Map(sharpLibs.filter((lib) => lib.key).map((lib) => [lib.key, lib]));
+  const stale = [
+    ...Object.entries(shipped)
+      .filter(([key, version]) => keyed.get(key)?.version !== version)
+      .map(([key, version]) => `${key} ${version}`),
+    ...[...keyed.keys()].filter((key) => !(key in shipped)),
+  ];
+  if (stale.length > 0) {
+    throw new Error(`versions.json of ${SHARP_LIBVIPS} differs (${stale.join(', ')}): ${refresh}`);
+  }
+
+  const problems = [];
+  const bun = manual.find((entry) => entry.name === 'Bun runtime');
+  bun.groups = [
+    {
+      title: 'Libraries in the Bun runtime',
+      note: [
+        "The licence files of the libraries Bun's LICENSE.md names, and of those its build pins",
+        `without naming them there, at the revisions Bun ${BUN_VERSION} pins (scripts/build/deps in`,
+        'its repository) or, where it pins none, the nearest release.',
+      ],
+      items: native.libraries.filter((lib) => lib.bundle === 'bun').map(nativeLibrary),
+    },
+    {
+      title: "npm packages in Bun's Node.js polyfills",
+      note: wrap(
+        'Bun embeds browser polyfills of Node.js modules (src/node-fallbacks), bundled from these' +
+          ' packages as its bun.lock resolves them. Their licence files are taken from the npm' +
+          ' registry.',
+      ),
+      items: polyfills.packages.map((pkg) => polyfillLibrary(pkg, problems)),
+    },
+  ];
+  libvips.groups = [
+    {
+      title: 'Libraries in the prebuilt libvips',
+      note: wrap(
+        `libvips and the libraries built into it, at the versions in versions.json of ${SHARP_LIBVIPS}` +
+          ` ${libvips.versions[0]}. The LGPL-licensed ones are used under the LGPL 3.0 (through the` +
+          ' "any later version" clause, as its README says), whose text is listed with this entry;' +
+          ' cairo, available under the LGPL 2.1 or the MPL 1.1, is used under the LGPL 2.1.',
+      ),
+      items: sharpLibs.map(nativeLibrary),
+    },
+  ];
+  if (problems.length > 0) {
+    throw new Error(`licences to resolve by hand:\n  ${problems.join('\n  ')}`);
+  }
+}
+
 const RULE = '-'.repeat(78);
 const HEAVY = '='.repeat(78);
 const ORDER = DISTRIBUTIONS.map((d) => d.id);
@@ -528,25 +680,45 @@ function lgplSources(packages) {
 function render() {
   const manual = manualEntries();
   const packages = packageEntries();
+  attachNative(manual, packages);
   const all = [...manual, ...packages];
+  // Every entry and every library listed under one, in output order.
+  const owners = all.flatMap((entry) => [
+    entry,
+    ...(entry.groups ?? []).flatMap((group) => group.items),
+  ]);
 
-  // Texts used by more than one entry are printed once, at the end.
+  // Texts used by more than one entry or library are printed once, at the end.
   const uses = new Map();
-  for (const entry of all) {
-    for (const file of entry.files) {
+  for (const owner of owners) {
+    for (const file of owner.files) {
       const list = uses.get(file.text) ?? [];
-      if (!list.includes(entry)) list.push(entry);
+      if (!list.includes(owner)) list.push(owner);
       uses.set(file.text, list);
     }
   }
   const shared = new Map();
-  for (const entry of all) {
-    for (const file of entry.files) {
+  for (const owner of owners) {
+    for (const file of owner.files) {
       if (uses.get(file.text).length > 1 && !shared.has(file.text)) {
         shared.set(file.text, `S${shared.size + 1}`);
       }
     }
   }
+  const renderFile = (file) => {
+    const id = shared.get(file.text);
+    if (id) {
+      const from = file.source ? ` (${file.source})` : '';
+      return ['', `${file.name}${from}: see [${id}] below.`];
+    }
+    return [
+      '',
+      `${RULE.slice(0, 3)} ${file.name} ${RULE.slice(file.name.length + 5)}`,
+      ...(file.source ? [`Source: ${file.source}`] : []),
+      '',
+      file.text,
+    ];
+  };
 
   const out = [];
   out.push(
@@ -573,8 +745,10 @@ function render() {
     ...lgplSources(packages),
     '',
     'Generated by scripts/third-party-notices.mjs (pnpm notices) from the installed',
-    'dependencies; do not edit by hand. Licence texts used by more than one package are',
-    'printed once, under "Shared licence texts" at the end, and referred to as [S1], [S2], ...',
+    'dependencies and scripts/licenses/; do not edit by hand. The libraries compiled into the',
+    'Bun runtime and into libvips are listed under those two entries. Licence texts used more',
+    'than once are printed once, under "Shared licence texts" at the end, and referred to as',
+    '[S1], [S2], ...',
     '',
     HEAVY,
     `INDEX (${all.length} entries)`,
@@ -583,6 +757,9 @@ function render() {
   );
   for (const entry of all) {
     out.push(`${title(entry)}  (${entry.license})`);
+    for (const group of entry.groups ?? []) {
+      for (const item of group.items) out.push(`    ${item.title}  (${item.license})`);
+    }
   }
   out.push('');
   for (const entry of all) {
@@ -594,23 +771,24 @@ function render() {
     }
     out.push(`In: ${shipsIn(entry.in)}`);
     if (entry.note) out.push('', ...entry.note);
-    for (const file of entry.files) {
-      const id = shared.get(file.text);
-      if (id) out.push('', `${file.name}: see [${id}] below.`);
-      else
-        out.push(
-          '',
-          `${RULE.slice(0, 3)} ${file.name} ${RULE.slice(file.name.length + 5)}`,
-          '',
-          file.text,
-        );
+    for (const file of entry.files) out.push(...renderFile(file));
+    for (const group of entry.groups ?? []) {
+      const heading = `${group.title} (${group.items.length})`;
+      out.push('', `*** ${heading} ${'*'.repeat(Math.max(3, 73 - heading.length))}`);
+      if (group.note.length > 0) out.push('', ...group.note);
+      for (const item of group.items) {
+        out.push('', `~~~ ${item.title} ${'~'.repeat(Math.max(3, 73 - item.title.length))}`);
+        out.push(...item.meta);
+        if (item.note.length > 0) out.push('', ...item.note);
+        for (const file of item.files) out.push(...renderFile(file));
+      }
     }
     out.push('');
   }
   out.push(HEAVY, 'SHARED LICENCE TEXTS', HEAVY, '');
   for (const [text, id] of shared) {
     const users = uses.get(text);
-    const named = users.slice(0, 5).map((e) => e.name);
+    const named = users.slice(0, 5).map((e) => e.label ?? e.name);
     const more = users.length > 5 ? ` and ${users.length - 5} more` : '';
     out.push(RULE, `[${id}] used by ${named.join(', ')}${more}`, RULE, '', text, '');
   }

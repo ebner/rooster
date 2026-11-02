@@ -1,0 +1,1539 @@
+{
+  "lockfile": "https://raw.githubusercontent.com/oven-sh/bun/bun-v1.4.3/src/node-fallbacks/bun.lock",
+  "packages": [
+    {
+      "name": "abort-controller",
+      "version": "3.0.0",
+      "license": "MIT",
+      "author": "Toru Nagashima",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/abort-controller@3.0.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "asn1.js",
+      "version": "4.10.1",
+      "license": "MIT",
+      "author": "Fedor Indutny",
+      "locked": true,
+      "files": [],
+      "readme": {
+        "name": "README.md (licence section)",
+        "path": "bun/polyfills/asn1.js@4.10.1/README.licence.txt"
+      }
+    },
+    {
+      "name": "assert",
+      "version": "2.1.0",
+      "license": "MIT",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/assert@2.1.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "available-typed-arrays",
+      "version": "1.0.7",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/available-typed-arrays@1.0.7/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "base64-js",
+      "version": "1.5.1",
+      "license": "MIT",
+      "author": "T. Jameson Little",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/base64-js@1.5.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "bn.js",
+      "version": "4.12.2",
+      "license": "MIT",
+      "author": "Fedor Indutny",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/bn.js@4.12.2/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "bn.js",
+      "version": "5.2.2",
+      "license": "MIT",
+      "author": "Fedor Indutny",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/bn.js@5.2.2/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "brorand",
+      "version": "1.1.0",
+      "license": "MIT",
+      "author": "Fedor Indutny",
+      "locked": true,
+      "files": [],
+      "readme": {
+        "name": "README.md (licence section)",
+        "path": "bun/polyfills/brorand@1.1.0/README.licence.txt"
+      }
+    },
+    {
+      "name": "browserify-aes",
+      "version": "1.2.0",
+      "license": "MIT",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/browserify-aes@1.2.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "browserify-cipher",
+      "version": "1.0.1",
+      "license": "MIT",
+      "author": "Calvin Metcalf",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/browserify-cipher@1.0.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "browserify-des",
+      "version": "1.0.2",
+      "license": "MIT",
+      "author": "Calvin Metcalf",
+      "locked": true,
+      "files": [
+        {
+          "name": "license",
+          "path": "bun/polyfills/browserify-des@1.0.2/license"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "browserify-rsa",
+      "version": "4.1.1",
+      "license": "MIT",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/browserify-rsa@4.1.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "browserify-sign",
+      "version": "4.2.5",
+      "license": "ISC",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/browserify-sign@4.2.5/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "browserify-zlib",
+      "version": "0.2.0",
+      "license": "MIT",
+      "author": "Devon Govett",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/browserify-zlib@0.2.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "buffer-xor",
+      "version": "1.0.3",
+      "license": "MIT",
+      "author": "Daniel Cousens",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/buffer-xor@1.0.3/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "buffer",
+      "version": "5.0.5",
+      "license": "MIT",
+      "author": "Feross Aboukhadijeh",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/buffer@5.0.5/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "buffer",
+      "version": "6.0.3",
+      "license": "MIT",
+      "author": "Feross Aboukhadijeh",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/buffer@6.0.3/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "builtin-status-codes",
+      "version": "3.0.0",
+      "license": "MIT",
+      "author": "Ben Drucker",
+      "locked": true,
+      "files": [
+        {
+          "name": "license",
+          "path": "bun/polyfills/builtin-status-codes@3.0.0/license"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "call-bind-apply-helpers",
+      "version": "1.0.2",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/call-bind-apply-helpers@1.0.2/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "call-bind",
+      "version": "1.0.8",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/call-bind@1.0.8/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "call-bound",
+      "version": "1.0.4",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/call-bound@1.0.4/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "cipher-base",
+      "version": "1.0.7",
+      "license": "MIT",
+      "author": "Calvin Metcalf",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/cipher-base@1.0.7/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "constants-browserify",
+      "version": "1.0.0",
+      "license": "MIT",
+      "author": "Julian Gruber",
+      "locked": false,
+      "files": [],
+      "readme": {
+        "name": "README.md (licence section)",
+        "path": "bun/polyfills/constants-browserify@1.0.0/README.licence.txt"
+      }
+    },
+    {
+      "name": "core-util-is",
+      "version": "1.0.3",
+      "license": "MIT",
+      "author": "Isaac Z. Schlueter",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/core-util-is@1.0.3/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "create-ecdh",
+      "version": "4.0.4",
+      "license": "MIT",
+      "author": "Calvin Metcalf",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/create-ecdh@4.0.4/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "create-hash",
+      "version": "1.2.0",
+      "license": "MIT",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/create-hash@1.2.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "create-hmac",
+      "version": "1.1.7",
+      "license": "MIT",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/create-hmac@1.1.7/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "crypto-browserify",
+      "version": "3.12.1",
+      "license": "MIT",
+      "author": "Dominic Tarr",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/crypto-browserify@3.12.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "define-data-property",
+      "version": "1.1.4",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/define-data-property@1.1.4/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "define-properties",
+      "version": "1.2.1",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/define-properties@1.2.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "des.js",
+      "version": "1.1.0",
+      "license": "MIT",
+      "author": "Fedor Indutny",
+      "locked": true,
+      "files": [],
+      "readme": {
+        "name": "README.md (licence section)",
+        "path": "bun/polyfills/des.js@1.1.0/README.licence.txt"
+      }
+    },
+    {
+      "name": "diffie-hellman",
+      "version": "5.0.3",
+      "license": "MIT",
+      "author": "Calvin Metcalf",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/diffie-hellman@5.0.3/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "domain-browser",
+      "version": "4.23.0",
+      "license": "Artistic-2.0",
+      "author": "2013+ Bevry Pty Ltd",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE.md",
+          "path": "bun/polyfills/domain-browser@4.23.0/LICENSE.md"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "dunder-proto",
+      "version": "1.0.1",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/dunder-proto@1.0.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "elliptic",
+      "version": "6.6.1",
+      "license": "MIT",
+      "author": "Fedor Indutny",
+      "locked": true,
+      "files": [],
+      "readme": {
+        "name": "README.md (licence section)",
+        "path": "bun/polyfills/elliptic@6.6.1/README.licence.txt"
+      }
+    },
+    {
+      "name": "es-define-property",
+      "version": "1.0.1",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/es-define-property@1.0.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "es-errors",
+      "version": "1.3.0",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/es-errors@1.3.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "es-object-atoms",
+      "version": "1.1.1",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/es-object-atoms@1.1.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "event-target-shim",
+      "version": "5.0.1",
+      "license": "MIT",
+      "author": "Toru Nagashima",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/event-target-shim@5.0.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "events",
+      "version": "3.3.0",
+      "license": "MIT",
+      "author": "Irakli Gozalishvili",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/events@3.3.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "evp_bytestokey",
+      "version": "1.0.3",
+      "license": "MIT",
+      "author": "Calvin Metcalf",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/evp_bytestokey@1.0.3/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "for-each",
+      "version": "0.3.5",
+      "license": "MIT",
+      "author": "Raynos",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/for-each@0.3.5/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "function-bind",
+      "version": "1.1.2",
+      "license": "MIT",
+      "author": "Raynos",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/function-bind@1.1.2/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "generator-function",
+      "version": "2.0.1",
+      "license": "MIT",
+      "author": "Jordan Harbamd",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE.md",
+          "path": "bun/polyfills/generator-function@2.0.1/LICENSE.md"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "get-intrinsic",
+      "version": "1.3.0",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/get-intrinsic@1.3.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "get-proto",
+      "version": "1.0.1",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/get-proto@1.0.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "gopd",
+      "version": "1.2.0",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/gopd@1.2.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "has-property-descriptors",
+      "version": "1.0.2",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/has-property-descriptors@1.0.2/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "has-symbols",
+      "version": "1.1.0",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/has-symbols@1.1.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "has-tostringtag",
+      "version": "1.0.2",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/has-tostringtag@1.0.2/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "hash-base",
+      "version": "3.0.5",
+      "license": "MIT",
+      "author": "Kirill Fomichev",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/hash-base@3.0.5/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "hash-base",
+      "version": "3.1.2",
+      "license": "MIT",
+      "author": "Kirill Fomichev",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/hash-base@3.1.2/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "hash.js",
+      "version": "1.1.7",
+      "license": "MIT",
+      "author": "Fedor Indutny",
+      "locked": true,
+      "files": [],
+      "readme": {
+        "name": "README.md (licence section)",
+        "path": "bun/polyfills/hash.js@1.1.7/README.licence.txt"
+      }
+    },
+    {
+      "name": "hasown",
+      "version": "2.0.2",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/hasown@2.0.2/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "hmac-drbg",
+      "version": "1.0.1",
+      "license": "MIT",
+      "author": "Fedor Indutny",
+      "locked": true,
+      "files": [],
+      "readme": {
+        "name": "README.md (licence section)",
+        "path": "bun/polyfills/hmac-drbg@1.0.1/README.licence.txt"
+      }
+    },
+    {
+      "name": "https-browserify",
+      "version": "1.0.0",
+      "license": "MIT",
+      "author": "James Halliday",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/https-browserify@1.0.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "ieee754",
+      "version": "1.2.1",
+      "license": "BSD-3-Clause",
+      "author": "Feross Aboukhadijeh",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/ieee754@1.2.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "inherits",
+      "version": "2.0.4",
+      "license": "ISC",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/inherits@2.0.4/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "is-arguments",
+      "version": "1.2.0",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/is-arguments@1.2.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "is-callable",
+      "version": "1.2.7",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/is-callable@1.2.7/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "is-generator-function",
+      "version": "1.1.2",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/is-generator-function@1.1.2/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "is-nan",
+      "version": "1.3.2",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/is-nan@1.3.2/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "is-regex",
+      "version": "1.2.1",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/is-regex@1.2.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "is-typed-array",
+      "version": "1.1.15",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/is-typed-array@1.1.15/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "isarray",
+      "version": "1.0.0",
+      "license": "MIT",
+      "author": "Julian Gruber",
+      "locked": true,
+      "files": [],
+      "readme": {
+        "name": "README.md (licence section)",
+        "path": "bun/polyfills/isarray@1.0.0/README.licence.txt"
+      }
+    },
+    {
+      "name": "isarray",
+      "version": "2.0.5",
+      "license": "MIT",
+      "author": "Julian Gruber",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/isarray@2.0.5/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "math-intrinsics",
+      "version": "1.1.0",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/math-intrinsics@1.1.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "md5.js",
+      "version": "1.3.5",
+      "license": "MIT",
+      "author": "Kirill Fomichev",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/md5.js@1.3.5/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "miller-rabin",
+      "version": "4.0.1",
+      "license": "MIT",
+      "author": "Fedor Indutny",
+      "locked": true,
+      "files": [],
+      "readme": {
+        "name": "README.md (licence section)",
+        "path": "bun/polyfills/miller-rabin@4.0.1/README.licence.txt"
+      }
+    },
+    {
+      "name": "minimalistic-assert",
+      "version": "1.0.1",
+      "license": "ISC",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/minimalistic-assert@1.0.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "minimalistic-crypto-utils",
+      "version": "1.0.1",
+      "license": "MIT",
+      "author": "Fedor Indutny",
+      "locked": true,
+      "files": [],
+      "readme": {
+        "name": "README.md (licence section)",
+        "path": "bun/polyfills/minimalistic-crypto-utils@1.0.1/README.licence.txt"
+      }
+    },
+    {
+      "name": "object-is",
+      "version": "1.1.6",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/object-is@1.1.6/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "object-keys",
+      "version": "1.1.1",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/object-keys@1.1.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "object.assign",
+      "version": "4.1.7",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/object.assign@4.1.7/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "os-browserify",
+      "version": "0.3.0",
+      "license": "MIT",
+      "author": "CoderPuppy",
+      "locked": false,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/os-browserify@0.3.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "pako",
+      "version": "1.0.11",
+      "license": "(MIT AND Zlib)",
+      "author": "Andrei Tuputcyn",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/pako@1.0.11/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "parse-asn1",
+      "version": "5.1.9",
+      "license": "ISC",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/parse-asn1@5.1.9/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "path-browserify",
+      "version": "1.0.1",
+      "license": "MIT",
+      "author": "James Halliday",
+      "locked": false,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/path-browserify@1.0.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "pbkdf2",
+      "version": "3.1.5",
+      "license": "MIT",
+      "author": "Daniel Cousens",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/pbkdf2@3.1.5/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "possible-typed-array-names",
+      "version": "1.1.0",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/possible-typed-array-names@1.1.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "process-nextick-args",
+      "version": "2.0.1",
+      "license": "MIT",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "license.md",
+          "path": "bun/polyfills/process-nextick-args@2.0.1/license.md"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "process",
+      "version": "0.11.10",
+      "license": "MIT",
+      "author": "Roman Shtylman",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/process@0.11.10/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "public-encrypt",
+      "version": "4.0.3",
+      "license": "MIT",
+      "author": "Calvin Metcalf",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/public-encrypt@4.0.3/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "punycode",
+      "version": "2.3.1",
+      "license": "MIT",
+      "author": "Mathias Bynens",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE-MIT.txt",
+          "path": "bun/polyfills/punycode@2.3.1/LICENSE-MIT.txt"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "querystring-es3",
+      "version": "1.0.0-0",
+      "license": "MIT",
+      "author": "SpainTrain",
+      "locked": true,
+      "files": [
+        {
+          "name": "License.md",
+          "path": "bun/polyfills/querystring-es3@1.0.0-0/License.md"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "randombytes",
+      "version": "2.1.0",
+      "license": "MIT",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/randombytes@2.1.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "randomfill",
+      "version": "1.0.4",
+      "license": "MIT",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/randomfill@1.0.4/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "react-refresh",
+      "version": "0.17.0",
+      "license": "MIT",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/react-refresh@0.17.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "readable-stream",
+      "version": "2.3.8",
+      "license": "MIT",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/readable-stream@2.3.8/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "readable-stream",
+      "version": "3.6.2",
+      "license": "MIT",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/readable-stream@3.6.2/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "readable-stream",
+      "version": "4.7.0",
+      "license": "MIT",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/readable-stream@4.7.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "ripemd160",
+      "version": "2.0.3",
+      "license": "MIT",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/ripemd160@2.0.3/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "safe-buffer",
+      "version": "5.1.2",
+      "license": "MIT",
+      "author": "Feross Aboukhadijeh",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/safe-buffer@5.1.2/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "safe-buffer",
+      "version": "5.2.1",
+      "license": "MIT",
+      "author": "Feross Aboukhadijeh",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/safe-buffer@5.2.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "safe-regex-test",
+      "version": "1.1.0",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/safe-regex-test@1.1.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "set-function-length",
+      "version": "1.2.2",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/set-function-length@1.2.2/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "sha.js",
+      "version": "2.4.12",
+      "license": "(MIT AND BSD-3-Clause)",
+      "author": "Dominic Tarr",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/sha.js@2.4.12/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "stream-browserify",
+      "version": "3.0.0",
+      "license": "MIT",
+      "author": "James Halliday",
+      "locked": false,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/stream-browserify@3.0.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "stream-http",
+      "version": "3.2.0",
+      "license": "MIT",
+      "author": "John Hiesey",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/stream-http@3.2.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "string_decoder",
+      "version": "1.1.1",
+      "license": "MIT",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/string_decoder@1.1.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "string_decoder",
+      "version": "1.3.0",
+      "license": "MIT",
+      "author": null,
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/string_decoder@1.3.0/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "timers-browserify",
+      "version": "2.0.12",
+      "license": "MIT",
+      "author": "J. Ryan Stinnett",
+      "locked": false,
+      "files": [
+        {
+          "name": "LICENSE.md",
+          "path": "bun/polyfills/timers-browserify@2.0.12/LICENSE.md"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "to-buffer",
+      "version": "1.2.2",
+      "license": "MIT",
+      "author": "Mathias Buus",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/to-buffer@1.2.2/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "tty-browserify",
+      "version": "0.0.1",
+      "license": "MIT",
+      "author": "James Halliday",
+      "locked": false,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/tty-browserify@0.0.1/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "typed-array-buffer",
+      "version": "1.0.3",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/typed-array-buffer@1.0.3/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "url",
+      "version": "0.11.4",
+      "license": "MIT",
+      "author": "defunctzombie",
+      "locked": false,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/url@0.11.4/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "util-deprecate",
+      "version": "1.0.2",
+      "license": "MIT",
+      "author": "Nathan Rajlich",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/util-deprecate@1.0.2/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "util",
+      "version": "0.12.5",
+      "license": "MIT",
+      "author": "Joyent",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/util@0.12.5/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "vm-browserify",
+      "version": "1.1.2",
+      "license": "MIT",
+      "author": "James Halliday",
+      "locked": false,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/vm-browserify@1.1.2/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "which-typed-array",
+      "version": "1.1.19",
+      "license": "MIT",
+      "author": "Jordan Harband",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/which-typed-array@1.1.19/LICENSE"
+        }
+      ],
+      "readme": null
+    },
+    {
+      "name": "xtend",
+      "version": "4.0.2",
+      "license": "MIT",
+      "author": "Raynos",
+      "locked": true,
+      "files": [
+        {
+          "name": "LICENSE",
+          "path": "bun/polyfills/xtend@4.0.2/LICENSE"
+        }
+      ],
+      "readme": null
+    }
+  ]
+}
