@@ -244,7 +244,9 @@ describe('MarkdownEditor', () => {
   });
 
   test('links carry the open hint while editing, after their own title', () => {
-    const { dom } = setup({ value: 'See [docs](https://example.com "The docs") and https://x.test' });
+    const { dom } = setup({
+      value: 'See [docs](https://example.com "The docs") and https://x.test',
+    });
     const titles = [...dom.querySelectorAll('a')].map(
       (a) => a.querySelector('[title]')?.getAttribute('title') ?? a.getAttribute('title'),
     );

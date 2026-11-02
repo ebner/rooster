@@ -83,16 +83,12 @@ describe('Settings → Calendar feed (FR-CAL)', () => {
   test('revoke asks inline; Escape cancels', async () => {
     const { onRevoke } = section();
     const [row] = screen.getAllByTestId('calendar-feed');
-    fireEvent.click(
-      within(row as HTMLElement).getByRole('button', { name: 'Revoke Brightwater' }),
-    );
+    fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Revoke Brightwater' }));
     const confirm = within(row as HTMLElement).getByTestId('confirm-feed');
     expect(row?.textContent).toContain('Revoke the feed for Brightwater?');
     fireEvent.keyDown(confirm, { key: 'Escape' });
     expect(within(row as HTMLElement).queryByTestId('confirm-feed')).toBeNull();
-    fireEvent.click(
-      within(row as HTMLElement).getByRole('button', { name: 'Revoke Brightwater' }),
-    );
+    fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Revoke Brightwater' }));
     await act(async () => {
       fireEvent.click(within(row as HTMLElement).getByTestId('confirm-feed'));
     });

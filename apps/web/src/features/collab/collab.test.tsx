@@ -218,7 +218,9 @@ describe('InboxPage (FR-NOT-1)', () => {
     const row = screen
       .getAllByTestId('notification')
       .find((node) => node.textContent?.includes('Acme Agent')) as HTMLElement;
-    expect(row.textContent).toContain('Acme Agent (agent.acme.example) was connected from 203.0.113.7');
+    expect(row.textContent).toContain(
+      'Acme Agent (agent.acme.example) was connected from 203.0.113.7',
+    );
     expect(row.textContent).toContain('Not you? Revoke it in Settings → Connected apps.');
     expect(row.textContent).toContain('Your account');
     expect(row.textContent).not.toContain('Rooster');
@@ -234,7 +236,9 @@ describe('InboxPage (FR-NOT-1)', () => {
       ],
     });
     const row = screen.getByTestId('notification');
-    expect(row.textContent).toContain('Evil Agent (agent.acme.example) was connected to your account');
+    expect(row.textContent).toContain(
+      'Evil Agent (agent.acme.example) was connected to your account',
+    );
   });
 
   test('Phase 12: the notice leads to the grant in Connected apps', async () => {
