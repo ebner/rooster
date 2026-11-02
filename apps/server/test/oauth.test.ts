@@ -884,4 +884,24 @@ describe('the refresh grace never revives a revocation it did not make', () => {
     expect(retry.status).toBe(400);
     expect((await withToken(ctx, access, 'GET', '/api/v1/me')).status).toBe(401);
   });
+  it("a sign-out while a retry is in flight keeps the session's access tokens revoked after the undo", async () => {
+    const ctx = oauthCtx();
+    const user = ctx.user('ada@example.com');
+    const tokens = await connect(ctx, user, { resource: API_RESOURCE });
+    const rotated = await refresh(ctx, tokens.refresh ?? '');
+    expect(rotated.status).toBe(200);
+    const access = String(rotated.body.access_token);
+    // The retry is staged (its successor's access tokens look revoked) and still waiting on the
+    // provider, say for a slow client assertion, when the browser signs out.
+    const check = ctx.app.services.grants.checkOAuthRefresh(tokens.refresh ?? '');
+    expect(check.ok && check.grace !== undefined).toBe(true);
+    const out = await ctx.app.request(
+      '/api/auth/sign-out',
+      asJar(user.jar, { method: 'POST', body: '{}' }),
+    );
+    expect(out.status).toBe(200);
+    // The provider then refuses the retry, and the undo puts back only what the retry changed.
+    if (check.ok && check.grace !== undefined) ctx.app.services.grants.undoGrace(check.grace);
+    expect((await withToken(ctx, access, 'GET', '/api/v1/me')).status).toBe(401);
+  });
 });

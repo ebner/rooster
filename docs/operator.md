@@ -153,7 +153,7 @@ rooster is its own OAuth 2.1 authorization server for AI agents and other apps (
 
 | Variable | Default | Description |
 |---|---|---|
-| `ROOSTER_OAUTH_DEVICE` | `first-party` | Who may use the OAuth device grant (sign-in with a code typed on `/device`, for machines without a browser): `first-party` lets only rooster's own CLI, `all` also any app with a Client ID Metadata Document that lists the grant (always shown as Unverified with its domain), `off` no one (the CLI then falls back to its older login). With `all`, the authorization server metadata advertises the device endpoint. |
+| `ROOSTER_OAUTH_DEVICE` | `first-party` | Who may use the OAuth device grant (sign-in with a code typed on `/device`, for machines without a browser): `first-party` lets only rooster's own CLI, `all` also any app with a Client ID Metadata Document that lists the grant (always shown as Unverified with its domain), `off` no one (the CLI then falls back to its older device login, which this switch doesn't turn off; it is removed at the next major version). With `all`, the authorization server metadata advertises the device endpoint. |
 | `ROOSTER_OAUTH_DCR` | `off` | `on` enables OAuth Dynamic Client Registration for older MCP clients that don't support Client ID Metadata Documents. Such apps show as "Unverified app" on the consent screen. Registration is rate-limited per IP. |
 | `ROOSTER_AGENT_DISCOVERY` | `on` | `off` hides the best-effort discovery documents: the MCP Server Card (`/mcp/server-card`, `/.well-known/mcp/server-card.json`), `/.well-known/ai-catalog.json`, the agent-skills index and `SKILL.md`, and `/llms.txt`. The OAuth metadata that MCP clients need is served either way. |
 
@@ -397,7 +397,7 @@ CLI logins and personal access tokens never get admin rights by default. An inst
 ### Agents and discovery
 - `ROOSTER_AGENT_DISCOVERY=off` stops advertising the MCP server, the skill and `llms.txt`. The documents reveal only that a rooster instance exists and where its endpoints are, never any data.
 - Keep `ROOSTER_OAUTH_DCR` off unless an MCP client you use needs it.
-- Keep `ROOSTER_OAUTH_DEVICE` at `first-party` unless an app you use needs the device grant: device-code phishing works by persuading users to type a code an attacker started (ADR 0065). Every approval sends the user a "device connected" notice, by email too when SMTP is set up.
+- Keep `ROOSTER_OAUTH_DEVICE` at `first-party` unless an app you use needs the device grant: device-code phishing works by persuading users to type a code an attacker started (ADR 0065). Every approval, the CLI's older device login included, sends the user a "device connected" notice, by email too when SMTP is set up.
 
 ### Search index
 The full-text index is rebuilt automatically at boot when it is out of step (for example after a restore). To rebuild it by hand: `rooster admin reindex` (a login with the admin capability), or `POST /api/v1/admin/search/reindex`.

@@ -2,6 +2,10 @@
 
 What changed for you in each version of rooster, newest first. After an update, rooster offers this page once. You can open it at any time from Settings or the guide's page list. The notes for whoever runs rooster (upgrades, settings, security) are in the [changelog](../../../CHANGELOG.md).
 
+## Unreleased
+
+- **Know when an older rooster CLI signs in.** Approving a sign-in from an older version of the rooster command line now puts the same "was connected to your account" notice in your inbox (and email) as newer versions do.
+
 ## 1.9.0
 
 _2026-11-02_

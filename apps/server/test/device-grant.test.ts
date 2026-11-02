@@ -409,7 +409,7 @@ describe('the device authorization request (RFC 8628 §3.1, 11 §9.2)', () => {
     });
   });
 
-  it('hashes the legacy CLI flow’s codes too, and it still logs in', async () => {
+  it('hashes the legacy CLI flow’s codes too, it still logs in, and it sends the device_connected notice', async () => {
     const ctx = ctxFor('first-party');
     const user = ctx.user('a@example.com');
     const code = await legacyDeviceCode(ctx, 'tasks:read');
@@ -426,9 +426,9 @@ describe('the device authorization request (RFC 8628 §3.1, 11 §9.2)', () => {
     expect(
       (await withToken(ctx, token.body.access_token as string, 'GET', '/api/v1/me')).status,
     ).toBe(200);
-    // The legacy login is not the device grant: no notice.
+    // The legacy login sends the same notice as the device grant (it is phishable alike).
     const rows = ctx.db.orm.select().from(notification).all();
-    expect(rows.filter((r) => r.type === 'device_connected')).toEqual([]);
+    expect(rows.filter((r) => r.type === 'device_connected')).toHaveLength(1);
   });
 });
 

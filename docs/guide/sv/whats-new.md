@@ -2,6 +2,10 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
+## Unreleased
+
+- **Se när en äldre rooster-CLI loggar in.** När du godkänner en inloggning från en äldre version av rooster för kommandoraden hamnar nu samma notis, ”anslöts till ditt konto”, i din inkorg (och e-post) som för nyare versioner.
+
 ## 1.9.0
 
 _2026-11-02_

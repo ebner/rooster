@@ -6,11 +6,15 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Fixed
+- **Sign-out during a refresh retry:** when a browser signed out while a refresh-token retry within the 60 s grace was being answered, and the retry then failed, the retry's undo made the session's access tokens valid again until they expired. The undo now leaves tokens of an ended session revoked.
+
 ### Added
 - Third-party licence notices: `THIRD-PARTY-NOTICES.txt` ships in the image (`/app`, and served at `/third-party-notices.txt`) and with the CLI binaries on each GitHub release, next to `LICENSE`.
 - `SECURITY.md`: report vulnerabilities privately through GitHub's private vulnerability reporting.
 
 ### Changed
+- **The older CLI login sends the "device connected" notice too.** Approving the legacy device login (`/api/auth/device/code`, used by CLIs before 1.8.0 and as the fallback when `ROOSTER_OAUTH_DEVICE=off`) now notifies the user in the inbox and by email, like the device grant. `ROOSTER_OAUTH_DEVICE=off` turns off the OAuth device grant only, not this older login.
 - The MCP Server Card names no npm package: the CLI is installed from the release binaries or built from source.
 - rooster is licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`; `LICENSE`), with an additional permission (section 7) for combining it with the Bun runtime, which the CLI binaries embed.
 - `THIRD-PARTY-NOTICES.txt` names where the source of the LGPL libraries in the image and the CLI binaries (libvips, Bun's JavaScriptCore and tinycc) is published. The release workflow builds the binaries with a pinned Bun (1.4.3).

@@ -34,7 +34,7 @@ ADR 0065 records the product decisions for headless agent access. The implementa
 7. **Revocation:** revoking a `rooster-cli` refresh token at `/oauth2/revoke` ends the login's grant. Revoking an app's refresh token revokes only that token, as RFC 7009 intends; its grant is shared with the browser flow.
 8. **Storage:** a CLI login's audience is in `access_grant.audience`; a PAT's audience is in the `apikey` metadata (absent means `api`).
 9. **The `device_connected` notice:**
-   - It is sent for every approval in the new flow, `rooster-cli` included, never for the legacy flow.
+   - It is sent for every approval in the new flow, `rooster-cli` included. Amended before publication (2026-11-02): the legacy CLI flow sends it too, since it is phishable alike and `ROOSTER_OAUTH_DEVICE=off` leaves it on as the CLI's fallback.
    - For the CLI, `clientName` is the grant label and there is no `clientHost`.
    - It is emailed at once, whatever the batching setting, with no unsubscribe link, and links to Connected apps.
 10. **`authorization_details`** on a device authorization request is accepted and ignored, and refused above 8 KB.

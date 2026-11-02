@@ -259,6 +259,16 @@ Reviewed commits: ee80672 (contract), dde30f2 (server), 878526e (CLI), 487d953 (
 
 **Final re-checks:** the structured re-checks of every fix commit report no actionable regression. The last focused CLI review is clean, apart from the accepted items. The focused server findings are all fixed and re-checked by the structured reviews.
 
+### Review before publication (2026-11-02)
+
+A focused review of the Phase 12 server (device grant, refresh grace, revocation, audiences) and a second, adversarial audit of the same code, before the repository was made public. Both reported the rest of the scope sound: code hashing and lookups, brute-force limits, decision binding and CSRF, single redemption of device codes, scope ceilings, audience isolation, the CIMD fetch and log redaction.
+
+| # | Severity | Finding | Source | Outcome |
+|---|---|---|---|---|
+| 24 | P2 | A sign-out while a grace retry was in flight skipped the successor's access tokens (they looked revoked); when the retry then failed, the undo made them valid again until expiry | Focused | Fixed: the undo leaves tokens of an ended session revoked |
+| 25 | Medium | The legacy CLI device login sent no `device_connected` notice, and `ROOSTER_OAUTH_DEVICE=off` leaves it on, so phishing through it skipped the notice | audit | Fixed: it sends the notice. `off` keeps it on as documented (the CLI's fallback until the next major) |
+| 26 | Low | With `ROOSTER_OAUTH_DEVICE=all`, the per-client limit on device authorization requests (30 per hour) counts requests before validation, so junk requests naming one app's client id block that app's device logins for an hour | audit | Accepted: only with `all`, no exposure, bounded to an hour per app; the per-IP limit still applies |
+
 ### Accepted risks (Phase 12)
 - **Lock takeover races (22, 23).** They need a crashed or paused CLI process, plus concurrent commands at the moment of takeover. The worst case is a revoked grant, so the user logs in again; no credential is exposed. An OS advisory lock would fix it structurally, but Node has none without a native dependency.
 - **The refresh grace window (ADR 0066).** A thief who uses a stolen refresh token within 60 s of a rotation, before the real client uses its successor, gets one pair. The theft surfaces as a revoked grant at the real client's next refresh.

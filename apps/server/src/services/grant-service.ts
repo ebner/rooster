@@ -30,7 +30,19 @@ import {
   type TokenCreate,
   type TokenCreated,
 } from '@rooster/core/schemas';
-import { and, desc, eq, inArray, isNull, lt, max, notInArray, or, sql } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  max,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm';
 import type { OAuthResource } from '../auth/oauth-bearer.ts';
 import { resourceOf, resourceUri } from '../auth/oauth-metadata.ts';
 import {
@@ -160,6 +172,12 @@ export interface GraceRetry {
   successorId: string;
   /** The successor's access tokens the retry revoked (those that were live until then). */
   accessTokenIds: string[];
+  /**
+   * Of those, the ones bound to a browser session. A sign-out while the retry is in flight
+   * skips them (they look revoked) and deletes the session, which clears their `sessionId`; the
+   * undo must then leave them revoked, as the sign-out would have.
+   */
+  sessionBoundIds: string[];
   at: Date;
 }
 
@@ -944,12 +962,13 @@ export class GrantService {
         .run();
       // Only access tokens still live are revoked (and recorded): one revoked before (a sign-out,
       // an RFC 7009 revocation) keeps its revocation, also if the retry is undone.
-      const accessTokenIds = tx
-        .select({ id: oauthAccessToken.id })
+      const accessTokens = tx
+        .select({ id: oauthAccessToken.id, sessionId: oauthAccessToken.sessionId })
         .from(oauthAccessToken)
         .where(and(eq(oauthAccessToken.refreshId, successor.id), isNull(oauthAccessToken.revoked)))
-        .all()
-        .map((r) => r.id);
+        .all();
+      const accessTokenIds = accessTokens.map((r) => r.id);
+      const sessionBoundIds = accessTokens.filter((r) => r.sessionId !== null).map((r) => r.id);
       if (accessTokenIds.length > 0) {
         tx.update(oauthAccessToken)
           .set({ revoked: at })
@@ -974,6 +993,7 @@ export class GrantService {
         rotatedAt,
         successorId: successor.id,
         accessTokenIds,
+        sessionBoundIds,
         at,
       };
     });
@@ -1004,12 +1024,23 @@ export class GrantService {
         )
         .run();
       if (grace.accessTokenIds.length > 0) {
+        // A session-bound token whose session ended meanwhile (a sign-out during the retry)
+        // stays revoked: its session is gone, so its `sessionId` is null now.
+        const unbound = grace.accessTokenIds.filter((id) => !grace.sessionBoundIds.includes(id));
         tx.update(oauthAccessToken)
           .set({ revoked: null })
           .where(
             and(
-              inArray(oauthAccessToken.id, grace.accessTokenIds),
               eq(oauthAccessToken.revoked, grace.at),
+              or(
+                unbound.length > 0 ? inArray(oauthAccessToken.id, unbound) : undefined,
+                grace.sessionBoundIds.length > 0
+                  ? and(
+                      inArray(oauthAccessToken.id, grace.sessionBoundIds),
+                      isNotNull(oauthAccessToken.sessionId),
+                    )
+                  : undefined,
+              ),
             ),
           )
           .run();
@@ -1729,6 +1760,9 @@ export class GrantService {
     });
     this.markApproved(tx, actor, row, grant);
     this.emitGrants(tx, actor.userId, grant.id);
+    // The older CLI login is phishable the same way, and `ROOSTER_OAUTH_DEVICE=off` leaves it
+    // on (the CLI's fallback), so it sends the same notice.
+    this.notifyDeviceConnected(tx, actor.userId, row, grant, false);
     return this.toDto(tx, actor, grant);
   }
 
