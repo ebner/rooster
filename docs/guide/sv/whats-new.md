@@ -2,7 +2,9 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
-## Unreleased
+## 1.9.0
+
+_2026-11-02_
 
 - **Dra en uppgift medan du skriver den.** När en ny uppgift har ett namn kan du ta tag i handtaget och dra den dit den ska; den skapas när du drar.
 
