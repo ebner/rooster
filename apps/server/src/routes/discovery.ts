@@ -99,8 +99,9 @@ export function serverCard(ctx: DiscoveryContext): Record<string, unknown> {
         supportedProtocolVersions: [...MCP_SUPPORTED_PROTOCOL_VERSIONS],
       },
     ],
-    // The card format has no packages or authentication members (they belong to the
-    // Registry's server.json and to RFC 9728 discovery); SEP-2127 points vendors to `_meta`.
+    // The card format has no authentication member (it belongs to RFC 9728 discovery);
+    // SEP-2127 points vendors to `_meta`. No package is listed: the CLI is not on npm
+    // (ADR 0041 §5).
     _meta: {
       [META_AUTHENTICATION]: {
         type: 'oauth2',
