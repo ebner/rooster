@@ -101,7 +101,10 @@ jobs:
         run: |
           gh release view "$TAG" >/dev/null 2>&1 ||
             gh release create "$TAG" --draft --verify-tag --title "$TAG" --notes "See CHANGELOG.md"
-          gh release upload "$TAG" apps/cli/dist/bin/* LICENSE THIRD-PARTY-NOTICES.txt --clobber
+          # Tags before 1.10 have neither file; a rebuild of one (workflow_dispatch) uploads what exists.
+          legal=()
+          for f in LICENSE THIRD-PARTY-NOTICES.txt; do [[ -f "$f" ]] && legal+=("$f"); done
+          gh release upload "$TAG" apps/cli/dist/bin/* "${legal[@]}" --clobber
 
   cli-smoke:
     needs: cli-binaries
