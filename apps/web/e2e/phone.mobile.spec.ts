@@ -212,6 +212,40 @@ test('AC-4.5 the FAB creates tasks with the accessory bar above the keyboard', a
   );
 });
 
+test('a new row is scrolled to the top of the list, clear of the keyboard', async ({ page }) => {
+  await setup(
+    page,
+    'draft.top',
+    Array.from({ length: 14 }, (_, i) => `Task ${i + 1}`),
+  );
+  const keyboard = 300;
+  /** The draft sits right under its sticky group header and above the keyboard. */
+  const expectDraftAtTop = async () => {
+    const draft = page.locator('[data-draft]');
+    await expect(page.locator('[data-list-input]')).toBeFocused();
+    await expect
+      .poll(async () => {
+        const header = await page.getByTestId('group-header').last().boundingBox();
+        const box = await draft.boundingBox();
+        const inner = await page.evaluate(() => window.innerHeight);
+        if (!header || !box) return 'missing';
+        return [
+          Math.abs(box.y - (header.y + header.height)) <= 2,
+          box.y + box.height <= inner - keyboard,
+        ];
+      })
+      .toEqual([true, true]);
+  };
+  // The last group's "Add task" is the list's last row: there is room to scroll it up anyway.
+  await page.getByRole('button', { name: 'Add task', exact: true }).last().tap();
+  await showKeyboard(page, keyboard);
+  await expectDraftAtTop();
+  await page.locator('[data-list-input]').fill('First');
+  await page.getByTestId('accessory-bar').getByRole('button', { name: 'Next' }).click();
+  await expect(row(page, 'First')).toBeAttached();
+  await expectDraftAtTop();
+});
+
 test("a new row's calendar opens the date sheet while its name stays in edit", async ({ page }) => {
   const { orgId } = await setup(page, 'draft.calendar', ['Already here']);
   await page.getByRole('button', { name: 'New task' }).tap();

@@ -162,6 +162,11 @@ export function MobileListChrome({
 
   return (
     <>
+      {/*
+       * Room below the list's end while a new row is typed: it is scrolled to the top, above
+       * the keyboard, even when it is the last row (`scrollRowToListTop`).
+       */}
+      {draft && <div aria-hidden data-draft-room className="h-dvh shrink-0" />}
       <SwipeRows
         rootRef={rootRef}
         layerRef={layerRef}

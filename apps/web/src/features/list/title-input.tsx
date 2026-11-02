@@ -16,6 +16,7 @@ import { detectPlatform } from '../../lib/platform';
 import type { Caret } from '../../state/list-store';
 import { useTagsStore } from '../../state/tags-store';
 import { Avatar } from '../../ui/avatar';
+import { isMobileViewport } from '../../ui/use-media';
 import { memberHandle, resolveAssigneeToken, suggestMembers } from '../people/assignee-token';
 import type { Person } from '../people/members';
 import { TagDot } from '../tags/tag-dot';
@@ -121,6 +122,22 @@ export function placeCaret(input: HTMLInputElement, caret: Caret): void {
   else if (caret === 'start') input.setSelectionRange(0, 0);
   else if (caret === 'end') input.setSelectionRange(length, length);
   else input.setSelectionRange(Math.min(caret, length), Math.min(caret, length));
+}
+
+/**
+ * Phones (02 §13.3): a new row goes to the top of the list, just under the sticky headers
+ * (its `scroll-m-list` margin). The frame is pinned to the full screen and the keyboard opens
+ * over its lower part, so a `nearest` scroll, done before the keyboard is there, can leave
+ * the row being typed under it. `MobileListChrome` adds room below the list's end, so the
+ * last row can get to the top too. False outside the list (the pane's subtasks).
+ */
+export function scrollRowToListTop(row: HTMLElement): boolean {
+  const scroller = row.closest<HTMLElement>('[data-list-column]');
+  if (!scroller) return false;
+  const margin = Number.parseFloat(getComputedStyle(row).scrollMarginTop) || 0;
+  scroller.scrollTop +=
+    row.getBoundingClientRect().top - scroller.getBoundingClientRect().top - margin;
+  return true;
 }
 
 /** Every occurrence of an ignored phrase in the current text (offsets move as the user types). */
@@ -292,7 +309,8 @@ export function TitleInput({
     if (!el) return;
     el.focus({ preventScroll: true });
     placeCaret(el, caret);
-    el.scrollIntoView?.({ block: 'nearest' });
+    const draftRow = isMobileViewport() ? el.closest<HTMLElement>('[data-draft]') : null;
+    if (!draftRow || !scrollRowToListTop(draftRow)) el.scrollIntoView?.({ block: 'nearest' });
     // caretSeq re-applies the requested caret on the same input.
   }, [caretSeq]);
 
