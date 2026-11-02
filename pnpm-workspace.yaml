@@ -14,7 +14,7 @@ catalog:
   '@playwright/test': 1.63.0
   '@axe-core/playwright': 4.13.0
   # shared
-  zod: 4.6.5
+  zod: 4.6.7
   date-fns: 4.4.0
   '@date-fns/tz': 1.5.0
   fractional-indexing: 4.0.0
