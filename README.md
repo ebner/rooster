@@ -125,3 +125,7 @@ Open http://localhost:5173 and use *Dev login*. `pnpm run ci` runs the whole pip
 Copyright © 2026 Hannes Ebner.
 
 rooster is free software under the [GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). If you run a modified version for other people over a network, the license requires you to offer them its source.
+
+**Additional permission under GNU AGPL version 3 section 7.** If you modify this program, or any covered work, by linking or combining it with the Bun runtime (or a modified version of it), including the libraries Bun links into its executables, containing parts covered by the terms of their own licences, the licensors of this program grant you additional permission to convey the resulting work. Corresponding Source for a non-source form of such a combination shall include the source code for the parts of the Bun runtime used as well as that of the covered work. This is what lets the single-file CLI binaries embed Bun.
+
+Third-party software in the image and the CLI is listed with its licences in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).
