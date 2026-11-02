@@ -6,6 +6,7 @@
 - Code: `apps/server/src/db/boot.ts`, `apps/server/src/db/instance.ts`, `apps/server/test/db.test.ts`
 
 ## Context
+Admin → Backups promised "pre-update copies", but boot took the `pre-migrate-*.db` snapshot only when schema migrations were pending. The last migration shipped in 1.0.0, so the updates to 1.0.1 and 1.0.2 left no backup.
 
 ## Decisions
 1. **Trigger.** On an existing (non-empty) database, boot takes the snapshot when migrations are pending **or** when the running version differs from the one that last booted the database. That covers upgrades and downgrades. A fresh database gets none.

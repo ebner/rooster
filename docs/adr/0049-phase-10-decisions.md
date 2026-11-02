@@ -215,6 +215,7 @@ added below as an amendment.
   - Once an IP is over the miss limit, all its feed requests are 429.
   - DTSTAMP is the task's `updatedAt`, so the ETag is stable. All-day events are TRANSP:TRANSPARENT.
 - **S3:** checksum calculation `WHEN_REQUIRED` for compatible stores; presigned redirects carry `private, max-age=60`; the endpoint must be http(s).
+- **Superseded:** Phase 10 shipped without a per-user storage quota. ADR 0052 §6 added one in 1.5.0 (`ROOSTER_USER_STORAGE_MB`, default 1024 MB).
 
 ## Amendments: CLI and MCP (07)
 - **`--remind`:**

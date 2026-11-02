@@ -4,6 +4,9 @@ Requirements are numbered `FR-<AREA>-<n>`. **P** is the phase that delivers each
 
 ## Personas
 
+- **Self-hoster (primary).** Runs a rooster instance. Has a *Personal* org and a shared work org with a few team members. Lives in the My tasks list all day on desktop and checks it on the phone. Uses the terminal a lot.
+- **Team member (secondary).** A member of a shared org who receives tasks from others, comments, and has their own groups.
+- **Light user (tertiary).** Has only a personal org on the same instance.
 
 ---
 
@@ -145,7 +148,6 @@ Requirements are numbered `FR-<AREA>-<n>`. **P** is the phase that delivers each
 | FR-ATT-1 | Files are attached by drag and drop onto the pane, paste (images), or a file picker. The limit is 25 MB by default (`ROOSTER_UPLOAD_MAX_MB`). | 10 |
 | FR-ATT-2 | Images get thumbnails generated server-side (WebP, 320 px) and open in a lightbox. Other files download with `Content-Disposition: attachment`. | 10 |
 | FR-ATT-3 | Storage is local `/data/attachments` by default, or S3-compatible when `ROOSTER_S3_*` is set. Downloads are always proxied or served through short-lived signed URLs and access is checked. | 10 |
-
 
 ## FR-CAL: iCal feed
 

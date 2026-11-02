@@ -257,6 +257,7 @@ Reviewed commits: ee80672 (contract), dde30f2 (server), 878526e (CLI), 487d953 (
 | 22 | CLI | P2 | Three or more processes taking over an abandoned lock at once can briefly overlap | Structured and focused | Accepted |
 | 23 | CLI | P2 | A live lock holder paused for over 120 s (SIGSTOP, a hung keychain) is taken over by age | Focused | Accepted |
 
+**Final re-checks:** the structured re-checks of every fix commit report no actionable regression. The last focused CLI review is clean, apart from the accepted items. The focused server findings are all fixed and re-checked by the structured reviews.
 
 ### Accepted risks (Phase 12)
 - **Lock takeover races (22, 23).** They need a crashed or paused CLI process, plus concurrent commands at the moment of takeover. The worst case is a revoked grant, so the user logs in again; no credential is exposed. An OS advisory lock would fix it structurally, but Node has none without a native dependency.

@@ -331,6 +331,7 @@ Specified 2026-10-21 (11 §9, ADR 0065) and scheduled the same day. A minor rele
 
 Work that is specified but not scheduled into a phase. Pick an item up by moving it into a phase (or a minor release after v1.0) and renumbering its WP and AC IDs.
 
+- **Import:** move tasks over from another task manager. Not specified yet.
 
 ### Dark theme (D-22, Q-03)
 
@@ -338,12 +339,7 @@ Moved here on 2026-10-10 (ADR 0052). Every colour is already a semantic token, s
 
 ### Security hardening (the open ASVS L2 gaps)
 
-These were accepted for 1.5.0 (ADR 0054 §10, `docs/security/asvs.md`):
-- malware scanning of uploads (12.4.2);
-- self-service account deletion (8.3.2);
-- an SBOM for release images (14.2.5), e.g. `buildx --sbom=true` in `release.yml`;
-- step-up re-authentication for sensitive actions, since sessions are 30-day rolling (3.3.2, 3.7.1);
-- a written threat model and data classification (1.1.2, 1.8.1).
+The gaps accepted for 1.5.0 (ADR 0054 §10) are still open: malware scanning of uploads (12.4.2), self-service account deletion (8.3.2), an SBOM for release images (14.2.5), step-up re-authentication or an absolute session lifetime (3.3.2, 3.7.1), and a written threat model and data classification (1.1.2, 1.8.1). `docs/security/asvs.md` §Gaps has the current status and the options for each.
 
 ### Phase 11 follow-ups
 

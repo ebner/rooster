@@ -5,6 +5,7 @@ Kommandoradsverktyget `rooster` låter dig arbeta med dina uppgifter från en te
 ## Installera kommandoradsverktyget
 
 - **Fristående programfil:** ladda ner `rooster-<version>-<plattform>` för Linux (x64, arm64), macOS (Apple-chip, Intel) eller Windows (x64) från projektets releasesida, gör den körbar (`chmod +x`) och lägg den i din `PATH` som `rooster`. Bredvid varje fil finns en kontrollsumma (`.sha256`).
+- **Från källkoden:** kör `pnpm i` och `pnpm --filter @rooster/cli build` i en klon av projektets repo. Det skapar `apps/cli/dist/rooster.mjs`, som körs med Node 22 eller senare. Lägg en länk till filen i din `PATH` med namnet `rooster`.
 
 Kontrollera installationen med `rooster --version`.
 

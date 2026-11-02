@@ -206,24 +206,25 @@ better-auth, no own algorithms. V13.3 (SOAP) and V13.4 (GraphQL): not used.
 
 ## Gaps
 
-Found in this pass and not fixed in WP 11.1. Each needs a decision (fix later, or accept in an
-ADR, as AC-11.1 requires for the review findings):
+Found in the Phase 11 pass and accepted for 1.5.0 (ADR 0054 §10). All five are still open and
+on the backlog (09 §Backlog, "Security hardening"); none is scheduled.
 
 1. **12.4.2 Malware scanning of uploads.** No antivirus. Uploads are never executed or rendered
-   by rooster (12.5.2), so the risk is a member passing a file to another member. Proposal:
-   accept for a self-hosted, invite-only app; document a ClamAV option for operators who need it.
+   by rooster (12.5.2), so the risk is a member passing a file to another member. Accepted for
+   a self-hosted, invite-only app. An operator who needs scanning can scan the attachment
+   storage (`/data/attachments` or the S3 bucket) outside rooster.
 2. **8.3.2 Self-service account deletion.** Users can delete their content and leave orgs, but
    cannot delete their account; an admin can only deactivate it (`PATCH /admin/users/{id}`).
    Options: an admin "delete user" with reassignment of their tasks, or a documented manual
-   the operator guide on removing a user by hand.
+   removal.
 3. **14.2.5 SBOM.** No SBOM is published with the image (`release.yml` builds without
    `--sbom`). Option: `docker buildx build --sbom=true` in `release.yml`.
 4. **3.3.2 / 3.7.1 Re-authentication.** Sessions live 30 days and are renewed while used;
    sensitive operations do not ask the IdP again. Accepted: the IdP's own session policy
    applies at each sign-in. Option: an absolute session lifetime setting.
 5. **1.1.2 / 1.8.1 Threat model and data classification** exist only implicitly: the trust
-   audit boundaries, 04 §4.11). Proposal: fold a short data classification into
-   `docs/security/` together with the security audit (WP 11.2).
+   boundaries of the security audit (`docs/security/security-review.md`, 09 Phase 11) and 04 §4.11.
+   Option: a short data classification in `docs/security/`.
 
 ## Fixed in this pass
 

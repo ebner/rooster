@@ -174,7 +174,7 @@ rooster/
 - **Sessions:** cookie `rooster.session`, httpOnly, Secure (when the base URL is https), SameSite=Lax, 30-day expiry with a 1-day update age. **`cookieCache` is disabled**, so that revoking a session or disabling a user takes effect on the very next request (AC-1.7). A session lookup is one indexed SQLite read, which is negligible.
 - **CLI:**
   - The `deviceAuthorization` plugin uses client ID `rooster-cli`. Codes expire after 10 minutes, with a 5 s poll interval.
-  - The web app has a `/device` page that requires login, shows the code and the client name, and offers Approve or Deny.
+  - The web app has a `/device` page that requires login. The user types the code, then sees the client and the request and chooses Allow or Deny (11 §9.3). Since Phase 12 the CLI signs in through the OAuth device grant (11 §9.6); this legacy flow stays until the next major version.
   - The resulting session token is used as `Authorization: Bearer` through the `bearer` plugin.
 - **OAuth 2.1 authorization server (P9):** better-auth's OAuth 2.1 Provider with Client ID Metadata Documents, rooster's own consent screen and grants, opaque audience-bound access tokens for `/mcp` and `/api/v1` (11 §4).
 - **PATs:** `@better-auth/api-key`, with the prefix `rooster_pat_` and metadata `{grantId, name}` (the grant holds the scopes and constraints, 11 §2). They are accepted as `Authorization: Bearer rooster_pat_…`. A small middleware tells a PAT from a session token by its prefix and verifies it through the api-key plugin.
@@ -244,6 +244,8 @@ All config comes from env vars, validated by a zod schema at boot. On a validati
   - Cookie-authenticated unsafe methods require `Origin` to be equal to `ROOSTER_BASE_URL`. JSON-only bodies are accepted (`Content-Type: application/json` or multipart for uploads).
   - Bearer-authenticated requests are exempt.
 - **Input:** zod everywhere. Titles and names are trimmed and control characters stripped. Markdown is stored raw and rendered **without raw HTML**. Links get `rel="noopener noreferrer nofollow"`.
+- **Secrets:** PATs, OAuth tokens, device codes and iCal tokens are stored hashed (SHA-256), compared in constant time, and displayed once. Device user codes are short (40 bits), so they are stored as an HMAC keyed with the auth secret instead (11 §9, ADR 0066).
+- **SSRF:** outbound HTTP goes only to configured hosts (OIDC discovery, SMTP, push endpoints, S3 endpoint).
 - **Dependencies:** `pnpm audit` runs in CI. Renovate or Dependabot config is recommended.
 - **Trusted proxy:** `ROOSTER_TRUST_PROXY=true` makes the server honour `X-Forwarded-*` for the client IP (rate limits, logs) and protocol.
 
@@ -276,7 +278,7 @@ Query keys (all scoped by org):
 
 ### 5.4 Rendering & performance
 - The list renders flat rows (group header, task, subtask, add row) from a memoised selector.
-- No virtualisation up to 1,000 visible rows. If profiling shows a need, use `@tanstack/react-virtual` and keep the dragged item mounted.
+- No virtualisation: rows render in chunks, and the DOM stays complete for keyboard, drag and drop, screen readers and print (ADR 0055).
 - Rows are `memo` components keyed by ID with stable callbacks.
 - Text inputs are uncontrolled while editing and commit on events, to avoid a re-render per keystroke across the list.
 

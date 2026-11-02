@@ -37,3 +37,4 @@
 10. **Distribution.**
     - `dist/rooster.mjs` bundles everything except the optional keychain addon, so it has no runtime dependencies besides it.
     - Single-file binaries for Linux x64/arm64, macOS arm64/x64 and Windows x64 are built with Bun in the release workflow, smoke-tested on each OS, and attached to the GitHub release.
+    - The CLI is not published to npm; it is installed from the release binaries or built from source.

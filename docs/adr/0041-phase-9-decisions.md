@@ -26,7 +26,8 @@
    - With it, MCP lists a `delete_task` tool. The tool soft-deletes to Trash under the grant's write constraints and tells the agent the task can be restored for 30 days. There is still no tool that deletes groups or deletes permanently.
    - `rooster mcp setup` requests no `tasks:delete` unless `--allow-delete` is passed, so the device consent page shows the same checkbox. `--read-only` hides it like every other write tool.
 3. **"This session only" expiry for OAuth grants.** A grant can carry an idle timeout, alongside 7/30/90 days, a date or never. It ends when its refresh token has gone unused for 24 hours. It is stored as `idle_timeout_ms` on `access_grant`, enforced at refresh and at each request, and offered only on the OAuth consent screen. CLI devices and PATs have no refresh token.
-4. **The MCP name is `io.github.201works/rooster`.** The Server Card and a future MCP Registry entry use it, since GitHub login proves the namespace. Registry publishing is not scheduled.
+4. **The MCP name is `io.github.201works/rooster`**, in the GitHub namespace form that MCP server names use. The Server Card and `serverInfo` use it. rooster is not published to the MCP Registry.
+5. **No npm package.** The CLI ships as release binaries and can be built from source (`pnpm --filter @rooster/cli build`); `@rooster/cli` is not published to npm, so the Server Card names no package.
 6. **The CIMD fetch guard is IP-based, not the push host allowlist.**
    - It uses https only, resolves DNS once, requires every answer to be public, pins the connection to that address and refuses redirects. It also has the plugin's 5 s timeout and 24 h revalidation.
    - The size cap is the plugin's 5 KB rather than 32 KB, which is stricter and enough for a metadata document.

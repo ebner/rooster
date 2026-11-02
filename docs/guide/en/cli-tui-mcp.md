@@ -5,6 +5,7 @@ The `rooster` command line tool works with your tasks from a terminal and from s
 ## Install the command line tool
 
 - **Single-file binary:** download `rooster-<version>-<platform>` for Linux (x64, arm64), macOS (Apple silicon, Intel) or Windows (x64) from the project's release page, make it executable (`chmod +x`), and put it on your `PATH` as `rooster`. Each file has a `.sha256` checksum next to it.
+- **From source:** in a checkout of the repository, run `pnpm i` and `pnpm --filter @rooster/cli build`. This writes `apps/cli/dist/rooster.mjs`, which runs with Node 22 or later. Link it onto your `PATH` as `rooster`.
 
 Check it with `rooster --version`.
 

@@ -6,6 +6,7 @@
 - Code: `packages/tokens/src/{tokens.css,index.ts}`, `apps/web/src/styles/theme.css` (root font size), `apps/web/src/lib/ui-scale.ts`, `apps/web/src/state/pane-store.ts`, `apps/web/src/features/pane/split-view.tsx`, `apps/web/src/features/dates/time-field.tsx`
 
 ## Context
+On a large desktop monitor the UI read as too small at 100 % browser zoom, and the whole UI should be a step bigger on desktop by default. Browser zoom also moves the layout breakpoints, so a 1920 px screen at 125 % lays out like a 1536 px one.
 
 ## Decisions
 1. **Every size token is rem** (16 px = 1 rem): type and line heights, spacing, component heights, square sizes, layout widths and radii (not `--radius-full`). Borders, shadows, breakpoints, z-index and motion stay in px. `index.ts` keeps the px design values and emits rem from `cssVariables()`.

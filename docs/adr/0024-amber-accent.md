@@ -6,6 +6,7 @@
 - Code: `packages/tokens/src/{tokens.css,index.ts}`, `packages/tokens/test/contrast.test.ts`, `apps/web/public/icons/*`, `apps/web/scripts/render-icons.mjs`, `apps/web/src/ui/fab.tsx`
 
 ## Context
+The coral-red accent read as alarming: red in a UI reads as "something is wrong". Blue was ruled out as too generic, and amber chosen over teal and plum.
 
 ## Decisions
 1. **Palette.** The `coral-*` scale is replaced by the full Tailwind amber scale (`amber-50` moves from #FFF8EB to #FFFBEB). Danger (overdue dates, destructive buttons, errors) stays rose/crimson: that is the one place red is meant.

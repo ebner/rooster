@@ -3,8 +3,8 @@
 The `rooster` binary lives in `apps/cli`. It uses only the public REST API (`packages/api-client`). It never touches the DB directly, so the CLI works against any remote instance.
 
 ## 1. Distribution
-- An npm package `@rooster/cli` (Node ≥ 22), with the bin name `rooster`, built with tsdown.
-- Single-file binaries via `bun build --compile` for linux-x64, linux-arm64, darwin-arm64, darwin-x64 and windows-x64, attached to releases.
+- Single-file binaries via `bun build --compile` for linux-x64, linux-arm64, darwin-arm64, darwin-x64 and windows-x64, attached to the GitHub releases.
+- From source: `pnpm --filter @rooster/cli build` (tsdown) writes `apps/cli/dist/rooster.mjs` (Node ≥ 22, bin name `rooster`). The package is not published to npm.
   - Bun is used **only as a build tool** for these binaries. The server runs on Node (04 §2).
   - The native `@napi-rs/keyring` addon is loaded with a dynamic `import()` inside `try`/`catch`. If a compiled binary cannot load it for a target, the CLI uses the 0600 credentials-file fallback and prints a one-time notice.
   - CI runs `rooster login --with-token` and `rooster whoami` against each binary to verify that the credential storage works.
