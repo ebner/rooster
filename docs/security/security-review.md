@@ -269,6 +269,8 @@ A focused review of the Phase 12 server (device grant, refresh grace, revocation
 | 25 | Medium | The legacy CLI device login sent no `device_connected` notice, and `ROOSTER_OAUTH_DEVICE=off` leaves it on, so phishing through it skipped the notice | audit | Fixed: it sends the notice. `off` keeps it on as documented (the CLI's fallback until the next major) |
 | 26 | Low | With `ROOSTER_OAUTH_DEVICE=all`, the per-client limit on device authorization requests (30 per hour) counts requests before validation, so junk requests naming one app's client id block that app's device logins for an hour | audit | Accepted: only with `all`, no exposure, bounded to an hour per app; the per-IP limit still applies |
 
+**Re-check:** the structured and focused re-checks of the fixes (sign-out, expiry, grant and RFC 7009 revocation, deactivation, other sessions, session-only grants, sessionless CLI tokens, the refresh lock order; the notice's data and email) report no issue.
+
 ### Accepted risks (Phase 12)
 - **Lock takeover races (22, 23).** They need a crashed or paused CLI process, plus concurrent commands at the moment of takeover. The worst case is a revoked grant, so the user logs in again; no credential is exposed. An OS advisory lock would fix it structurally, but Node has none without a native dependency.
 - **The refresh grace window (ADR 0066).** A thief who uses a stolen refresh token within 60 s of a rotation, before the real client uses its successor, gets one pair. The theft surfaces as a revoked grant at the real client's next refresh.
