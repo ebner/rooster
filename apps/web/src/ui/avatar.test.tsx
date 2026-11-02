@@ -47,7 +47,7 @@ describe('avatar fallback', () => {
     fireEvent.error(img);
     const fallback = screen.getByRole('img', { name: 'Jannik Lunde' });
     expect(fallback.tagName).toBe('SPAN');
-    expect(fallback.textContent).toBe('HE');
+    expect(fallback.textContent).toBe('JL');
   });
 
   test('org avatar is a rounded square and small sizes show one letter', () => {
