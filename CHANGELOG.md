@@ -6,11 +6,16 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.8.2] - 2026-11-02
+
 ### Fixed
 - On phones, a new task's row could end up under the on-screen keyboard, so you couldn't see what you typed. The row was scrolled into view before the keyboard opened, and the phone frame is pinned to the full screen, so the keyboard covers the list's lower part. A new row is now scrolled to the top of the list, under the sticky headers, with room below the list's end so the last row gets there too.
 
 ### Security
 - zod is updated to 4.6.7, also inside better-auth (GHSA-mrhx-c7xc-m3w5: validating an oversized constrained collection could exhaust memory).
+
+### Migrations
+- None.
 
 ## [1.8.1] - 2026-10-23
 

@@ -2,7 +2,9 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
-## Unreleased
+## 1.8.2
+
+_2026-11-02_
 
 - **Se vad du skriver på mobilen.** En ny uppgifts rad flyttas nu högst upp i listan, så att tangentbordet aldrig döljer den.
 
