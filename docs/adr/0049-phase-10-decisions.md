@@ -234,7 +234,7 @@ added below as an amendment.
   - `↻` and `🔔` mark recurring rows and rows with a pending reminder in `ls`, task lines and the TUI. `show` and the TUI details list the rule, reminders and attachments, all through `clean()`.
   - MCP rows carry `repeat`, `repeatFrom` and `nextReminder`; `get_task` carries reminders and attachments inside the framed data block. `remind`, `clearReminders` and `repeat` need only `tasks:write`.
 
-## Amendments after the security review of the server (e785776)
+## Amendments after the review of the server (065be42)
 - **§1.4:**
   - With a grant, completing or skipping a recurring task needs write access to its whole live subtree and to every new task's place in the list; otherwise it is `403 outside_grant` and nothing changes. A subtask the grant cannot read is refused the same way, without naming it, as for duplicate.
   - Copied subtasks keep their follower rows, muted ones included.
@@ -243,7 +243,7 @@ added below as an amendment.
   - Attachments, thumbnails and avatars are `Cache-Control: private, no-cache` with a strong ETag: the attachment id (`.thumb` for thumbnails), or `avatar-<avatar_at>`. A 304 is answered only after the access check, so a shared browser never reuses a private file after sign-out.
   - S3 redirects are `no-store`, and the presigned object response is `private, no-store`.
 
-## Amendments after the security review of the CLI and MCP (409f60a)
+## Amendments after the review of the CLI and MCP (feb4fbf)
 - **Untrusted responses:** the CLI and MCP treat API responses as untrusted. P10 output uses only validated numbers and instants, and its text goes through `clean()`. MCP summaries carry only canonical values (ISO date, slug, UUID, integer seq, zone name, word-like code); everything else stays in the framed data block.
 - **Option parsing:**
   - Every CLI command reads string and repeatable options with `readOptions`, which respects real option boundaries; `multi()` is gone.
@@ -264,7 +264,7 @@ added below as an amendment.
   - An oversized upload, by declared length or by the streamed count, is read and discarded up to 64 MB beyond the limit before `413 payload_too_large`. The 413 is sent with `Connection: close`, so proxies relay it instead of a 502. Past that cap the connection is cut, and nothing is buffered.
   - Upload 413s carry `limitBytes`, and `/meta` carries `uploadMaxBytes`, so the web checks sizes before sending.
 
-## Amendments after the security review of the late commits (ac6fec2, ae520cf, 4c4a5d0)
+## Amendments after the review of the late commits (65969ba, b132437, d0458c4)
 - **§3.1 drain bounds:** the drain before a 413 stops after 5 s without data or after 30 s in total (`DRAIN_TIMEOUTS`). It then destroys the stream and answers. A client that declares an oversized body and stalls can no longer hold a request until Node's request timeout. The partial temp file is removed when the limit is hit, not after the drain.
 - **Uploads belong to their session:**
   - Pending and failed uploads live outside the query cache, in the web upload store. The sync engine signals every wipe through `data/session-events.ts`: sign-out, a 401 on `/me`, or another account on this browser. The store then aborts and forgets its files, and an upload that completes afterwards updates no cache.
