@@ -118,3 +118,7 @@ pnpm dev                                       # server :3000 + web :5173
 ```
 
 Open http://localhost:5173 and use *Dev login*. `pnpm run ci` runs the whole pipeline. See [CONTRIBUTING](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md).
+
+## License
+
+rooster is free software under the [GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). If you run a modified version for other people over a network, the license requires you to offer them its source.

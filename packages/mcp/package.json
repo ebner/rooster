@@ -1,6 +1,7 @@
 {
   "name": "@rooster/mcp",
   "version": "1.9.0",
+  "license": "AGPL-3.0-only",
   "description": "rooster's MCP tools, shared by the stdio server (rooster mcp) and the remote /mcp endpoint (docs/spec/11-agent-access.md §5).",
   "private": true,
   "type": "module",
