@@ -1,6 +1,7 @@
 name: release
 # Pushing a tag vX.Y.Z publishes the image to GHCR as X.Y.Z, X.Y, X and latest (08 §8), and
-# attaches the CLI's single-file binaries to the GitHub release (07 §1).
+# attaches the CLI's single-file binaries to the GitHub release (07 §1), with LICENSE and
+# THIRD-PARTY-NOTICES.txt.
 #
 # The binaries go straight to a draft release, the smoke jobs download them from it, and the
 # release is published once everything passed. No Actions artifacts: they count against the
@@ -98,7 +99,7 @@ jobs:
         run: |
           gh release view "$TAG" >/dev/null 2>&1 ||
             gh release create "$TAG" --draft --verify-tag --title "$TAG" --notes "See CHANGELOG.md"
-          gh release upload "$TAG" apps/cli/dist/bin/* --clobber
+          gh release upload "$TAG" apps/cli/dist/bin/* LICENSE THIRD-PARTY-NOTICES.txt --clobber
 
   cli-smoke:
     needs: cli-binaries

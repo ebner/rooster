@@ -7,9 +7,11 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 ## [Unreleased]
 
 ### Added
+- Third-party licence notices: `THIRD-PARTY-NOTICES.txt` ships in the image (`/app`, and served at `/third-party-notices.txt`) and with the CLI binaries on each GitHub release, next to `LICENSE`.
 - `SECURITY.md`: report vulnerabilities privately through GitHub's private vulnerability reporting.
 
 ### Changed
+- The MCP Server Card names no npm package: the CLI is installed from the release binaries or built from source.
 - rooster is licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`; `LICENSE`).
 
 ## [1.9.0] - 2026-11-02

@@ -30,6 +30,8 @@ const serverPaths = [
   /^\/unsubscribe(\/|$)/,
   /^\/_dev(\/|$)/,
   /^\/(healthz|readyz)$/,
+  // Copied into the served web dir by docker/Dockerfile, after the build.
+  /^\/third-party-notices\.txt$/,
 ];
 
 registerRoute(

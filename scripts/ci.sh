@@ -17,6 +17,7 @@ stage_static() {
   step "secret scan";  bash scripts/secret-scan.sh   # needs the full git history
   step "i18n";         pnpm i18n:check
   step "docs";         pnpm docs:keyboard --check   # the keyboard page matches keymap.ts (ADR 0053)
+  step "notices";      pnpm notices:check   # THIRD-PARTY-NOTICES.txt matches the installed dependencies
   step "api client";   pnpm gen:api && git diff --exit-code -- apps/server/openapi.json packages/api-client/src/schema.d.ts
 }
 

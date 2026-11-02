@@ -32,13 +32,16 @@ RUN pnpm --filter @rooster/web build \
  && pnpm --filter @rooster/server build
 # Runtime folder: the bundled server (all JS deps inlined by tsdown), the web build, and a
 # node_modules containing only the native modules that cannot be bundled (better-sqlite3, and
-# sharp with its prebuilt libvips for the target platform).
+# sharp with its prebuilt libvips for the target platform). LICENSE and THIRD-PARTY-NOTICES.txt
+# sit next to them, and the notices are also served at /third-party-notices.txt.
 # Slimming (WP 11.4): better-sqlite3 ships prebuilt binaries for every platform; only this
 # one stays (glibc Linux, the architecture being built). The web build's source maps go too:
 # the server never serves them (lib/web-app.ts refuses *.map).
 RUN mkdir -p /out /out-data \
  && cp -r apps/server/dist /out/dist \
  && cp -r apps/web/dist /out/public \
+ && cp LICENSE THIRD-PARTY-NOTICES.txt /out/ \
+ && cp THIRD-PARTY-NOTICES.txt /out/public/third-party-notices.txt \
  && SQLITE_VERSION="$(node -p "require('./apps/server/node_modules/better-sqlite3/package.json').version")" \
  && SHARP_VERSION="$(node -p "require('./apps/server/node_modules/sharp/package.json').version")" \
  && printf '{"name":"rooster-server","private":true,"type":"module","dependencies":{"better-sqlite3":"%s","sharp":"%s"}}\n' "$SQLITE_VERSION" "$SHARP_VERSION" > /out/package.json \

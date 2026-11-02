@@ -26,7 +26,9 @@
     "dev:idp": "node scripts/dev-idp.mjs",
     "bundle:check": "node scripts/bundle-budget.mjs apps/web/dist",
     "docs:keyboard": "node scripts/docs/keyboard.mjs",
-    "docs:screenshots": "bash scripts/docs/screenshots.sh"
+    "docs:screenshots": "bash scripts/docs/screenshots.sh",
+    "notices": "node scripts/third-party-notices.mjs",
+    "notices:check": "node scripts/third-party-notices.mjs --check"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
