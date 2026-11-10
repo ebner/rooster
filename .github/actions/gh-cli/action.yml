@@ -1,5 +1,5 @@
 name: gh-cli
-description: The GitHub CLI, installed (pinned and checksum-verified) when the runner has none, as on the org's self-hosted runners
+description: The GitHub CLI, installed (pinned and checksum-verified) when the runner has none
 runs:
   using: composite
   steps:
