@@ -99,7 +99,12 @@ describe('AC-11.5 migrating the previous release fixture database (1.8.0)', () =
       expect(me.storage?.usedBytes).toBeGreaterThan(0);
 
       const team = me.orgs.find((o) => o.name === 'Northwind Garden Club');
-      const list = await anna.ok<MyList>('GET', `/api/v1/orgs/${team?.id}/my-list`);
+      // The fixture's completed task dates from the release it was made at; ask for every
+      // completed task, so the test doesn't depend on today's date (the default is 14 days).
+      const list = await anna.ok<MyList>(
+        'GET',
+        `/api/v1/orgs/${team?.id}/my-list?completedSince=0`,
+      );
       const titles = list.tasks.map((t) => t.title);
       expect(titles).toEqual(
         expect.arrayContaining([
