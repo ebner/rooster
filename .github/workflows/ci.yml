@@ -10,10 +10,10 @@ permissions:
 # The stages of scripts/ci.sh run as parallel jobs, so one run reports every failing stage. The e2e
 # suite and its timing budgets run locally, in `pnpm release`, on the commit being released (ADR
 # 0060); on shared 2-vCPU runners they failed mostly on runner load.
-# Every job runs on self-hosted runners.
+# Every job runs on GitHub-hosted runners (free for public repositories).
 jobs:
   static:
-    runs-on: self-hosted
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -22,21 +22,21 @@ jobs:
       - run: bash scripts/ci.sh static
 
   unit:
-    runs-on: self-hosted
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: ./.github/actions/setup
       - run: bash scripts/ci.sh unit
 
   build:
-    runs-on: self-hosted
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: ./.github/actions/setup
       - run: bash scripts/ci.sh build
 
   docker:
-    runs-on: self-hosted
+    runs-on: ubuntu-24.04
     needs: [static, unit, build]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

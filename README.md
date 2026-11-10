@@ -54,8 +54,8 @@ You need Docker, a domain with HTTPS behind a reverse proxy, and a Google or OID
 
    ```sh
    mkdir rooster && cd rooster
-   curl -fsSLO https://raw.githubusercontent.com/201works/rooster/main/compose.yaml
-   curl -fsSL https://raw.githubusercontent.com/201works/rooster/main/apps/server/.env.example -o .env
+   curl -fsSLO https://raw.githubusercontent.com/ebner/rooster/main/compose.yaml
+   curl -fsSL https://raw.githubusercontent.com/ebner/rooster/main/apps/server/.env.example -o .env
    ```
 
 2. Edit `.env`. The required values are:
@@ -95,7 +95,7 @@ rooster                                               # the full-screen TUI
 rooster mcp setup --client claude-code                # a separate, narrower login for an AI agent
 ```
 
-Single-file binaries for Linux, macOS and Windows are attached to each [GitHub release](https://github.com/201works/rooster/releases). Remote agents only need `https://<your rooster>/mcp`. More in [Terminal app, command line and AI agents](docs/guide/en/cli-tui-mcp.md).
+Single-file binaries for Linux, macOS and Windows are attached to each [GitHub release](https://github.com/ebner/rooster/releases). Remote agents only need `https://<your rooster>/mcp`. More in [Terminal app, command line and AI agents](docs/guide/en/cli-tui-mcp.md).
 
 ## Documentation
 

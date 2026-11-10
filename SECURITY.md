@@ -16,7 +16,7 @@ rooster is maintained by a small team in its spare time. We aim to confirm a rep
 
 ## Supported versions
 
-Fixes go into the latest release. Upgrade to it: images are published to `ghcr.io/201works/rooster` (`:1` follows the latest 1.x), and CLI binaries are attached to each GitHub release.
+Fixes go into the latest release. Upgrade to it: images are published to `ghcr.io/ebner/rooster` (`:1` follows the latest 1.x), and CLI binaries are attached to each GitHub release.
 
 ## Scope
 

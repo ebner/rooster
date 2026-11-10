@@ -14,6 +14,7 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 - `SECURITY.md`: report vulnerabilities privately through GitHub's private vulnerability reporting.
 
 ### Changed
+- **The project is public at `github.com/ebner/rooster`.** Images are published to `ghcr.io/ebner/rooster` again from this release on; 1.8.0 to 1.9.0 stay at `ghcr.io/201works/rooster`. When this release is out, change the image line in your compose file to `ghcr.io/ebner/rooster:1` (before that, `:1` there is an older 1.x). The MCP Server Card's name is `io.github.ebner/rooster`. CI and releases run on GitHub-hosted runners.
 - **The older CLI login sends the "device connected" notice too.** Approving the legacy device login (`/api/auth/device/code`, used by CLIs before 1.8.0 and as the fallback when `ROOSTER_OAUTH_DEVICE=off`) now notifies the user in the inbox and by email, like the device grant. `ROOSTER_OAUTH_DEVICE=off` turns off the OAuth device grant only, not this older login.
 - The MCP Server Card names no npm package: the CLI is installed from the release binaries or built from source.
 - rooster is licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`; `LICENSE`), with an additional permission (section 7) for combining it with the Bun runtime, which the CLI binaries embed.
@@ -45,7 +46,7 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 - With the detail pane open, creating a task left an empty row under it that was neither a task nor editable and couldn't be removed (until a reload). The pane's selection sync ended the new row's edit; it now never interrupts a title being typed (regression in 1.8.0, ADR 0064).
 
 ### Changed
-- **The project lives at `github.com/201works/rooster`.** Images are published to `ghcr.io/201works/rooster`. The MCP Server Card's name is `io.github.201works/rooster`.
+- **The project moved to `github.com/201works/rooster`.** Images were published to `ghcr.io/201works/rooster` from 1.8.0 to 1.9.0. The MCP Server Card's name was `io.github.201works/rooster`.
 
 ### Migrations
 - None.
@@ -416,7 +417,7 @@ The first switch-over release: rooster is ready for daily use (D-18).
 ### Not included
 - Move tasks over from another tool by pasting a multi-line list into a group.
 
-[Unreleased]: https://github.com/201works/rooster/compare/v1.0.2...HEAD
-[1.0.2]: https://github.com/201works/rooster/compare/v1.0.1...v1.0.2
-[1.0.1]: https://github.com/201works/rooster/compare/v1.0.0...v1.0.1
-[1.0.0]: https://github.com/201works/rooster/releases/tag/v1.0.0
+[Unreleased]: https://github.com/ebner/rooster/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/ebner/rooster/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/ebner/rooster/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/ebner/rooster/releases/tag/v1.0.0

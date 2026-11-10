@@ -39,7 +39,7 @@ const OPENAPI_DOC_PATH = '/api/v1/openapi.json';
 const API_DOCS_PATH = '/api/docs';
 
 /** ADR 0041 §4. */
-export const MCP_SERVER_NAME = 'io.github.201works/rooster';
+export const MCP_SERVER_NAME = 'io.github.ebner/rooster';
 export const SERVER_CARD_SCHEMA =
   'https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json';
 export const SKILLS_INDEX_SCHEMA = 'https://schemas.agentskills.io/discovery/0.2.0/schema.json';
@@ -52,9 +52,9 @@ const OPENAPI_TYPE = 'application/openapi+json';
 const MARKDOWN = 'text/markdown; charset=utf-8';
 
 /** Vendor `_meta` keys on the Server Card (reverse-DNS prefix of the server name). */
-export const META_AUTHENTICATION = 'io.github.201works/authentication';
+export const META_AUTHENTICATION = 'io.github.ebner/authentication';
 
-const REPOSITORY_URL = 'https://github.com/201works/rooster';
+const REPOSITORY_URL = 'https://github.com/ebner/rooster';
 const SERVER_CARD_DESCRIPTION =
   'Self-hosted task manager: plan the day, add, move and complete tasks.';
 

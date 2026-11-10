@@ -59,4 +59,4 @@
      - In the home directory only the `rooster` folder and the file itself must not be links, so a dotfiles-linked `~/.claude` works.
      - The write is atomic, with a backup and mode 0644.
 8. **`rooster admin reindex`** maps a 403 to exit 3 with the `rooster login --admin` hint. `login --admin` requests `admin` and warns when the grant comes back without it.
-9. **`serverInfo`** is `{name: 'io.github.201works/rooster', title: 'rooster'}`, matching the Server Card (ADR 0043).
+9. **`serverInfo`** is `{name: 'io.github.ebner/rooster', title: 'rooster'}`, matching the Server Card (ADR 0043).

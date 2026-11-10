@@ -15,7 +15,7 @@ This checklist is the part a machine can't judge: what a screen reader actually 
   - **NVDA + Firefox on Windows**: browse mode for reading, focus mode for the list.
 - Each step below says what to do, then what you should hear (→). The wording may vary by screen reader; the content should not.
 
-**Reporting.** File each finding as a GitHub issue on `201works/rooster` with the label `a11y`. Give the pass (e.g. "NVDA 2026.3 + Firefox 140"), the step number, what was announced and what was expected. A finding that blocks a task without a workaround is a release blocker.
+**Reporting.** File each finding as a GitHub issue on `ebner/rooster` with the label `a11y`. Give the pass (e.g. "NVDA 2026.3 + Firefox 140"), the step number, what was announced and what was expected. A finding that blocks a task without a workaround is a release blocker.
 
 ## 1. Sign in and the shell (all passes)
 

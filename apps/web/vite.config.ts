@@ -33,7 +33,7 @@ export default defineConfig({
     guidePlugin({
       guideDir: `${repoRoot}docs/guide`,
       repoRoot,
-      repoUrl: 'https://github.com/201works/rooster',
+      repoUrl: 'https://github.com/ebner/rooster',
       locales: ['en', 'sv'],
     }),
     // 04 §6.3: a custom service worker (injectManifest), registered by the app with an

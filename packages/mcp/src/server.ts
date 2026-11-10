@@ -145,7 +145,7 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
   const server = new McpServer(
     {
       // The MCP Server Card's name (ADR 0041 §4); serverInfo must not contradict the card.
-      name: 'io.github.201works/rooster',
+      name: 'io.github.ebner/rooster',
       title: 'rooster',
       version: options.version,
       websiteUrl: options.instanceUrl,

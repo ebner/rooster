@@ -153,6 +153,6 @@ rooster is licensed under the [GNU Affero General Public License v3.0 only](LICE
 
 ## Reporting security issues
 
-Please **don't open a public issue** for a vulnerability. Report it privately through GitHub's private vulnerability reporting on [201works/rooster](https://github.com/201works/rooster/security) (Security → Report a vulnerability).
+Please **don't open a public issue** for a vulnerability. Report it privately through GitHub's private vulnerability reporting on [ebner/rooster](https://github.com/ebner/rooster/security) (Security → Report a vulnerability).
 
 Security-relevant changes (authentication, grants and authorisation, uploads, outbound requests, the CLI's credential and file handling) also get an independent security review before they are considered done; ADR 0040 records the first round, and the Phase 11 audit is tracked in `docs/security/`.

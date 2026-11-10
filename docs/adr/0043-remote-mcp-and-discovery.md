@@ -43,8 +43,8 @@
    - **MCP Server Card** (SEP-2127, final; modelcontextprotocol/experimental-ext-server-card at 526201bb):
      - The extension reserves `<streamable-http-url>/server-card`, so the canonical path is **`/mcp/server-card`**, with `/.well-known/mcp/server-card.json` kept as an alias for older crawlers. The spec advises against `.well-known` for cards, which corrects 11 §6.1's guess.
      - The card has `$schema` `https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json` and media type `application/mcp-server-card+json`. It validates against the vendored published schema with Ajv.
-     - The card schema has no `authentication` member, so the OAuth hint goes under `_meta["io.github.201works/authentication"]`, as SEP-2127 directs vendors. The card names no package: the CLI is not published to npm (ADR 0041 §5).
-     - `serverInfo.name` matches the card (`io.github.201works/rooster`, title `rooster`).
+     - The card schema has no `authentication` member, so the OAuth hint goes under `_meta["io.github.ebner/authentication"]`, as SEP-2127 directs vendors. The card names no package: the CLI is not published to npm (ADR 0041 §5).
+     - `serverInfo.name` matches the card (`io.github.ebner/rooster`, title `rooster`).
    - **AI Catalog** (Agent-Card/ai-catalog, specVersion 1.0):
      - Served at `/.well-known/ai-catalog.json` as `application/ai-catalog+json`.
      - Entries: the card, the skill (`application/agent-skills+md`), the skills index, the OpenAPI document and `/llms.txt`.

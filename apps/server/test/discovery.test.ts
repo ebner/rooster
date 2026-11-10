@@ -113,7 +113,7 @@ describe('AC-9.5 discovery documents', () => {
       name: string;
       remotes: { type: string; url: string; supportedProtocolVersions: string[] }[];
     };
-    expect(card.name).toBe('io.github.201works/rooster');
+    expect(card.name).toBe('io.github.ebner/rooster');
     expect(card.remotes).toEqual([
       expect.objectContaining({ type: 'streamable-http', url: `${BASE_URL}/mcp` }),
     ]);
@@ -136,7 +136,7 @@ describe('AC-9.5 discovery documents', () => {
       expect(validateServerCard(card), path).toEqual([]);
       expect(card).toMatchObject({
         $schema: 'https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json',
-        name: 'io.github.201works/rooster',
+        name: 'io.github.ebner/rooster',
         version: '0.0.0-test',
         title: 'rooster',
         websiteUrl: BASE_URL,
@@ -144,7 +144,7 @@ describe('AC-9.5 discovery documents', () => {
           expect.objectContaining({ src: `${BASE_URL}/icons/icon-512.png` }),
         ]),
         _meta: {
-          'io.github.201works/authentication': {
+          'io.github.ebner/authentication': {
             type: 'oauth2',
             protectedResourceMetadata: `${BASE_URL}/.well-known/oauth-protected-resource/mcp`,
           },

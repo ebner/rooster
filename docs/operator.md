@@ -21,7 +21,7 @@ rooster is **one container, one volume and one env file**. After `docker compose
 
 | What | Notes |
 |---|---|
-| Docker with Compose v2 | The image is published to `ghcr.io/201works/rooster` for `linux/amd64`. On another architecture (for example arm64), build it from the repository: `compose.yaml` has a `build` section, so `docker compose build` works. |
+| Docker with Compose v2 | The image is published to `ghcr.io/ebner/rooster` for `linux/amd64`. On another architecture (for example arm64), build it from the repository: `compose.yaml` has a `build` section, so `docker compose build` works. |
 | A **local** filesystem for the volume | rooster keeps its data in SQLite in WAL mode. NFS and SMB break SQLite's locking: use a local disk (a named Docker volume or a local bind mount). |
 | A domain with HTTPS | TLS is your reverse proxy's job (Caddy, nginx, Apache, Traefik). Session cookies are `Secure` and `__Host-` prefixed on https, and installable apps and push notifications need https. |
 | One sign-in provider | Google or any OpenID Connect provider. rooster has no passwords. See [`oidc-setup.md`](oidc-setup.md). |
@@ -36,14 +36,14 @@ rooster is **one container, one volume and one env file**. After `docker compose
    ```sh
    umask 077   # .env will hold the auth secret and provider credentials: owner-only
    mkdir rooster && cd rooster
-   curl -fsSLO https://raw.githubusercontent.com/201works/rooster/main/compose.yaml
-   curl -fsSL https://raw.githubusercontent.com/201works/rooster/main/apps/server/.env.example -o .env
+   curl -fsSLO https://raw.githubusercontent.com/ebner/rooster/main/compose.yaml
+   curl -fsSL https://raw.githubusercontent.com/ebner/rooster/main/apps/server/.env.example -o .env
    chmod 600 .env
    ```
 
    Keep `.env` readable by its owner only (`chmod 600 .env`, also for an existing install) before you put secrets in it: under a shared path such as `/srv`, another local account could otherwise read the auth secret and every credential added later.
 
-   `compose.yaml` runs `ghcr.io/201works/rooster:1` (the major version is pinned), mounts the named volume `rooster-data` at `/data`, sets `ROOSTER_TRUST_PROXY=true`, and publishes port 3000 on `127.0.0.1` only. Your reverse proxy connects to it there, or you attach the service to the proxy's Docker network instead.
+   `compose.yaml` runs `ghcr.io/ebner/rooster:1` (the major version is pinned), mounts the named volume `rooster-data` at `/data`, sets `ROOSTER_TRUST_PROXY=true`, and publishes port 3000 on `127.0.0.1` only. Your reverse proxy connects to it there, or you attach the service to the proxy's Docker network instead.
 
 2. Edit `.env`. The required values are:
 

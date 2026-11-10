@@ -36,7 +36,7 @@ export const fixtureGuideHtml = `<p>Reminders tell you about a task at the momen
 <h3 id="from-the-terminal">From the terminal</h3>
 <pre><code>rooster add "Water the plants" --due tomorrow --remind 1h
 </code></pre>
-<p>See also <a href="https://github.com/201works/rooster" target="_blank" rel="noopener noreferrer">the project on GitHub</a>.</p>
+<p>See also <a href="https://github.com/ebner/rooster" target="_blank" rel="noopener noreferrer">the project on GitHub</a>.</p>
 `;
 
 export const fixtureGuidePages: GuidePage[] = [

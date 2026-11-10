@@ -17,7 +17,7 @@ Goal: **one container, one volume, one env file.** Nothing has to be run by hand
   3. Wait for in-flight requests (≤ 10 s).
   4. Stop the scheduler.
   5. Close the DB.
-- linux/amd64 (ADR 0052 §9; arm64 is not built). Published to `ghcr.io/201works/rooster` as `x.y.z`, `x.y`, `x` and `latest`.
+- linux/amd64 (ADR 0052 §9; arm64 is not built). Published to `ghcr.io/ebner/rooster` as `x.y.z`, `x.y`, `x` and `latest`.
 - Target size: under 350 MB uncompressed in total, of which rooster's own layers (bundled server, web build, native modules: SQLite and, from P10, sharp with libvips) are under 100 MB (ADR 0048). The distroless Node 24 base accounts for about 200 MB. RAM use is about 100 to 150 MB.
 
 ## 2. `/data` layout
@@ -74,7 +74,7 @@ Every variable also accepts a `<NAME>_FILE` form (Docker secrets): when it is se
 ```yaml
 services:
   rooster:
-    image: ghcr.io/201works/rooster:1
+    image: ghcr.io/ebner/rooster:1
     restart: unless-stopped
     env_file: .env
     environment:

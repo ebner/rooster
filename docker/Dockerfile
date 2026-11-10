@@ -59,7 +59,7 @@ FROM gcr.io/distroless/nodejs24-debian12:nonroot@sha256:14d42e2511532589a7c7e01a
 ARG ROOSTER_VERSION=1.9.0
 ARG ROOSTER_GIT_SHA=dev
 LABEL org.opencontainers.image.title="rooster" \
-      org.opencontainers.image.source="https://github.com/201works/rooster" \
+      org.opencontainers.image.source="https://github.com/ebner/rooster" \
       org.opencontainers.image.version="${ROOSTER_VERSION}" \
       org.opencontainers.image.revision="${ROOSTER_GIT_SHA}"
 # MALLOC_ARENA_MAX: glibc's per-thread malloc arenas keep memory freed after a burst of

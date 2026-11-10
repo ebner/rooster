@@ -26,7 +26,7 @@ env:
 jobs:
   image:
     if: github.event_name == 'push'
-    runs-on: self-hosted
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # The self-hosted runners bring no Node of their own.
@@ -71,7 +71,7 @@ jobs:
           done <<< "$TAGS"
 
   cli-binaries:
-    runs-on: self-hosted
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
@@ -114,10 +114,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Linux x64 runs on the org's self-hosted scale set like the other jobs; arm64, macOS and
-        # Windows need GitHub-hosted runners.
         include:
-          - { os: self-hosted, target: linux-x64 }
+          - { os: ubuntu-24.04, target: linux-x64 }
           - { os: ubuntu-24.04-arm, target: linux-arm64 }
           - { os: macos-latest, target: darwin-arm64 }
           - { os: macos-15-intel, target: darwin-x64 }
@@ -136,8 +134,6 @@ jobs:
       - run: corepack enable
       # The smoke script starts an in-memory server, which needs the server's dependencies.
       - run: pnpm install --frozen-lockfile
-      - if: matrix.os == 'self-hosted'
-        uses: ./.github/actions/gh-cli
       - name: smoke (--version, login --with-token, whoami)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -153,7 +149,7 @@ jobs:
     needs: [image, cli-smoke]
     # A manual run skips the image; the release still waits for every smoke test.
     if: ${{ !failure() && !cancelled() }}
-    runs-on: self-hosted
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:

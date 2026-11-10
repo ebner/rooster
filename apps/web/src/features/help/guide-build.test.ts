@@ -77,7 +77,7 @@ function context(root: string, guideDir: string, warn = vi.fn()): RenderContext 
     guideDir,
     repoRoot: root,
     slugs: new Set(['getting-started', 'reminders']),
-    repoUrl: 'https://github.com/201works/rooster',
+    repoUrl: 'https://github.com/ebner/rooster',
     image: guideImage,
     warn,
   };
@@ -91,7 +91,7 @@ describe('the guide build (ADR 0052 §2)', () => {
     const { html } = renderGuideMarkdown(markdown, context(root, guideDir));
     expect(html).toContain('<a href="/help/reminders#add-one" data-guide-link>r</a>');
     expect(html).toContain(
-      '<a href="https://github.com/201works/rooster/blob/main/docs/operator.md" target="_blank" rel="noopener noreferrer">op</a>',
+      '<a href="https://github.com/ebner/rooster/blob/main/docs/operator.md" target="_blank" rel="noopener noreferrer">op</a>',
     );
     expect(html).toContain(
       '<a href="https://example.com" target="_blank" rel="noopener noreferrer">x</a>',
@@ -273,7 +273,7 @@ describe('the guide build (ADR 0052 §2)', () => {
       const guide = buildGuide({
         guideDir: join(root, 'docs/guide'),
         repoRoot: root,
-        repoUrl: 'https://github.com/201works/rooster',
+        repoUrl: 'https://github.com/ebner/rooster',
         locale,
         warn,
       });
