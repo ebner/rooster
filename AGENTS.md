@@ -270,7 +270,7 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
 - Phase 5, smart views, search, palette, export and Trash (2026-10-06), released as **v1.0.0**. AC-5.1 to AC-5.3 pass on desktop and the phone projects. ADRs 0012 to 0016 record the decisions; ADR 0016 relaxed the initial-bundle budget to 450 KB.
 - **Backlog** (`docs/spec/09-phases.md` §Backlog): the dark theme, the open ASVS gaps, and the Phase 11 follow-ups. Do not build an item unless it is scheduled.
 - **E2E:** never run two Playwright suites at once; they share ports 9400, 3181, 5181 and 3182.
-- **Git:** commit locally; **do not push to origin unless the maintainer explicitly asks.**
+- **Git:** commit locally; **do not push to origin unless the maintainer explicitly asks.** `main` and the `v*` release tags are protected by repository rulesets: no force-push, no deletion, linear history on `main`, and a pushed release tag can't be moved. A broken release gets a new patch version, not a moved tag.
 - **Deferred to later phases** (from ADRs 0003–0011; pick them up in the phase named):
   - **Later, unscheduled:** Show the OAuth client's name in activity ("via Claude (MCP)", 11 §2.3; activity shows "via an app" today).
   - **Whenever touched:**
