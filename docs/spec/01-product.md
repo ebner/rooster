@@ -138,8 +138,9 @@ Requirements are numbered `FR-<AREA>-<n>`. **P** is the phase that delivers each
 |---|---|---|
 | FR-REC-1 | Supported patterns: every N days, weeks (on chosen weekdays), months (on day D, or on the nth or last weekday) or years; and *N days/weeks after completion*. An optional end condition is either an end date or a count. | 10 |
 | FR-REC-2 | NL phrases are supported: "every day", "every mon", "every 2 weeks", "every month", "varje måndag", "varannan vecka" and so on (see 02). | 10 |
-| FR-REC-3 | When a recurring task is completed, the next instance is created with the next date. It goes into the **same group at the position directly after the completed task**, for the same assignee. Title, description, tags, followers and subtasks are copied, with subtasks reset to open. Comments and attachments are not copied. | 10 |
+| FR-REC-3 | When a recurring task is completed, the next instance is created with the next date. It goes into the **same group at the position directly after the completed task**, for the same assignee. Title, description, tags, followers and subtasks are copied, with subtasks reset to open. Comments and attachments are not copied. While its day is in the future it waits in the **Recurring** section (FR-REC-5). | 10 |
 | FR-REC-4 | Removing the due date or the repeat rule stops the series. Deleting an instance asks "this / this and following". | 10 |
+| FR-REC-5 | **The Recurring section** (ADR 0068). In My tasks, an open top-level recurring task whose day (its start date, else its due date) is after today is held out of its group and listed in a collapsed **Recurring** section (↻) at the end of the list, sorted by date. On its day it is back in its group at its own position; the placement never changes. The smart views stay date-based. The web, the TUI and `rooster ls` (`--upcoming` to include them) apply the same rule. | 1.10 |
 
 ## FR-ATT: Attachments
 

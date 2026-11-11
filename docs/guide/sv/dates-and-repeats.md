@@ -103,7 +103,13 @@ Normalt följer nästa datum regeln räknat från förfallodatumet: en uppgift s
 
 ### När du markerar den som klar
 
-Nästa uppgift i serien hamnar **direkt under** den klara, i samma grupp och med samma ansvarig. Den får samma namn, beskrivning, taggar, följare och deluppgifter (öppna igen), och de påminnelser som räknas från förfallodatumet. Kommentarer, bilagor och påminnelser vid en fast tid stannar på den gamla.
+Nästa uppgift i serien skapas åt samma person, i samma grupp, direkt under den klara. Tills dess dag kommer väntar den under **Återkommande** längst ner i Mina uppgifter (se nedan). Den får samma namn, beskrivning, taggar, följare och deluppgifter (öppna igen), och de påminnelser som räknas från förfallodatumet. Kommentarer, bilagor och påminnelser vid en fast tid stannar på den gamla.
+
+### Delen Återkommande
+
+En återkommande uppgift visas inte i sin grupp förrän på sin dag: startdatumet om den har ett, annars förfallodatumet. Fram till dess finns den under **↻ Återkommande**, en hopfälld del längst ner i Mina uppgifter, sorterad efter datum. Varje uppgift där visar vilken grupp den går tillbaka till. Klicka eller tryck på **Återkommande** för att se vad som väntar. På sin dag är uppgiften tillbaka i sin grupp, på den plats du gav den.
+
+Idag och Kommande 7 dagar går efter datum, så där syns en återkommande uppgift på sin dag och veckan före, precis som förut. Vill du ha tillbaka en uppgift tidigare ger du den ett tidigare datum. Uppgifter under Återkommande kan markeras som klara, redigeras och öppnas, men inte flyttas.
 
 ### Avsluta eller ta bort
 

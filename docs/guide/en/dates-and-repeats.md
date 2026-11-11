@@ -103,7 +103,13 @@ Normally the next date follows the rule from the due date: a task due every Mond
 
 ### What happens when you complete it
 
-The next instance appears **directly below** the completed one, in the same group, for the same person. It gets the title, description, tags, followers and subtasks (reopened), and the reminders that are relative to the due date. Comments, attachments and reminders at a fixed time stay with the old one.
+The next instance is made for the same person, in the same group, directly below the completed one. Until its day comes, it waits in the **Recurring** section at the end of My tasks (see below). It gets the title, description, tags, followers and subtasks (reopened), and the reminders that are relative to the due date. Comments, attachments and reminders at a fixed time stay with the old one.
+
+### The Recurring section
+
+A repeating task isn't shown in its group until its day: its start date if it has one, otherwise its due date. Until then it's listed under **↻ Recurring**, a collapsed section at the end of My tasks, sorted by date. Each task there shows the group it goes back to. Click or tap **Recurring** to see what's coming. On its day the task is back in its group, in the place you gave it.
+
+Today and Next 7 days are by date, so they show a repeating task on its day and in the week before it, as always. To bring a task back early, give it an earlier date. Tasks in Recurring can be completed, edited and opened, but not moved.
 
 ### Stop or delete
 

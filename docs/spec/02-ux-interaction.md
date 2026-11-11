@@ -166,6 +166,12 @@ The pane (if open) always shows the **selected** row (D-29). Moving the selectio
 - It has no rename, delete or move. Tasks can be dragged out of it, and can be dragged into it; doing so is unusual but allowed.
 - Header hint: "Triage: drag tasks into your groups".
 
+**Recurring** (FR-REC-5, ADR 0068). A system section (↻ icon) at the end of My tasks, after the last group and "+ Add group", for recurring tasks whose day hasn't come yet (their start date, else their due date, is after today).
+- It is rendered only when it has ≥ 1 task, and is collapsed by default; the state is kept per user and org on the device.
+- Its tasks are sorted by date and show it. They are normal rows (complete, edit, open the pane), and each shows the group it goes back to, but they can't be dragged or moved, nothing can be dropped into Recurring, and no new rows are created there. Changing a task's date to today or earlier brings it back to its group.
+- On its day a task leaves Recurring and appears in its own group, at its own position. Group counts and the My tasks badge leave these tasks out; the smart views don't change.
+- The section's name differs from the default group "Upcoming" on purpose: that group is the user's own.
+
 ## 5. Drag and drop
 
 | Aspect | Spec |
@@ -424,6 +430,7 @@ A tiny status label sits in the toolbar's left area:
 - **Swipe left:** the **quick date sheet** (Today, Tomorrow, Weekend, Next week, Pick date…, No date).
 - The swipe actions can be configured in Settings: each direction is Complete / Date / Move / Delete.
 - **Long-press 350 ms:** lifts the row for dragging (with haptics). Dragging near the top or bottom auto-scrolls. Dropping commits.
+- A **new row** lifts the same way once its title has text: the long-press on the title creates the task (as Enter would), closes the keyboard and lifts the row (ADR 0069).
 - Long-press then release without moving enters **selection mode**: checkboxes turn into selection circles and a bulk action bar replaces the bottom nav.
 - Pull to refresh: refetch plus outbox flush. The spinner turns until both settle, and for at least 0.5 s, so a fast refetch still reads as a refresh.
 

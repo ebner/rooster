@@ -30,7 +30,7 @@ På iPhone och iPad har den installerade appen egen lagring, så du loggar in en
 | Tryck på cirkeln | Markerar uppgiften som klar, med **Ångra** i meddelandet längst ner |
 | Svep åt höger | Markera som klar (standard) |
 | Svep åt vänster | Välj datum (standard): Idag, Imorgon, I helgen, Nästa vecka, Välj datum…, Inget datum |
-| Håll kvar och dra | Flyttar uppgiften; drar du nära över- eller underkanten skrollar listan |
+| Håll kvar och dra | Flyttar uppgiften; drar du nära över- eller underkanten skrollar listan. Fungerar också på en uppgift du just har skrivit: håll kvar på namnet så läggs den till och kan flyttas. |
 | Håll kvar och släpp | Markeringsläge: tryck på uppgifter för att markera dem och gör sedan något med alla på en gång från raden längst ner. **Avsluta markering** lämnar läget. |
 | Dra nedåt högst upp | Uppdaterar listan och skickar väntande ändringar |
 

@@ -20,6 +20,10 @@ Grupperna är personliga. Två personer i samma organisation har var sina gruppe
 
 **Inkorgen** är en särskild grupp som ligger fast högst upp. Hit kommer uppgifter som saknar grupp: uppgifter som någon annan har tilldelat dig och uppgifter som har lagts till från kommandoraden eller av en AI-agent. Den syns inte när den är tom. Dra uppgifterna vidare till dina egna grupper för att sortera dem. Inkorgen kan inte döpas om, flyttas eller tas bort.
 
+### Återkommande
+
+**↻ Återkommande** är en hopfälld del längst ner i listan. Där ligger återkommande uppgifter vars dag inte har kommit än, så att en veckouppgift inte står i din grupp *Idag* hela veckan. På sin dag flyttar uppgiften tillbaka till sin egen grupp. Se [Delen Återkommande](./dates-and-repeats.md#delen-återkommande).
+
 ## Lägga till och redigera uppgifter
 
 - **Enter** medan du redigerar lägger till en uppgift nedanför, **Skift+Enter** en ovanför. När en rad bara är markerad gör **N** och **Skift+N** samma sak, och **Q** (eller Tab+Q) lägger till en uppgift högst upp i den första gruppen.

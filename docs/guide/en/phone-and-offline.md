@@ -30,7 +30,7 @@ On iPhone and iPad the installed app keeps its own storage, so you sign in once 
 | Tap the circle | Completes the task, with **Undo** in the message at the bottom |
 | Swipe right | Complete (by default) |
 | Swipe left | Set date (by default): Today, Tomorrow, Weekend, Next week, Pick date…, No date |
-| Long-press, then drag | Moves the task; dragging near the top or bottom scrolls |
+| Long-press, then drag | Moves the task; dragging near the top or bottom scrolls. Works on a task you've just typed too: long-press its name to add it and move it. |
 | Long-press and let go | Selection mode: tap tasks to select them, then act on all of them from the bar at the bottom. **Done selecting** ends it. |
 | Pull down at the top | Refreshes the list and sends waiting changes |
 

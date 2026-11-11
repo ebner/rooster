@@ -10,6 +10,8 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 - **Sign-out during a refresh retry:** when a browser signed out while a refresh-token retry within the 60 s grace was being answered, and the retry then failed, the retry's undo made the session's access tokens valid again until they expired. The undo now leaves tokens of an ended session revoked.
 
 ### Added
+- **The Recurring section** (ADR 0068): in My tasks, a recurring task whose day (its start date, else its due date) hasn't come yet waits in a collapsed **↻ Recurring** section at the end of the list instead of in its group, and is back in its group, at its own position, on its day. The next instance of a completed recurring task therefore no longer shows directly below the completed one until its day. Placements and the API don't change; the smart views stay date-based; group counts and the My tasks badge leave these tasks out. The TUI does the same, `rooster ls` lists them only with `--upcoming` (`--json` keeps every task and marks each with `upcoming`), and MCP rows mark them `upcoming: true`.
+- **Phones:** a long-press on a new row's title creates the task and lifts it, so a task can be moved right after typing it (ADR 0069).
 - Third-party licence notices: `THIRD-PARTY-NOTICES.txt` ships in the image (`/app`, and served at `/third-party-notices.txt`) and with the CLI binaries on each GitHub release, next to `LICENSE`.
 - `SECURITY.md`: report vulnerabilities privately through GitHub's private vulnerability reporting.
 

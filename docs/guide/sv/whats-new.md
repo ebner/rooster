@@ -4,6 +4,8 @@ Vad som har ändrats för dig i varje version av rooster, med den senaste först
 
 ## Unreleased
 
+- **Återkommande uppgifter väntar på sin dag.** När du markerar en återkommande uppgift som klar står nästa inte längre i listan hela veckan: den väntar under **↻ Återkommande** längst ner i Mina uppgifter och kommer tillbaka till sin grupp på sin dag. Idag och Kommande 7 dagar visar den som förut.
+- **Flytta en ny uppgift på mobilen.** Skriv namnet och håll sedan kvar på det: uppgiften läggs till och du kan dra den dit den ska.
 - **Se när en äldre rooster-CLI loggar in.** När du godkänner en inloggning från en äldre version av rooster för kommandoraden hamnar nu samma notis, ”anslöts till ditt konto”, i din inkorg (och e-post) som för nyare versioner.
 
 ## 1.9.0

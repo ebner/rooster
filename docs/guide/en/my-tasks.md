@@ -20,6 +20,10 @@ Groups are personal. Two people in the same organisation each have their own gro
 
 The **Inbox** is a special group pinned at the top. It collects tasks that arrive without a group: tasks someone else assigned to you, and tasks added from the command line or an AI agent. It is hidden when it's empty. Drag its tasks into your own groups to triage them. The Inbox can't be renamed, moved or deleted.
 
+### Recurring
+
+**↻ Recurring** is a collapsed section at the end of the list. It holds repeating tasks whose day hasn't come yet, so a weekly task doesn't sit in your *Today* group all week. On its day a task goes back to its own group. See [The Recurring section](./dates-and-repeats.md#the-recurring-section).
+
 ## Add and edit tasks
 
 - **Enter** while editing adds a task below; **Shift+Enter** adds one above. While a row is only selected, **N** and **Shift+N** do the same, and **Q** (or Tab+Q) adds a task at the top of the first group.

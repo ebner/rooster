@@ -4,6 +4,8 @@ What changed for you in each version of rooster, newest first. After an update, 
 
 ## Unreleased
 
+- **Repeating tasks wait for their day.** When you complete a repeating task, the next one no longer sits in your list all week: it waits under **↻ Recurring** at the end of My tasks and comes back to its group on its day. Today and Next 7 days show it as before.
+- **Move a new task on your phone.** Type its name, then press and hold the name: the task is added and you can drag it where it belongs.
 - **Know when an older rooster CLI signs in.** Approving a sign-in from an older version of the rooster command line now puts the same "was connected to your account" notice in your inbox (and email) as newer versions do.
 
 ## 1.9.0
