@@ -6,7 +6,8 @@
  * the list's tree grid goes (the sidebar, headers, toolbars, the pane, the FAB, the bottom nav,
  * toasts and popovers), plus the list's own screen-only parts (add rows, drag handles,
  * chevrons). Group and section headings stay, and each task keeps its title, date, tags and
- * assignee, with subtasks indented and the checkbox as ☐ / ☑.
+ * assignee, with subtasks indented and the checkbox as ☐ / ☑. Upcoming (ADR 0068) prints as
+ * it is shown: its tasks when it is open, nothing when it is folded.
  *
  * The main list is the `[data-list-root]` outside the detail pane (the pane's subtask list
  * uses the same grid). `:has()` is only evaluated while printing: rules under a media query
@@ -84,6 +85,8 @@
       [data-testid="group-header"] button,
       [data-testid="section-header"] button,
       [data-testid="member-section"] button,
+      [data-testid="upcoming-header"] button,
+      [data-testid="upcoming-header"][aria-expanded="false"],
       [role="row"] > [aria-hidden].absolute
     ) {
     display: none !important;
@@ -109,7 +112,8 @@
     :is(
       [data-testid="group-header"],
       [data-testid="section-header"],
-      [data-testid="member-section"]
+      [data-testid="member-section"],
+      [data-testid="upcoming-header"]
     ) {
     margin-top: var(--space-4) !important;
     break-after: avoid;

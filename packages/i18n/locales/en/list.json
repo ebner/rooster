@@ -275,14 +275,17 @@
       "passport": "Renew passport",
       "offsite": "Plan the team offsite",
       "done": "Send the slides",
-      "weekly": "Water the plants"
+      "weekly": "Water the plants",
+      "bins": "Take out the bins"
     },
     "recurringDeletePopover": "Anchored popover (focus)",
     "recurringDeleteSheet": "Phone sheet",
     "headerMenu": "Header ⋯ menu",
     "headerMenuMy": "My tasks",
     "headerMenuSmart": "Smart view",
-    "headerMenuEveryone": "Everyone’s tasks"
+    "headerMenuEveryone": "Everyone’s tasks",
+    "upcomingCollapsed": "Recurring (folded)",
+    "upcomingOpen": "Recurring (open)"
   },
   "subtasks": {
     "add": "Add subtask",
@@ -321,5 +324,15 @@
     "groupCount": "{count, plural, one {# task} other {# tasks}}",
     "expanded": "expanded",
     "collapsed": "collapsed"
+  },
+  "upcoming": {
+    "name": "Recurring",
+    "hint": "Repeating tasks wait here until their day",
+    "next": "Next: {date} · in Recurring",
+    "nextMany": "The next ones are in Recurring",
+    "movedOne": "“{title}” is in Recurring until {date}",
+    "movedMany": "{count, plural, one {# task is} other {# tasks are}} in Recurring",
+    "cantMove": "Tasks in Recurring can’t be moved. Change the date to bring one back.",
+    "noAdd": "New tasks can’t be added to Recurring"
   }
 }

@@ -1,6 +1,8 @@
+import type { IsoDate } from '@rooster/core/dates';
 import { compareKeys } from '@rooster/core/ordering';
 import { childrenIndex, inboxOf, type ListState, normalGroups } from '@rooster/core/reducers';
 import type { Group, Task } from '@rooster/core/schemas';
+import { compareUpcoming, isUpcoming } from '@rooster/core/upcoming';
 import type { SmartView, ViewSectionKind } from '@rooster/core/views';
 import {
   addGroupRowId,
@@ -8,6 +10,7 @@ import {
   addSubtaskRowId,
   type Draft,
   groupRowId,
+  upcomingRowId,
 } from '../../../state/list-store';
 import type { Person } from '../../people/members';
 
@@ -40,8 +43,25 @@ export interface TaskRow {
   breadcrumb: string | null;
   /** Smart views (02 §10): the section the row is in. */
   sectionId?: string;
-  /** Today (02 §10): the task's group name, shown as a muted chip. */
+  /** Today (02 §10) and Upcoming (ADR 0068): the task's group name, shown as a muted chip. */
   groupChip?: string;
+  /**
+   * ADR 0068: the row is in the Upcoming section (an upcoming task, or a subtask under one).
+   * It can't be dragged or moved, and no new rows are created next to it.
+   */
+  upcoming?: true;
+}
+
+/**
+ * The Upcoming section's header (ADR 0068): after the groups, for recurring tasks whose day
+ * hasn't come yet. A system section: no rename, menu, inline add or drop target.
+ */
+export interface UpcomingRow {
+  kind: 'upcoming';
+  id: string;
+  /** Open tasks in the section. */
+  count: number;
+  collapsed: boolean;
 }
 
 /** "+ Add subtask" after an expanded parent's subtasks. */
@@ -110,7 +130,8 @@ export type Row =
   | AddGroupRow
   | AddSubtaskRow
   | SectionRow
-  | EmptyRow;
+  | EmptyRow
+  | UpcomingRow;
 
 export interface RowOptions {
   drafts: readonly Draft[];
@@ -122,6 +143,19 @@ export interface RowOptions {
   draftTask: (draft: Draft) => Task;
   /** FR-TAG-4: only top-level rows carrying one of these tags (empty: all). */
   tagFilter?: readonly string[];
+  /**
+   * ADR 0068: the viewer's today. With it, open top-level recurring tasks whose day is after
+   * today leave their groups for the Upcoming section at the end.
+   */
+  today?: IsoDate | undefined;
+  /** The Upcoming section is folded (the default; a group drag folds it as well). */
+  upcomingCollapsed?: boolean | undefined;
+  /**
+   * The row whose date picker is open: it stays where it was (in its group or in Upcoming)
+   * until the picker closes. The picker is anchored to it, and a repeat or a reminder saves a
+   * new date while the picker stays open.
+   */
+  inPlace?: string | null | undefined;
 }
 
 export type RowCache = Map<string, Row>;
@@ -144,8 +178,10 @@ export function rowReuser(cache: RowCache | undefined): <T extends Row>(row: T) 
 
 /**
  * The flat row model (04 §5.4): group header, its visible tasks (with drafts spliced in),
- * its "+ Add task" row, and "+ Add group" at the end. Rows equal to the cached ones keep
- * their identity, so memoised row components re-render only when their row changed.
+ * its "+ Add task" row, and "+ Add group" at the end. With `today` (ADR 0068), recurring
+ * tasks whose day hasn't come yet leave their groups for the Upcoming section after that.
+ * Rows equal to the cached ones keep their identity, so memoised row components re-render
+ * only when their row changed.
  */
 export function buildRows(state: ListState, options: RowOptions, cache?: RowCache): Row[] {
   const rows: Row[] = [];
@@ -165,13 +201,41 @@ export function buildRows(state: ListState, options: RowOptions, cache?: RowCach
   const filter = options.tagFilter ?? [];
   const passes = (task: Task) =>
     filter.length === 0 || task.tagIds.some((id) => filter.includes(id));
+  const { today } = options;
+  const pinned = options.inPlace ? cache?.get(options.inPlace) : undefined;
+  const pinnedUpcoming = pinned?.kind === 'task' ? pinned.upcoming === true : undefined;
+  /**
+   * ADR 0068: waiting for its day, or completed there and still in its hold, or with its date
+   * picker open there (both stay put).
+   */
+  const inUpcoming = (task: Task) =>
+    today !== undefined &&
+    (task.id === options.inPlace && pinnedUpcoming !== undefined
+      ? pinnedUpcoming
+      : isUpcoming(task, today) ||
+        (task.completedAt !== null &&
+          task.id in options.hiding &&
+          isUpcoming({ ...task, completedAt: null }, today)));
 
   const inbox = inboxOf(state);
   const groups = normalGroups(state);
   const byGroup = bucketByGroup(state);
   const children = childrenIndex(Object.values(state.tasks));
   const expanded = new Set(state.expandedTaskIds);
-  const inGroup = (groupId: string) => byGroup.get(groupId) ?? [];
+  const upcoming: Task[] = [];
+  /** Each group's own tasks: every upcoming one goes to `upcoming` instead, in one pass. */
+  const kept = new Map<string, Task[]>();
+  for (const group of inbox ? [inbox, ...groups] : groups) {
+    const all = byGroup.get(group.id) ?? [];
+    if (today === undefined) {
+      kept.set(group.id, all);
+      continue;
+    }
+    const own: Task[] = [];
+    for (const task of all) (inUpcoming(task) ? upcoming : own).push(task);
+    kept.set(group.id, own);
+  }
+  const inGroup = (groupId: string) => kept.get(groupId) ?? [];
   const inboxTasks = inbox ? inGroup(inbox.id) : [];
   const showInbox =
     inbox !== undefined &&
@@ -193,8 +257,18 @@ export function buildRows(state: ListState, options: RowOptions, cache?: RowCach
       breadcrumb: null,
     });
 
-  /** Rows of a parent's expanded subtree: subtasks (drafts spliced in), then "+ Add subtask". */
-  const subtree = (parent: Task, groupId: string, level: number, out: Row[], guard: number) => {
+  /**
+   * Rows of a parent's expanded subtree: subtasks (drafts spliced in), then "+ Add subtask"
+   * (none in Upcoming, where no rows are added).
+   */
+  const subtree = (
+    parent: Task,
+    groupId: string,
+    level: number,
+    out: Row[],
+    guard: number,
+    section: boolean,
+  ) => {
     const items: (TaskRow | Task)[] = (children.get(parent.id) ?? []).filter(visible);
     for (const draft of draftsByParent.get(parent.id) ?? []) {
       const at =
@@ -208,8 +282,9 @@ export function buildRows(state: ListState, options: RowOptions, cache?: RowCach
         out.push(item);
         continue;
       }
-      taskRows(item, groupId, level, parent.id, out, guard + 1);
+      taskRows(item, groupId, level, parent.id, out, guard + 1, section);
     }
+    if (section) return;
     out.push(
       reuse({
         kind: 'addSubtask',
@@ -228,12 +303,16 @@ export function buildRows(state: ListState, options: RowOptions, cache?: RowCach
     parentId: string | null,
     out: Row[],
     guard = 0,
+    /** In the Upcoming section (ADR 0068). */
+    section = false,
   ) => {
     const hasChildren =
       task.counts.subtasks > 0 || children.has(task.id) || draftsByParent.has(task.id);
     const open = hasChildren && expanded.has(task.id) && guard < 8;
     const orphanParent =
       parentId === null && task.parentId !== null ? state.tasks[task.parentId] : undefined;
+    // Upcoming names the group each task goes back to.
+    const chip = section && parentId === null ? state.groups[groupId]?.name : undefined;
     out.push(
       reuse<TaskRow>({
         kind: 'task',
@@ -246,9 +325,11 @@ export function buildRows(state: ListState, options: RowOptions, cache?: RowCach
         expandable: hasChildren,
         expanded: open,
         breadcrumb: orphanParent ? orphanParent.title : null,
+        ...(chip === undefined ? {} : { groupChip: chip }),
+        ...(section ? { upcoming: true as const } : {}),
       }),
     );
-    if (open) subtree(task, groupId, level + 1, out, guard);
+    if (open) subtree(task, groupId, level + 1, out, guard, section);
   };
 
   ordered.forEach((group, index) => {
@@ -267,12 +348,16 @@ export function buildRows(state: ListState, options: RowOptions, cache?: RowCach
     );
     if (collapsed) return;
     const items: (Task | TaskRow)[] = tasks.filter((t) => visible(t) && passes(t));
-    for (const draft of draftsByGroup.get(group.id) ?? []) {
-      const at =
-        draft.afterId === null
-          ? 0
-          : items.findIndex((r) => r.id === draft.afterId) + 1 || items.length;
-      items.splice(at, 0, draftRow(draft, group.id, 2, null));
+    const drafts = draftsByGroup.get(group.id);
+    if (drafts) {
+      const anchors = hiddenAnchors(byGroup.get(group.id) ?? [], items);
+      for (const draft of drafts) {
+        items.splice(
+          draftIndex(items, draft.afterId, anchors),
+          0,
+          draftRow(draft, group.id, 2, null),
+        );
+      }
     }
     for (const item of items) {
       if ('kind' in item) rows.push(item);
@@ -284,7 +369,58 @@ export function buildRows(state: ListState, options: RowOptions, cache?: RowCach
     rows.push(reuse({ kind: 'add', id: addRowId(group.id), groupId: group.id }));
   });
   rows.push(reuse({ kind: 'addGroup', id: addGroupRowId }));
+  if (upcoming.length > 0) {
+    upcoming.sort(compareUpcoming);
+    const collapsed = options.dragCollapsed || (options.upcomingCollapsed ?? true);
+    rows.push(
+      reuse({
+        kind: 'upcoming',
+        id: upcomingRowId,
+        count: upcoming.filter((t) => t.completedAt === null).length,
+        collapsed,
+      }),
+    );
+    if (!collapsed) {
+      for (const task of upcoming) {
+        const groupId = task.placement?.groupId ?? '';
+        if (passes(task)) taskRows(task, groupId, 2, null, rows, 0, true);
+      }
+    }
+  }
   return rows;
+}
+
+/**
+ * For each task of a group that is not shown (completed, filtered out, or in Upcoming): the
+ * shown task directly above it, or null at the top. A new row placed after a task that has
+ * just left the group (Enter on a title that sent it to Upcoming) stays where it was.
+ */
+function hiddenAnchors(
+  all: readonly Task[],
+  shown: readonly (Task | TaskRow)[],
+): Map<string, string | null> {
+  const anchors = new Map<string, string | null>();
+  const isShown = new Set(shown.map((item) => item.id));
+  let above: string | null = null;
+  for (const task of all) {
+    if (isShown.has(task.id)) above = task.id;
+    else anchors.set(task.id, above);
+  }
+  return anchors;
+}
+
+/** Where a draft goes in `items`: after `afterId` (or its shown stand-in), else at the end. */
+function draftIndex(
+  items: readonly (Task | TaskRow)[],
+  afterId: string | null,
+  anchors: ReadonlyMap<string, string | null>,
+): number {
+  if (afterId === null) return 0;
+  const at = items.findIndex((r) => r.id === afterId);
+  if (at >= 0) return at + 1;
+  const anchor = anchors.get(afterId);
+  if (anchor === undefined) return items.length;
+  return anchor === null ? 0 : items.findIndex((r) => r.id === anchor) + 1;
 }
 
 /** Placed tasks per group in list order, in one pass (`tasksInGroup` per group is O(groups × n)). */
@@ -307,9 +443,14 @@ function bucketByGroup(state: ListState): Map<string, Task[]> {
   return buckets;
 }
 
-/** Rows that ↑/↓ and the selection move through: group headers and tasks. */
-export function isNavigable(row: Row): row is GroupRow | TaskRow {
-  return row.kind === 'group' || row.kind === 'task';
+/** Rows that ↑/↓ and the selection move through: group headers, Upcoming's header and tasks. */
+export function isNavigable(row: Row): row is GroupRow | TaskRow | UpcomingRow {
+  return row.kind === 'group' || row.kind === 'task' || row.kind === 'upcoming';
+}
+
+/** ADR 0068: the Upcoming header, or a row in its section. */
+export function isUpcomingRow(row: Row): boolean {
+  return row.kind === 'upcoming' || (row.kind === 'task' && row.upcoming === true);
 }
 
 /** Persisted tasks only (no drafts). */
@@ -329,10 +470,12 @@ export interface GroupOrder {
   taskIds: string[];
 }
 
-/** The visible order the keyboard moves and drops work in (no drafts). */
+/** The visible order the keyboard moves and drops work in (no drafts, nothing in Upcoming). */
 export function visibleOrder(rows: readonly Row[]): GroupOrder[] {
   const groups: GroupOrder[] = [];
   for (const row of rows) {
+    // Upcoming comes last, and nothing moves into it or within it (ADR 0068).
+    if (row.kind === 'upcoming') break;
     if (row.kind === 'group') {
       groups.push({ id: row.group.id, collapsed: row.collapsed, taskIds: [] });
     } else if (isTopTaskRow(row)) {

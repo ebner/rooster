@@ -56,6 +56,8 @@ export interface TitleInputHandle {
   focus: () => void;
   /** Commits as a blur would, for a suspended edit whose focus went elsewhere. */
   blur: () => void;
+  /** The text as typed and the tokens cancelled in it (ADR 0069: whether a press lifts it). */
+  text: () => { raw: string; ignored: Span[] };
 }
 
 const handles = new Map<string, TitleInputHandle>();
@@ -341,8 +343,9 @@ export function TitleInput({
       },
       focus: () => input.current?.focus({ preventScroll: true }),
       blur: () => {
-        if (!committed.current) apply(controller.blurEdit(rowId, value(), spans()));
+        if (!committed.current) finish(controller.blurEdit(rowId, value(), spans()));
       },
+      text: () => ({ raw: value(), ignored: spans() }),
     };
     handles.set(rowId, handle);
     return () => {
@@ -448,7 +451,9 @@ export function TitleInput({
     if (matches(native, 'newBelow', platform) || matches(native, 'newAbove', platform)) {
       event.preventDefault();
       const trimmed = el.value.trim();
-      if (!event.shiftKey && !view && !everyone && trimmed.length > 1 && trimmed.endsWith(':')) {
+      // No groups from a row in Upcoming: it would split its group where it isn't (ADR 0068).
+      const colon = !event.shiftKey && !view && !everyone && trimmed.endsWith(':');
+      if (colon && trimmed.length > 1 && !controller.isInUpcoming(rowId)) {
         if (colonChip === 'shown') {
           committed.current = true;
           setColonChip('off');
@@ -545,7 +550,8 @@ export function TitleInput({
     if (committed.current) return;
     // A sheet from the accessory bar has focus for a moment; the edit resumes after it.
     if (controller.ui().suspendedEdit === rowId) return;
-    apply(controller.blurEdit(rowId, value(), spans()));
+    // The edit is over: a drag that blurred the title (ADR 0069) must not commit it again.
+    finish(controller.blurEdit(rowId, value(), spans()));
   };
 
   const syncScroll = () => {

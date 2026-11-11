@@ -19,6 +19,7 @@ import {
 } from '@rooster/core/reducers';
 import type { ReminderSpec } from '@rooster/core/reminders';
 import type { OrderingIntent, Reminder, Tag, Task, TaskMove } from '@rooster/core/schemas';
+import { isUpcoming } from '@rooster/core/upcoming';
 import type { SmartView, ViewSection } from '@rooster/core/views';
 import type { DroppedOp, ListPipeline } from '../../data/list';
 import {
@@ -30,6 +31,7 @@ import {
   type ListStore,
   type ListStoreHook,
   selectedIds,
+  upcomingRowId,
   useListStore,
 } from '../../state/list-store';
 import { type UndoEntry, useUndoStore } from '../../state/undo-store';
@@ -46,7 +48,14 @@ import {
   type KeyboardMove,
   keyboardMoveTarget,
 } from './model/moves';
-import { isNavigable, isTaskRow, type Row, type TaskRow, visibleOrder } from './model/rows';
+import {
+  isNavigable,
+  isTaskRow,
+  isUpcomingRow,
+  type Row,
+  type TaskRow,
+  visibleOrder,
+} from './model/rows';
 import { sectionTakesAdds } from './model/view-rows';
 import {
   blankSpan,
@@ -56,6 +65,7 @@ import {
   resolveGroupToken,
   type Span,
 } from './title-tokens';
+import { setUpcomingOpen, upcomingDayLabel, upcomingOpen } from './upcoming';
 
 export type Translate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -318,6 +328,121 @@ export class ListController {
   }
 
   // -------------------------------------------------------------------------------------
+  // Upcoming (ADR 0068): recurring tasks wait at the end of My tasks until their day
+  // -------------------------------------------------------------------------------------
+
+  /** My tasks has the section; the smart views, Everyone's tasks and the pane don't. */
+  private hasUpcoming(): boolean {
+    return !this.isView() && this.deps.rootTaskId === undefined;
+  }
+
+  /**
+   * Whether the task waits in Upcoming now (by its own fields and the viewer's today). Only a
+   * task placed in My tasks can: one created for someone else goes to their list.
+   */
+  isUpcomingTask(id: string): boolean {
+    const task = this.task(id);
+    return (
+      this.hasUpcoming() &&
+      task !== undefined &&
+      Boolean(task.placement) &&
+      isUpcoming(task, this.deps.dateContext().today)
+    );
+  }
+
+  /** The rows in the Upcoming section: its tasks and the subtasks shown under them. */
+  private upcomingRowIds(): Set<string> {
+    const ids = new Set<string>();
+    for (const row of this.rows()) if (row.kind === 'task' && row.upcoming) ids.add(row.id);
+    return ids;
+  }
+
+  /** Whether the row is Upcoming's header or in its section. */
+  isInUpcoming(rowId: string): boolean {
+    const row = this.rows().find((r) => r.id === rowId);
+    return row !== undefined && isUpcomingRow(row);
+  }
+
+  upcomingCollapsed(): boolean {
+    return !upcomingOpen(this.deps.userId, this.orgId);
+  }
+
+  /** The header's chevron, a click on it, ←/→ (persisted on this device, not undoable). */
+  setUpcomingCollapsed(collapsed: boolean): void {
+    setUpcomingOpen(this.deps.userId, this.orgId, !collapsed);
+  }
+
+  /**
+   * The tasks that can be moved: none in Upcoming (it holds tasks until their day; a new date
+   * brings one back). Says so when that leaves nothing to move.
+   */
+  movable(ids: readonly string[]): string[] {
+    if (!this.hasUpcoming()) return [...ids];
+    const upcoming = this.upcomingRowIds();
+    const movable = ids.filter((id) => !upcoming.has(id));
+    if (movable.length === 0 && ids.length > 0) announce(this.t('upcoming.cantMove'));
+    return movable;
+  }
+
+  /** Ids among `ids` whose tasks are in Upcoming now. */
+  private upcomingSet(ids: readonly string[]): Set<string> {
+    return new Set(ids.filter((id) => this.isUpcomingTask(id)));
+  }
+
+  /**
+   * The tasks among `ids` that this command sent to Upcoming (they left their group). A cursor
+   * on one of them follows it into an open section, or moves to `next` when the section is
+   * folded, unless the pane shows it (02 §3.2: the pane shows the selected row).
+   */
+  private sentToUpcoming(
+    ids: readonly string[],
+    before: ReadonlySet<string>,
+    next?: string | null,
+  ): Task[] {
+    const sent = ids
+      .filter((id) => !before.has(id) && this.isUpcomingTask(id))
+      .map((id) => this.task(id) as Task);
+    const store = this.store();
+    if (next === undefined || !store.cursor || !sent.some((t) => t.id === store.cursor)) {
+      return sent;
+    }
+    if (!this.upcomingCollapsed()) store.set({ focusSeq: store.focusSeq + 1 });
+    else if (!this.deps.pane?.isOpen()) store.select(next);
+    return sent;
+  }
+
+  /**
+   * "“Water the plants” is in Recurring until Mon.": a task the user's own change sent out of
+   * its group says where it went. None of these ops has a toast of its own, so this one is
+   * informational (a toast is a polite status, so it is announced too).
+   */
+  private toastUpcoming(sent: readonly Task[]): void {
+    const first = sent[0];
+    if (!first) return;
+    toast({
+      message:
+        sent.length === 1
+          ? this.t('upcoming.movedOne', {
+              title: first.title,
+              date: upcomingDayLabel(first, this.deps.dateContext(), true),
+            })
+          : this.t('upcoming.movedMany', { count: sent.length }),
+    });
+  }
+
+  /** " · Next: Mon · in Upcoming" for the toast of a completion or a skip that made one. */
+  private upcomingSuffix(nextIds: readonly string[]): string {
+    const next = nextIds.filter((id) => this.isUpcomingTask(id));
+    const first = next[0] ? this.task(next[0]) : undefined;
+    if (!first) return '';
+    const text =
+      next.length === 1
+        ? this.t('upcoming.next', { date: upcomingDayLabel(first, this.deps.dateContext()) })
+        : this.t('upcoming.nextMany');
+    return ` · ${text}`;
+  }
+
+  // -------------------------------------------------------------------------------------
   // Running ops and undo (02 §3.7)
   // -------------------------------------------------------------------------------------
 
@@ -467,7 +592,7 @@ export class ListController {
   }
 
   toggleInSelection(rowId: string): void {
-    if (isGroupRowId(rowId)) return;
+    if (isGroupRowId(rowId) || rowId === upcomingRowId) return;
     this.store().toggleSelected(rowId);
     this.announceSelection();
   }
@@ -476,14 +601,18 @@ export class ListController {
   selectAll(): void {
     const rows = this.rows().filter(isTaskRow);
     const cursorRow = this.cursorRow();
-    // A smart view's sections stand in for groups.
+    // A smart view's sections and Upcoming stand in for groups.
+    const bucket = (row: TaskRow) =>
+      row.upcoming ? upcomingRowId : (row.sectionId ?? row.groupId);
     const groupId =
       cursorRow?.kind === 'task'
-        ? (cursorRow.sectionId ?? cursorRow.groupId)
+        ? bucket(cursorRow)
         : cursorRow?.kind === 'group'
           ? cursorRow.group.id
-          : undefined;
-    const inGroup = rows.filter((r) => (r.sectionId ?? r.groupId) === groupId).map((r) => r.id);
+          : cursorRow?.kind === 'upcoming'
+            ? upcomingRowId
+            : undefined;
+    const inGroup = rows.filter((r) => bucket(r) === groupId).map((r) => r.id);
     const selected = selectedIds(this.store());
     const all = rows.map((r) => r.id);
     const groupDone = inGroup.length > 0 && inGroup.every((id) => selected.includes(id));
@@ -591,7 +720,7 @@ export class ListController {
     const scan = (step: 1 | -1): TaskRow | null => {
       for (let i = index + step; i >= 0 && i < rows.length; i += step) {
         const r = rows[i] as Row;
-        if (r.kind === 'group') return null;
+        if (r.kind === 'group' || r.kind === 'upcoming') return null;
         if (r.kind === 'task' && r.level === row.level) {
           return r.parentId === row.parentId ? r : null;
         }
@@ -616,6 +745,10 @@ export class ListController {
       else this.quickAdd();
       return;
     }
+    if (row && isUpcomingRow(row)) {
+      announce(this.t('upcoming.noAdd'));
+      return;
+    }
     if (row?.kind === 'task') this.newDraft(row.groupId, row.id, row.parentId);
     else if (row?.kind === 'group') this.newDraft(row.group.id, null);
     else this.quickAdd();
@@ -629,6 +762,10 @@ export class ListController {
         this.newSectionDraft(row.sectionId, this.rowAboveInSection(row.id));
       } else if (row?.kind === 'section') this.newSectionDraft(row.sectionId, null);
       else this.quickAdd();
+      return;
+    }
+    if (row && isUpcomingRow(row)) {
+      announce(this.t('upcoming.noAdd'));
       return;
     }
     if (row?.kind === 'task') {
@@ -739,8 +876,24 @@ export class ListController {
     for (const offsetMinutes of parsed.reminders ?? []) {
       specs.push(listOps.createReminder(rowId, uuidv7(), { offsetMinutes }));
     }
-    if (specs.length > 0) this.run(this.t('undo.edited'), specs);
+    if (specs.length > 0) {
+      const before = this.upcomingSet([rowId]);
+      this.run(this.t('undo.edited'), specs);
+      // A new date phrase ("every mon") can send the task to Upcoming (ADR 0068).
+      this.toastUpcoming(this.sentToUpcoming([rowId], before));
+    }
     return {};
+  }
+
+  /**
+   * Whether committing this draft's title would create a task (ADR 0067 §4, ADR 0069). A title
+   * that parses to nothing (blank, or empty backticks) creates none, so a press lifts nothing.
+   */
+  draftCreates(rowId: string, raw: string, ignored: readonly Span[] = []): boolean {
+    const draft = this.store().drafts.find((d) => d.id === rowId);
+    if (!draft || raw.trim() === '') return false;
+    const groupTokens = Boolean(draft.sectionId && !draft.parentId && !this.isEveryone());
+    return this.parseLine(raw, ignored, groupTokens, true, this.hasDueFor(rowId)).title !== '';
   }
 
   /** Whether a row's task or draft already has a due date (P10: `!1h` needs one). */
@@ -804,8 +957,10 @@ export class ListController {
     let afterId = neighbours.afterId;
     const beforeId = neighbours.beforeId;
     const specs: ListOpSpec[] = [];
+    const ids: string[] = [];
     parsed.forEach((p, i) => {
       const id = i === 0 ? draft.id : uuidv7();
+      ids.push(id);
       createdHere.add(id);
       const { ids: tagIds, newNames } = this.resolveTags(p.tags ?? []);
       specs.push(
@@ -829,6 +984,8 @@ export class ListController {
     this.store().removeDraft(draft.id);
     const label = this.createdLabel(parsed);
     this.run(label, specs, { toast: this.createdElsewhere(parsed) });
+    // A future repeat ("every mon") puts the new task in Upcoming at once (ADR 0068).
+    this.toastUpcoming(this.sentToUpcoming(ids, new Set()));
   }
 
   /** `assigneeId` for a create body: only another member (the server defaults to me). */
@@ -942,6 +1099,12 @@ export class ListController {
       }
       return result;
     }
+    if (row?.kind === 'task' && row.upcoming) {
+      // No new rows in Upcoming (ADR 0068): Enter only commits.
+      const result = this.commitTitle(rowId, raw, ignored);
+      this.store().navigate(rowId);
+      return result;
+    }
     const aboveId = above ? this.rowAboveInGroup(rowId) : null;
     const result = this.commitTitle(rowId, raw, ignored);
     const groupId = row?.kind === 'task' ? row.groupId : draft?.groupId;
@@ -955,6 +1118,8 @@ export class ListController {
 
   /** Esc in Edit: commit and go to Navigate (an empty draft disappears). */
   escapeEdit(rowId: string, raw: string, ignored: readonly Span[]): CommitResult {
+    const next = this.nextNavigableAfter([rowId]);
+    const before = this.upcomingSet([rowId]);
     const result = this.commitTitle(rowId, raw, ignored);
     if (this.draftTask(rowId)) {
       const previous = this.previousTaskRow(rowId);
@@ -963,6 +1128,8 @@ export class ListController {
       return result;
     }
     this.store().navigate(rowId);
+    // A title that sent the task into a folded Upcoming hands the cursor on (ADR 0068).
+    this.sentToUpcoming([rowId], before, next);
     return result;
   }
 
@@ -1146,8 +1313,9 @@ export class ListController {
       ? targets.filter((id) => this.task(id)?.recurrence && this.task(id)?.dueDate)
       : [];
     const rest = targets.filter((id) => !repeating.includes(id));
+    const nextIds = repeating.map(() => uuidv7());
     const specs = [
-      ...repeating.map((id) => listOps.completeTask(id, true, uuidv7())),
+      ...repeating.map((id, i) => listOps.completeTask(id, true, nextIds[i])),
       ...(rest.length === 1
         ? [listOps.completeTask(rest[0] as string, complete)]
         : chunk(rest).map((part) =>
@@ -1165,8 +1333,9 @@ export class ListController {
     if (complete && entry) {
       const extra =
         subtasksOpen > 0 ? ` · ${this.t('undo.openSubtasks', { count: subtasksOpen })}` : '';
+      // The next instance of a repeating task waits in Upcoming until its day (ADR 0068).
       toast({
-        message: `${label}${extra}`,
+        message: `${label}${extra}${this.upcomingSuffix(nextIds)}`,
         action: { label: this.t('undo.action'), onAction: () => this.undoEntry(entry) },
       });
     }
@@ -1247,7 +1416,15 @@ export class ListController {
       return;
     }
     const next = this.nextNavigableAfter([id]);
-    this.run(this.t('undo.skipped'), [listOps.skipTask(id, uuidv7())], { toast: true });
+    const nextId = uuidv7();
+    const label = this.t('undo.skipped');
+    const entry = this.run(label, [listOps.skipTask(id, nextId)]);
+    if (entry) {
+      toast({
+        message: `${label}${this.upcomingSuffix([nextId])}`,
+        action: { label: this.t('undo.action'), onAction: () => this.undoEntry(entry) },
+      });
+    }
     this.store().select(next);
   }
 
@@ -1305,6 +1482,9 @@ export class ListController {
     };
     const live = ids.filter((id) => this.task(id));
     if (live.length === 0) return;
+    const before = this.upcomingSet(live);
+    const cursor = this.store().cursor;
+    const next = cursor && live.includes(cursor) ? this.nextNavigableAfter(live) : undefined;
     const specs =
       live.length === 1
         ? [listOps.patchTask(live[0] as string, value)]
@@ -1319,6 +1499,8 @@ export class ListController {
         ? this.t('undo.dateClearedReminders')
         : this.t('undo.dateCleared');
     this.run(label, specs, { toast: due === null });
+    // A later date sends a repeating task to Upcoming until then (ADR 0068).
+    this.toastUpcoming(this.sentToUpcoming(live, before, next));
   }
 
   // -------------------------------------------------------------------------------------
@@ -1352,7 +1534,7 @@ export class ListController {
    * where they are sends nothing and records no undo step (02 §5); returns whether it moved.
    */
   moveTasks(ids: readonly string[], target: TaskMove, announceMove = true): boolean {
-    const live = ids.filter((id) => this.task(id));
+    const live = this.movable(ids.filter((id) => this.task(id)));
     if (live.length === 0) return false;
     const state = this.state();
     if (
@@ -1404,6 +1586,11 @@ export class ListController {
     // Smart views are derived orders (02 §10): nothing to move within them; D re-dates.
     if (this.isView()) return false;
     const cursor = this.cursorRow();
+    if (cursor && isUpcomingRow(cursor)) {
+      // ADR 0068: Upcoming keeps its tasks until their day; a new date brings one back.
+      if (cursor.kind === 'task') announce(this.t('upcoming.cantMove'));
+      return cursor.kind === 'task';
+    }
     if (cursor?.kind === 'group') {
       if (move !== 'up' && move !== 'down') return false;
       return this.stepGroup(cursor.group.id, move === 'up' ? -1 : 1);
@@ -1413,8 +1600,8 @@ export class ListController {
       if (move !== 'up' && move !== 'down') return true;
       return this.stepSubtask(cursor.id, move === 'up' ? -1 : 1);
     }
-    const ids = this.selectedTaskIds();
-    if (ids.length === 0) return false;
+    const ids = this.movable(this.selectedTaskIds());
+    if (ids.length === 0) return this.selectedTaskIds().length > 0;
     const target = keyboardMoveTarget(visibleOrder(this.rows()), ids, move);
     if (!target) return true;
     this.moveTasks(ids, target);
@@ -1488,6 +1675,10 @@ export class ListController {
     const row = this.cursorRow();
     if (row?.kind === 'group') {
       this.setCollapsed(row.group.id, collapsed);
+      return true;
+    }
+    if (row?.kind === 'upcoming') {
+      this.setUpcomingCollapsed(collapsed);
       return true;
     }
     if (row?.kind !== 'task' || row.draft) return false;
@@ -1573,6 +1764,11 @@ export class ListController {
     const id = parentId ?? this.selectedTaskIds()[0];
     const state = this.state();
     const parent = id ? state?.tasks[id] : undefined;
+    if (id && this.hasUpcoming() && this.isInUpcoming(id)) {
+      // No new rows in Upcoming (ADR 0068); the pane adds subtasks to any task.
+      announce(this.t('upcoming.noAdd'));
+      return false;
+    }
     if (!id || !parent || !this.canNestUnder(id)) return false;
     if (this.isView()) {
       // Flat rows: the subtask draft sits right under its parent, with the section's date.
@@ -1718,7 +1914,9 @@ export class ListController {
     const state = this.state();
     // Smart views have no groups to split.
     if (!state || this.isView()) return;
-    const row = this.cursorRow();
+    const cursorRow = this.cursorRow();
+    // Upcoming sits after the groups: a new group there goes after the last one (ADR 0068).
+    const row = cursorRow && isUpcomingRow(cursorRow) ? undefined : cursorRow;
     const name = this.t('group.untitled');
     const id = uuidv7();
     let specs: ListOpSpec[];

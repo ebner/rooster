@@ -41,7 +41,7 @@ import type { ListController } from './controller';
 import { longPressMs, longPressSlopPx, suppressNextClick } from './gestures';
 import { useListContext } from './list-context';
 import { isNoopIntent } from './model/moves';
-import { type GroupOrder, type Row, visibleOrder } from './model/rows';
+import { type GroupOrder, isUpcomingRow, type Row, visibleOrder } from './model/rows';
 import {
   currentSlot,
   type DropSlot,
@@ -301,6 +301,11 @@ interface DragSession {
   container: HTMLElement | null;
   width: number;
   touch: boolean;
+  /**
+   * The row lifts (a preview, drop targets). Not in a smart view, nor from Upcoming (ADR 0068),
+   * where a touch long-press only selects (02 §13.2).
+   */
+  lifts: boolean;
   /** The farthest the pointer got from the start (a still long-press selects, 02 §13.2). */
   moved: number;
   /** Removes the session's window listeners. */
@@ -315,15 +320,29 @@ function rowElementAt(x: number, y: number): HTMLElement | null {
 const noDragSelector =
   'input,[role="checkbox"],[data-no-drag],button:not([data-drag-handle]),[role="menu"],[role="dialog"]';
 
-/** The row a pointer-down landed on, resolved before the sensor activates. */
-function pressedRow(target: EventTarget | null): string | null {
-  if (!(target instanceof Element) || target.closest(noDragSelector)) return null;
+/**
+ * The row a press landed on, resolved before the sensor activates. A mouse or pen press drags
+ * a row (a new one from its handle); a touch is a long-press, which also selects (02 §13.2).
+ * On touch, a new row's title lifts it once `liftDraft` says its title makes a task (ADR 0069):
+ * the drag then creates it. Rows in Upcoming never drag (ADR 0068); a long-press still selects.
+ */
+export function pressedRow(
+  target: EventTarget | null,
+  input: 'pointer' | 'touch',
+  liftDraft?: (rowId: string) => boolean,
+): string | null {
+  if (!(target instanceof Element)) return null;
   const row = target.closest<HTMLElement>('[data-row-id]');
   const id = row?.dataset.rowId;
-  if (!id || (row?.dataset.testid !== 'task-row' && row?.dataset.testid !== 'group-header')) {
+  if (!row || !id || (row.dataset.testid !== 'task-row' && row.dataset.testid !== 'group-header')) {
     return null;
   }
-  if (row?.dataset.inbox || (row?.dataset.draft && !draftDraggable(row, target))) return null;
+  if (row.dataset.draft && target.matches('[data-list-input]')) {
+    return input === 'touch' && liftDraft?.(id) ? id : null;
+  }
+  if (target.closest(noDragSelector)) return null;
+  if (row.dataset.upcoming && input === 'pointer') return null;
+  if (row.dataset.inbox || (row.dataset.draft && !draftDraggable(row, target))) return null;
   return id;
 }
 
@@ -336,6 +355,20 @@ function draftDraggable(row: HTMLElement, target: Element): boolean {
   return (row.querySelector<HTMLInputElement>('[data-list-input]')?.value.trim() ?? '') !== '';
 }
 
+/**
+ * Commits a new row's title as a blur would (ADR 0067). While the title still has focus (a
+ * long-press on it, ADR 0069, or Safari, which keeps focus there when the handle is pressed),
+ * it really blurs, which also closes the on-screen keyboard; otherwise the title commits
+ * through its handle (the press's own blur may already have done it).
+ */
+function commitDraftTitle(root: HTMLElement | null, id: string): void {
+  const input = root?.querySelector<HTMLInputElement>(
+    `[data-row-id="${CSS.escape(id)}"] [data-list-input]`,
+  );
+  if (input && document.activeElement === input) input.blur();
+  else titleInputHandle(id)?.blur();
+}
+
 interface SurfaceProps {
   label: string;
   compact: boolean;
@@ -344,6 +377,8 @@ interface SurfaceProps {
   enabled: boolean;
   /** Pointer (mouse) drags reorder; without it only touch long-presses start. */
   reorder: boolean;
+  /** ADR 0069: whether a long-press on this new row's title lifts it (where rows reorder). */
+  liftDraft?: ((rowId: string) => boolean) | undefined;
   children: ReactNode;
 }
 
@@ -359,6 +394,7 @@ function DragSurface({
   pressed,
   enabled,
   reorder,
+  liftDraft,
   children,
 }: SurfaceProps) {
   const { setNodeRef, listeners } = useDraggable({ id: 'list', disabled: !enabled });
@@ -368,11 +404,13 @@ function DragSurface({
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     // Touch drags are the TouchSensor's long-press; a touch moving 4 px is a scroll or a swipe.
     if (event.pointerType === 'touch' || !reorder) return;
-    pressed.current = pressedRow(event.target);
+    pressed.current = pressedRow(event.target, 'pointer');
     if (pressed.current) listeners?.onPointerDown?.(event);
   };
   const onTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
-    pressed.current = pressedRow(event.target);
+    // A pen on an iPad sends touches too; a pen in a title places the caret, as a mouse does.
+    const stylus = (event.touches[0] as { touchType?: string } | undefined)?.touchType === 'stylus';
+    pressed.current = pressedRow(event.target, 'touch', stylus ? undefined : liftDraft);
     if (pressed.current) listeners?.onTouchStart?.(event);
   };
   return (
@@ -442,6 +480,15 @@ export const ListDnd = memo(function ListDnd({
     useSensor(TouchSensor, { activationConstraint: { delay: touchDelayMs, tolerance: 5 } }),
   );
   const rowById = (id: string) => rowsRef.current.find((r) => r.id === id);
+  // ADR 0069: where rows reorder, a long-press on a new row's title lifts it, once committing
+  // the title would create a task.
+  const liftDraft = useCallback(
+    (rowId: string) => {
+      const text = titleInputHandle(rowId)?.text();
+      return text !== undefined && controller.draftCreates(rowId, text.raw, text.ignored);
+    },
+    [controller],
+  );
 
   const setDrop = (drop: DropIndicator | null) => {
     const current = controller.ui().drop;
@@ -475,13 +522,19 @@ export const ListDnd = memo(function ListDnd({
           rowId: row.id,
           edge: upper && row.group.kind !== 'inbox' ? 'before' : 'after',
         };
-      } else if (row.kind === 'addGroup') {
+      } else if (row.kind === 'addGroup' || row.kind === 'upcoming') {
         const last = [...rowsRef.current].reverse().find((r) => r.kind === 'group');
         if (last) candidate = { rowId: last.id, edge: 'after' };
       } else return;
       setDrop(
         candidate && groupDropIntent(controller, s.ids[0] as string, candidate) ? candidate : null,
       );
+      return;
+    }
+    // ADR 0068: Upcoming takes no drops; its tasks come back on their day, or with a new date.
+    if (isUpcomingRow(row)) {
+      clearHover(s);
+      setDrop(null);
       return;
     }
     if (row.kind === 'group' && row.collapsed) {
@@ -591,9 +644,11 @@ export const ListDnd = memo(function ListDnd({
     if (!id) return;
     // A new row's title is committed as a blur would: the task keeps the row's id. The press
     // may already have done so (the handle took focus), and a title that parses to nothing
-    // (only `#tag`) creates no task, which leaves nothing to drag.
-    if (controller.ui().drafts.some((d) => d.id === id)) titleInputHandle(id)?.blur();
-    if (!isGroupRowId(id) && !controller.task(id)) {
+    // creates no task, which leaves nothing to drag. A new task that went straight to Upcoming
+    // (a future repeat, ADR 0068) has left the groups: nothing to drag either.
+    const draft = controller.ui().drafts.some((d) => d.id === id);
+    if (draft) commitDraftTitle(rootRef.current, id);
+    if (!isGroupRowId(id) && (!controller.task(id) || (draft && controller.isUpcomingTask(id)))) {
       pressed.current = null;
       return;
     }
@@ -604,6 +659,8 @@ export const ListDnd = memo(function ListDnd({
         : 'task';
     const point = activatorEvent as PointerEvent | TouchEvent;
     const touch = 'touches' in point;
+    const pressedRowModel = rowById(id);
+    const rowLifts = lifts && !(pressedRowModel && isUpcomingRow(pressedRowModel));
     const start = touch
       ? { x: point.touches[0]?.clientX ?? 0, y: point.touches[0]?.clientY ?? 0 }
       : { x: (point as PointerEvent).clientX, y: (point as PointerEvent).clientY };
@@ -613,7 +670,6 @@ export const ListDnd = memo(function ListDnd({
       ?.querySelector(`[data-row-id="${CSS.escape(id)}"]`)
       ?.getBoundingClientRect();
     const rect = rowRect ?? active.rect.current.initial;
-    const pressedRowModel = rowById(id);
     const s: DragSession = {
       kind,
       assign:
@@ -629,6 +685,7 @@ export const ListDnd = memo(function ListDnd({
       container: scrollParent(root),
       width: rect?.width ?? 0,
       touch,
+      lifts: rowLifts,
       moved: 0,
       detach: () => undefined,
     };
@@ -640,7 +697,7 @@ export const ListDnd = memo(function ListDnd({
       s.pointer = { x, y };
       s.moved = Math.max(s.moved, Math.hypot(x - s.start.x, y - s.start.y));
       placeLayer(s);
-      if (!lifts) return;
+      if (!s.lifts) return;
       computeDrop(s);
       autoScroll(s);
     };
@@ -651,19 +708,22 @@ export const ListDnd = memo(function ListDnd({
     };
     // Scrolling moves the rows under a still pointer.
     const onScroll = () => {
-      if (session.current === s && lifts) computeDrop(s);
+      if (session.current === s && s.lifts) computeDrop(s);
     };
     const options = { capture: true, passive: true };
-    if (touch) window.addEventListener('touchmove', onTouchMove, options);
+    // A touch's events all go to the element it started on, even once that is gone from the
+    // page (a new row's title input, ADR 0069), where nothing above it hears them any more.
+    const touched = touch && point.target instanceof EventTarget ? point.target : window;
+    if (touch) touched.addEventListener('touchmove', onTouchMove as EventListener, options);
     else window.addEventListener('pointermove', onPointerMove, options);
     window.addEventListener('scroll', onScroll, options);
     s.detach = () => {
-      window.removeEventListener('touchmove', onTouchMove, options);
+      touched.removeEventListener('touchmove', onTouchMove as EventListener, options);
       window.removeEventListener('pointermove', onPointerMove, options);
       window.removeEventListener('scroll', onScroll, options);
     };
     if (touch) navigator.vibrate?.(10);
-    if (!lifts) return;
+    if (!s.lifts) return;
     const state = controller.state();
     const name =
       kind === 'group'
@@ -686,14 +746,20 @@ export const ListDnd = memo(function ListDnd({
     if (s.assign) {
       announce(t('dnd.pickedUpAssign', { title: name, count: ids.length }));
     } else if (kind !== 'group') {
-      const order = dragOrder(rowsRef.current, ids);
-      const moving = new Set(ids);
-      const slot = dropSlots(order, moving)[currentSlot(order, moving)];
-      if (slot) {
-        announce(
-          t('dnd.pickedUp', { title: name, ...positionText(controller, order, moving, slot) }),
-        );
-      }
+      const pickedUp = () => {
+        if (session.current !== s) return;
+        const order = dragOrder(rowsRef.current, ids);
+        const moving = new Set(ids);
+        const slot = dropSlots(order, moving)[currentSlot(order, moving)];
+        if (slot) {
+          announce(
+            t('dnd.pickedUp', { title: name, ...positionText(controller, order, moving, slot) }),
+          );
+        }
+      };
+      // A task the drag just created is in the rows once they render.
+      if (draft) requestAnimationFrame(pickedUp);
+      else pickedUp();
     } else {
       announce(t('dnd.pickedUpGroup', { group: name }));
     }
@@ -701,25 +767,30 @@ export const ListDnd = memo(function ListDnd({
 
   const onDragEnd = (_event: DragEndEvent) => {
     const s = session.current;
-    if (s?.touch) suppressNextClick(s.pointer.x, s.pointer.y);
-    if (s?.touch && s.kind === 'task' && s.moved < longPressSlopPx && onLongPress) {
+    // Nothing was picked up (`onDragStart` found nothing to drag).
+    if (!s) {
+      finish();
+      return;
+    }
+    if (s.touch) suppressNextClick(s.pointer.x, s.pointer.y);
+    if (s.touch && s.kind === 'task' && s.moved < longPressSlopPx && onLongPress) {
       const id = pressed.current;
       finish();
       if (id) onLongPress(id);
       return;
     }
-    if (!lifts) {
+    if (!s.lifts) {
       finish();
       return;
     }
-    if (s?.assign) {
+    if (s.assign) {
       const to = s.assign.to;
       finish();
       if (!to || !assignRef.current?.commit(s.ids, to)) announce(t('dnd.cancelled'));
       return;
     }
     const drop = controller.ui().drop;
-    if (!s || !drop) {
+    if (!drop) {
       finish();
       announce(t('dnd.cancelled'));
       return;
@@ -758,8 +829,9 @@ export const ListDnd = memo(function ListDnd({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onDragCancel={() => {
+        const lifted = session.current?.lifts === true;
         finish();
-        announce(t('dnd.cancelled'));
+        if (lifted) announce(t('dnd.cancelled'));
       }}
       accessibility={{
         announcements: silent,
@@ -773,6 +845,7 @@ export const ListDnd = memo(function ListDnd({
         pressed={pressed}
         enabled={enabled}
         reorder={lifts}
+        liftDraft={reorder && !assignDrop ? liftDraft : undefined}
       >
         {children}
       </DragSurface>

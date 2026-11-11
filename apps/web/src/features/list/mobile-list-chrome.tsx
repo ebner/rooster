@@ -1,7 +1,7 @@
 import { orderedGroups } from '@rooster/core/reducers';
 import type { Task } from '@rooster/core/schemas';
 import { Calendar, CheckCircle2, FolderInput, Hash, Trash2, UserRound, X } from 'lucide-react';
-import { type RefObject, Suspense, useMemo, useState } from 'react';
+import { type RefObject, Suspense, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMyList } from '../../data/list';
 import type { OrgMember } from '../../data/types';
@@ -87,6 +87,11 @@ export function MobileListChrome({
   const selectedCount = useListUi((s) => selectedIds(s).length);
   const editing = useListUi((s) => s.editing);
   const draft = useListUi((s) => s.drafts.find((d) => d.id === s.editing?.rowId));
+  const dragging = useListUi((s) => s.dragging !== null);
+  // A new row lifted by a long-press (ADR 0069) keeps the room below the list until it drops,
+  // so the list doesn't jump under the finger when the keyboard goes.
+  const room = useRef(false);
+  room.current = draft !== undefined || (dragging && room.current);
   const tags = useTagsStore((s) => s.byId);
   // Re-render on list changes so sheet checks and labels follow.
   useMyList(orgId);
@@ -166,7 +171,7 @@ export function MobileListChrome({
        * Room below the list's end while a new row is typed: it is scrolled to the top, above
        * the keyboard, even when it is the last row (`scrollRowToListTop`).
        */}
-      {draft && <div aria-hidden data-draft-room className="h-dvh shrink-0" />}
+      {room.current && <div aria-hidden data-draft-room className="h-dvh shrink-0" />}
       <SwipeRows
         rootRef={rootRef}
         layerRef={layerRef}
@@ -337,7 +342,10 @@ function SelectionBars({
           id: 'move',
           label: tList('bulk.moveTo'),
           icon: FolderInput,
-          onPress: () => bulk('moveTo'),
+          // Nothing in Upcoming moves (ADR 0068); the controller says so.
+          onPress: () => {
+            if (controller.movable(controller.selectedTaskIds()).length > 0) bulk('moveTo');
+          },
         },
     { id: 'tag', label: tList('bulk.tag'), icon: Hash, onPress: () => bulk('tag') },
     {

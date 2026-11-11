@@ -269,6 +269,7 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
       data-testid="task-row"
       data-done={done || undefined}
       data-draft={draft || undefined}
+      data-upcoming={row.upcoming}
       onClick={onRowClick}
       onFocus={(event) => {
         // Tabbing onto the title (or name) selects the row in Navigate.
@@ -330,7 +331,8 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
             />
           </button>
         )}
-        {dragEnabled && (
+        {/* ADR 0068: rows in Upcoming stay there until their day; nothing drags them. */}
+        {dragEnabled && !row.upcoming && (
           <button
             type="button"
             data-drag-handle

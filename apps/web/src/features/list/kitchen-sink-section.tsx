@@ -1,20 +1,25 @@
 import { addDays, todayIn } from '@rooster/core/dates';
+import type { Task } from '@rooster/core/schemas';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ListTransportContext, useListPipeline } from '../../data/list';
 import { createFixtureTransport } from '../../data/pipeline/fixture-transport';
 import { cn } from '../../lib/cn';
+import { createListStore, ListStoreContext, upcomingRowId } from '../../state/list-store';
 import { Menu } from '../../ui/menu';
 import { popoverSurface } from '../../ui/popover';
 import { useViewerDateContext } from '../dates';
 import { Group, Section, Specimen } from '../dev-ui/layout';
 import { BulkBar } from './bulk-bar';
-import { ListController } from './controller';
+import { ListController, type Translate } from './controller';
 import { ListHeaderMenu, ListMenuItems, type ListMenuView } from './header-actions';
-import { ListContext } from './list-context';
+import { ListContext, type ListContextValue } from './list-context';
+import type { TaskRow as TaskRowModel, UpcomingRow } from './model/rows';
 import { MyListView } from './my-list-view';
 import { RecurringDeleteBody, RecurringDeleteSheet } from './recurring-delete';
+import { TaskRow } from './task-row';
+import { UpcomingHeader } from './upcoming-header';
 
 const noop = () => {};
 
@@ -47,6 +52,92 @@ function BulkBarSpecimen() {
     <ListContext.Provider value={value}>
       <BulkBar ids={['a', 'b', 'c']} className="static translate-x-0 animate-none" />
     </ListContext.Provider>
+  );
+}
+
+/**
+ * The Upcoming section (ADR 0068), folded and open, on a static context of its own: its
+ * header, and rows with their date, repeat icon and the group they go back to.
+ */
+function UpcomingSpecimen({ open }: { open: boolean }) {
+  const { t } = useTranslation('list');
+  const pipeline = useListPipeline();
+  const dateCtx = useViewerDateContext();
+  const [store] = useState(() => createListStore());
+  const rows = useMemo(() => {
+    const task = (id: string, title: string, dueDate: string): Task => ({
+      id,
+      orgId: fixtureOrg,
+      seq: null,
+      parentId: null,
+      subtaskPosition: null,
+      title,
+      assigneeId: fixtureUser,
+      createdBy: fixtureUser,
+      dueDate,
+      dueTime: null,
+      dueTz: null,
+      startDate: null,
+      recurrence: 'FREQ=WEEKLY',
+      recurrenceBasis: 'due',
+      tagIds: [],
+      completedAt: null,
+      hasDescription: false,
+      counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
+      placement: { groupId: 'today', position: 'a0' },
+      createdAt: 0,
+      updatedAt: 0,
+    });
+    const row = (item: Task, groupChip: string): TaskRowModel => ({
+      kind: 'task',
+      id: item.id,
+      task: item,
+      groupId: 'today',
+      draft: false,
+      level: 2,
+      parentId: null,
+      expandable: false,
+      expanded: false,
+      breadcrumb: null,
+      groupChip,
+      upcoming: true,
+    });
+    const header: UpcomingRow = { kind: 'upcoming', id: upcomingRowId, count: 2, collapsed: !open };
+    return {
+      header,
+      tasks: [
+        row(
+          task('upcoming-1', t('dev.tasks.weekly'), addDays(dateCtx.today, 1)),
+          t('dev.groups.today'),
+        ),
+        row(
+          task('upcoming-2', t('dev.tasks.bins'), addDays(dateCtx.today, 3)),
+          t('dev.groups.prio'),
+        ),
+      ],
+    };
+  }, [open, t, dateCtx.today]);
+  const value = useMemo<ListContextValue>(() => {
+    const controller = new ListController({
+      orgId: fixtureOrg,
+      userId: fixtureUser,
+      pipeline,
+      t: t as unknown as Translate,
+      rows: () => [rows.header, ...rows.tasks],
+      dateContext: () => dateCtx,
+      store,
+    });
+    return { controller, dateCtx, parseTitles: true, dragEnabled: true };
+  }, [pipeline, t, rows, dateCtx, store]);
+  return (
+    <ListStoreContext.Provider value={store}>
+      <ListContext.Provider value={value}>
+        <div role="treegrid" aria-label={t('upcoming.name')} className="flex w-full flex-col">
+          <UpcomingHeader row={rows.header} />
+          {open && rows.tasks.map((row) => <TaskRow key={row.id} row={row} />)}
+        </div>
+      </ListContext.Provider>
+    </ListStoreContext.Provider>
   );
 }
 
@@ -93,6 +184,8 @@ export function ListSection() {
         ],
         3: [
           { title: t('dev.tasks.offsite'), dueDate: addDays(today, 1) },
+          // ADR 0068: a repeating task whose day hasn't come waits in Upcoming at the end.
+          { title: t('dev.tasks.bins'), dueDate: addDays(today, 3), recurrence: 'FREQ=WEEKLY' },
           // P10: the bell, the paperclip and the repeat icon in the row meta.
           {
             title: t('dev.tasks.weekly'),
@@ -135,6 +228,16 @@ export function ListSection() {
           </Group>
           <Group title={t('dev.bulkBar')}>
             <BulkBarSpecimen />
+          </Group>
+          <Group title={t('dev.upcomingCollapsed')} className="block">
+            <div className="w-full rounded-md border border-border px-3 pb-4">
+              <UpcomingSpecimen open={false} />
+            </div>
+          </Group>
+          <Group title={t('dev.upcomingOpen')} className="block">
+            <div className="w-full rounded-md border border-border px-3 pb-4">
+              <UpcomingSpecimen open />
+            </div>
           </Group>
           <Group title={t('recurringDelete.title')}>
             <Specimen label={t('dev.recurringDeletePopover')}>

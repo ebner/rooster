@@ -3,7 +3,15 @@ import type { Group, Task } from '@rooster/core/schemas';
 import { describe, expect, test } from 'vitest';
 import type { Draft } from '../../../state/list-store';
 import { groupStepTarget, isNoopIntent, keyboardMoveTarget } from './moves';
-import { buildRows, type GroupOrder, type RowCache, type RowOptions, visibleOrder } from './rows';
+import {
+  buildRows,
+  type GroupOrder,
+  isNavigable,
+  isUpcomingRow,
+  type RowCache,
+  type RowOptions,
+  visibleOrder,
+} from './rows';
 import {
   currentSlot,
   dropSlots,
@@ -382,5 +390,217 @@ describe('subtask rows (P3)', () => {
     const filtered = buildRows(s, options({ tagFilter: ['urgent'] }));
     expect(filtered.filter((r) => r.kind === 'task').map((r) => r.id)).toEqual(['t']);
     expect(filtered.filter((r) => r.kind === 'group').length).toBe(2);
+  });
+});
+
+describe('ADR 0068 Upcoming', () => {
+  const today = '2026-11-11';
+  const weekly = (id: string, groupId: string, position: string, extra: Partial<Task> = {}) => ({
+    ...task(id, groupId, position),
+    recurrence: 'FREQ=WEEKLY',
+    recurrenceBasis: 'due' as const,
+    dueDate: '2026-11-18',
+    ...extra,
+  });
+  const open = (patch: Partial<RowOptions> = {}) =>
+    options({ today, upcomingCollapsed: false, ...patch });
+
+  test('upcoming recurring tasks leave their group for the section after "+ Add group"', () => {
+    const s = state([
+      task('a', 'g1', 'a0'),
+      weekly('w', 'g1', 'a1'),
+      task('b', 'g1', 'a2'),
+      weekly('due', 'g2', 'a0', { dueDate: today }),
+    ]);
+    const rows = buildRows(s, open());
+    expect(ids(rows)).toEqual([
+      'group:g1',
+      'a',
+      'b',
+      'add:g1',
+      'group:g2',
+      'due',
+      'add:g2',
+      'add-group',
+      'upcoming',
+      'w',
+    ]);
+    // The group counts leave it out; the section counts it.
+    expect(rows[0]).toMatchObject({ kind: 'group', count: 2 });
+    expect(rows.find((r) => r.id === 'upcoming')).toMatchObject({ count: 1, collapsed: false });
+    // Its row names the group it goes back to, and is marked as Upcoming's.
+    expect(rows.find((r) => r.id === 'w')).toMatchObject({
+      kind: 'task',
+      groupId: 'g1',
+      groupChip: 'g1',
+      upcoming: true,
+    });
+  });
+
+  test('folded by default; hidden entirely with nothing upcoming; no change without today', () => {
+    const s = state([weekly('w', 'g1', 'a0')]);
+    expect(ids(buildRows(s, options({ today }))).slice(-2)).toEqual(['add-group', 'upcoming']);
+    expect(buildRows(s, options({ today })).at(-1)).toMatchObject({ collapsed: true });
+    expect(ids(buildRows(state([task('a', 'g1', 'a0')]), open()))).not.toContain('upcoming');
+    // Without the viewer's today (the pane, older callers) every task stays in its group.
+    expect(ids(buildRows(s, options()))).toEqual([
+      'group:g1',
+      'w',
+      'add:g1',
+      'group:g2',
+      'add:g2',
+      'add-group',
+    ]);
+  });
+
+  test('a group drag folds Upcoming with the groups', () => {
+    const s = state([weekly('w', 'g1', 'a0')]);
+    expect(buildRows(s, open({ dragCollapsed: true })).at(-1)).toMatchObject({
+      kind: 'upcoming',
+      collapsed: true,
+    });
+  });
+
+  test('sorted by day (start date, else due date), then due time, then title', () => {
+    const s = state([
+      weekly('late', 'g1', 'a0', { dueDate: '2026-11-20', title: 'A' }),
+      weekly('start', 'g2', 'a0', { dueDate: '2026-11-25', startDate: '2026-11-13' }),
+      weekly('timed', 'g1', 'a1', { dueDate: '2026-11-13', dueTime: '09:00', dueTz: 'UTC' }),
+      weekly('untimed', 'g1', 'a2', { dueDate: '2026-11-13', title: 'B' }),
+    ]);
+    const rows = buildRows(s, open());
+    expect(ids(rows).slice(ids(rows).indexOf('upcoming') + 1)).toEqual([
+      'timed',
+      'untimed',
+      'start',
+      'late',
+    ]);
+  });
+
+  test('only open, top-level recurring tasks with a future day; the Inbox hides without others', () => {
+    const s = state([
+      weekly('done', 'g1', 'a0', { completedAt: 5 }),
+      task('plain', 'g1', 'a1'),
+      { ...task('future', 'g1', 'a2'), dueDate: '2026-11-18' },
+      weekly('started', 'g1', 'a3', { startDate: today, dueDate: '2026-11-18' }),
+      weekly('inbox', 'inbox', 'a0'),
+    ]);
+    const rows = buildRows(s, open({ showCompleted: true }));
+    // Completed instances stay in their group; a non-repeating future task too; a started range
+    // is today's.
+    expect(ids(rows)).toEqual([
+      'group:g1',
+      'done',
+      'plain',
+      'future',
+      'started',
+      'add:g1',
+      'group:g2',
+      'add:g2',
+      'add-group',
+      'upcoming',
+      'inbox',
+    ]);
+    expect(rows.find((r) => r.id === 'inbox')).toMatchObject({ groupChip: 'inbox' });
+  });
+
+  test('a task completed from Upcoming stays there through its hold', () => {
+    const s = state([weekly('w', 'g1', 'a0', { completedAt: 5 })]);
+    const held = buildRows(s, open({ hiding: { w: 'hold' } }));
+    expect(ids(held).slice(-2)).toEqual(['upcoming', 'w']);
+    expect(held.at(-2)).toMatchObject({ count: 0 });
+    expect(ids(buildRows(s, open()))).not.toContain('upcoming');
+  });
+
+  test('on its day it is back in its group, at its own place', () => {
+    const s = state([task('a', 'g1', 'a0'), weekly('w', 'g1', 'a1'), task('b', 'g1', 'a2')]);
+    expect(ids(buildRows(s, open({ today: '2026-11-17' }))).slice(0, 3)).toEqual([
+      'group:g1',
+      'a',
+      'b',
+    ]);
+    expect(ids(buildRows(s, open({ today: '2026-11-18' }))).slice(0, 4)).toEqual([
+      'group:g1',
+      'a',
+      'w',
+      'b',
+    ]);
+  });
+
+  test('subtasks show under an open upcoming parent, without "+ Add subtask"', () => {
+    const parent = weekly('p', 'g1', 'a0', {
+      counts: { subtasks: 1, subtasksDone: 0, comments: 0, attachments: 0 },
+    });
+    const child = {
+      ...task('c', 'g1', 'a0'),
+      parentId: 'p',
+      subtaskPosition: 'a0',
+      placement: null,
+    };
+    const s = { ...state([parent, child]), expandedTaskIds: ['p'] };
+    const rows = buildRows(s, open());
+    expect(ids(rows).slice(-3)).toEqual(['upcoming', 'p', 'c']);
+    expect(rows.at(-1)).toMatchObject({ level: 3, parentId: 'p', upcoming: true });
+    expect(rows.at(-1)).not.toHaveProperty('groupChip');
+  });
+
+  test('the tag filter keeps the header and filters its rows', () => {
+    const s = state([weekly('w', 'g1', 'a0'), weekly('t', 'g1', 'a1', { tagIds: ['x'] })]);
+    const rows = buildRows(s, open({ tagFilter: ['x'] }));
+    expect(ids(rows).slice(-2)).toEqual(['upcoming', 't']);
+    expect(rows.at(-2)).toMatchObject({ count: 2 });
+  });
+
+  test('moves and drops leave Upcoming out; its header and rows are navigable', () => {
+    const s = state([task('a', 'g1', 'a0'), weekly('w', 'g2', 'a0')]);
+    const rows = buildRows(s, open());
+    expect(visibleOrder(rows)).toEqual([
+      { id: 'g1', collapsed: false, taskIds: ['a'] },
+      { id: 'g2', collapsed: false, taskIds: [] },
+    ]);
+    expect(rows.filter(isNavigable).map((r) => r.id)).toEqual([
+      'group:g1',
+      'a',
+      'group:g2',
+      'upcoming',
+      'w',
+    ]);
+    expect(rows.filter(isUpcomingRow).map((r) => r.id)).toEqual(['upcoming', 'w']);
+  });
+
+  test('a row with its date picker open stays where it was until the picker closes', () => {
+    const cache: RowCache = new Map();
+    buildRows(state([weekly('w', 'g1', 'a0', { dueDate: today })]), open(), cache);
+    // A repeat or a reminder saved from the picker makes it upcoming: it stays while open.
+    const later = state([weekly('w', 'g1', 'a0')]);
+    expect(ids(buildRows(later, open({ inPlace: 'w' }), cache)).slice(0, 2)).toEqual([
+      'group:g1',
+      'w',
+    ]);
+    expect(ids(buildRows(later, open(), cache)).slice(-2)).toEqual(['upcoming', 'w']);
+    // Opened in Upcoming and dated today, it stays there while the picker is open.
+    const back = state([weekly('w', 'g1', 'a0', { dueDate: today })]);
+    expect(ids(buildRows(back, open({ inPlace: 'w' }), cache)).slice(-2)).toEqual([
+      'upcoming',
+      'w',
+    ]);
+    expect(ids(buildRows(back, open(), cache)).slice(0, 2)).toEqual(['group:g1', 'w']);
+  });
+
+  test('a new row after a task that left for Upcoming stays where it was', () => {
+    const s = state([task('a', 'g1', 'a0'), weekly('w', 'g1', 'a1'), task('b', 'g1', 'a2')]);
+    const drafts: Draft[] = [
+      { id: 'd', groupId: 'g1', afterId: 'w' },
+      { id: 'top', groupId: 'g2', afterId: null },
+    ];
+    expect(ids(buildRows(s, open({ drafts }))).slice(0, 4)).toEqual(['group:g1', 'a', 'd', 'b']);
+    // A hidden first task: the new row goes to the top.
+    const first = state([weekly('w', 'g1', 'a0'), task('b', 'g1', 'a1')]);
+    expect(
+      ids(buildRows(first, open({ drafts: [{ id: 'd', groupId: 'g1', afterId: 'w' }] }))).slice(
+        0,
+        3,
+      ),
+    ).toEqual(['group:g1', 'd', 'b']);
   });
 });

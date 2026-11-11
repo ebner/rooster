@@ -64,6 +64,8 @@ export interface ListPopover {
 export const groupRowId = (groupId: string) => `group:${groupId}`;
 export const addRowId = (groupId: string) => `add:${groupId}`;
 export const addGroupRowId = 'add-group';
+/** The Upcoming section's header (ADR 0068). */
+export const upcomingRowId = 'upcoming';
 export const addSubtaskRowId = (parentId: string) => `addsub:${parentId}`;
 /** A smart-view section header and its "+ Add task" row (02 §10). */
 export const sectionRowId = (sectionId: string) => `section:${sectionId}`;

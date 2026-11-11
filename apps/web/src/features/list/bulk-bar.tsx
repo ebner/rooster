@@ -84,7 +84,11 @@ export function BulkBar({
           variant="ghost-inverse"
           size="sm"
           icon={FolderInput}
-          onPress={() => controller.ui().set({ popover: { kind: 'moveTo', rowId: 'bulk' } })}
+          onPress={() => {
+            // Nothing in Upcoming moves (ADR 0068); the controller says so.
+            if (controller.movable(ids).length === 0) return;
+            controller.ui().set({ popover: { kind: 'moveTo', rowId: 'bulk' } });
+          }}
         >
           <span className="max-tablet:sr-only">{t('bulk.moveTo')}</span>
         </Button>

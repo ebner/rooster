@@ -52,7 +52,7 @@ async function signInPersonal(page: Page, name: string) {
   return { orgId, home };
 }
 
-test('AC-10.1 completing a weekly task shows the next instance directly below', async ({
+test('AC-10.1, ADR 0068 completing a weekly task makes the next instance directly below; it waits in Recurring', async ({
   page,
 }) => {
   const { orgId, home } = await signInPersonal(page, 'ac.tenone');
@@ -74,19 +74,29 @@ test('AC-10.1 completing a weekly task shows the next instance directly below', 
 
   await row(page, 'Water the plants').locator('[data-focus-target]').focus();
   await page.keyboard.press(`${mod}+Enter`);
-  // The held original and, directly below it, the next instance.
-  await expect(row(page, 'Water the plants')).toHaveCount(2);
+  // The held original; the next instance, due next week, waits in the folded Upcoming.
+  await expect(page.getByTestId('upcoming-header')).toHaveAttribute(
+    'aria-label',
+    'Recurring, 1 task',
+  );
   const titles = page.getByTestId('task-row').locator('[data-focus-target]');
   await expect(titles.nth(0)).toHaveText('Water the plants');
-  await expect(titles.nth(1)).toHaveText('Water the plants');
-  await expect(titles.nth(2)).toHaveText('Something else');
+  await expect(titles.nth(1)).toHaveText('Something else');
   await waitForSync(page);
   const tasks = (await myList(page, orgId)).tasks.filter((t) => t.title === 'Water the plants');
   const next = tasks.find((t) => t.id !== weekly.id) as Task;
   expect(next.completedAt).toBeNull();
   expect(next.dueDate).toBe(addDays(today, 7));
   expect(next.recurrence).toMatch(/^FREQ=WEEKLY/);
-  // After the hold only the next one remains.
+  // Its place is directly below the completed one, where it shows on its day.
+  const inbox = (await myList(page, orgId)).tasks
+    .filter((t) => t.placement?.groupId === weekly.placement?.groupId)
+    .sort((a, b) => ((a.placement?.position ?? '') < (b.placement?.position ?? '') ? -1 : 1))
+    .map((t) => t.id);
+  expect(inbox.indexOf(next.id)).toBe(inbox.indexOf(weekly.id) + 1);
+  // After the hold the original is gone; opening Upcoming shows the next one.
+  await expect(row(page, 'Water the plants')).toHaveCount(0);
+  await page.getByTestId('upcoming-header').getByRole('heading', { name: 'Recurring' }).click();
   await expect(row(page, 'Water the plants')).toHaveCount(1);
 });
 
@@ -106,7 +116,10 @@ test('FR-REC-4 deleting a repeating task asks; "this task" keeps the series', as
   await expect(prompt.getByTestId('recurring-delete-this')).toBeFocused();
   if (shots) await page.screenshot({ path: `${shots}/1440-recurring-delete.png` });
   await page.keyboard.press('Enter');
-  await expect(page.getByText('Task deleted · the series continues')).toBeVisible();
+  // Tomorrow's instance waits in Upcoming (ADR 0068), and the message says so.
+  await expect(
+    page.getByText('Task deleted · the series continues · Next: Tomorrow · in Recurring'),
+  ).toBeVisible();
   await waitForSync(page);
   const tasks = (await myList(page, orgId)).tasks.filter((t) => t.title === 'Morning standup');
   expect(tasks.map((t) => t.id)).not.toContain(daily.id);
@@ -114,6 +127,7 @@ test('FR-REC-4 deleting a repeating task asks; "this task" keeps the series', as
   expect(tasks[0]?.dueDate).toBe(addDays(today, 1));
 
   // "This and following" ends the series.
+  await page.getByTestId('upcoming-header').getByRole('heading', { name: 'Recurring' }).click();
   await row(page, 'Morning standup').locator('[data-focus-target]').focus();
   await page.keyboard.press('Delete');
   await page.getByTestId('recurring-delete-following').click();
@@ -139,9 +153,12 @@ test('the picker: Repeat presets and Alt+R reminders; the pane lists them', asyn
   await reminders.getByRole('button', { name: '1 day before' }).click();
   await expect(reminders.getByTestId('reminder-chip')).toContainText('1 day before');
   if (shots) await page.screenshot({ path: `${shots}/1440-picker-repeat-reminders.png` });
-  // Enter in the date input commits the repeat with the date.
+  // Enter in the date input commits the repeat with the date. Repeating from a later day, the
+  // task waits in Upcoming until then (ADR 0068).
   await dialog.getByRole('textbox', { name: 'Type a date' }).press('Enter');
   await expect(dialog).toHaveCount(0);
+  await expect(page.getByText(/^“Pay the rent” is in Recurring until /)).toBeVisible();
+  await page.getByTestId('upcoming-header').getByRole('heading', { name: 'Recurring' }).click();
   const meta = row(page, 'Pay the rent');
   await expect(meta.getByTestId('repeat-indicator')).toHaveAttribute('title', /Monthly on the/);
   await expect(meta.getByTestId('reminder-indicator')).toHaveAttribute('title', /^Reminder: /);
@@ -195,6 +212,8 @@ test('390 px: the date sheet has Repeat and Reminders; the pane sheet lists them
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(home);
+  // Due tomorrow, it waits in Upcoming (ADR 0068).
+  await page.getByTestId('upcoming-header').click();
   await expect(row(page, 'Gym')).toBeVisible();
   await page.screenshot({ path: `${shots}/390-row-icons.png` });
   await row(page, 'Gym')

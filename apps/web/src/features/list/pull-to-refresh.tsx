@@ -26,6 +26,11 @@ export interface PullToRefreshProps {
   onRefresh: () => Promise<unknown>;
   /** A drag (long-press) owns the touch. */
   isBlocked?: () => boolean;
+  /**
+   * The same, as state: a pull in progress ends when a drag starts. A new row's drag (ADR 0069)
+   * removes the touched title input, so the touch's later events never reach the list again.
+   */
+  blocked?: boolean;
 }
 
 /**
@@ -34,19 +39,25 @@ export interface PullToRefreshProps {
  * spinner turning for at least `minRefreshMs`. Uses
  * passive touch listeners on the list's scroll container, so native scrolling is untouched.
  */
-export function PullToRefresh({ enabled, onRefresh, isBlocked }: PullToRefreshProps) {
+export function PullToRefresh({ enabled, onRefresh, isBlocked, blocked }: PullToRefreshProps) {
   const { t } = useTranslation('mobile');
   const anchor = useRef<HTMLDivElement>(null);
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const live = useRef({ enabled, onRefresh, isBlocked, refreshing });
   live.current = { enabled, onRefresh, isBlocked, refreshing };
+  const cancel = useRef(() => {});
 
   useEffect(() => {
     const scroller = scrollParent(anchor.current);
     if (!scroller) return;
     let startY: number | null = null;
     let current = 0;
+    cancel.current = () => {
+      startY = null;
+      current = 0;
+      setPull(0);
+    };
 
     const onStart = (event: TouchEvent) => {
       const { enabled: on, isBlocked: blocked, refreshing: busy } = live.current;
@@ -100,6 +111,10 @@ export function PullToRefresh({ enabled, onRefresh, isBlocked }: PullToRefreshPr
       scroller.removeEventListener('touchcancel', onEnd);
     };
   }, [t]);
+
+  useEffect(() => {
+    if (blocked) cancel.current();
+  }, [blocked]);
 
   const visible = refreshing || pull > 0;
   const height = refreshing ? pullThresholdPx * 0.75 : pull;

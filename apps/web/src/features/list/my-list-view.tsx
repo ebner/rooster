@@ -68,6 +68,8 @@ import { PullToRefresh } from './pull-to-refresh';
 import { ChunkAssigner, isChunk, RowChunkView } from './row-chunks';
 import { SectionHeader } from './section-header';
 import { TaskRow } from './task-row';
+import { useUpcomingOpen } from './upcoming';
+import { UpcomingHeader } from './upcoming-header';
 import { type AssignDrop, ListDnd } from './use-list-dnd';
 import { ViewEmptyState } from './view-empty';
 
@@ -94,6 +96,8 @@ function rowElement(row: Row) {
       );
     case 'empty':
       return <ViewEmptyState key={row.id} row={row} />;
+    case 'upcoming':
+      return <UpcomingHeader key={row.id} row={row} />;
   }
 }
 
@@ -168,6 +172,10 @@ const ListRows = memo(function ListRows({
   const dragCollapsed = useListStore((s) => s.dragCollapsed);
   const hoverExpanded = useListStore((s) => s.hoverExpanded);
   const tagFilter = useListStore((s) => s.tagFilter);
+  // ADR 0068: My tasks holds upcoming recurring tasks in a section at the end until their day.
+  const upcomingOpen = useUpcomingOpen(userId, orgId);
+  const today = dateCtx.today;
+  const datePicker = useListStore((s) => (s.popover?.kind === 'date' ? s.popover.rowId : null));
   const rowCache = useRef<{ orgId: string; cache: RowCache }>({ orgId, cache: new Map() });
   if (rowCache.current.orgId !== orgId) rowCache.current = { orgId, cache: new Map() };
   const draftTasks = useRef(new Map<string, Task>());
@@ -257,7 +265,18 @@ const ListRows = memo(function ListRows({
     }
     return buildRows(
       list.data,
-      { drafts, showCompleted, hiding, dragCollapsed, hoverExpanded, tagFilter, draftTask },
+      {
+        drafts,
+        showCompleted,
+        hiding,
+        dragCollapsed,
+        hoverExpanded,
+        tagFilter,
+        draftTask,
+        today,
+        upcomingCollapsed: !upcomingOpen,
+        inPlace: datePicker,
+      },
       rowCache.current.cache,
     );
   }, [
@@ -272,6 +291,9 @@ const ListRows = memo(function ListRows({
     dragCollapsed,
     hoverExpanded,
     tagFilter,
+    today,
+    upcomingOpen,
+    datePicker,
     orgId,
     userId,
   ]);
@@ -439,6 +461,7 @@ export function MyListView({
   const cursor = useListStore((s) => s.cursor);
   const focusSeq = useListStore((s) => s.focusSeq);
   const mode = useListStore((s) => s.mode);
+  const dragging = useListStore((s) => s.dragging !== null);
   const mobile = useIsMobile();
   const root = useRef<HTMLDivElement>(null);
   const layer = useRef<HTMLDivElement>(null);
@@ -580,17 +603,30 @@ export function MyListView({
     [pipeline, controller],
   );
 
-  // Navigate keeps DOM focus on the cursor row (its title or header name).
-  useEffect(() => {
-    if (mode !== 'navigate' || !cursor) return;
+  // Navigate keeps DOM focus on the cursor row (its title or header name). A request made while
+  // a popover is open waits for it to close: a date picked there can send its task to Upcoming
+  // (ADR 0068), and the cursor then moves on to the next row.
+  const focusPending = useRef(false);
+  const focusCursor = () => {
+    const { cursor: id, mode: now, popover: open } = useListStore.getState();
+    focusPending.current = false;
+    if (now !== 'navigate' || !id) return;
     const el = root.current?.querySelector<HTMLElement>(
-      `[data-row-id="${cursor}"] [data-focus-target]`,
+      `[data-row-id="${id}"] [data-focus-target]`,
     );
-    if (el && document.activeElement !== el && !useListStore.getState().popover) {
-      el.focus({ preventScroll: true });
-      el.scrollIntoView?.({ block: 'nearest' });
+    if (!el || document.activeElement === el) return;
+    if (open) {
+      focusPending.current = true;
+      return;
     }
-  }, [cursor, focusSeq, mode]);
+    el.focus({ preventScroll: true });
+    el.scrollIntoView?.({ block: 'nearest' });
+  };
+  useEffect(focusCursor, [cursor, focusSeq, mode]);
+  const popoverOpen = popover !== null;
+  useEffect(() => {
+    if (!popoverOpen && focusPending.current) focusCursor();
+  }, [popoverOpen]);
 
   const ready = status.ready;
   const withTitle = <T,>(fn: () => T): T => {
@@ -684,6 +720,8 @@ export function MyListView({
       moveToNavigate: () => {
         // Everyone's tasks has no groups of mine to move other people's tasks into.
         if (everyone || controller.selectedTaskIds().length === 0) return false;
+        // Nothing in Upcoming moves (ADR 0068); the controller says so.
+        if (controller.movable(controller.selectedTaskIds()).length === 0) return;
         useListStore
           .getState()
           .set({ popover: { kind: 'moveTo', rowId: useListStore.getState().cursor ?? '' } });
@@ -691,6 +729,7 @@ export function MyListView({
       moveTo: () =>
         withTitle(() => {
           if (everyone || controller.selectedTaskIds().length === 0) return false;
+          if (controller.movable(controller.selectedTaskIds()).length === 0) return;
           useListStore
             .getState()
             .set({ popover: { kind: 'moveTo', rowId: useListStore.getState().cursor ?? '' } });
@@ -876,6 +915,7 @@ export function MyListView({
           enabled
           onRefresh={refresh}
           isBlocked={() => useListStore.getState().dragging !== null}
+          blocked={dragging}
         />
       )}
       <div ref={layer} className="relative">

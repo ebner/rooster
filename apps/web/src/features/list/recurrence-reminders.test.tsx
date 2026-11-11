@@ -75,7 +75,7 @@ afterEach(() => {
 });
 
 describe('recurring tasks (FR-REC)', () => {
-  test('AC-10.1 completing a weekly task puts the next instance directly below; undo removes it', async () => {
+  test('AC-10.1, ADR 0068 completing a weekly task makes the next instance, in Recurring until its day; undo removes it', async () => {
     const { sent, transport } = await setup({
       1: [{ title: 'Water plants', dueDate: today(), recurrence: 'FREQ=WEEKLY' }, 'Other'],
     });
@@ -84,16 +84,29 @@ describe('recurring tasks (FR-REC)', () => {
     await waitFor(() => expect(sent.some((op) => op.kind === 'task.complete')).toBe(true));
     const complete = sent.find((op) => op.kind === 'task.complete');
     expect(complete?.kind === 'task.complete' && complete.payload.nextId).toBeTruthy();
-    // The held original, then the new instance, then the rest.
-    expect(titles()).toEqual(['Water plants', 'Water plants', 'Other']);
+    // The held original, then the rest: the next instance (due in a week) waits in Upcoming,
+    // folded at the end, and the toast says so.
+    expect(titles()).toEqual(['Water plants', 'Other']);
+    const upcoming = screen.getByTestId('upcoming-header');
+    expect(upcoming.getAttribute('aria-expanded')).toBe('false');
+    expect(upcoming.getAttribute('aria-label')).toBe('Recurring, 1 task');
+    expect(
+      await screen.findByText(/^Completed “Water plants” · Next: \S.* · in Recurring$/),
+    ).toBeTruthy();
     const nextId = complete?.kind === 'task.complete' ? complete.payload.nextId : undefined;
     const next = transport.state(orgId).tasks[nextId as string];
     expect(next?.dueDate).toBe(addDays(today(), 7));
     expect(next?.completedAt).toBeNull();
+    // Its place is still directly below the completed one (ADR 0049 §1.4).
+    const original = Object.values(transport.state(orgId).tasks).find(
+      (t) => t.title === 'Water plants' && t.id !== nextId,
+    );
+    expect((next?.placement?.position ?? '') > (original?.placement?.position ?? '')).toBe(true);
 
     fireEvent.keyDown(document.body, { key: 'z', ctrlKey: true });
     await waitFor(() => expect(transport.state(orgId).tasks[nextId as string]).toBeUndefined());
     expect(titles()).toEqual(['Water plants', 'Other']);
+    expect(screen.queryByTestId('upcoming-header')).toBeNull();
   });
 
   test('FR-REC-4 Delete asks; "this task" skips, so the series goes on', async () => {
@@ -107,8 +120,16 @@ describe('recurring tasks (FR-REC)', () => {
     fireEvent.click(within(prompt).getByTestId('recurring-delete-this'));
     await waitFor(() => expect(sent.some((op) => op.kind === 'task.skip')).toBe(true));
     expect(sent.some((op) => op.kind === 'task.delete')).toBe(false);
-    expect(titles()).toEqual(['Standup', 'Other']);
-    expect(await screen.findByText('Task deleted · the series continues')).toBeTruthy();
+    // Tomorrow's instance waits in Upcoming (ADR 0068).
+    expect(titles()).toEqual(['Other']);
+    expect(screen.getByTestId('upcoming-header').getAttribute('aria-label')).toBe(
+      'Recurring, 1 task',
+    );
+    expect(
+      await screen.findByText(
+        'Task deleted · the series continues · Next: Tomorrow · in Recurring',
+      ),
+    ).toBeTruthy();
   });
 
   test('FR-REC-4 "this and following" is a plain delete; Esc cancels', async () => {

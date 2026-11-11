@@ -98,10 +98,11 @@ export async function seedA11yList(page: Page): Promise<A11ySeed> {
     Prio: await groupId(page, orgId, 'Prio'),
     Upcoming: await groupId(page, orgId, 'Upcoming'),
   };
+  // Due today: a repeating task due later waits in Upcoming (ADR 0068), out of its group.
   const dentist = await createTask(page, orgId, {
     title: 'Book dentist',
     groupId: groups.Today,
-    dueDate: plusDays(today, 1),
+    dueDate: today,
     description: 'Ask about the **cleaning** too.\n\n- call before 10\n- bring the card',
     tagNames: ['health'],
     recurrence: 'FREQ=WEEKLY',

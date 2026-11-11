@@ -275,14 +275,17 @@
       "passport": "Förnya passet",
       "offsite": "Planera teamdagen",
       "done": "Skicka bilderna",
-      "weekly": "Vattna blommorna"
+      "weekly": "Vattna blommorna",
+      "bins": "Ställ ut soptunnorna"
     },
     "recurringDeletePopover": "Förankrad popover (fokus)",
     "recurringDeleteSheet": "Ark på telefon",
     "headerMenu": "Menyn ⋯ i sidhuvudet",
     "headerMenuMy": "Mina uppgifter",
     "headerMenuSmart": "Smart vy",
-    "headerMenuEveryone": "Allas uppgifter"
+    "headerMenuEveryone": "Allas uppgifter",
+    "upcomingCollapsed": "Återkommande (hopfälld)",
+    "upcomingOpen": "Återkommande (utfälld)"
   },
   "subtasks": {
     "add": "Lägg till deluppgift",
@@ -321,5 +324,15 @@
     "groupCount": "{count, plural, one {# uppgift} other {# uppgifter}}",
     "expanded": "utfälld",
     "collapsed": "hopfälld"
+  },
+  "upcoming": {
+    "name": "Återkommande",
+    "hint": "Uppgifter som upprepas väntar här till sin dag",
+    "next": "Nästa: {date} · under Återkommande",
+    "nextMany": "De nästa ligger under Återkommande",
+    "movedOne": "”{title}” ligger under Återkommande till {date}",
+    "movedMany": "{count, plural, one {# uppgift ligger} other {# uppgifter ligger}} under Återkommande",
+    "cantMove": "Uppgifter under Återkommande kan inte flyttas. Ändra datumet för att få tillbaka en.",
+    "noAdd": "Det går inte att lägga till nya uppgifter under Återkommande"
   }
 }

@@ -42,6 +42,8 @@ interface Gesture {
   phase: 'pending' | 'swiping' | 'scroll';
   armed: boolean;
   action: SwipeRevealAction | null;
+  /** In Upcoming (ADR 0068): a Move swipe only stretches, as a direction without an action. */
+  upcoming: boolean;
 }
 
 export interface SwipeRowsProps {
@@ -140,6 +142,7 @@ export function SwipeRows({
         phase: 'pending',
         armed: false,
         action: null,
+        upcoming: row.dataset.upcoming !== undefined,
       };
     };
 
@@ -173,7 +176,8 @@ export function SwipeRows({
       g.lastX = event.clientX;
       g.lastT = event.timeStamp;
       g.dx = dx;
-      const action = swipeActionFor(dx, live.current.prefs);
+      const swiped = swipeActionFor(dx, live.current.prefs);
+      const action = g.upcoming && swiped === 'move' ? null : swiped;
       const width = g.row.getBoundingClientRect().width;
       const offset = action ? dx : dx * swipeResistance;
       const armed = action !== null && Math.abs(dx) >= width * swipeCommitShare;
