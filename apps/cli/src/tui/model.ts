@@ -6,10 +6,11 @@ import {
   tasksInGroup,
 } from '@rooster/core/reducers';
 import type { Group, Task } from '@rooster/core/schemas';
+import { compareUpcoming } from '@rooster/core/upcoming';
 import { type SmartView, selectView, type ViewCounts, viewCounts } from '@rooster/core/views';
 import type { Member } from '../api.ts';
 import { clean } from '../output/color.ts';
-import { type DateContext, dayLabel } from '../output/format.ts';
+import { type DateContext, dayLabel, inUpcoming } from '../output/format.ts';
 import type { TuiTranslate } from './i18n.ts';
 
 /**
@@ -32,7 +33,7 @@ export interface TaskLine {
   breadcrumb: string | null;
   /** A muted chip: the group in smart views, the assignee nowhere (sections say it). */
   chip: string | null;
-  /** The section the row belongs to (`group:<id>`, `section:<id>`). */
+  /** The section the row belongs to (`group:<id>`, `section:<id>`, `UPCOMING_KEY`). */
   section: string;
   /** Has subtasks, and whether they are shown below it (My tasks). */
   hasChildren: boolean;
@@ -60,13 +61,28 @@ export interface SectionLine {
   assigneeId?: string | null;
 }
 
+/** The key of the Upcoming header, and the `section` of the rows under it. */
+export const UPCOMING_KEY = 'section:upcoming';
+
+/**
+ * Upcoming (ADR 0068): the last section of My tasks, after the groups, holding the recurring
+ * tasks whose day hasn't come. Collapsed unless opened this session.
+ */
+export interface UpcomingLine {
+  kind: 'upcoming';
+  key: typeof UPCOMING_KEY;
+  /** Open tasks in it. */
+  count: number;
+  collapsed: boolean;
+}
+
 export interface EmptyLine {
   kind: 'empty';
   key: string;
   text: string;
 }
 
-export type Line = TaskLine | GroupLine | SectionLine | EmptyLine;
+export type Line = TaskLine | GroupLine | SectionLine | UpcomingLine | EmptyLine;
 
 export interface LinesInput {
   view: ViewId;
@@ -78,6 +94,8 @@ export interface LinesInput {
   keep: ReadonlySet<string>;
   expanded: ReadonlySet<string>;
   collapsed: (group: Group) => boolean;
+  /** Upcoming is open (it starts collapsed). */
+  upcomingOpen?: boolean;
   members: readonly Member[] | null;
   everyone: readonly Task[] | null;
   search: { query: string; hits: readonly Task[] } | null;
@@ -86,6 +104,16 @@ export interface LinesInput {
 
 const visibleIn = (input: Pick<LinesInput, 'showCompleted' | 'keep'>) => (task: Task) =>
   task.completedAt === null || input.showCompleted || input.keep.has(task.id);
+
+/**
+ * Whether My tasks lists the task under Upcoming rather than in its group (ADR 0068). A row
+ * completed in Upcoming and still held in place (`keep`) stays there until it goes.
+ */
+export const upcomingIn =
+  (input: Pick<LinesInput, 'dates' | 'keep'>) =>
+  (task: Task): boolean =>
+    inUpcoming(task, input.dates.today) ||
+    (input.keep.has(task.id) && inUpcoming({ ...task, completedAt: null }, input.dates.today));
 
 /** The subtasks under each parent that has no placement of its own, in sibling order. */
 function nestedChildren(tasks: Iterable<Task>): Map<string, Task[]> {
@@ -100,7 +128,10 @@ function nestedChildren(tasks: Iterable<Task>): Map<string, Task[]> {
   return index;
 }
 
-/** Groups as My tasks shows them: the Inbox only while it has visible tasks (02 §4). */
+/**
+ * Groups as My tasks shows them: the Inbox only while it has visible tasks (02 §4). `visible`
+ * leaves out what the groups don't show, Upcoming tasks included.
+ */
 export function displayedGroups(
   list: ListState,
   visible: (task: Task) => boolean,
@@ -114,9 +145,37 @@ export function displayedGroups(
 
 function myLines(input: LinesInput): Line[] {
   const visible = visibleIn(input);
+  const upcoming = upcomingIn(input);
   const children = nestedChildren(Object.values(input.list.tasks));
   const lines: Line[] = [];
-  for (const { group, tasks } of displayedGroups(input.list, visible)) {
+  const add = (
+    task: Task,
+    depth: number,
+    seen: Set<string>,
+    section: string,
+    chip: string | null,
+  ) => {
+    if (seen.has(task.id)) return;
+    seen.add(task.id);
+    const kids = (children.get(task.id) ?? []).filter(visible);
+    const expanded = input.expanded.has(task.id) && kids.length > 0;
+    lines.push({
+      kind: 'task',
+      key: task.id,
+      task,
+      depth,
+      breadcrumb: null,
+      chip,
+      section,
+      hasChildren: task.counts.subtasks > 0,
+      expanded,
+    });
+    if (expanded) for (const kid of kids) add(kid, depth + 1, seen, section, null);
+  };
+  for (const { group, tasks } of displayedGroups(
+    input.list,
+    (task) => visible(task) && !upcoming(task),
+  )) {
     const collapsed = input.collapsed(group);
     const section = `group:${group.id}`;
     lines.push({
@@ -127,25 +186,28 @@ function myLines(input: LinesInput): Line[] {
       collapsed,
     });
     if (collapsed) continue;
-    const add = (task: Task, depth: number, seen: Set<string>) => {
-      if (seen.has(task.id)) return;
-      seen.add(task.id);
-      const kids = (children.get(task.id) ?? []).filter(visible);
-      const expanded = input.expanded.has(task.id) && kids.length > 0;
-      lines.push({
-        kind: 'task',
-        key: task.id,
-        task,
-        depth,
-        breadcrumb: null,
-        chip: null,
-        section,
-        hasChildren: task.counts.subtasks > 0,
-        expanded,
-      });
-      if (expanded) for (const kid of kids) add(kid, depth + 1, seen);
-    };
-    for (const task of tasks) add(task, 0, new Set());
+    for (const task of tasks) add(task, 0, new Set(), section, null);
+  }
+  const held = orderedGroups(input.list)
+    .flatMap((group) => tasksInGroup(input.list, group.id))
+    .filter((task) => visible(task) && upcoming(task))
+    .sort(compareUpcoming);
+  if (held.length > 0) {
+    const collapsed = input.upcomingOpen !== true;
+    lines.push({
+      kind: 'upcoming',
+      key: UPCOMING_KEY,
+      count: held.filter((task) => task.completedAt === null).length,
+      collapsed,
+    });
+    if (!collapsed) {
+      for (const task of held) {
+        // The group it returns to on its day, as the smart views name a task's group.
+        const group = groupOf(input.list, task);
+        const chip = group === undefined || group.kind === 'inbox' ? null : clean(group.name);
+        add(task, 0, new Set(), UPCOMING_KEY, chip);
+      }
+    }
   }
   return lines;
 }
@@ -312,6 +374,16 @@ export function buildLines(input: LinesInput): Line[] {
       lines = smartLines(input, input.view);
   }
   if (!lines.some((line) => line.kind === 'task')) {
+    const upcoming = lines.findIndex((line) => line.kind === 'upcoming');
+    if (upcoming !== -1) {
+      // Only Upcoming has tasks: the hint goes above it, and says the list isn't empty.
+      const text = input.t('empty.myUpcoming');
+      return [
+        ...lines.slice(0, upcoming),
+        { kind: 'empty', key: 'empty', text },
+        ...lines.slice(upcoming),
+      ];
+    }
     const text =
       input.view === 'search'
         ? input.t('empty.search', { query: input.search?.query ?? '' })
@@ -559,7 +631,9 @@ export function createTarget(
         }
       : { anchorKey: key, placement: 'before' as const, depth };
   if (view === 'my') {
-    if (line === undefined || line.kind === 'empty') {
+    // New tasks never go into Upcoming (ADR 0068): from there, `n` adds at the top of the list,
+    // as in an empty list (the server puts the task first in the Inbox).
+    if (line === undefined || line.kind === 'empty' || line.kind === 'upcoming') {
       return { anchorKey: null, placement: 'after', depth: 0, body: {} };
     }
     if (line.kind === 'group' || line.kind === 'section') {
@@ -583,6 +657,9 @@ export function createTarget(
             ? { parentId: task.parentId, afterId: task.id }
             : { parentId: task.parentId, afterId: null, beforeId: task.id },
       };
+    }
+    if (line.section === UPCOMING_KEY) {
+      return { anchorKey: null, placement: 'after', depth: 0, body: {} };
     }
     const groupId = task.placement?.groupId;
     if (groupId === undefined) return null;

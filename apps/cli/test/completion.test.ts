@@ -30,6 +30,9 @@ describe('completion entries', () => {
       'mv',
       'rm',
     ]);
+    // ADR 0068: Upcoming belongs to My tasks, not to the date views.
+    expect(entries.find((e) => e.path === 'ls')?.flags).toContain('--upcoming');
+    expect(entries.find((e) => e.path === 'today')?.flags).not.toContain('--upcoming');
     expect(entries.find((e) => e.path === 'add')?.flags).toEqual(
       expect.arrayContaining(['--due', '--tag', '--group', '--no-parse', '--bottom']),
     );

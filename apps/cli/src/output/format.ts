@@ -3,9 +3,11 @@ import {
   dueInstant,
   dueState,
   formatRelative,
+  isValidIsoDate,
   type TimeFormat,
   todayIn,
 } from '@rooster/core/dates';
+import { isUpcoming, upcomingDay } from '@rooster/core/upcoming';
 import type { Tag, Task } from '../api.ts';
 import type { Locale } from '../i18n.ts';
 import {
@@ -205,6 +207,29 @@ function metaText(row: Row): string {
 function titleText(row: Row): string {
   const indent = '  '.repeat(row.depth);
   return `${indent}${row.breadcrumb === null ? '' : `${row.breadcrumb} › `}${row.title}`;
+}
+
+/**
+ * Whether My tasks holds the task in Upcoming on `today` (ADR 0068): core's `isUpcoming`, with
+ * the server's values checked first, since responses are only type-cast. A rule that is not a
+ * string, or a day that is not a date, never holds a task back.
+ */
+export function inUpcoming(
+  // Structural, so the API's tasks and core's (the TUI's list state) both fit.
+  task: {
+    parentId: string | null;
+    recurrence?: string | null | undefined;
+    startDate: string | null;
+    dueDate: string | null;
+    completedAt: number | null;
+  },
+  today: string,
+): boolean {
+  return (
+    typeof task.recurrence === 'string' &&
+    isValidIsoDate(upcomingDay(task)) &&
+    isUpcoming(task, today)
+  );
 }
 
 /** A day header (Next 7 days): the same relative label as the due cell. */

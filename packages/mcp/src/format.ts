@@ -1,6 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { dueState, isValidIsoDate } from '@rooster/core/dates';
 import { isValidSlug } from '@rooster/core/schemas/org';
+import { isUpcoming, upcomingDay } from '@rooster/core/upcoming';
 import type { Group, Member, Org, Tag, Task } from './context.ts';
 
 /**
@@ -130,8 +131,24 @@ export interface RowContext {
 }
 
 /**
+ * Whether the user's My tasks holds the task in its Recurring section on `today` (ADR 0068): an open,
+ * top-level recurring task whose day (start date, else due date) hasn't come. Responses are
+ * only type-cast, so a rule that is not a string or a day that is not a date never counts.
+ */
+export function heldUpcoming(
+  task: Pick<Task, 'parentId' | 'recurrence' | 'startDate' | 'dueDate' | 'completedAt'>,
+  today: string,
+): boolean {
+  return (
+    typeof task.recurrence === 'string' &&
+    canonical.date(upcomingDay(task)) !== null &&
+    isUpcoming(task, today)
+  );
+}
+
+/**
  * A compact row (07 §6: seq, title, due, group, tags; P10: the repeat rule and the user's next
- * reminder), omitting empty fields.
+ * reminder; `upcoming` while My tasks holds it in Recurring), omitting empty fields.
  */
 export function taskRow(task: Task, ctx: RowContext): Record<string, unknown> {
   const row: Record<string, unknown> = { ref: taskRef(task, ctx.org), title: task.title };
@@ -168,6 +185,7 @@ export function taskRow(task: Task, ctx: RowContext): Record<string, unknown> {
     row.repeat = task.recurrence;
     if (task.recurrenceBasis === 'completion') row.repeatFrom = 'completion';
   }
+  if (heldUpcoming(task, ctx.today)) row.upcoming = true;
   const nextReminder = isoInstant(task.nextReminderAt);
   if (nextReminder !== null) row.nextReminder = nextReminder;
   if (task.completedAt !== null) row.completed = true;

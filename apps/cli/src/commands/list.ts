@@ -1,4 +1,5 @@
 import { compareKeys } from '@rooster/core/ordering';
+import { compareUpcoming } from '@rooster/core/upcoming';
 import { inSmartView } from '@rooster/core/views';
 import { defineCommand } from 'citty';
 import { type Group, type Org, type Task, unwrap } from '../api.ts';
@@ -10,6 +11,7 @@ import {
   type DateContext,
   dayLabel,
   header,
+  inUpcoming,
   type Row,
   renderRows,
   taskRef,
@@ -28,6 +30,8 @@ export interface ListFlags {
   completed: boolean;
   allOrgs: boolean;
   subtasks: boolean;
+  /** My tasks: also list Upcoming, the recurring tasks whose day hasn't come (ADR 0068). */
+  upcoming: boolean;
 }
 
 interface Section {
@@ -39,8 +43,15 @@ interface OrgResult {
   org: Org;
   view: View;
   groups: Group[] | null;
+  /** Every task of the listing, for `--json` (My tasks: Upcoming ones too, in group order). */
   tasks: Task[];
+  /** The tasks the text and `--quiet` show, in their order. */
+  shown: Task[];
   sections: Section[];
+  /** My tasks: the ids held in Upcoming today (null for the views). */
+  upcoming: ReadonlySet<string> | null;
+  /** My tasks without `--upcoming`: how many Upcoming tasks the listing leaves out. */
+  upcomingHidden: number;
 }
 
 const PAGE = 200;
@@ -101,8 +112,18 @@ async function tagFilter(runtime: Runtime, orgId: string, names: readonly string
   );
 }
 
-/** My tasks: the my-list payload, filtered like the query route, grouped by group. */
-async function listMy(runtime: Runtime, org: Org, flags: ListFlags): Promise<OrgResult> {
+/**
+ * My tasks: the my-list payload, filtered like the query route, grouped by group. An open,
+ * top-level recurring task whose day hasn't come is held out of its group (ADR 0068): the text
+ * lists it, with its subtasks, under Upcoming at the end only with `--upcoming`; `--json` keeps
+ * every task where it was and marks it `upcoming: true`.
+ */
+async function listMy(
+  runtime: Runtime,
+  org: Org,
+  flags: ListFlags,
+  ctx: DateContext,
+): Promise<OrgResult> {
   const list = await runtime.myList(org.id, flags.completed);
   const groupId =
     flags.group === undefined ? undefined : (await findGroup(runtime, org.id, flags.group)).id;
@@ -132,31 +153,62 @@ async function listMy(runtime: Runtime, org: Org, flags: ListFlags): Promise<Org
       children.set(task.parentId, siblings);
     }
   }
+  const subtree = (task: Task, depth: number, rows: Section['rows'], seen: Set<string>) => {
+    if (seen.has(task.id)) return;
+    seen.add(task.id);
+    rows.push({ task, depth });
+    for (const child of (children.get(task.id) ?? []).sort(bySubtaskPosition)) {
+      subtree(child, depth + 1, rows, seen);
+    }
+  };
   const groups = sortGroups(list.groups).filter((g) => groupId === undefined || g.id === groupId);
   const tasks: Task[] = [];
+  const upcoming = new Set<string>();
+  const held: { task: Task; group: Group; rows: Section['rows'] }[] = [];
   const sections: Section[] = groups.flatMap((group) => {
     const rows: Section['rows'] = [];
-    const addWithChildren = (task: Task, depth: number) => {
-      rows.push({ task, depth });
-      tasks.push(task);
-      for (const child of (children.get(task.id) ?? []).sort(bySubtaskPosition)) {
-        addWithChildren(child, depth + 1);
-      }
-    };
-    placed
+    const inGroup = placed
       .filter((task) => task.placement?.groupId === group.id)
       .sort(
         (a, b) =>
           compareKeys(a.placement?.position ?? '', b.placement?.position ?? '') ||
           compareKeys(a.id, b.id),
-      )
-      .forEach((task) => {
-        addWithChildren(task, 0);
-      });
+      );
+    for (const task of inGroup) {
+      const tree: Section['rows'] = [];
+      subtree(task, 0, tree, new Set());
+      tasks.push(...tree.map((r) => r.task));
+      if (inUpcoming(task, ctx.today)) {
+        upcoming.add(task.id);
+        held.push({ task, group, rows: tree });
+      } else rows.push(...tree);
+    }
     if (rows.length === 0 && groupId === undefined) return [];
     return [{ title: clean(group.name), rows }];
   });
-  return { org, view: 'my', groups, tasks, sections };
+  if (flags.upcoming && held.length > 0) {
+    held.sort((a, b) => compareUpcoming(a.task, b.task));
+    sections.push({
+      title: t('ls.upcoming'),
+      // The group each one returns to on its day (none named for the Inbox, as in the TUI).
+      rows: held.flatMap(({ group, rows }) =>
+        rows.map((r) =>
+          r.depth === 0 && group.kind !== 'inbox' ? { ...r, extra: clean(group.name) } : r,
+        ),
+      ),
+    });
+  }
+  const shown = sections.flatMap((section) => section.rows.map((r) => r.task));
+  return {
+    org,
+    view: 'my',
+    groups,
+    tasks,
+    shown,
+    sections,
+    upcoming,
+    upcomingHidden: flags.upcoming ? 0 : held.length,
+  };
 }
 
 /**
@@ -237,11 +289,21 @@ async function listView(
   } else {
     sections = tasks.length === 0 ? [] : [{ title: t(`view.${view}`), rows: tasks.map(row) }];
   }
-  return { org, view, groups: null, tasks, sections };
+  return {
+    org,
+    view,
+    groups: null,
+    tasks,
+    shown: tasks,
+    sections,
+    upcoming: null,
+    upcomingHidden: 0,
+  };
 }
 
 export async function runList(runtime: Runtime, view: View, flags: ListFlags): Promise<void> {
   needs('tasks:read');
+  if (flags.upcoming && view !== 'my') throw new CliError(EXIT.usage, t('ls.upcomingMyOnly'));
   const { out } = runtime;
   const ctx = await dates(runtime);
   const me = await runtime.me();
@@ -252,17 +314,18 @@ export async function runList(runtime: Runtime, view: View, flags: ListFlags): P
   for (const org of orgs) {
     results.push(
       view === 'my'
-        ? await listMy(runtime, org, flags)
+        ? await listMy(runtime, org, flags, ctx)
         : await listView(runtime, org, view, flags, ctx),
     );
   }
 
   if (out.json) {
     if (view === 'my') {
+      // Additive and complete: every task stays, each says whether Upcoming holds it.
       const payload = results.map((r) => ({
         org: r.org.slug,
         groups: r.groups ?? [],
-        tasks: r.tasks,
+        tasks: r.tasks.map((task) => ({ ...task, upcoming: r.upcoming?.has(task.id) === true })),
       }));
       out.data(
         flags.allOrgs
@@ -276,7 +339,7 @@ export async function runList(runtime: Runtime, view: View, flags: ListFlags): P
   }
   if (out.quiet) {
     for (const r of results) {
-      for (const task of r.tasks) out.line(taskRef(task, flags.allOrgs ? r.org.slug : undefined));
+      for (const task of r.shown) out.line(taskRef(task, flags.allOrgs ? r.org.slug : undefined));
     }
     return;
   }
@@ -322,6 +385,15 @@ export async function runList(runtime: Runtime, view: View, flags: ListFlags): P
       out.line(header(block.section.title, topLevel, out.level));
       for (let i = 0; i < block.rows.length; i++) out.line(lines[index++]);
     }
+    if (result.upcomingHidden > 0) {
+      out.line(
+        paint(
+          clean(t('ls.upcomingHidden', { count: result.upcomingHidden })),
+          styles.muted,
+          out.level,
+        ),
+      );
+    }
   }
 }
 
@@ -333,6 +405,7 @@ function describeListArgs() {
     completed: { type: 'boolean', description: t('ls.arg.completed') },
     'all-orgs': { type: 'boolean', description: t('ls.arg.allOrgs') },
     subtasks: { type: 'boolean', description: t('ls.arg.subtasks') },
+    upcoming: { type: 'boolean', description: t('ls.arg.upcoming') },
   } as const;
 }
 
@@ -344,6 +417,8 @@ function flagsOf(args: Record<string, unknown>, rawArgs: readonly string[]): Lis
     completed: args.completed === true,
     allOrgs: args['all-orgs'] === true || args.allOrgs === true,
     subtasks: args.subtasks === true,
+    // Read from the command line with real option boundaries, so it is never a value's text.
+    upcoming: given.switches.has('upcoming') && !given.switches.has('no-upcoming'),
   };
 }
 
@@ -368,7 +443,8 @@ function viewAlias(view: 'today' | 'week') {
   return defineCommand({
     meta: () => ({ name: view, description: t(`cmd.${view}`) }),
     args: () => {
-      const { view: _positional, ...others } = describeListArgs();
+      // Upcoming is part of My tasks only; the smart views go by date (ADR 0068).
+      const { view: _positional, upcoming: _upcoming, ...others } = describeListArgs();
       return others;
     },
     async run({ args, rawArgs }) {

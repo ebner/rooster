@@ -82,19 +82,20 @@ describe('TUI: repeat and reminders (P10)', () => {
     await t.waitFor((f) => f.includes('Water plants'));
     await t.press('d');
     await t.waitFor((f) => f.includes('Date ▏') && f.includes('!1h'));
-    await t.type('every mon !1h');
-    await t.waitFor((f) => f.includes('↻ Weekly on Monday · 🔔 1 h before'));
+    // Every day starts today, so the task stays in its group (a later day goes to Recurring).
+    await t.type('every day !1h');
+    await t.waitFor((f) => f.includes('↻ Daily · 🔔 1 h before'));
     await t.press(KEY.enter);
     await t.waitFor((f) => /Water plants\s+↻ 🔔/.test(f));
     const get = async () => (await user.api<TaskJson>('GET', `/api/v1/tasks/${task.id}`)).data;
-    const saved = await eventually(get, (v) => v.recurrence === 'FREQ=WEEKLY;BYDAY=MO');
-    expect(saved.recurrence).toBe('FREQ=WEEKLY;BYDAY=MO');
+    const saved = await eventually(get, (v) => v.recurrence === 'FREQ=DAILY');
+    expect(saved.recurrence).toBe('FREQ=DAILY');
     expect(await offsets(user, task.id)).toEqual([60]);
 
     // The details list the rule and the reminder.
     await t.press('o');
     const details = await t.waitFor((f) => f.includes('Reminders'));
-    expect(details).toMatch(/Repeats\s+↻ Weekly on Monday/);
+    expect(details).toMatch(/Repeats\s+↻ Daily/);
     expect(details).toMatch(/Reminders\s+🔔 1 h before · /);
     await t.press(KEY.esc);
 
@@ -144,9 +145,10 @@ describe('TUI: repeat and reminders (P10)', () => {
     const t = await tui(cli);
     await t.waitFor((f) => f.includes('Standup'));
     await t.press('x');
-    // The hint and the next instance's row can render in separate frames.
+    // The hint and the next instance can render in separate frames. The next one is due
+    // tomorrow, so it waits in Recurring (ADR 0068) while the completed one stays in place.
     await t.waitFor(
-      (f) => f.includes('Completed “Standup”; next: Tomorrow') && /○ Standup/.test(f),
+      (f) => f.includes('Completed “Standup”; next: Tomorrow') && f.includes('▸ ↻ Recurring (1)'),
     );
     const list = async () =>
       (

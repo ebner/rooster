@@ -55,13 +55,17 @@
       "tag": "Only tasks with this tag (repeatable)",
       "completed": "Include completed tasks",
       "allOrgs": "Every organisation",
-      "subtasks": "Include subtasks"
+      "subtasks": "Include subtasks",
+      "upcoming": "Also list Recurring: repeating tasks whose day hasn’t come yet (My tasks only)"
     },
     "badView": "Unknown view “{view}”. Use one of: {views}",
     "empty": "No tasks",
     "unassigned": "Unassigned",
     "groupNotEveryone": "--group works with your own list only, not with everyone",
-    "everyonePersonal": "Everyone’s tasks exists only in shared organisations; pick one with --org."
+    "everyonePersonal": "Everyone’s tasks exists only in shared organisations; pick one with --org.",
+    "upcoming": "Recurring",
+    "upcomingHidden": "{count, plural, one {# task in Recurring not shown (add --upcoming)} other {# tasks in Recurring not shown (add --upcoming)}}",
+    "upcomingMyOnly": "--upcoming works with My tasks only (rooster ls), not with a view"
   },
   "view": {
     "my": "My tasks",

@@ -312,6 +312,18 @@ function headerRow(line: Line, selected: boolean, ctx: Ctx, width: number): stri
       ctx.level,
     );
   }
+  if (line.kind === 'upcoming') {
+    return fit(
+      [
+        marker,
+        seg(`${line.collapsed ? '▸' : '▾'} ${REPEAT_MARK} `, muted),
+        seg(ctx.t('section.upcoming'), styles.heading),
+        seg(` (${line.count})`, muted),
+      ],
+      width,
+      ctx.level,
+    );
+  }
   if (line.kind === 'section') {
     return fit(
       [

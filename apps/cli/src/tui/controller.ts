@@ -2,6 +2,7 @@ import { compareKeys } from '@rooster/core/ordering';
 import { type ListState, normalizeMyList, tasksInGroup } from '@rooster/core/reducers';
 import type { Group, Task } from '@rooster/core/schemas';
 import { parseSseInvalidate } from '@rooster/core/sse';
+import { upcomingDay } from '@rooster/core/upcoming';
 import type { ViewCounts } from '@rooster/core/views';
 import {
   type Me,
@@ -18,7 +19,7 @@ import { CliError, EXIT } from '../errors.ts';
 import { describeApiError } from '../grant-info.ts';
 import { type Locale, withLocale } from '../i18n.ts';
 import { clean } from '../output/color.ts';
-import { type DateContext, dateContext, dueLabel } from '../output/format.ts';
+import { type DateContext, dateContext, dayLabel, dueLabel, inUpcoming } from '../output/format.ts';
 import { splitReminderTokens } from '../reminders.ts';
 import { type Runtime, withRuntime } from '../runtime.ts';
 import type { TuiTranslate } from './i18n.ts';
@@ -40,6 +41,8 @@ import {
   restorePlan,
   stepSelection,
   type TaskLine,
+  UPCOMING_KEY,
+  upcomingIn,
   type ViewId,
 } from './model.ts';
 import type { SseMessage, SseState } from './sse.ts';
@@ -188,6 +191,8 @@ export class TuiController {
   /** Session overrides of the server's collapse and expand state, so a toggle sticks at once. */
   private readonly collapsed = new Map<string, boolean>();
   private readonly expanded = new Map<string, boolean>();
+  /** The orgs whose Upcoming is open; it starts collapsed, and this session remembers it. */
+  private readonly upcomingOpen = new Set<string>();
   private readonly keep = new Set<string>();
   private failed: (() => Promise<void>) | null = null;
   private inFlight = 0;
@@ -306,6 +311,7 @@ export class TuiController {
       keep: this.keep,
       expanded: new Set(this.expandedIds(s.list)),
       collapsed: (group) => this.collapsed.get(group.id) ?? group.collapsed,
+      upcomingOpen: this.upcomingOpen.has(s.org.id),
       members: s.members,
       everyone: s.everyone,
       search: s.search,
@@ -738,8 +744,11 @@ export class TuiController {
   private async mutate(
     exec: () => Promise<void>,
     options: {
-      /** The success message; a function when it depends on the response (a next instance). */
-      done?: string | (() => string);
+      /**
+       * The success message; a function when it depends on the response (a next instance),
+       * which may return undefined for none.
+       */
+      done?: string | (() => string | undefined);
       undoable?: boolean;
       onSuccess?: () => void;
       /** Shown at once and taken back if the server refuses (or can't be reached). */
@@ -761,14 +770,10 @@ export class TuiController {
       if (!current()) return true;
       this.failed = null;
       options.onSuccess?.();
-      if (options.done !== undefined) {
+      const text = typeof options.done === 'function' ? options.done() : options.done;
+      if (text !== undefined) {
         this.set({
-          message: {
-            text: typeof options.done === 'function' ? options.done() : options.done,
-            tone: 'info',
-            retry: false,
-            undo: options.undoable ?? true,
-          },
+          message: { text, tone: 'info', retry: false, undo: options.undoable ?? true },
         });
       } else if (this.state.message?.retry) this.set({ message: null });
       return true;
@@ -899,6 +904,25 @@ export class TuiController {
   private selectedTask(): TaskLine | undefined {
     const line = this.selectedLine();
     return line?.kind === 'task' ? line : undefined;
+  }
+
+  /** A task row of Upcoming itself (not a subtask under one): it can't be moved (ADR 0068). */
+  private inUpcomingSection(line: TaskLine): boolean {
+    return line.section === UPCOMING_KEY && line.depth === 0;
+  }
+
+  /** In My tasks, the task now waits in Upcoming rather than in its group (ADR 0068). */
+  private leftForUpcoming(task: Task): boolean {
+    return this.state.view === 'my' && inUpcoming(task, this.state.dates.today);
+  }
+
+  /** "“Water plants” is in Recurring; back in its group: Mon" (ADR 0068). */
+  private upcomingNotice(task: Task): string {
+    const day = upcomingDay(task);
+    return this.t('msg.toUpcoming', {
+      title: clean(task.title),
+      day: day === null ? '' : dayLabel(day, this.state.dates),
+    });
   }
 
   private select(key: string | null): void {
@@ -1169,6 +1193,13 @@ export class TuiController {
       this.setCollapsed(line.group.id, !open);
       return;
     }
+    if (line?.kind === 'upcoming') {
+      if (line.collapsed === !open) return;
+      if (open) this.upcomingOpen.add(this.state.org.id);
+      else this.upcomingOpen.delete(this.state.org.id);
+      this.set({}, true);
+      return;
+    }
     if (line?.kind !== 'task') return;
     if (open && line.expanded) {
       // → on an expanded parent selects its first subtask (02 §6).
@@ -1231,7 +1262,9 @@ export class TuiController {
     const line = this.selectedTask();
     if (line === undefined) {
       const selected = this.selectedLine();
-      if (selected?.kind === 'group') this.toggleOpen(selected.collapsed);
+      if (selected?.kind === 'group' || selected?.kind === 'upcoming') {
+        this.toggleOpen(selected.collapsed);
+      }
       return;
     }
     // The edit buffer is drawn to the terminal, so it starts from the cleaned title; an
@@ -1331,9 +1364,15 @@ export class TuiController {
           }),
         );
         this.touchTask(created);
-        if (generation === this.orgGeneration) this.select(created.id);
+        // A task that went to a collapsed Upcoming isn't shown: the selection stays.
+        const shown = this.state.lines.some((line) => line.key === created?.id);
+        if (generation === this.orgGeneration && shown) this.select(created.id);
       },
       {
+        done: () =>
+          created !== undefined && this.leftForUpcoming(created)
+            ? this.upcomingNotice(created)
+            : undefined,
         onSuccess: () => {
           const id = created?.id;
           if (id === undefined) return;
@@ -1346,10 +1385,20 @@ export class TuiController {
     );
     if (!ok || generation !== this.orgGeneration) return false;
     if (!again || created === undefined || this.state.mode.kind !== 'navigate') return true;
-    // Rapid entry: the next draft goes below the task just added (02 §3.4).
+    // Rapid entry: the next draft goes below the task just added (02 §3.4). One that went to
+    // Upcoming isn't in its group's rows, so the next draft stays where its draft was, after it.
     const s = this.state;
     if (s.list === null) return true;
-    const next = createTarget(s.view, s.lines, s.list, created.id, 'below');
+    const placement = created.placement;
+    const next =
+      placement !== null && this.leftForUpcoming(created)
+        ? {
+            anchorKey: target.anchorKey,
+            placement: target.placement,
+            depth: target.depth,
+            body: { groupId: placement.groupId, afterId: created.id },
+          }
+        : createTarget(s.view, s.lines, s.list, created.id, 'below');
     if (next !== null) this.set({ mode: { kind: 'draft', target: next, input: lineInput() } });
     return true;
   }
@@ -1438,8 +1487,14 @@ export class TuiController {
       this.info('msg.sortedView');
       return;
     }
+    if (this.inUpcomingSection(line)) {
+      this.info('msg.upcomingNoMove');
+      return;
+    }
+    // Moves step over the rows the groups show; Upcoming tasks aren't among them.
+    const upcoming = upcomingIn({ dates: this.state.dates, keep: this.keep });
     const visible = (t: Task) =>
-      t.completedAt === null || this.state.showCompleted || this.keep.has(t.id);
+      (t.completedAt === null || this.state.showCompleted || this.keep.has(t.id)) && !upcoming(t);
     const plan = planMove(list, line.task.id, direction, visible);
     if (plan === null) {
       if (
@@ -1502,6 +1557,10 @@ export class TuiController {
     const taskId = line.task.id;
     if (command === 'move' && line.task.placement === null) {
       this.info('msg.notInMyList');
+      return;
+    }
+    if (command === 'move' && this.inUpcomingSection(line)) {
+      this.info('msg.upcomingNoMove');
       return;
     }
     const kind = command === 'move' ? 'group' : command;
@@ -1611,8 +1670,16 @@ export class TuiController {
       if (after !== null) await this.patchTask(id, { ...after });
       created = await this.addReminders(id, offsets);
     };
+    const wasUpcoming = inUpcoming(task, this.state.dates.today);
     void this.mutate(send, {
       ...(shown === null ? {} : { local: this.localTask(task, shown) }),
+      // A date that sends the task to Upcoming takes it out of its group: say where it went.
+      done: () => {
+        const saved = this.findTask(id);
+        return saved !== undefined && !wasUpcoming && this.leftForUpcoming(saved)
+          ? this.upcomingNotice(saved)
+          : undefined;
+      },
       onSuccess: () =>
         this.pushUndo({
           // The same writes in the same order on every attempt, so a retry (`r`) after a failed

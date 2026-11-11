@@ -147,6 +147,7 @@ export async function dispatch(rest: readonly string[]): Promise<void> {
       completed: false,
       allOrgs: false,
       subtasks: false,
+      upcoming: false,
     });
     return;
   }

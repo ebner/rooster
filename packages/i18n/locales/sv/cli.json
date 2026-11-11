@@ -55,13 +55,17 @@
       "tag": "Bara uppgifter med den här taggen (kan upprepas)",
       "completed": "Ta med klara uppgifter",
       "allOrgs": "Alla organisationer",
-      "subtasks": "Ta med deluppgifter"
+      "subtasks": "Ta med deluppgifter",
+      "upcoming": "Visa även Återkommande: upprepade uppgifter vars dag inte har kommit än (bara Mina uppgifter)"
     },
     "badView": "Okänd vy ”{view}”. Använd någon av: {views}",
     "empty": "Inga uppgifter",
     "unassigned": "Ingen ansvarig",
     "groupNotEveryone": "--group fungerar bara med din egen lista, inte med everyone",
-    "everyonePersonal": "Allas uppgifter finns bara i delade organisationer; välj en med --org."
+    "everyonePersonal": "Allas uppgifter finns bara i delade organisationer; välj en med --org.",
+    "upcoming": "Återkommande",
+    "upcomingHidden": "{count, plural, one {# uppgift under Återkommande visas inte (lägg till --upcoming)} other {# uppgifter under Återkommande visas inte (lägg till --upcoming)}}",
+    "upcomingMyOnly": "--upcoming fungerar bara med Mina uppgifter (rooster ls), inte med en vy"
   },
   "view": {
     "my": "Mina uppgifter",

@@ -16,6 +16,8 @@ import {
   planMove,
   restorePlan,
   stepSelection,
+  UPCOMING_KEY,
+  upcomingIn,
 } from '../src/tui/model.ts';
 import { helpLines } from '../src/tui/render.ts';
 import {
@@ -390,6 +392,157 @@ describe('tui model', () => {
       body: { dueDate: '2026-10-11' },
     });
     expect(createTarget('search', lines, LIST, 'a1', 'below')).toBeNull();
+  });
+});
+
+describe('ADR 0068: Upcoming in the TUI model', () => {
+  // Today is 2026-10-09 (DATES). r1 repeats from tomorrow, r2 from a start date the day after,
+  // r3 is due today (its day has come), once is a plain future task, sub a repeating subtask.
+  const UP = normalizeMyList('o', {
+    groups: GROUPS,
+    tasks: [
+      placed('a1', 'g-a', 'a0'),
+      placed('r1', 'g-a', 'a1', { dueDate: '2026-10-10', recurrence: 'FREQ=DAILY' }),
+      placed('a2', 'g-a', 'a2'),
+      placed('r3', 'g-a', 'a3', { dueDate: '2026-10-09', recurrence: 'FREQ=DAILY' }),
+      placed('once', 'g-b', 'a0', { dueDate: '2026-10-20' }),
+      placed('r2', 'g-inbox', 'a0', {
+        startDate: '2026-10-11',
+        dueDate: '2026-10-11',
+        recurrence: 'FREQ=WEEKLY',
+        counts: { subtasks: 1, subtasksDone: 0, comments: 0, attachments: 0 },
+      }),
+      task('sub', {
+        parentId: 'r2',
+        subtaskPosition: 'a0',
+        dueDate: '2026-10-12',
+        recurrence: 'FREQ=DAILY',
+      }),
+      // A broken server value never holds a task back.
+      placed('bad', 'g-b', 'a1', { dueDate: 'soon', recurrence: 'FREQ=DAILY' }),
+    ],
+    expandedTaskIds: ['r2'],
+    serverTime: 0,
+  });
+  const shown = (lines: ReturnType<typeof buildLines>) =>
+    lines.map((l) => (l.kind === 'task' ? `${'  '.repeat(l.depth)}${l.key}` : l.key));
+
+  it('holds open repeating tasks out of their groups, behind a collapsed Upcoming at the end', () => {
+    const lines = buildLines(input({ list: UP, expanded: new Set(UP.expandedTaskIds) }));
+    // The Inbox only held r2, so it is hidden like an empty Inbox.
+    expect(shown(lines)).toEqual([
+      'group:g-a',
+      'a1',
+      'a2',
+      'r3',
+      'group:g-b',
+      'once',
+      'bad',
+      UPCOMING_KEY,
+    ]);
+    expect(lines.find((l) => l.key === 'group:g-a')).toMatchObject({ count: 3 });
+    expect(lines.at(-1)).toEqual({
+      kind: 'upcoming',
+      key: UPCOMING_KEY,
+      count: 2,
+      collapsed: true,
+    });
+  });
+
+  it('opened, lists them by day with the group they go back to; subtasks stay under them', () => {
+    const lines = buildLines(
+      input({ list: UP, expanded: new Set(UP.expandedTaskIds), upcomingOpen: true }),
+    );
+    expect(shown(lines).slice(shown(lines).indexOf(UPCOMING_KEY))).toEqual([
+      UPCOMING_KEY,
+      'r1',
+      'r2',
+      '  sub',
+    ]);
+    const row = (key: string) => lines.find((l) => l.key === key);
+    expect(row('r1')).toMatchObject({ section: UPCOMING_KEY, chip: 'A' });
+    // The Inbox goes unnamed, as in the smart views.
+    expect(row('r2')).toMatchObject({ section: UPCOMING_KEY, chip: null, expanded: true });
+    expect(row('sub')).toMatchObject({ section: UPCOMING_KEY, depth: 1 });
+  });
+
+  it('on its day a task is back in its group at its own position', () => {
+    const later = { ...DATES, today: '2026-10-11' };
+    const lines = buildLines(input({ list: UP, dates: later, expanded: new Set() }));
+    expect(shown(lines)).toEqual([
+      'group:g-inbox',
+      'r2',
+      'group:g-a',
+      'a1',
+      'r1',
+      'a2',
+      'r3',
+      'group:g-b',
+      'once',
+      'bad',
+    ]);
+  });
+
+  it('a row completed in Upcoming stays there while held; completed ones elsewhere stay put', () => {
+    const done = normalizeMyList('o', {
+      groups: GROUPS,
+      tasks: [
+        placed('a1', 'g-a', 'a0'),
+        placed('r1', 'g-a', 'a1', {
+          dueDate: '2026-10-10',
+          recurrence: 'FREQ=DAILY',
+          completedAt: 5,
+        }),
+      ],
+      expandedTaskIds: [],
+      serverTime: 0,
+    });
+    const held = buildLines(input({ list: done, keep: new Set(['r1']), upcomingOpen: true }));
+    expect(shown(held)).toEqual(['group:g-a', 'a1', 'group:g-b', UPCOMING_KEY, 'r1']);
+    expect(held.at(-2)).toMatchObject({ count: 0 });
+    // Shown with "show completed", a completed instance is in its group (it isn't upcoming).
+    const all = buildLines(input({ list: done, showCompleted: true }));
+    expect(shown(all)).toEqual(['group:g-a', 'a1', 'r1', 'group:g-b']);
+    expect(upcomingIn({ dates: DATES, keep: new Set() })(done.tasks.r1 as Task)).toBe(false);
+  });
+
+  it('with only Upcoming tasks, the hint says so above it', () => {
+    const only = normalizeMyList('o', {
+      groups: [GROUPS[0] as Group],
+      tasks: [placed('r1', 'g-inbox', 'a0', { dueDate: '2026-10-10', recurrence: 'FREQ=DAILY' })],
+      expandedTaskIds: [],
+      serverTime: 0,
+    });
+    const lines = buildLines(input({ list: only }));
+    expect(lines.map((l) => l.kind)).toEqual(['empty', 'upcoming']);
+    expect(lines[0]).toMatchObject({
+      text: 'Nothing to do now; Recurring has what’s coming. Press n to add a task.',
+    });
+  });
+
+  it('new tasks never go into Upcoming: n there adds at the top; s adds a subtask', () => {
+    const lines = buildLines(
+      input({ list: UP, expanded: new Set(UP.expandedTaskIds), upcomingOpen: true }),
+    );
+    const top = { anchorKey: null, placement: 'after', depth: 0, body: {} };
+    expect(createTarget('my', lines, UP, UPCOMING_KEY, 'below')).toEqual(top);
+    expect(createTarget('my', lines, UP, 'r1', 'below')).toEqual(top);
+    expect(createTarget('my', lines, UP, 'r1', 'above')).toEqual(top);
+    expect(createTarget('my', lines, UP, UPCOMING_KEY, 'subtask')).toBeNull();
+    expect(createTarget('my', lines, UP, 'r1', 'subtask')).toMatchObject({
+      body: { parentId: 'r1' },
+    });
+    // Below a subtask in Upcoming is its sibling, as anywhere else.
+    expect(createTarget('my', lines, UP, 'sub', 'below')).toMatchObject({
+      body: { parentId: 'r2', afterId: 'sub' },
+    });
+    // In a group, the rows Upcoming holds are stepped over by moves.
+    const up = upcomingIn({ dates: DATES, keep: new Set() });
+    const visible = (t: Task) => t.completedAt === null && !up(t);
+    expect(planMove(UP, 'a2', 'up', visible)).toEqual({
+      kind: 'move',
+      body: { groupId: 'g-a', beforeId: 'a1' },
+    });
   });
 });
 

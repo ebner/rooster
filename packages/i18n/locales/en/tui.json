@@ -19,10 +19,12 @@
   "section": {
     "overdue": "Overdue",
     "unassigned": "Unassigned",
-    "me": "{name} (you)"
+    "me": "{name} (you)",
+    "upcoming": "Recurring"
   },
   "empty": {
     "my": "No tasks yet. Press n to add one.",
+    "myUpcoming": "Nothing to do now; Recurring has what’s coming. Press n to add a task.",
     "today": "Nothing due today",
     "week": "Nothing due in the next 7 days",
     "overdue": "Nothing overdue",
@@ -73,7 +75,9 @@
     "notInMyList": "Only tasks in My tasks can move to a group",
     "sortedView": "Sorted view: move tasks in My tasks (g m)",
     "subtaskGroup": "Subtasks move with their parent",
-    "taskGone": "That task is no longer here"
+    "taskGone": "That task is no longer here",
+    "upcomingNoMove": "Tasks in Recurring can’t be moved; give one an earlier date to bring it back",
+    "toUpcoming": "“{title}” is in Recurring; back in its group: {day}"
   },
   "toast": {
     "completed": "Completed “{title}”",
@@ -124,8 +128,8 @@
   "key": {
     "down": "Next row",
     "up": "Previous row",
-    "collapse": "Collapse the group or task, or go to the parent",
-    "expand": "Expand the group or task, or go to the first subtask",
+    "collapse": "Collapse the group (or Recurring) or task, or go to the parent",
+    "expand": "Expand the group (or Recurring) or task, or go to the first subtask",
     "first": "First row",
     "last": "Last row",
     "edit": "Edit the title (Enter or Esc saves)",

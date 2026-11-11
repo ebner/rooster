@@ -19,10 +19,12 @@
   "section": {
     "overdue": "Försenade",
     "unassigned": "Ingen ansvarig",
-    "me": "{name} (du)"
+    "me": "{name} (du)",
+    "upcoming": "Återkommande"
   },
   "empty": {
     "my": "Inga uppgifter än. Tryck n för att lägga till en.",
+    "myUpcoming": "Inget att göra just nu; under Återkommande ser du vad som väntar. Tryck n för att lägga till en uppgift.",
     "today": "Inget att göra idag",
     "week": "Inget planerat de kommande 7 dagarna",
     "overdue": "Inget är försenat",
@@ -73,7 +75,9 @@
     "notInMyList": "Bara uppgifter i Mina uppgifter kan flyttas till en grupp",
     "sortedView": "Sorterad vy: flytta uppgifter i Mina uppgifter (g m)",
     "subtaskGroup": "Deluppgifter flyttas med sin överordnade uppgift",
-    "taskGone": "Uppgiften finns inte längre här"
+    "taskGone": "Uppgiften finns inte längre här",
+    "upcomingNoMove": "Uppgifter under Återkommande kan inte flyttas; ge uppgiften ett tidigare datum för att få tillbaka den",
+    "toUpcoming": "”{title}” ligger under Återkommande; tillbaka i sin grupp: {day}"
   },
   "toast": {
     "completed": "”{title}” är klar",
@@ -124,8 +128,8 @@
   "key": {
     "down": "Nästa rad",
     "up": "Föregående rad",
-    "collapse": "Fäll ihop gruppen eller uppgiften, eller gå till den överordnade",
-    "expand": "Fäll ut gruppen eller uppgiften, eller gå till första deluppgiften",
+    "collapse": "Fäll ihop gruppen (eller Återkommande) eller uppgiften, eller gå till den överordnade",
+    "expand": "Fäll ut gruppen (eller Återkommande) eller uppgiften, eller gå till första deluppgiften",
     "first": "Första raden",
     "last": "Sista raden",
     "edit": "Redigera titeln (Enter eller Esc sparar)",

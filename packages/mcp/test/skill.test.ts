@@ -53,6 +53,15 @@ describe('skillMarkdown (11 §6.2)', () => {
     expect(text).toContain('--json');
   });
 
+  it('ADR 0068: explains Upcoming and that agents must not move tasks out of it', () => {
+    expect(text).toContain('- **Recurring.**');
+    expect(text).toContain('waits in a collapsed Recurring section');
+    expect(text).toContain('`upcoming: true`');
+    expect(text).toContain('never move it or change its group to bring it back');
+    expect(skillInstructions(ctx)).toContain('the Recurring section of the user');
+    expect(skillInstructions(ctx)).toContain('never move them to bring them back');
+  });
+
   it('ends with a newline', () => {
     expect(text.endsWith('\n')).toBe(true);
   });

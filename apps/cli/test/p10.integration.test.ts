@@ -130,7 +130,8 @@ describe('P10 CLI: repeating tasks', () => {
     expect(task.recurrence).toBe('FREQ=WEEKLY;BYDAY=MO');
 
     await json(cli, ['edit', String(task.seq), '--remind', '1h']);
-    const ls = await cli.run(['ls']);
+    // Due on a later day, it waits in Recurring (ADR 0068), which --upcoming lists.
+    const ls = await cli.run(['ls', '--upcoming']);
     expect(ls.code).toBe(0);
     const row = ls.stdout.split('\n').find((line) => line.includes('Water plants'));
     expect(row).toContain('↻');
