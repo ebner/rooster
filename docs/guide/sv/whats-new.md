@@ -2,7 +2,9 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
-## Unreleased
+## 1.10.0
+
+_2026-11-11_
 
 - **Återkommande uppgifter väntar på sin dag.** När du markerar en återkommande uppgift som klar står nästa inte längre i listan hela veckan: den väntar under **↻ Återkommande** längst ner i Mina uppgifter och kommer tillbaka till sin grupp på sin dag. Idag och Kommande 7 dagar visar den som förut.
 - **Flytta en ny uppgift på mobilen.** Skriv namnet och håll sedan kvar på det: uppgiften läggs till och du kan dra den dit den ska.

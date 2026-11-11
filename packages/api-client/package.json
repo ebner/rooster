@@ -1,6 +1,6 @@
 {
   "name": "@rooster/api-client",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "license": "AGPL-3.0-only",
   "description": "Typed client for the rooster REST API, generated from its OpenAPI document.",
   "private": true,

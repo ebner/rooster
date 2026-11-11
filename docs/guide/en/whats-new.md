@@ -2,7 +2,9 @@
 
 What changed for you in each version of rooster, newest first. After an update, rooster offers this page once. You can open it at any time from Settings or the guide's page list. The notes for whoever runs rooster (upgrades, settings, security) are in the [changelog](../../../CHANGELOG.md).
 
-## Unreleased
+## 1.10.0
+
+_2026-11-11_
 
 - **Repeating tasks wait for their day.** When you complete a repeating task, the next one no longer sits in your list all week: it waits under **↻ Recurring** at the end of My tasks and comes back to its group on its day. Today and Next 7 days show it as before.
 - **Move a new task on your phone.** Type its name, then press and hold the name: the task is added and you can drag it where it belongs.
