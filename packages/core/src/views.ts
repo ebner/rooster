@@ -2,6 +2,7 @@ import { addDays, type DueContext, diffDays, dueState, type IsoDate } from './da
 import { compareKeys } from './ordering.ts';
 import { compareSubtasks, orderedGroups } from './reducers/state.ts';
 import type { Group, Task } from './schemas/index.ts';
+import { isUpcoming } from './upcoming.ts';
 
 /**
  * Smart views (01 FR-VIEW-1, 02 §10, 04 §5.1). Pure selectors shared by the web client (over the
@@ -62,7 +63,7 @@ export interface ViewSection {
 }
 
 export interface ViewCounts {
-  /** Open tasks in My tasks (placed tasks; the sidebar's My tasks badge). */
+  /** Open tasks in My tasks (placed tasks, Upcoming ones not counted; the sidebar badge). */
   my: number;
   /** Today's badge: open tasks due today or earlier. */
   today: number;
@@ -256,8 +257,11 @@ export function viewCounts(
   const counts: ViewCounts = { my: 0, today: 0, week: 0, overdue: 0, nodate: 0 };
   for (const task of Object.values(source.tasks)) {
     if (task.completedAt !== null || !isLive(task)) continue;
-    // Rows of My tasks: placed in a group the source knows (the list renders per group).
-    if (task.placement && source.groups[task.placement.groupId]) counts.my++;
+    // Rows of My tasks: placed in a group the source knows (the list renders per group), and
+    // not waiting in Upcoming (ADR 0068).
+    if (task.placement && source.groups[task.placement.groupId] && !isUpcoming(task, ctx.today)) {
+      counts.my++;
+    }
     if (task.assigneeId !== ctx.viewerId) continue;
     const bucket = bucketOf(task, ctx);
     if (bucket.days === null) {

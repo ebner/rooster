@@ -248,6 +248,16 @@ describe('viewCounts', () => {
     }
   });
 
+  it('leaves Upcoming recurring tasks out of my, but not out of the date-based views', () => {
+    const weekly = 'FREQ=WEEKLY';
+    const later = task('later', { ...at('home', p3), dueDate: '2026-10-08', recurrence: weekly });
+    const due = task('due', { ...at('home', p4), dueDate: '2026-10-05', recurrence: weekly });
+    const counts = viewCounts(source([later, due]), ctx);
+    expect(counts.my).toBe(1);
+    expect(counts.week).toBe(2);
+    expect(counts.today).toBe(1);
+  });
+
   it('is all zeros for an empty org', () => {
     expect(viewCounts(source([]), ctx)).toEqual({
       my: 0,
