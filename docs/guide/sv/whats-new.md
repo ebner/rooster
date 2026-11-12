@@ -2,6 +2,10 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
+## Unreleased
+
+- **Säkerhetsuppdateringar.** Komponenter med kända säkerhetsproblem är uppdaterade. Inget ändras i hur rooster fungerar.
+
 ## 1.10.0
 
 _2026-11-11_
