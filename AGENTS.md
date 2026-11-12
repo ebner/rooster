@@ -226,6 +226,7 @@ At least one sign-in provider must be configured, or the server exits with code 
 - Files are kebab-case. React components are PascalCase. Hooks are `useX`.
 - Comments explain *why*, not *what*. Do not write task-history comments.
 - **Release notes have two audiences.** A change users notice gets a CHANGELOG entry (for operators, English) **and** a line under `## Unreleased` in both `docs/guide/en/whats-new.md` and `docs/guide/sv/whats-new.md` (for users: what they see, no operator details, no ADR numbers; ADR 0057). `pnpm release` refuses a release without them.
+- **Dependency advisories:** bump direct dependencies in the `pnpm-workspace.yaml` catalog; fix transitive ones with an `overrides` entry scoped to the vulnerable range, with a comment naming the parent and the advisory, and remove it once the parent ships the fix. Mind the minimum release age (pick versions a few days old). Run `pnpm notices` afterwards. Accepted advisories go in `docs/security/security-review.md`.
 - Commits and PR titles follow Conventional Commits (`feat(list): …`, `fix(sync): …`).
 
 ## Keeping this file current (mandatory)

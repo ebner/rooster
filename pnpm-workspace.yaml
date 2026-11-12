@@ -37,7 +37,7 @@ catalog:
   oauth2-mock-server: 9.2.0
   web-push: 3.6.7                # P7 Web Push (VAPID), 04 §2
   '@types/web-push': 3.6.4
-  nodemailer: 10.0.16             # P7 email over SMTP, 04 §2 (ships its own types)
+  nodemailer: 10.4.0              # P7 email over SMTP, 04 §2 (ships its own types)
   '@better-auth/api-key': 1.7.7   # P8 PATs (04 §2), matches better-auth
   '@better-auth/oauth-provider': 1.7.7   # P9 OAuth 2.1 AS (ADR 0041), pinned exactly with better-auth
   '@better-auth/cimd': 1.7.7             # P9 Client ID Metadata Documents (ADR 0041)
@@ -56,7 +56,7 @@ catalog:
   react-dom: 19.3.0
   '@types/react': 19.3.0
   '@types/react-dom': 19.3.0
-  vite: 8.3.2
+  vite: 8.3.6
   '@vitejs/plugin-react': 6.1.1
   '@tanstack/react-router': 1.170.41
   '@tanstack/router-plugin': 1.168.42
@@ -107,6 +107,19 @@ catalog:
   # api client
   openapi-fetch: 0.17.0
   openapi-typescript: 7.13.0
+
+# Patched versions of transitive dependencies with security advisories (Dependabot, 2026-11-12).
+# Each selector covers only the vulnerable range; drop an entry once the parent ships the fix.
+overrides:
+  'undici@>=7.0.0 <7.30.1': 7.30.2                 # Scalar (/api/docs); GHSA-xjj6-f33q-929c and others
+  'undici@>=8.0.0 <8.12.2': 8.12.4                 # jsdom (tests)
+  'seroval@<1.6.11': 1.6.11                        # TanStack Router; GHSA-9wx9-5pv9-3349, GHSA-f86p-h4j2-7qgj
+  '@ai-sdk/provider-utils@>=4.0.0-beta.10 <4.0.33': 4.0.65   # Scalar agent chat; GHSA-866g-f22w-33x8
+  'fast-uri@>=3.0.0 <3.1.9': 3.1.9                 # workbox-build (build only)
+  'serialize-javascript@<7.1.3': 7.1.4             # workbox-build (build only)
+  'glob@>=9.0.0 <=14.0.1': 14.0.4                  # workbox-build (build only)
+  'minimatch@>=7.0.0 <11.0.1': 11.0.5              # workbox-build (build only)
+  '@esbuild-kit/core-utils>esbuild': 0.25.12        # drizzle-kit's loader (dev only); GHSA-67mh-4wv8-2f99
 
 minimumReleaseAgeExclude:
   - data-urls@8.0.0

@@ -6,6 +6,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Security
+- Dependencies with advisories updated: nodemailer 10.4.0 (address parsing), seroval 1.6.11 (web app), and undici 7.30.2 and @ai-sdk/provider-utils 4.0.65 inside the API reference (`/api/docs`); build and development tools too (vite 8.3.6, undici 8, esbuild for drizzle-kit, and fast-uri, serialize-javascript, glob and minimatch in the service-worker build). Transitive fixes are `overrides` in `pnpm-workspace.yaml`. deepmerge (build only, no fix available) is accepted; see `docs/security/security-review.md`.
+
 ## [1.10.0] - 2026-11-11
 
 ### Fixed

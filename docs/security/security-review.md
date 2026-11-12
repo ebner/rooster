@@ -275,3 +275,15 @@ A focused review of the Phase 12 server (device grant, refresh grace, revocation
 - **Lock takeover races (22, 23).** They need a crashed or paused CLI process, plus concurrent commands at the moment of takeover. The worst case is a revoked grant, so the user logs in again; no credential is exposed. An OS advisory lock would fix it structurally, but Node has none without a native dependency.
 - **The refresh grace window (ADR 0066).** A thief who uses a stolen refresh token within 60 s of a rotation, before the real client uses its successor, gets one pair. The theft surfaces as a revoked grant at the real client's next refresh.
 - **Device-code phishing in general (ADR 0065).** A user who types a code an attacker started and approves it anyway. Mitigated by the typed code, the warning, the defaults, the browser-only notice and the operator switch.
+
+## Dependency advisories (2026-11-12)
+
+Dependabot reported 34 alerts on 13 packages after the repository went public (`pnpm audit`: 37). All were transitive except nodemailer and vite.
+
+- **Shipped and fixed:**
+  - nodemailer 10.0.16 → 10.4.0: address-parser bugs (GHSA-85x2-q946-cp5h, GHSA-m943-m63m-w62w, GHSA-8c8m-p3m8-cjg8). It parses the addresses of invites and notification emails.
+  - seroval → 1.6.11: script injection in serialised output (TanStack Router, web app).
+  - undici 7 → 7.30.2 and @ai-sdk/provider-utils → 4.0.65: inside Scalar, the API reference at `/api/docs`.
+- **Build and development only, fixed anyway:** vite → 8.3.6 (dev server), undici 8 → 8.12.4 (jsdom in tests), esbuild for drizzle-kit's loader → 0.25.12, and fast-uri, serialize-javascript, glob and minimatch inside workbox-build.
+- The transitive fixes are `overrides` in `pnpm-workspace.yaml`, each scoped to the vulnerable range; drop an entry once its parent ships the fix.
+- **Accepted:** deepmerge 4.3.1 (GHSA-gcqx-w48m-w2h4, low, no patched version). It is reached only through `@rollup/plugin-node-resolve` in `workbox-build`, while the service worker is built from rooster's own configuration, and ships nowhere.
