@@ -1,0 +1,76 @@
+name: pages
+# The project site and the user guide on GitHub Pages (ADR 0070). A release tag deploys the
+# site built from that tag, so it never describes unreleased work; running the workflow by hand
+# redeploys the newest release tag (or the ref you name) after a copy fix.
+#
+# One-time setup: Settings → Pages → Source "GitHub Actions", and Settings → Environments →
+# github-pages → deployment branches and tags: add the tag rule `v*` (it allows main only).
+#
+# Pages only deploys from an Actions artifact. It is the one exception to "no Actions
+# artifacts" (release.yml): about 6 MB, kept for one day.
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: A tag or branch to build (empty = the newest release tag)
+        required: false
+
+permissions:
+  contents: read
+
+# One deployment at a time; a newer one waits instead of cancelling a running one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: check out the ref to publish
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            ref="$GITHUB_REF_NAME"
+          elif [[ -n "$REF" ]]; then
+            ref="$REF"
+          else
+            ref="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)"
+          fi
+          [[ "$ref" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || { echo "not a ref: '$ref'"; exit 1; }
+          git checkout --quiet "$ref"
+          echo "publishing $ref ($(git rev-parse --short HEAD))"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: build
+        env:
+          # A custom domain later: set the repository variables SITE_URL and SITE_CNAME.
+          SITE_URL: ${{ vars.SITE_URL }}
+          SITE_CNAME: ${{ vars.SITE_CNAME }}
+        run: pnpm --filter @rooster/site build
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: apps/site/dist
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        id: deploy

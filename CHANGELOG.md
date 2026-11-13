@@ -6,6 +6,12 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+- **The project site** at https://ebner.github.io/rooster/ (ADR 0070): a landing page and the user guide, in English and Swedish, with a demo of the date parser running in the browser. It is built from `apps/site` and deployed to GitHub Pages by `.github/workflows/pages.yml` for each release tag. The README is shorter and links to it.
+
+### Migrations
+- None.
+
 ## [1.10.1] - 2026-11-12
 
 ### Security

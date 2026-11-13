@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pnpm docs:screenshots (ADR 0052 §3): seeds the fictional Kestrel Lane team into a fresh server
-# and captures the guide's and README's screenshots into docs/screenshots/.
+# and captures the screenshots of the guide, the README and the project site (apps/site) into docs/screenshots/.
 #
 #   pnpm docs:screenshots                         # everything
 #   DOCS_SHOTS=my-tasks,inbox pnpm docs:screenshots   # only these shots (others are kept)

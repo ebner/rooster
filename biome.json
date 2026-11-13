@@ -38,7 +38,7 @@
       "linter": { "rules": { "style": { "noDefaultExport": "off" } } }
     },
     {
-      "includes": ["scripts/**", "apps/cli/**"],
+      "includes": ["scripts/**", "apps/cli/**", "apps/site/scripts/**"],
       "linter": { "rules": { "suspicious": { "noConsole": "off" } } }
     }
   ],
