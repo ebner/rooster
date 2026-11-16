@@ -9,6 +9,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 ### Added
 - **The project site** at https://ebner.github.io/rooster/ (ADR 0070): a landing page and the user guide, in English and Swedish, with a demo of the date parser running in the browser. It is built from `apps/site` and deployed to GitHub Pages by `.github/workflows/pages.yml` for each release tag. The README is shorter and links to it.
 
+### Security
+- hono 4.13.16 (GHSA-4m76-xfj5-7975, GHSA-h7mg-cq63-vhpq, GHSA-4h7h-rv7c-7m2v: middleware bypasses in `mount()` and the RegExpRouter, and `validator('form')` skipping multipart requests with extra parameters) and @hono/node-server 2.1.6 (GHSA-jpvv-r467-5p4w: a raw backslash in the request path is now rejected with 400 instead of being read as `/`, which could slip past path rules at a reverse proxy).
+
 ### Migrations
 - None.
 
