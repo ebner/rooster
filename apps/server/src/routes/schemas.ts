@@ -53,6 +53,12 @@ import {
   pushSubscriptionSchema,
   reindexResultSchema,
   resolvedMemberSchema,
+  savedViewCreateSchema,
+  savedViewMoveSchema,
+  savedViewPatchSchema,
+  savedViewQuerySchema,
+  savedViewSchema,
+  savedViewTasksSchema,
   searchHitSchema,
   sessionSchema,
   subtaskReorderResultSchema,
@@ -293,6 +299,25 @@ export const AllViewSchema = named(
     today: 'My today, in my timezone.',
   }),
   'AllView',
+);
+// Phase 13 (ADR 0073 B): views, saved queries in one org.
+export const SavedViewQuerySchema = named(savedViewQuerySchema, 'SavedViewQuery', {
+  description:
+    'A view’s query: `tags` (IDs) with `tagMode` any/all, `assignee` (`anyone`, `me`, `unassigned` or a member’s ID), `due` (`any`, `today` incl. overdue, `week`, `overdue`, `none`), `status` (`open`, `done`, `any`). Omitted fields take their defaults.',
+});
+export const SavedViewSchema = named(
+  savedViewSchema.extend({ query: SavedViewQuerySchema }),
+  'SavedView',
+);
+export const SavedViewCreateSchema = named(
+  savedViewCreateSchema.extend({ query: SavedViewQuerySchema }),
+  'SavedViewCreate',
+);
+export const SavedViewPatchSchema = named(savedViewPatchSchema, 'SavedViewPatch');
+export const SavedViewMoveSchema = named(savedViewMoveSchema, 'SavedViewMove');
+export const SavedViewTasksSchema = named(
+  savedViewTasksSchema.extend({ items: z.array(TaskSchema) }),
+  'SavedViewTasks',
 );
 export const BackupSchema = named(backupSchema, 'Backup');
 

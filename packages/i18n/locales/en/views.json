@@ -59,5 +59,8 @@
         "club": "Rowing club"
       }
     }
+  },
+  "saved": {
+    "title": "Views"
   }
 }

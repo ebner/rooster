@@ -43,6 +43,7 @@ import { PaletteKitchenSection } from '../palette/kitchen-sink-section';
 import { PaneSection } from '../pane/kitchen-sink-section';
 import { PeopleKitchenSection } from '../people/kitchen-sink-section';
 import { PwaKitchenSection } from '../pwa/kitchen-sink-section';
+import { SavedViewsKitchenSection } from '../saved-views/kitchen-sink-section';
 import { CalendarKitchenSection } from '../settings/calendar-kitchen-section';
 import { MobileKitchenSection } from '../shell/mobile-kitchen-section';
 import { TagsKitchenSection } from '../tags/kitchen-sink-section';
@@ -777,6 +778,7 @@ export function KitchenSink() {
         <MobileKitchenSection />
         <ViewsKitchenSection />
         <AllOrgsKitchenSection />
+        <SavedViewsKitchenSection />
         <PaletteKitchenSection />
         <PeopleKitchenSection />
         <CollabKitchenSection />

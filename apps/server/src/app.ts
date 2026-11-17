@@ -52,6 +52,7 @@ import { registerSearchRoutes } from './routes/search.ts';
 import { registerTagRoutes } from './routes/tags.ts';
 import { registerTaskRoutes } from './routes/tasks.ts';
 import { registerUnsubscribeRoutes } from './routes/unsubscribe.ts';
+import { registerViewRoutes } from './routes/views.ts';
 import { createServices, type DeliveryTransports, type Services } from './services/index.ts';
 
 export interface AppDeps {
@@ -192,6 +193,7 @@ export function createApp(deps: AppDeps): App {
   registerRefRoutes(app, services);
   registerTaskRoutes(app, services);
   registerTagRoutes(app, services);
+  registerViewRoutes(app, services);
   registerSearchRoutes(app, services);
   registerExportRoutes(app, services);
   registerCollabRoutes(app, services);

@@ -28,6 +28,8 @@ export const paths = {
   login: '/login',
   orgView: (slug: string, view: OrgViewId) => `/o/${slug}/${view}`,
   task: (slug: string, taskId: string) => `/o/${slug}/t/${taskId}`,
+  /** Phase 13 (ADR 0073 B): a view of the org (`saved_view`); the pane opens over it. */
+  savedView: (slug: string, viewId: string) => `/o/${slug}/v/${viewId}`,
   orgSettings: (slug: string) => `/o/${slug}/settings`,
   /** Phase 13 (ADR 0073 A8): All organisations → Today, Next 7 days, Overdue. */
   allView: (view: AllViewId) => `/all/${view}`,

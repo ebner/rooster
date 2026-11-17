@@ -16,3 +16,4 @@ export * from './tags.ts';
 export * from './task-query.ts';
 export * from './text.ts';
 export * from './user.ts';
+export * from './views.ts';

@@ -15,6 +15,14 @@ export const queryKeys = {
   search: (scope: string, q: string) => ['search', scope, q] as const,
   /** SSE invalidates `['trash', orgId]` (04 §4.5); the pages hang below it. */
   trash: (orgId: string) => ['trash', orgId] as const,
+  /**
+   * Phase 13 (ADR 0073 B). SSE invalidates `['views', orgId]` (the live and the archived lists
+   * hang below it); a view's rows are `['view-tasks', viewId, completed]`.
+   */
+  views: (orgId: string, archived: boolean) =>
+    ['views', orgId, archived ? 'archived' : 'live'] as const,
+  viewTasks: (viewId: string, completed: boolean) =>
+    ['view-tasks', viewId, completed ? 'all' : 'open'] as const,
   /** P6. SSE invalidates `['everyone', orgId]`; the filter variants hang below it. */
   everyone: (orgId: string, filters: string) => ['everyone', orgId, filters] as const,
   /** ADR 0072. The move picker's preview: the target org and the sorted, comma-joined ids. */

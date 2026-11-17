@@ -1232,6 +1232,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{orgId}/views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The views I see in an org, in my order
+         * @description The org’s shared views and my private ones, in my own sidebar order, each with `openCount`. `archived=true` lists the archived ones instead (Org settings → Views). Needs `tasks:read`.
+         */
+        get: operations["listViews"];
+        put?: never;
+        /**
+         * Create a view (private unless `shared`; always private in a personal org)
+         * @description Tags in the query must be the org’s and a named assignee one of its members (`422`). The view goes to the end of my order (and of every member’s, when shared). A repeated create with the same `id` and content returns the view. Needs `groups:write`.
+         */
+        post: operations["createView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/views/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a view (the tasks and tags stay)
+         * @description As for changes: any member for a shared view, the creator for a private one.
+         */
+        delete: operations["deleteView"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename a view, change its query, or share or unshare it
+         * @description Any member may change a shared view; a private one only its creator (anyone else gets `404`). Unsharing makes it private to its creator. Needs `groups:write`.
+         */
+        patch: operations["updateView"];
+        trace?: never;
+    };
+    "/api/v1/views/{id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a view in my own sidebar order
+         * @description `afterId`/`beforeId` name other views I see; each member orders views themselves.
+         */
+        post: operations["moveView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/views/{id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive a view: it leaves every sidebar (Org settings → Views restores it)
+         * @description Idempotent. The tag is untouched.
+         */
+        post: operations["archiveView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/views/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore an archived view
+         * @description Idempotent. It returns to the end of my order.
+         */
+        post: operations["restoreView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/views/{id}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A view’s tasks and its open/done counts
+         * @description Every task of the org matching the query (subtasks included, each a row of its own; group them with `@rooster/core/saved-views`), filtered by my grant as every read; `completed=true` also lists completed matches. `counts` are the matches by completion, ignoring the status filter. Needs `tasks:read`.
+         */
+        get: operations["listViewTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search": {
         parameters: {
             query?: never;
@@ -4252,6 +4380,83 @@ export interface components {
          */
         TagMerge: {
             intoId: string;
+        };
+        SavedView: {
+            id: string;
+            orgId: string;
+            createdBy: string;
+            shared: boolean;
+            name: string;
+            query: components["schemas"]["SavedViewQuery"];
+            archivedAt: number | null;
+            position: string;
+            openCount: number;
+            createdAt: number;
+            updatedAt: number;
+        };
+        /** @description A view’s query: `tags` (IDs) with `tagMode` any/all, `assignee` (`anyone`, `me`, `unassigned` or a member’s ID), `due` (`any`, `today` incl. overdue, `week`, `overdue`, `none`), `status` (`open`, `done`, `any`). Omitted fields take their defaults. */
+        SavedViewQuery: {
+            /** @default [] */
+            tags: string[];
+            /**
+             * @default any
+             * @enum {string}
+             */
+            tagMode: "any" | "all";
+            /** @default anyone */
+            assignee: ("anyone" | "me" | "unassigned") | string;
+            /**
+             * @default any
+             * @enum {string}
+             */
+            due: "any" | "today" | "week" | "overdue" | "none";
+            /**
+             * @default open
+             * @enum {string}
+             */
+            status: "open" | "done" | "any";
+        };
+        SavedViewCreate: {
+            id?: string;
+            name: string;
+            query: components["schemas"]["SavedViewQuery"];
+            shared?: boolean;
+        };
+        SavedViewPatch: {
+            name?: string;
+            query?: {
+                /** @default [] */
+                tags: string[];
+                /**
+                 * @default any
+                 * @enum {string}
+                 */
+                tagMode: "any" | "all";
+                /** @default anyone */
+                assignee: ("anyone" | "me" | "unassigned") | string;
+                /**
+                 * @default any
+                 * @enum {string}
+                 */
+                due: "any" | "today" | "week" | "overdue" | "none";
+                /**
+                 * @default open
+                 * @enum {string}
+                 */
+                status: "open" | "done" | "any";
+            };
+            shared?: boolean;
+        };
+        SavedViewMove: {
+            afterId?: string | null;
+            beforeId?: string | null;
+        };
+        SavedViewTasks: {
+            items: components["schemas"]["Task"][];
+            counts: {
+                open: number;
+                done: number;
+            };
         };
         /**
          * @example [
@@ -12348,6 +12553,803 @@ export interface operations {
             };
             /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listViews: {
+        parameters: {
+            query?: {
+                archived?: "true" | "false";
+            };
+            header?: never;
+            path: {
+                /** @description Org ID, slug, or `personal` for your personal org. */
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The views */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"][];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createView: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
+            path: {
+                /** @description Org ID, slug, or `personal` for your personal org. */
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedViewCreate"];
+            };
+        };
+        responses: {
+            /** @description The view */
+            201: {
+                headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicts with the current state. Codes: `id_conflict`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteView: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
+            path: {
+                /** @description View ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateView: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
+            path: {
+                /** @description View ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedViewPatch"];
+            };
+        };
+        responses: {
+            /** @description The view */
+            200: {
+                headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    moveView: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
+            path: {
+                /** @description View ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedViewMove"];
+            };
+        };
+        responses: {
+            /** @description The view */
+            200: {
+                headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    archiveView: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
+            path: {
+                /** @description View ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The view */
+            200: {
+                headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    restoreView: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
+            path: {
+                /** @description View ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The view */
+            200: {
+                headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listViewTasks: {
+        parameters: {
+            query?: {
+                completed?: "true" | "false";
+            };
+            header?: never;
+            path: {
+                /** @description View ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The tasks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewTasks"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

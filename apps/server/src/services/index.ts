@@ -37,6 +37,7 @@ import { SystemService } from './system-service.ts';
 import { TagService } from './tag-service.ts';
 import { expansionRemovalStep, TaskService } from './task-service.ts';
 import { UserService } from './user-service.ts';
+import { ViewService } from './view-service.ts';
 
 export interface Services {
   orgs: OrgService;
@@ -52,6 +53,7 @@ export interface Services {
   groups: GroupService;
   tasks: TaskService;
   tags: TagService;
+  views: ViewService;
   search: SearchService;
   exports: ExportService;
   idempotency: IdempotencyStore;
@@ -193,6 +195,7 @@ export function createServices(
       reminders,
     }),
     tags: new TagService(deps),
+    views: new ViewService(deps),
     search,
     exports: new ExportService(deps),
     idempotency,
