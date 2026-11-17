@@ -1,8 +1,24 @@
+import {
+  addDays,
+  diffDays,
+  formatRelative,
+  isValidIsoDate,
+  parseIsoDate,
+  weekdayOf,
+} from '@rooster/core/dates';
 import { compareKeys } from '@rooster/core/ordering';
 import { compareUpcoming } from '@rooster/core/upcoming';
 import { inSmartView } from '@rooster/core/views';
 import { defineCommand } from 'citty';
-import { type Group, type Org, type Task, unwrap } from '../api.ts';
+import {
+  type AllView,
+  type Group,
+  type Me,
+  type Org,
+  RoosterApiError,
+  type Task,
+  unwrap,
+} from '../api.ts';
 import { CliError, EXIT } from '../errors.ts';
 import { findGroup } from '../grant-info.ts';
 import { t } from '../i18n.ts';
@@ -23,6 +39,12 @@ import { dates, needs, positionals, readOptions, stringOptions, tagMap } from '.
 
 export const VIEWS = ['my', 'today', 'week', 'overdue', 'nodate', 'everyone'] as const;
 export type View = (typeof VIEWS)[number];
+
+/** The views All organisations has (ADR 0073 A1): `--all-orgs` lists them in one request. */
+const ALL_VIEWS = ['today', 'week', 'overdue'] as const;
+type AllViewName = (typeof ALL_VIEWS)[number];
+const isAllView = (view: View): view is AllViewName =>
+  (ALL_VIEWS as readonly string[]).includes(view);
 
 export interface ListFlags {
   group?: string | undefined;
@@ -301,12 +323,133 @@ async function listView(
   };
 }
 
+/**
+ * `GET /me/views/<view>` (ADR 0073 A9): the view across every org, in the web's sections. Null
+ * from a server that predates it (`404`), which then gets the per-org loop.
+ */
+async function fetchAllView(
+  runtime: Runtime,
+  view: AllViewName,
+  flags: ListFlags,
+): Promise<AllView | null> {
+  const api = await runtime.api();
+  try {
+    return await unwrap(
+      api.GET('/api/v1/me/views/{view}', {
+        params: { path: { view }, query: { completed: flags.completed ? 'any' : 'false' } },
+      }),
+    );
+  } catch (error) {
+    if (error instanceof RoosterApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+/** "Oct 6" / "6 okt" in the user's date format, as the date cells write a date. */
+function dayMonth(date: string, ctx: DateContext): string {
+  const { month, day } = parseIsoDate(date);
+  // `formatRelative` gives the bare day and month for a date a week from "today" in its year.
+  const anchor = month === 12 && day > 24 ? addDays(date, -7) : addDays(date, 7);
+  return formatRelative({ dueDate: date }, { ...ctx, today: anchor });
+}
+
+function weekdayDate(date: string, ctx: DateContext): string {
+  return t('ls.allOrgs.day', {
+    weekday: t(`ls.allOrgs.weekday.${weekdayOf(date)}`),
+    date: dayMonth(date, ctx),
+  });
+}
+
+/**
+ * A section heading as on the web (02 §10): Overdue; Today with its date; then each day. The
+ * response is only type-cast, so a section without a valid date reads as Overdue.
+ */
+function allSectionTitle(section: AllView['sections'][number], ctx: DateContext): string {
+  if (section.kind === 'overdue' || !isValidIsoDate(section.date)) return t('view.overdue');
+  if (section.kind === 'today')
+    return t('ls.allOrgs.today', { day: weekdayDate(section.date, ctx) });
+  const days = diffDays(section.date, ctx.today);
+  if (days === 0 || days === 1) return dayLabel(section.date, ctx);
+  return weekdayDate(section.date, ctx);
+}
+
+/**
+ * The All organisations listing: one heading, the server's sections in its order, each row with
+ * its org's slug. `--tag` is matched by name in each row's org (an unknown name matches
+ * nothing); without `--subtasks` a subtask whose parent is listed shows through it, as per org.
+ */
+async function printAllView(
+  runtime: Runtime,
+  me: Me,
+  name: AllViewName,
+  view: AllView,
+  flags: ListFlags,
+  ctx: DateContext,
+): Promise<void> {
+  const { out } = runtime;
+  const orgs = new Map(me.orgs.map((org) => [org.id, org]));
+  const slugOf = (task: Task) => orgs.get(task.orgId)?.slug ?? task.orgId;
+  const wanted = new Map<string, (string | null)[] | null>();
+  for (const orgId of new Set(view.sections.flatMap((s) => s.items.map((task) => task.orgId)))) {
+    wanted.set(orgId, await tagFilter(runtime, orgId, flags.tags));
+  }
+  const keep = (task: Task) => {
+    const ids = wanted.get(task.orgId) ?? null;
+    return ids === null || ids.every((id) => id !== null && task.tagIds.includes(id));
+  };
+  const listed = view.sections.flatMap((s) => s.items.filter(keep));
+  const byId = new Map(listed.map((task) => [task.id, task]));
+  const shown = new Set((flags.subtasks ? listed : viewRows(listed)).map((task) => task.id));
+  const sections = view.sections
+    .map((section) => ({
+      title: allSectionTitle(section, ctx),
+      tasks: section.items.filter((task) => shown.has(task.id)),
+    }))
+    .filter((section) => section.tasks.length > 0);
+  const tasks = sections.flatMap((section) => section.tasks);
+
+  if (out.json) {
+    out.data(tasks);
+    return;
+  }
+  if (out.quiet) {
+    for (const task of tasks) out.line(taskRef(task, slugOf(task)));
+    return;
+  }
+  const tagMaps = new Map<string, Awaited<ReturnType<typeof tagMap>>>();
+  for (const orgId of new Set(tasks.map((task) => task.orgId))) {
+    tagMaps.set(orgId, await tagMap(runtime, orgId));
+  }
+  const rows = tasks.map((task) => {
+    const parent = task.parentId === null ? undefined : byId.get(task.parentId);
+    return toRow(task, {
+      tags: tagMaps.get(task.orgId) ?? new Map(),
+      dates: ctx,
+      orgSlug: slugOf(task),
+      ...(parent === undefined ? {} : { breadcrumb: parent.title }),
+    });
+  });
+  const lines = renderRows(rows, out.level, out.columns);
+  out.line(paint(`${t('ls.allOrgs.title')} · ${t(`view.${name}`)}`, styles.heading, out.level));
+  if (tasks.length === 0) out.line(paint(`  ${t('ls.empty')}`, styles.muted, out.level));
+  let index = 0;
+  for (const section of sections) {
+    out.line(header(section.title, section.tasks.length, out.level));
+    for (let i = 0; i < section.tasks.length; i++) out.line(lines[index++]);
+  }
+}
+
 export async function runList(runtime: Runtime, view: View, flags: ListFlags): Promise<void> {
   needs('tasks:read');
   if (flags.upcoming && view !== 'my') throw new CliError(EXIT.usage, t('ls.upcomingMyOnly'));
   const { out } = runtime;
   const ctx = await dates(runtime);
   const me = await runtime.me();
+  // A group is one org's, so `--group` keeps the per-org listing.
+  if (flags.allOrgs && isAllView(view) && flags.group === undefined) {
+    const all = await fetchAllView(runtime, view, flags);
+    if (all !== null) return printAllView(runtime, me, view, all, flags, ctx);
+  }
   const orgs = flags.allOrgs
     ? me.orgs.filter((o) => view !== 'everyone' || !o.isPersonal)
     : [await runtime.org()];

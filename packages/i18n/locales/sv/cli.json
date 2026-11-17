@@ -54,7 +54,7 @@
       "group": "Bara den här gruppen",
       "tag": "Bara uppgifter med den här taggen (kan upprepas)",
       "completed": "Ta med klara uppgifter",
-      "allOrgs": "Alla organisationer",
+      "allOrgs": "Alla organisationer; today, week och overdue som en lista",
       "subtasks": "Ta med deluppgifter",
       "upcoming": "Visa även Återkommande: upprepade uppgifter vars dag inte har kommit än (bara Mina uppgifter)"
     },
@@ -65,7 +65,21 @@
     "everyonePersonal": "Allas uppgifter finns bara i delade organisationer; välj en med --org.",
     "upcoming": "Återkommande",
     "upcomingHidden": "{count, plural, one {# uppgift under Återkommande visas inte (lägg till --upcoming)} other {# uppgifter under Återkommande visas inte (lägg till --upcoming)}}",
-    "upcomingMyOnly": "--upcoming fungerar bara med Mina uppgifter (rooster ls), inte med en vy"
+    "upcomingMyOnly": "--upcoming fungerar bara med Mina uppgifter (rooster ls), inte med en vy",
+    "allOrgs": {
+      "title": "Alla organisationer",
+      "today": "Idag · {day}",
+      "day": "{weekday} {date}",
+      "weekday": {
+        "0": "Söndag",
+        "1": "Måndag",
+        "2": "Tisdag",
+        "3": "Onsdag",
+        "4": "Torsdag",
+        "5": "Fredag",
+        "6": "Lördag"
+      }
+    }
   },
   "view": {
     "my": "Mina uppgifter",

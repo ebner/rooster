@@ -376,6 +376,45 @@ export const COMPONENT_EXAMPLES: Record<string, unknown> = {
     nextCursor: null,
   },
   TaskPage: { items: [taskExample], nextCursor: 'eyJvIjo1MH0' },
+  AllViewSection: {
+    id: 'today',
+    kind: 'today',
+    date: '2026-10-09',
+    items: [{ ...taskExample, dueDate: '2026-10-09' }],
+  },
+  AllView: {
+    view: 'today',
+    today: '2026-10-09',
+    sections: [
+      {
+        id: 'overdue',
+        kind: 'overdue',
+        date: null,
+        items: [{ ...taskExample, dueDate: '2026-10-07' }],
+      },
+      {
+        id: 'today',
+        kind: 'today',
+        date: '2026-10-09',
+        items: [
+          {
+            ...taskExample,
+            id: EX.otherTask,
+            orgId: EX.personalOrg,
+            seq: 7,
+            title: 'Call the dentist',
+            hasDescription: false,
+            dueDate: '2026-10-09',
+            dueTime: '14:30',
+            dueTz: 'Europe/Stockholm',
+            tagIds: [],
+            counts: { subtasks: 0, subtasksDone: 0, comments: 0, attachments: 0 },
+            placement: { groupId: EX.inbox, position: 'a0' },
+          },
+        ],
+      },
+    ],
+  },
   Backup: backupExample,
   AdminSystem: {
     version: '1.5.0',

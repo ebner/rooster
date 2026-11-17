@@ -5,6 +5,8 @@ import {
   adminUserSchema,
   allowlistCreateSchema,
   allowlistEntrySchema,
+  allViewSchema,
+  allViewSectionSchema,
   backupSchema,
   bulkOpSchema,
   bulkResultSchema,
@@ -276,6 +278,21 @@ export const TrashPageSchema = named(
 export const TaskPageSchema = named(
   describe(taskPageSchema.extend({ items: z.array(TaskSchema) }), { nextCursor: NEXT_CURSOR }),
   'TaskPage',
+);
+// Phase 13 (ADR 0073 A9): a smart view across every org (`GET /me/views/{view}`).
+export const AllViewSectionSchema = named(
+  describe(allViewSectionSchema.extend({ items: z.array(TaskSchema) }), {
+    id: '`overdue`, `today`, or the ISO date of a Next 7 days day.',
+    date: 'The due date a task created in this section gets; null for `overdue`.',
+    items: 'Rows by due date and time, then my sidebar order of their orgs, then my list order.',
+  }),
+  'AllViewSection',
+);
+export const AllViewSchema = named(
+  describe(allViewSchema.extend({ sections: z.array(AllViewSectionSchema) }), {
+    today: 'My today, in my timezone.',
+  }),
+  'AllView',
 );
 export const BackupSchema = named(backupSchema, 'Backup');
 

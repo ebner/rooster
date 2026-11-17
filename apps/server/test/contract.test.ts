@@ -596,7 +596,28 @@ const SPECS: Record<string, Spec> = {
     ok: () => ({ path: '/api/v1/events' }),
     cases: [{ status: 503, code: 'unavailable', setup: (f) => void f.app.hub.shutdown() }],
   },
-  'PATCH /api/v1/me': { ok: () => ({ path: '/api/v1/me', body: { name: 'Renamed' } }) },
+  'GET /api/v1/me/views/{view}': {
+    ok: () => ({ path: '/api/v1/me/views/today' }),
+    cases: [
+      {
+        status: 200,
+        name: 'week with completed',
+        request: () => ({ path: '/api/v1/me/views/week?completed=any' }),
+      },
+      { status: 422, request: () => ({ path: '/api/v1/me/views/nodate' }) },
+    ],
+  },
+  'PATCH /api/v1/me': {
+    ok: () => ({ path: '/api/v1/me', body: { name: 'Renamed' } }),
+    cases: [
+      {
+        status: 422,
+        name: 'default org not mine',
+        request: () => ({ path: '/api/v1/me', body: { prefs: { defaultOrgId: fresh() } } }),
+        code: 'validation_failed',
+      },
+    ],
+  },
   'GET /api/v1/me/sessions': { ok: () => ({ path: '/api/v1/me/sessions' }) },
   'DELETE /api/v1/me/sessions/{id}': {
     ok: (f) => ({ path: `/api/v1/me/sessions/${f.spareSessionId}` }),

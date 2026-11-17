@@ -26,6 +26,7 @@ import {
 } from './context.ts';
 import { memberIds, qk, selfAudience } from './event-audience.ts';
 import { grantReachesOrg, requireBrowserSession } from './grant-access.ts';
+import { isMember } from './list-access.ts';
 import {
   listMemberships,
   type Membership,
@@ -117,6 +118,16 @@ export class UserService {
   }
 
   private toMe(tx: Tx, actor: Actor, row: UserRow): Me {
+    // A grant sees the orgs it reaches (11 §2.2).
+    const orgs = listMemberships(tx, actor.userId)
+      .filter((m) => grantReachesOrg(actor, m.org.id))
+      .map(toOrgDto);
+    const prefs = resolvePrefs(parseJson(row.prefs));
+    // ADR 0073 A4: a default org the user has left (or that was deleted, or that a grant doesn't
+    // reach) reads as the personal org; the stored value is kept until the next write.
+    if (prefs.defaultOrgId !== null && !orgs.some((o) => o.id === prefs.defaultOrgId)) {
+      prefs.defaultOrgId = null;
+    }
     return {
       id: row.id,
       name: row.name,
@@ -127,12 +138,9 @@ export class UserService {
       weekStart: row.weekStart === 0 ? 0 : 1,
       dateFormat: oneOf<DateFormat>(DATE_FORMATS, row.dateFormat, 'MMM d'),
       timeFormat: oneOf<TimeFormat>(TIME_FORMATS, row.timeFormat, '24h'),
-      prefs: resolvePrefs(parseJson(row.prefs)),
+      prefs,
       isAdmin: actor.isAdmin,
-      // A grant sees the orgs it reaches (11 §2.2).
-      orgs: listMemberships(tx, actor.userId)
-        .filter((m) => grantReachesOrg(actor, m.org.id))
-        .map(toOrgDto),
+      orgs,
       storage: userStorage(tx, actor.userId, this.deps.config.userStorageQuotaBytes),
     };
   }
@@ -161,6 +169,13 @@ export class UserService {
       if (patch.dateFormat !== undefined) changes.dateFormat = patch.dateFormat;
       if (patch.timeFormat !== undefined) changes.timeFormat = patch.timeFormat;
       if (patch.prefs !== undefined) {
+        const defaultOrgId = patch.prefs.defaultOrgId;
+        // Same answer for a missing, deleted or foreign org: existence never leaks (04 §4.3).
+        if (typeof defaultOrgId === 'string' && !isMember(tx, actor.userId, defaultOrgId)) {
+          throw new AppError('validation_failed', 422, 'Not an organisation you are a member of.', [
+            { path: 'prefs.defaultOrgId', message: 'Not an organisation you are a member of' },
+          ]);
+        }
         const stored = parseJson(current.prefs);
         const merged = {
           ...(stored !== null && typeof stored === 'object' ? stored : {}),

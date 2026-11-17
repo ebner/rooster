@@ -265,6 +265,11 @@ const ROWS: Record<string, Row> = {
     expect: { ...signedIn(200), ...grants(200, 200, 200, 200) },
     stream: 'text/event-stream',
   },
+  // Every signed-in user has a personal org; a grant sees the orgs it reaches (ADR 0073 A9).
+  'GET /api/v1/me/views/{view}': {
+    request: () => ({ path: '/api/v1/me/views/today?completed=any' }),
+    expect: { ...signedIn(200), ...grants(200, 200, 200, 200) },
+  },
   'PATCH /api/v1/me': {
     request: () => ({ path: '/api/v1/me', body: { name: 'Renamed' } }),
     expect: { ...signedIn(200), ...grants(403, 403, 403, 403) },

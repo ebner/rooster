@@ -1,5 +1,7 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi';
 import {
+  ALL_VIEW_NAMES,
+  allViewQuerySchema,
   pageQuerySchema,
   reminderCreateSchema,
   reminderSchema,
@@ -23,6 +25,7 @@ import {
   problems,
 } from './common.ts';
 import {
+  AllViewSchema,
   BulkOpSchema,
   BulkResultSchema,
   SubtaskReorderResultSchema,
@@ -75,6 +78,28 @@ const queryTasks = createRoute({
     200: json(TaskPageSchema, 'A page of tasks'),
     ...problems(401, 404, 422, 'personal_org'),
   },
+});
+
+// Phase 13 (ADR 0073 A9): the smart views of All organisations. A task query like the one above,
+// so it is registered with the task routes; its path is the actor's own.
+const getAllView = createRoute({
+  method: 'get',
+  path: '/api/v1/me/views/{view}',
+  tags: ['me'],
+  operationId: 'getAllView',
+  summary: 'Today, Next 7 days or Overdue across all my orgs, in date sections',
+  description:
+    'The smart view of "All organisations": tasks assigned to me in every org I am a member of (a token: every org its grant reaches; rows outside a group-limited read constraint are left out), evaluated in my timezone. Sections as on the web: `today` has Overdue (only when non-empty) and Today; `week` has one section per day, today first; `overdue` has one section, or none. Within a section: by due date and time (timed before untimed), then my sidebar order of the orgs, then my list order. Each task carries its `orgId`. `completed` (default `false`): `any` keeps completed tasks in their sections, `true` lists only them. Needs `tasks:read`. Not paged.',
+  request: {
+    params: z.object({
+      view: z.enum(ALL_VIEW_NAMES).openapi({
+        param: { name: 'view', in: 'path' },
+        example: 'today',
+      }),
+    }),
+    query: allViewQuerySchema,
+  },
+  responses: { 200: json(AllViewSchema, 'The view'), ...problems(401, 422) },
 });
 
 const createTask = createRoute({
@@ -384,6 +409,9 @@ const deleteReminder = createRoute({
 export function registerTaskRoutes(app: OpenAPIHono<AppEnv>, { tasks, reminders }: Services): void {
   app.openapi(queryTasks, (c) =>
     c.json(tasks.query(actorOf(c), c.req.valid('param').orgId, c.req.valid('query')), 200),
+  );
+  app.openapi(getAllView, (c) =>
+    c.json(tasks.allView(actorOf(c), c.req.valid('param').view, c.req.valid('query')), 200),
   );
   app.openapi(createTask, (c) =>
     c.json(

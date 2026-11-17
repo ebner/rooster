@@ -212,7 +212,7 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
     {
       title: 'List tasks',
       description:
-        'Tasks in a view, as compact rows (ref, title, due, group, tags). "my" is My tasks in group order; "today" includes overdue; "week" is the next 7 days; "everyone" lists every open task in a shared org. Rows marked upcoming are repeating tasks the user\'s list holds in its Recurring section until their day (listed last in "my"); they return to their group by themselves, so never move them to bring them back.',
+        'Tasks in a view, as compact rows (ref, title, due, group, tags). "my" is My tasks in group order; "today" includes overdue; "week" is the next 7 days; "everyone" lists every open task in a shared org. With allOrgs, "today", "week" and "overdue" span every organisation in one list (by due date, then the user\'s org order), and each row names its org. Rows marked upcoming are repeating tasks the user\'s list holds in its Recurring section until their day (listed last in "my"); they return to their group by themselves, so never move them to bring them back.',
       inputSchema: z.object({
         org: orgArg,
         view: z.enum(VIEWS).default('my').describe('Which view. Default "my".'),
@@ -222,10 +222,28 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
           .boolean()
           .default(false)
           .describe('Also completed tasks (My tasks: those completed recently).'),
+        allOrgs: z
+          .boolean()
+          .default(false)
+          .describe(
+            'Views today, week and overdue only: every organisation this connection can see, in one list (not with org or group).',
+          ),
       }),
       annotations: READ,
     },
     async (args, ctx) => {
+      if (args.allOrgs) {
+        if (!isAllView(args.view)) {
+          throw new ToolError('allOrgs works with the views today, week and overdue.');
+        }
+        if (args.org !== undefined || args.group !== undefined) {
+          throw new ToolError('allOrgs lists every organisation; leave out org and group.');
+        }
+        return allOrgsView(ctx, args.view, {
+          tag: args.tag?.replace(/^#/, ''),
+          includeCompleted: args.includeCompleted,
+        });
+      }
       const org = await ctx.org(args.org);
       if (args.view === 'everyone' && org.isPersonal) {
         throw new ToolError(
@@ -1024,6 +1042,84 @@ async function queryView(
     cursor = page.nextCursor ?? undefined;
   } while (cursor !== undefined && tasks.length < MAX_ROWS);
   return { tasks, truncated: cursor !== undefined };
+}
+
+const ALL_VIEWS = ['today', 'week', 'overdue'] as const;
+type AllViewName = (typeof ALL_VIEWS)[number];
+const isAllView = (view: string): view is AllViewName =>
+  (ALL_VIEWS as readonly string[]).includes(view);
+
+/**
+ * `list_tasks` with `allOrgs` (ADR 0073 A9): `GET /me/views/<view>`, the sections of All
+ * organisations, flattened in order; each row names its org. `tag` is matched by name in each
+ * row's org. A server that predates the route (`404`) gets each org's view in turn.
+ */
+async function allOrgsView(
+  ctx: CallContext,
+  view: AllViewName,
+  filter: { tag: string | undefined; includeCompleted: boolean },
+): Promise<CallToolResult> {
+  let listed: Task[];
+  let truncated = false;
+  try {
+    const result = await unwrap(
+      ctx.client.GET('/api/v1/me/views/{view}', {
+        params: {
+          path: { view },
+          query: { completed: filter.includeCompleted ? 'any' : 'false' },
+        },
+      }),
+    );
+    listed = result.sections.flatMap((section) => section.items);
+  } catch (error) {
+    if (!(error instanceof RoosterApiError && error.status === 404)) throw error;
+    listed = [];
+    for (const org of await ctx.orgs()) {
+      const page = await queryView(ctx.client, org.id, {
+        view,
+        groupId: undefined,
+        tag: undefined,
+        includeCompleted: filter.includeCompleted,
+      });
+      listed.push(...page.tasks);
+      truncated ||= page.truncated;
+    }
+  }
+  const rowsByOrg = new Map<string, RowContext>();
+  const rowsOf = async (orgId: string) => {
+    let rows = rowsByOrg.get(orgId);
+    if (rows === undefined) {
+      rows = await rowContext(ctx, await ctx.orgById(orgId), false);
+      rowsByOrg.set(orgId, rows);
+    }
+    return rows;
+  };
+  if (filter.tag !== undefined) {
+    const wanted = filter.tag.toLocaleLowerCase();
+    const kept: Task[] = [];
+    for (const task of listed) {
+      const tag = [...(await rowsOf(task.orgId)).tags.values()].find(
+        (t) => t.name.toLocaleLowerCase() === wanted,
+      );
+      if (tag !== undefined && task.tagIds.includes(tag.id)) kept.push(task);
+    }
+    listed = kept;
+  }
+  let tasks = viewRows(listed);
+  if (tasks.length > MAX_ROWS) {
+    tasks = tasks.slice(0, MAX_ROWS);
+    truncated = true;
+  }
+  const out: Record<string, unknown>[] = [];
+  for (const task of tasks) {
+    const rows = await rowsOf(task.orgId);
+    out.push({ ...taskRow(task, rows), org: rows.org?.slug ?? task.orgId });
+  }
+  const { today, timezone } = await ctx.today();
+  return toolResult(
+    `${tasks.length} task(s) in every organisation, view ${view}${truncated ? ' (truncated; narrow with tag)' : ''}. Today is ${canonical.date(today) ?? 'unknown'} (${canonical.zone(timezone) ?? 'unknown zone'}).`,
+    { allOrgs: true, view, today, tasks: out },
+  );
 }
 
 /**

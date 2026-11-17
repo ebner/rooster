@@ -14,6 +14,9 @@ import { compareKeys } from '@rooster/core/ordering';
 import type { RecurrenceBasis } from '@rooster/core/recurrence';
 import type { ReminderSpec } from '@rooster/core/reminders';
 import {
+  type AllViewDto,
+  type AllViewName,
+  type AllViewQuery,
   type BulkOp,
   type BulkResult,
   isValidTimeZone,
@@ -42,7 +45,13 @@ import {
   type TaskSkipResult,
   type TrashPage,
 } from '@rooster/core/schemas';
-import { inSmartView, selectView } from '@rooster/core/views';
+import {
+  type AllViewSource,
+  inSmartView,
+  selectAllView,
+  selectView,
+  type ViewSource,
+} from '@rooster/core/views';
 import {
   and,
   asc,
@@ -2043,7 +2052,6 @@ export class TaskService {
           ? undefined
           : requireOwnGroup(tx, actor.userId, query.groupId, { orgId: org.id }).id;
       if (groupFilter !== undefined) authorizeGroupRead(actor, org.id, groupFilter);
-      const groups = listGroups(tx, actor.userId, org.id);
       let rows: { task: TaskRow; place: PlacementRow | null }[];
       if (view === 'everyone') {
         rows = this.everyoneRows(tx, actor, org, query);
@@ -2063,7 +2071,7 @@ export class TaskService {
             ),
           )
           .all();
-        const order = new Map(groups.map((g, i) => [g.id, i]));
+        const order = new Map(listGroups(tx, actor.userId, org.id).map((g, i) => [g.id, i]));
         rows.sort(
           (a, b) =>
             (order.get(a.place?.groupId ?? '') ?? 0) - (order.get(b.place?.groupId ?? '') ?? 0) ||
@@ -2072,28 +2080,12 @@ export class TaskService {
         );
         if (view !== 'my') rows = rows.filter((r) => inSmartView(r.task, view, due));
       } else {
-        const mine = tx
-          .select()
-          .from(task)
-          .where(
-            and(eq(task.orgId, org.id), eq(task.assigneeId, actor.userId), isNull(task.deletedAt)),
-          )
-          .all();
-        const places = placementsFor(
-          tx,
-          actor.userId,
-          mine.map((t) => t.id),
-        );
-        const dtos = taskDtos(tx, actor, mine, { places });
-        const byId = new Map(mine.map((t) => [t.id, t]));
-        const sections = selectView(
-          {
-            groups: Object.fromEntries(groups.map((g) => [g.id, toGroupDto(g)])),
-            tasks: Object.fromEntries(dtos.map((d) => [d.id, d])),
-          },
-          view,
-          { ...due, viewerId: actor.userId, showCompleted: completed !== 'false' },
-        );
+        const { source, byId, places } = this.smartViewSource(tx, actor, org.id);
+        const sections = selectView(source, view, {
+          ...due,
+          viewerId: actor.userId,
+          showCompleted: completed !== 'false',
+        });
         const ids = [...new Set(sections.flatMap((s) => s.taskIds))];
         rows = ids.flatMap((id) => {
           const t = byId.get(id);
@@ -2145,6 +2137,103 @@ export class TaskService {
           { places: new Map(page.map((r) => [r.task.id, r.place])) },
         ),
         nextCursor: offset + limit < filtered.length ? encodeCursor({ o: offset + limit }) : null,
+      };
+    });
+  }
+
+  /**
+   * The smart views' input for one org (shared by `query` and `allView`, so the CLI, MCP and
+   * the web's selectors see the same data): the live tasks assigned to the actor, completed
+   * ones included, as DTOs with the actor's placements, and the actor's groups. The read
+   * constraint is applied by the callers after selecting, as everywhere else: a hidden parent
+   * still ranks its subtasks.
+   */
+  private smartViewSource(
+    tx: Tx,
+    actor: Actor,
+    orgId: string,
+  ): {
+    source: ViewSource;
+    rows: TaskRow[];
+    byId: Map<string, TaskRow>;
+    places: Map<string, PlacementRow>;
+    dtos: Map<string, Task>;
+  } {
+    const rows = tx
+      .select()
+      .from(task)
+      .where(and(eq(task.orgId, orgId), eq(task.assigneeId, actor.userId), isNull(task.deletedAt)))
+      .all();
+    const places = placementsFor(
+      tx,
+      actor.userId,
+      rows.map((t) => t.id),
+    );
+    const dtos = new Map(taskDtos(tx, actor, rows, { places }).map((d) => [d.id, d]));
+    const groups = listGroups(tx, actor.userId, orgId);
+    return {
+      source: {
+        groups: Object.fromEntries(groups.map((g) => [g.id, toGroupDto(g)])),
+        tasks: Object.fromEntries(dtos),
+      },
+      rows,
+      byId: new Map(rows.map((t) => [t.id, t])),
+      places,
+      dtos,
+    };
+  }
+
+  /**
+   * `GET /me/views/{view}` (ADR 0073 A9): a smart view across every org the actor is a member
+   * of, in the sections of All organisations (core `selectAllView`, the web's selector), for the
+   * CLI, TUI and MCP. Each org's input is `query`'s; orgs a grant doesn't reach are left out
+   * (not `404`: the view is the actor's, not an org's), and rows outside a group-limited read
+   * constraint are dropped after selecting. Deleted orgs are never members (`listMemberships`).
+   */
+  allView(actor: Actor, view: AllViewName, query: AllViewQuery): AllViewDto {
+    requireScope(actor, 'tasks:read');
+    return readOnly(this.deps.db, (tx) => {
+      const completed = query.completed ?? 'false';
+      const viewerTz =
+        tx.select({ timezone: user.timezone }).from(user).where(eq(user.id, actor.userId)).get()
+          ?.timezone ?? 'UTC';
+      const nowMs = this.now();
+      const today = todayIn(viewerTz, nowMs);
+      const sources: AllViewSource[] = [];
+      const dtos = new Map<string, Task>();
+      const hidden = new Set<string>();
+      for (const membership of listMemberships(tx, actor.userId)) {
+        const orgId = membership.org.id;
+        if (!grantReachesOrg(actor, orgId)) continue;
+        const built = this.smartViewSource(tx, actor, orgId);
+        sources.push({ orgId, source: built.source });
+        for (const [id, dto] of built.dtos) dtos.set(id, dto);
+        const readable = readFilter(tx, actor, orgId, built.rows);
+        if (readable !== null) {
+          for (const row of built.rows) if (!readable(row)) hidden.add(row.id);
+        }
+      }
+      // A grant reaching none of the actor's orgs still gets the view's day sections (Today, the
+      // seven days), so every client renders the same headings.
+      const sections = selectAllView(
+        sources.length === 0 ? [{ orgId: '', source: { groups: {}, tasks: {} } }] : sources,
+        view,
+        { today, nowMs, viewerTz, viewerId: actor.userId, showCompleted: completed !== 'false' },
+      );
+      return {
+        view,
+        today,
+        sections: sections.flatMap((section) => {
+          const items = section.items.flatMap(({ taskId }) => {
+            const dto = dtos.get(taskId);
+            if (dto === undefined || hidden.has(taskId)) return [];
+            if (completed === 'true' && dto.completedAt === null) return [];
+            return [dto];
+          });
+          // As in `selectView`, an Overdue section exists only with rows in it.
+          if (section.kind === 'overdue' && items.length === 0) return [];
+          return [{ id: section.id, kind: section.kind, date: section.date, items }];
+        }),
       };
     });
   }

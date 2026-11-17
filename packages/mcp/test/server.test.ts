@@ -222,6 +222,106 @@ describe('list_tasks', () => {
     expect(personal.isError).toBe(true);
   });
 
+  it('allOrgs: one GET /me/views request; rows in its order name their org (ADR 0073 A9)', async () => {
+    const personalTag = { ...TAG, id: '01a00000-0000-7000-8000-0000000000d9', orgId: PERSONAL.id };
+    const { mcp, api } = await start({
+      ...baseRoutes(),
+      'GET /api/v1/orgs/*/tags': (call: { path: string }) =>
+        call.path.includes(PERSONAL.id) ? [personalTag] : [TAG],
+      'GET /api/v1/me/views/*': {
+        view: 'today',
+        today: '2026-10-09',
+        sections: [
+          {
+            id: 'overdue',
+            kind: 'overdue',
+            date: null,
+            items: [task({ id: 'o', seq: 7, title: 'Late', dueDate: '2026-10-01' })],
+          },
+          {
+            id: 'today',
+            kind: 'today',
+            date: '2026-10-09',
+            items: [
+              task({
+                id: 'p',
+                seq: 3,
+                orgId: PERSONAL.id,
+                title: 'Mine',
+                dueDate: '2026-10-09',
+                tagIds: [personalTag.id],
+              }),
+              task({ id: 's', seq: 4, parentId: 'p', orgId: PERSONAL.id, dueDate: '2026-10-09' }),
+              task({ id: 'a', seq: 9, title: 'Acme', dueDate: '2026-10-09', tagIds: [TAG.id] }),
+            ],
+          },
+        ],
+      },
+    });
+    const result = await mcp.callTool({
+      name: 'list_tasks',
+      arguments: { view: 'today', allOrgs: true, includeCompleted: true },
+    });
+    expect(result.isError).toBeFalsy();
+    const call = api.calls.find((c) => c.path.startsWith('/api/v1/me/views/'));
+    expect(call?.path).toBe('/api/v1/me/views/today');
+    expect(call?.query.get('completed')).toBe('any');
+    expect(api.calls.some((c) => c.path.endsWith('/tasks'))).toBe(false);
+    const data = dataOf(result);
+    expect(data).toMatchObject({ allOrgs: true, view: 'today', today: '2026-10-09' });
+    // The subtask shows through its parent, as in a per-org view.
+    expect(data.tasks.map((t: { ref: string; org: string }) => [t.ref, t.org])).toEqual([
+      ['acme#7', 'acme'],
+      ['ada#3', 'ada'],
+      ['acme#9', 'acme'],
+    ]);
+    expect(texts(result)[0]?.text).toContain('3 task(s) in every organisation, view today');
+
+    // A tag is matched by name in each row's org.
+    const tagged = await mcp.callTool({
+      name: 'list_tasks',
+      arguments: { view: 'today', allOrgs: true, tag: '#mail' },
+    });
+    expect(dataOf(tagged).tasks.map((t: { ref: string }) => t.ref)).toEqual(['ada#3', 'acme#9']);
+  });
+
+  it('allOrgs: only today, week and overdue, and never with org or group', async () => {
+    const { mcp, api } = await start(baseRoutes());
+    for (const args of [
+      { view: 'my', allOrgs: true },
+      { view: 'nodate', allOrgs: true },
+      { view: 'everyone', allOrgs: true },
+      { view: 'today', allOrgs: true, org: 'acme' },
+      { view: 'week', allOrgs: true, group: 'Prio' },
+    ]) {
+      const result = await mcp.callTool({ name: 'list_tasks', arguments: args });
+      expect(result.isError, JSON.stringify(args)).toBe(true);
+    }
+    expect(api.calls.some((c) => c.path.startsWith('/api/v1/me/views/'))).toBe(false);
+  });
+
+  it('allOrgs against a server without GET /me/views: each org in turn', async () => {
+    const { mcp, api } = await start({
+      ...baseRoutes(),
+      'GET /api/v1/orgs/*/tasks': (call: { path: string }) => ({
+        items: call.path.includes(PERSONAL.id)
+          ? [task({ id: 'p', seq: 3, orgId: PERSONAL.id, dueDate: '2026-10-09' })]
+          : [task({ id: 'a', seq: 9, dueDate: '2026-10-09' })],
+        nextCursor: null,
+      }),
+    });
+    const result = await mcp.callTool({
+      name: 'list_tasks',
+      arguments: { view: 'week', allOrgs: true },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(
+      api.calls.filter((c) => c.path.endsWith('/tasks')).map((c) => c.query.get('view')),
+    ).toEqual(['week', 'week']);
+    // The sidebar order: the personal org (position a0) first.
+    expect(dataOf(result).tasks.map((t: { ref: string }) => t.ref)).toEqual(['ada#3', 'acme#9']);
+  });
+
   it('an unknown group is a tool error, not a protocol error', async () => {
     const { mcp } = await start(baseRoutes());
     const result = await mcp.callTool({ name: 'list_tasks', arguments: { group: 'Nope' } });

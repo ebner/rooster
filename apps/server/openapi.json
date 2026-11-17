@@ -3797,6 +3797,189 @@
           "nextCursor": "eyJvIjo1MH0"
         }
       },
+      "AllView": {
+        "type": "object",
+        "properties": {
+          "view": {
+            "type": "string",
+            "enum": [
+              "today",
+              "week",
+              "overdue"
+            ]
+          },
+          "today": {
+            "type": "string",
+            "description": "My today, in my timezone."
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllViewSection"
+            }
+          }
+        },
+        "required": [
+          "view",
+          "today",
+          "sections"
+        ],
+        "example": {
+          "view": "today",
+          "today": "2026-10-09",
+          "sections": [
+            {
+              "id": "overdue",
+              "kind": "overdue",
+              "date": null,
+              "items": [
+                {
+                  "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+                  "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+                  "seq": 42,
+                  "parentId": null,
+                  "subtaskPosition": null,
+                  "title": "Pay invoice",
+                  "hasDescription": true,
+                  "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+                  "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+                  "dueDate": "2026-10-07",
+                  "dueTime": null,
+                  "dueTz": null,
+                  "startDate": null,
+                  "completedAt": null,
+                  "tagIds": [
+                    "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+                  ],
+                  "counts": {
+                    "subtasks": 1,
+                    "subtasksDone": 0,
+                    "comments": 2,
+                    "attachments": 0
+                  },
+                  "placement": {
+                    "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+                    "position": "a1V"
+                  },
+                  "createdAt": 1791532800000,
+                  "updatedAt": 1791532800000
+                }
+              ]
+            },
+            {
+              "id": "today",
+              "kind": "today",
+              "date": "2026-10-09",
+              "items": [
+                {
+                  "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c02",
+                  "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a02",
+                  "seq": 7,
+                  "parentId": null,
+                  "subtaskPosition": null,
+                  "title": "Call the dentist",
+                  "hasDescription": false,
+                  "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+                  "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+                  "dueDate": "2026-10-09",
+                  "dueTime": "14:30",
+                  "dueTz": "Europe/Stockholm",
+                  "startDate": null,
+                  "completedAt": null,
+                  "tagIds": [],
+                  "counts": {
+                    "subtasks": 0,
+                    "subtasksDone": 0,
+                    "comments": 0,
+                    "attachments": 0
+                  },
+                  "placement": {
+                    "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b01",
+                    "position": "a0"
+                  },
+                  "createdAt": 1791532800000,
+                  "updatedAt": 1791532800000
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "AllViewSection": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "`overdue`, `today`, or the ISO date of a Next 7 days day."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "overdue",
+              "today",
+              "day"
+            ]
+          },
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The due date a task created in this section gets; null for `overdue`."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            },
+            "description": "Rows by due date and time, then my sidebar order of their orgs, then my list order."
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "date",
+          "items"
+        ],
+        "example": {
+          "id": "today",
+          "kind": "today",
+          "date": "2026-10-09",
+          "items": [
+            {
+              "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+              "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+              "seq": 42,
+              "parentId": null,
+              "subtaskPosition": null,
+              "title": "Pay invoice",
+              "hasDescription": true,
+              "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+              "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+              "dueDate": "2026-10-09",
+              "dueTime": null,
+              "dueTz": null,
+              "startDate": null,
+              "completedAt": null,
+              "tagIds": [
+                "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+              ],
+              "counts": {
+                "subtasks": 1,
+                "subtasksDone": 0,
+                "comments": 2,
+                "attachments": 0
+              },
+              "placement": {
+                "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+                "position": "a1V"
+              },
+              "createdAt": 1791532800000,
+              "updatedAt": 1791532800000
+            }
+          ]
+        }
+      },
       "TaskCreate": {
         "type": "object",
         "properties": {
@@ -18485,6 +18668,166 @@
                       "status": 422,
                       "detail": "The reminder time has already passed.",
                       "code": "reminder_in_past",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/views/{view}": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "operationId": "getAllView",
+        "summary": "Today, Next 7 days or Overdue across all my orgs, in date sections",
+        "description": "The smart view of \"All organisations\": tasks assigned to me in every org I am a member of (a token: every org its grant reaches; rows outside a group-limited read constraint are left out), evaluated in my timezone. Sections as on the web: `today` has Overdue (only when non-empty) and Today; `week` has one section per day, today first; `overdue` has one section, or none. Within a section: by due date and time (timed before untimed), then my sidebar order of the orgs, then my list order. Each task carries its `orgId`. `completed` (default `false`): `any` keeps completed tasks in their sections, `true` lists only them. Needs `tasks:read`. Not paged.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "today",
+                "week",
+                "overdue"
+              ],
+              "example": "today"
+            },
+            "required": true,
+            "name": "view",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "false",
+                "true",
+                "any"
+              ]
+            },
+            "required": false,
+            "name": "completed",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The view",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
                       "errors": [
                         {
                           "path": "title",

@@ -54,7 +54,7 @@
       "group": "Only this group",
       "tag": "Only tasks with this tag (repeatable)",
       "completed": "Include completed tasks",
-      "allOrgs": "Every organisation",
+      "allOrgs": "Every organisation; today, week and overdue as one list",
       "subtasks": "Include subtasks",
       "upcoming": "Also list Recurring: repeating tasks whose day hasn’t come yet (My tasks only)"
     },
@@ -65,7 +65,21 @@
     "everyonePersonal": "Everyone’s tasks exists only in shared organisations; pick one with --org.",
     "upcoming": "Recurring",
     "upcomingHidden": "{count, plural, one {# task in Recurring not shown (add --upcoming)} other {# tasks in Recurring not shown (add --upcoming)}}",
-    "upcomingMyOnly": "--upcoming works with My tasks only (rooster ls), not with a view"
+    "upcomingMyOnly": "--upcoming works with My tasks only (rooster ls), not with a view",
+    "allOrgs": {
+      "title": "All organisations",
+      "today": "Today · {day}",
+      "day": "{weekday}, {date}",
+      "weekday": {
+        "0": "Sunday",
+        "1": "Monday",
+        "2": "Tuesday",
+        "3": "Wednesday",
+        "4": "Thursday",
+        "5": "Friday",
+        "6": "Saturday"
+      }
+    }
   },
   "view": {
     "my": "My tasks",

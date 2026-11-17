@@ -804,6 +804,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/views/{view}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Today, Next 7 days or Overdue across all my orgs, in date sections
+         * @description The smart view of "All organisations": tasks assigned to me in every org I am a member of (a token: every org its grant reaches; rows outside a group-limited read constraint are left out), evaluated in my timezone. Sections as on the web: `today` has Overdue (only when non-empty) and Today; `week` has one section per day, today first; `overdue` has one section, or none. Within a section: by due date and time (timed before untimed), then my sidebar order of the orgs, then my list order. Each task carries its `orgId`. `completed` (default `false`): `any` keeps completed tasks in their sections, `true` lists only them. Needs `tasks:read`. Not paged.
+         */
+        get: operations["getAllView"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{id}": {
         parameters: {
             query?: never;
@@ -3355,6 +3375,145 @@ export interface components {
             items: components["schemas"]["Task"][];
             /** @description Pass as `cursor` to get the next page; null on the last page. */
             nextCursor: string | null;
+        };
+        /**
+         * @example {
+         *       "view": "today",
+         *       "today": "2026-10-09",
+         *       "sections": [
+         *         {
+         *           "id": "overdue",
+         *           "kind": "overdue",
+         *           "date": null,
+         *           "items": [
+         *             {
+         *               "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *               "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *               "seq": 42,
+         *               "parentId": null,
+         *               "subtaskPosition": null,
+         *               "title": "Pay invoice",
+         *               "hasDescription": true,
+         *               "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *               "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *               "dueDate": "2026-10-07",
+         *               "dueTime": null,
+         *               "dueTz": null,
+         *               "startDate": null,
+         *               "completedAt": null,
+         *               "tagIds": [
+         *                 "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *               ],
+         *               "counts": {
+         *                 "subtasks": 1,
+         *                 "subtasksDone": 0,
+         *                 "comments": 2,
+         *                 "attachments": 0
+         *               },
+         *               "placement": {
+         *                 "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *                 "position": "a1V"
+         *               },
+         *               "createdAt": 1791532800000,
+         *               "updatedAt": 1791532800000
+         *             }
+         *           ]
+         *         },
+         *         {
+         *           "id": "today",
+         *           "kind": "today",
+         *           "date": "2026-10-09",
+         *           "items": [
+         *             {
+         *               "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c02",
+         *               "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a02",
+         *               "seq": 7,
+         *               "parentId": null,
+         *               "subtaskPosition": null,
+         *               "title": "Call the dentist",
+         *               "hasDescription": false,
+         *               "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *               "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *               "dueDate": "2026-10-09",
+         *               "dueTime": "14:30",
+         *               "dueTz": "Europe/Stockholm",
+         *               "startDate": null,
+         *               "completedAt": null,
+         *               "tagIds": [],
+         *               "counts": {
+         *                 "subtasks": 0,
+         *                 "subtasksDone": 0,
+         *                 "comments": 0,
+         *                 "attachments": 0
+         *               },
+         *               "placement": {
+         *                 "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b01",
+         *                 "position": "a0"
+         *               },
+         *               "createdAt": 1791532800000,
+         *               "updatedAt": 1791532800000
+         *             }
+         *           ]
+         *         }
+         *       ]
+         *     }
+         */
+        AllView: {
+            /** @enum {string} */
+            view: "today" | "week" | "overdue";
+            /** @description My today, in my timezone. */
+            today: string;
+            sections: components["schemas"]["AllViewSection"][];
+        };
+        /**
+         * @example {
+         *       "id": "today",
+         *       "kind": "today",
+         *       "date": "2026-10-09",
+         *       "items": [
+         *         {
+         *           "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *           "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "seq": 42,
+         *           "parentId": null,
+         *           "subtaskPosition": null,
+         *           "title": "Pay invoice",
+         *           "hasDescription": true,
+         *           "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "dueDate": "2026-10-09",
+         *           "dueTime": null,
+         *           "dueTz": null,
+         *           "startDate": null,
+         *           "completedAt": null,
+         *           "tagIds": [
+         *             "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *           ],
+         *           "counts": {
+         *             "subtasks": 1,
+         *             "subtasksDone": 0,
+         *             "comments": 2,
+         *             "attachments": 0
+         *           },
+         *           "placement": {
+         *             "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *             "position": "a1V"
+         *           },
+         *           "createdAt": 1791532800000,
+         *           "updatedAt": 1791532800000
+         *         }
+         *       ]
+         *     }
+         */
+        AllViewSection: {
+            /** @description `overdue`, `today`, or the ISO date of a Next 7 days day. */
+            id: string;
+            /** @enum {string} */
+            kind: "overdue" | "today" | "day";
+            /** @description The due date a task created in this section gets; null for `overdue`. */
+            date: string | null;
+            /** @description Rows by due date and time, then my sidebar order of their orgs, then my list order. */
+            items: components["schemas"]["Task"][];
         };
         /**
          * @example {
@@ -9286,6 +9445,67 @@ export interface operations {
                 };
             };
             /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `invalid_parent`, `subtask_depth`, `reminder_needs_due`, `reminder_in_past`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAllView: {
+        parameters: {
+            query?: {
+                completed?: "false" | "true" | "any";
+            };
+            header?: never;
+            path: {
+                view: "today" | "week" | "overdue";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The view */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AllView"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`. */
             422: {
                 headers: {
                     [name: string]: unknown;

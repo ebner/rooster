@@ -19,6 +19,7 @@ const USER_AGENT = `rooster-cli/${CLI_VERSION} (${process.platform}; ${process.a
 export type { RoosterClient };
 export { RoosterApiError, unwrap };
 export type Task = Schemas['Task'];
+export type AllView = Schemas['AllView'];
 export type TaskDetail = Schemas['TaskDetail'];
 export type Group = Schemas['Group'];
 export type Tag = Schemas['Tag'];
