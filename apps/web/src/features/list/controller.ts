@@ -1833,6 +1833,18 @@ export class ListController {
   // Duplicate (FR-TASK-13) and tags (FR-TAG-2)
   // -------------------------------------------------------------------------------------
 
+  /**
+   * ADR 0072: moves the tasks (with their subtrees) to another org, at the top of `groupId` (null:
+   * the actor's first normal group there). One undo entry, queued under the target org. Returns
+   * false when nothing could move. CONTRACT STUB: the data-layer agent implements it.
+   */
+  moveToOrg(
+    _target: { orgId: string; orgName: string; groupId: string | null },
+    _ids: readonly string[] = this.selectedTaskIds(),
+  ): boolean {
+    return false;
+  }
+
   /** Ctrl+D: copies go directly after their originals; the selection moves to the copy. */
   duplicate(ids: readonly string[] = this.selectedTaskIds()): string[] {
     const live = ids.filter((id) => this.task(id));

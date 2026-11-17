@@ -118,6 +118,15 @@ export const activitySchema = z.discriminatedUnion('type', [
     type: z.literal('attachment_added'),
     data: z.object({ attachmentId: idSchema, filename: z.string() }),
   }),
+  /**
+   * ADR 0072 §16: the task moved here from another org (on each moved root). Clients name the
+   * source org only to viewers who are members of it.
+   */
+  z.object({
+    ...activityBase,
+    type: z.literal('org_moved'),
+    data: z.object({ fromOrgId: idSchema, toOrgId: idSchema }),
+  }),
 ]);
 
 export const ACTIVITY_TYPES = [
@@ -132,6 +141,7 @@ export const ACTIVITY_TYPES = [
   'moved_parent',
   'restored',
   'attachment_added',
+  'org_moved',
 ] as const;
 export const activityTypeSchema = z.enum(ACTIVITY_TYPES);
 
@@ -180,6 +190,12 @@ export const NOTIFICATION_TYPES = [
    * user's personal org, `task` and `actor` are null.
    */
   'device_connected',
+  /**
+   * ADR 0072 §15: a task you were assigned to or followed was moved to an org you aren't a
+   * member of. In-app only, not in the preference matrix. `orgId` is the source org, `task` is
+   * null (you can't open it), and the title is in `data.taskTitle`.
+   */
+  'moved_away',
 ] as const;
 export const notificationTypeSchema = z.enum(NOTIFICATION_TYPES);
 

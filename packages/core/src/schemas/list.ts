@@ -357,6 +357,60 @@ export const taskDuplicateSchema = z.object({
   includeSubtasks: z.boolean().default(true),
 });
 
+/**
+ * ADR 0072. POST /tasks/move-to-org: move tasks (with their whole subtrees) to another org the
+ * actor is a member of. All `ids` must be in one source org. The moved roots become the actor's
+ * and land at the top of `groupId` (one of the actor's groups in the target org; absent or null:
+ * their first normal group), or at the ordering intent (undo uses it to restore the position).
+ */
+export const taskMoveToOrgSchema = orderingIntentSchema.extend({
+  ids: bulkIds,
+  orgId: idSchema,
+  groupId: idSchema.nullable().optional(),
+});
+export const taskMoveToOrgResultSchema = z.object({
+  /** The target org. */
+  orgId: idSchema,
+  /** The moved roots in the target org, as the actor sees them (new `seq`, placement, tags). */
+  tasks: z.array(taskSchema),
+  /** Every moved task: the roots and all their descendants (live and in Trash). */
+  movedIds: z.array(idSchema),
+});
+
+/** ADR 0072 §19. GET /tasks/move-to-org/preview?ids=a,b&orgId=…: no side effects. */
+export const taskMoveToOrgPreviewQuerySchema = z.object({
+  /** Comma-separated task ids (1–200), as for the move. */
+  ids: z.string().min(1),
+  orgId: idSchema,
+});
+export const taskMoveToOrgPreviewSchema = z.object({
+  /** Roots that would move (selected tasks whose ancestor is also selected travel with it). */
+  tasks: z.int().nonnegative(),
+  /** Their descendants, live and in Trash. */
+  subtasks: z.int().nonnegative(),
+  /** Comments and attachments on the moved tasks written or uploaded by someone else. */
+  comments: z.int().nonnegative(),
+  attachments: z.int().nonnegative(),
+  /**
+   * Whether the move shares other people's comments or files with someone new: true when
+   * `comments + attachments > 0` and the target org has a member who isn't in the source org.
+   * Clients confirm before moving when it is true (ADR 0072 §13).
+   */
+  exposes: z.boolean(),
+  /** Tag names that don't exist in the target org yet and would be created there. */
+  newTags: z.array(z.string()),
+  /** Tasks whose assignee changes (to the actor, or to a new parent's assignee). */
+  reassigned: z.int().nonnegative(),
+});
+
+/** Splits the preview's `ids` parameter. */
+export function parseIdList(value: string): string[] {
+  return value
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => id !== '');
+}
+
 export const trashPageSchema = z.object({
   items: z.array(taskSchema),
   nextCursor: z.string().nullable(),
@@ -391,4 +445,8 @@ export type TaskDetail = z.infer<typeof taskDetailSchema>;
 export type SubtaskReorder = z.infer<typeof subtaskReorderSchema>;
 export type SubtaskReorderResult = z.infer<typeof subtaskReorderResultSchema>;
 export type TaskDuplicate = z.infer<typeof taskDuplicateSchema>;
+export type TaskMoveToOrg = z.infer<typeof taskMoveToOrgSchema>;
+export type TaskMoveToOrgResult = z.infer<typeof taskMoveToOrgResultSchema>;
+export type TaskMoveToOrgPreviewQuery = z.infer<typeof taskMoveToOrgPreviewQuerySchema>;
+export type TaskMoveToOrgPreview = z.infer<typeof taskMoveToOrgPreviewSchema>;
 export type OrderingIntent = z.infer<typeof orderingIntentSchema>;

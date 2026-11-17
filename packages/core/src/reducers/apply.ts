@@ -88,6 +88,8 @@ export function applyOp(state: ListState, op: ListOpSpec, ctx: ApplyContext): Li
       return applyBulk(state, op.payload, ctx);
     case 'task.reorder':
       return reorderSubtask(state, op.entityId, op.payload);
+    case 'task.moveToOrg':
+      return state; // ADR 0072: the core agent implements the subtree leaving this org
     case 'task.duplicate':
       return duplicateTask(state, op.entityId, op.payload, ctx);
     case 'task.expanded':

@@ -9,6 +9,7 @@ import type {
   TaskComplete,
   TaskCreate,
   TaskMove,
+  TaskMoveToOrg,
   TaskPatch,
   TaskSkip,
 } from '../schemas/list.ts';
@@ -51,6 +52,12 @@ export type ListOpSpec =
   | { kind: 'task.bulk'; entityId: string; payload: BulkOp }
   | { kind: 'task.reorder'; entityId: string; payload: SubtaskReorder }
   | { kind: 'task.duplicate'; entityId: string; payload: TaskDuplicateBody }
+  /**
+   * ADR 0072: POST /tasks/move-to-org. `entityId` is the SOURCE org (the op is queued and
+   * applied there: the moved subtrees leave its list); the target org's list is refetched on
+   * confirmation. Undo queues the inverse under the target org.
+   */
+  | { kind: 'task.moveToOrg'; entityId: string; payload: TaskMoveToOrg }
   | { kind: 'task.expanded'; entityId: string; payload: { expanded: boolean } }
   | { kind: 'task.addTag'; entityId: string; payload: { tagId: string } }
   | { kind: 'task.removeTag'; entityId: string; payload: { tagId: string } }
@@ -106,6 +113,7 @@ export interface ReducerContext {
 export function opEntityIds(op: ListOpSpec): string[] {
   switch (op.kind) {
     case 'task.bulk':
+    case 'task.moveToOrg':
       return [...op.payload.ids];
     case 'task.duplicate':
       return [op.entityId, op.payload.id];
@@ -167,6 +175,12 @@ export const listOps = {
   reorderSubtask: (id: string, payload: SubtaskReorder): ListOpSpec => ({
     kind: 'task.reorder',
     entityId: id,
+    payload,
+  }),
+  /** ADR 0072: `sourceOrgId` is the org the tasks are in now (the op's `entityId`). */
+  moveTasksToOrg: (sourceOrgId: string, payload: TaskMoveToOrg): ListOpSpec => ({
+    kind: 'task.moveToOrg',
+    entityId: sourceOrgId,
     payload,
   }),
   duplicateTask: (id: string, copyId: string, includeSubtasks = true): ListOpSpec => ({

@@ -201,6 +201,8 @@ export function applyOpToTaskList(
       return restoreRows(tasks, [op.entityId], ctx);
     case 'task.bulk':
       return bulkRows(tasks, op.payload, ctx);
+    case 'task.moveToOrg':
+      return tasks; // ADR 0072: the core agent implements it
     case 'task.duplicate': {
       const original = tasks.find((t) => t.id === op.entityId);
       if (!original || tasks.some((t) => t.id === op.payload.id)) return tasks;

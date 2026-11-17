@@ -60,6 +60,8 @@ export function inverseOf(op: ListOpSpec, before: ListState, ctx: ApplyContext):
       if (!task?.parentId || after.tasks[id]?.subtaskPosition === task.subtaskPosition) return [];
       return [listOps.reorderSubtask(id, siblingSlot(before, id, task.parentId))];
     }
+    case 'task.moveToOrg':
+      return []; // ADR 0072: the core agent implements the move back
     case 'task.duplicate':
       return applyOp(before, op, ctx) === before ? [] : [listOps.deleteTask(op.payload.id)];
     case 'task.expanded':

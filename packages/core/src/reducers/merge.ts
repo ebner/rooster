@@ -101,6 +101,8 @@ export function mergeResponse(state: ListState, op: ListOpSpec, response: unknow
       if (typeof position !== 'string' || !task) return keep;
       return { state: putTask(state, { ...task, subtaskPosition: position }), refetch: false };
     }
+    case 'task.moveToOrg':
+      return { state, refetch: true }; // ADR 0072: the core agent implements it
     case 'task.duplicate':
       // The copied subtasks get server ids: only a refetch replaces the optimistic copies.
       return {
