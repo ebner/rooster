@@ -11,7 +11,7 @@ import { hasPendingMigrations, MIGRATIONS_DIR, runMigrations } from '../src/db/m
 import { tempDir } from './helpers.ts';
 import { listCtx } from './list-helpers.ts';
 
-const FIXTURE = join(import.meta.dirname, 'fixtures', 'release-1.8.0.sql');
+const FIXTURE = join(import.meta.dirname, 'fixtures', 'release-1.11.0.sql');
 
 /** The fixture loaded into a private in-memory database (foreign keys checked afterwards). */
 function loadFixture(): AppDb {
