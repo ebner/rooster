@@ -208,8 +208,9 @@ describe('[perf] AC-11.4 server performance with a 2,000-task org', () => {
 
 // Phase 13 (ADR 0073 B): GET /orgs/{orgId}/views counts every view over the org's tasks. With
 // the view limit (100 shared + 100 private) and each task's due buckets classified once per
-// request, a full org stays cheap; counting each view with the date work took seconds.
-const VIEWS_BUDGET_MS = 100;
+// request, a full org stays cheap; counting each view with the date work took seconds. About
+// 75 ms here and 150 ms on GitHub's runners; per-view date work took 320 ms here.
+const VIEWS_BUDGET_MS = 250;
 
 describe('[perf] views: 200 views × 2,000 timed tasks due today', () => {
   it(`GET /orgs/{orgId}/views takes ≤ ${VIEWS_BUDGET_MS} ms`, async () => {
