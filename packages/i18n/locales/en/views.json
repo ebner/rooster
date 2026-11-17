@@ -44,6 +44,20 @@
     }
   },
   "all": {
-    "title": "All organisations"
+    "title": "All organisations",
+    "rowOrg": "Organisation: {name}",
+    "draftOrg": "Goes to {name}",
+    "dev": {
+      "rows": "Rows from several organisations",
+      "draft": "New row: the default organisation, and one named with ^",
+      "suggest": "The ^ suggestions",
+      "draftDefault": "Book the venue",
+      "draftToken": "Book the venue ^Kes",
+      "orgs": {
+        "personal": "Personal",
+        "kestrel": "Kestrel Lane",
+        "club": "Rowing club"
+      }
+    }
   }
 }

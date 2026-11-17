@@ -333,7 +333,8 @@
     "group": "group",
     "groupCount": "{count, plural, one {# task} other {# tasks}}",
     "expanded": "expanded",
-    "collapsed": "collapsed"
+    "collapsed": "collapsed",
+    "org": "in {name}"
   },
   "upcoming": {
     "name": "Recurring",
@@ -368,5 +369,9 @@
     "confirmBack": "Back",
     "confirm": "Move",
     "toast": "Moved to {org}"
+  },
+  "all": {
+    "orgSuggestions": "Organisations",
+    "oneOrg": "This works on tasks from one organisation at a time."
   }
 }

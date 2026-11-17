@@ -1,5 +1,6 @@
 import type { SmartView } from '@rooster/core/views';
 import { createContext, useContext } from 'react';
+import type { Org } from '../../data/types';
 import type { ViewerDateContext } from '../dates';
 import type { ListController } from './controller';
 
@@ -28,6 +29,11 @@ export interface ListContextValue {
   shared?: boolean | undefined;
   /** Everyone's tasks (02 §11): every row shows its assignee; no groups to make or move to. */
   everyone?: boolean | undefined;
+  /**
+   * Phase 13 (ADR 0073 A2): All organisations: the viewer's orgs by id, for each row's org
+   * chip and accessible name. Absent in an org's own lists.
+   */
+  orgs?: ReadonlyMap<string, Org> | undefined;
 }
 
 export const ListContext = createContext<ListContextValue | null>(null);

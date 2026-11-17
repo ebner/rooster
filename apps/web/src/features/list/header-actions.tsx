@@ -53,7 +53,8 @@ export function ShowCompletedToggle() {
  * sections derived from dates (no groups to add or fold); Everyone's tasks lists open tasks
  * only (02 §11), so it has no "Show completed" either.
  */
-export type ListMenuView = 'my' | 'smart' | 'everyone';
+/** `all`: All organisations (Phase 13), whose export stays per org. */
+export type ListMenuView = 'my' | 'smart' | 'everyone' | 'all';
 
 export type ListMenuItemId =
   | 'addGroup'
@@ -71,7 +72,8 @@ export function listMenuItemIds(view: ListMenuView): ListMenuItemId[] {
   if (groups) ids.push('addGroup');
   if (view !== 'everyone') ids.push('showCompleted');
   if (groups) ids.push('collapseAll', 'expandAll');
-  ids.push('exportJson', 'exportMarkdown', 'print');
+  if (view !== 'all') ids.push('exportJson', 'exportMarkdown');
+  ids.push('print');
   return ids;
 }
 

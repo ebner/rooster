@@ -57,5 +57,15 @@
   },
   "error": {
     "saveFailed": "Det gick inte att spara. Kontrollera anslutningen och försök igen."
+  },
+  "allOrgs": {
+    "title": "Alla organisationer",
+    "dev": {
+      "sidebar": "Alla organisationer i sidofältet",
+      "badges": "Siffror, Idag aktiv",
+      "noOverdue": "Inget försenat",
+      "rail": "Ikonlist",
+      "settings": "Inställningar → Beteende med flera organisationer"
+    }
   }
 }

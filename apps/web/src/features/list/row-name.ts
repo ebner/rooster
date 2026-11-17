@@ -15,7 +15,13 @@ export interface RowName {
  * 10 §5: what a screen reader says for a task row. The due part uses the relative label the
  * row shows; "Today", "Tomorrow" and "Yesterday" read mid-sentence, so they lose their capital.
  */
-export function useTaskRowName(task: Task, title: string, ctx: ViewerDateContext): RowName {
+export function useTaskRowName(
+  task: Task,
+  title: string,
+  ctx: ViewerDateContext,
+  /** Phase 13 (ADR 0073 A2): All organisations names the row's org. */
+  orgName?: string,
+): RowName {
   const { t } = useTranslation('list');
   const done = task.completedAt !== null;
   const info = useDateLabel(
@@ -29,6 +35,7 @@ export function useTaskRowName(task: Task, title: string, ctx: ViewerDateContext
     { completed: done },
   );
   const parts: string[] = [];
+  if (orgName !== undefined) parts.push(t('a11y.org', { name: orgName }));
   if (info) {
     // A range ("Oct 9 – 11") keeps its month name's capital.
     const range = task.startDate !== null;

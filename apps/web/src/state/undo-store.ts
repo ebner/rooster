@@ -17,6 +17,24 @@ export interface UndoEntry {
   label: string;
   inverseOps: ListOpSpec[];
   redoOps: ListOpSpec[];
+  /**
+   * Phase 13 (ADR 0073 A3): one operation over tasks of several orgs (All organisations). Each
+   * part is queued under its own org; undo and redo apply them together.
+   */
+  more?: UndoEntry[];
+}
+
+/** The per-org parts of an entry: itself (without `more`), then each of `more`. */
+export function undoParts(entry: UndoEntry): UndoEntry[] {
+  const { more, ...first } = entry;
+  return [first, ...(more ?? [])];
+}
+
+/** One entry from per-org parts (the first carries the rest in `more`). */
+export function joinUndoParts(parts: readonly UndoEntry[]): UndoEntry | null {
+  const [first, ...rest] = parts;
+  if (!first) return null;
+  return rest.length > 0 ? { ...first, more: rest } : first;
 }
 
 /**

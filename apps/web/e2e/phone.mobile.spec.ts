@@ -457,7 +457,8 @@ test('ADR 0063 a swipe on the org name moves between orgs and keeps the view', a
   await expect(page).toHaveURL(/\/today$/);
   const switcher = page.getByTestId('org-switcher');
   await expect(switcher).toContainText('Personal');
-  await expect(page.getByTestId('org-dots').locator('span')).toHaveCount(3);
+  // All organisations is the first stop (ADR 0073 A7), then the three orgs.
+  await expect(page.getByTestId('org-dots').locator('span')).toHaveCount(4);
   // Left brings the next org in, in sidebar order, on the same view.
   await swipe(page, switcher, -0.9);
   await expect(page).toHaveURL(/\/o\/garden-club[^/]*\/today$/);

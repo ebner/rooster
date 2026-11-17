@@ -21,12 +21,15 @@ import {
   useSetOrgCollapsed,
   useSignOut,
 } from '../data';
+import { hasAllOrgs } from '../features/all-orgs/default-org';
+import { allListViewOf, useLastAllView } from '../features/all-orgs/last-view';
 import { useWhatsNewNotice } from '../features/help/whats-new';
 import { AppShell } from '../features/shell/app-shell';
 import { MobileNav } from '../features/shell/mobile-nav';
 import { type OrgViewId, orgUrlSlug, paths } from '../features/shell/paths';
 import { Sidebar } from '../features/shell/sidebar';
-import { switchView } from '../features/shell/sidebar-views';
+import { switchAllView, switchView } from '../features/shell/sidebar-views';
+import { rememberListPath } from '../features/shell/start-page';
 import { listViewOf, useLastListView } from '../features/views/last-view';
 import { LiveViewCounts } from '../features/views/view-counts';
 import { setLocale } from '../lib/i18n';
@@ -62,6 +65,7 @@ function AppLayout() {
   const changeLocale = useChangeLocale();
   const signOut = useSignOut();
   const lastView = useLastListView((s) => s.view);
+  const lastAllView = useLastAllView((s) => s.view);
 
   // The session ended while the app was open (revoked elsewhere, signed out).
   const unauthenticated = errorCode(me.error) === 'unauthenticated';
@@ -78,6 +82,12 @@ function AppLayout() {
   useEffect(() => {
     if (isLocale(storedLocale) && storedLocale !== i18n.language) void setLocale(storedLocale);
   }, [storedLocale, i18n.language]);
+
+  // "Open rooster on: the last view" (ADR 0073 A6): `/` returns to the list view shown last.
+  const userId = me.data?.user.id;
+  useEffect(() => {
+    if (userId) rememberListPath(userId, location.pathname);
+  }, [userId, location.pathname]);
 
   // After an update: "Updated to X.Y.Z · What's new", once (ADR 0057).
   useWhatsNewNotice(me.data?.user.id, isLocale(i18n.language) ? i18n.language : 'en');
@@ -120,6 +130,9 @@ function AppLayout() {
   const activeOrg = orgSlug ? findOrg(orgs, orgSlug) : null;
   // The pane (`/t/:taskId`) sits over the last list view (02 §2).
   const activeView = listViewOf(location.pathname, lastView);
+  // All organisations (ADR 0073 A): its view, or the last one under its pane (`/all/t/:id`).
+  const allView = allListViewOf(location.pathname, lastAllView);
+  const withAll = hasAllOrgs(me.data);
   const failed = () => toast({ message: t('error.saveFailed'), tone: 'danger' });
   const homeOrg = activeOrg ?? orgs[0] ?? null;
   const createOrgAndGo = async (input: Parameters<typeof createOrg.mutateAsync>[0]) => {
@@ -144,16 +157,26 @@ function AppLayout() {
           orgs,
           activeOrg: activeOrg ?? null,
           isAdmin: user.isAdmin,
-          // ADR 0063: a switch keeps the view (Today stays Today) where the other org has it.
+          // ADR 0063: a switch keeps the view (Today stays Today) where the other org has it;
+          // so does one from All organisations, whose views every org has (ADR 0073 A7).
           onSelectOrg: (org) =>
-            void navigate({ href: paths.orgView(orgUrlSlug(org), switchView(activeView, org)) }),
+            void navigate({
+              href: paths.orgView(orgUrlSlug(org), switchView(activeView ?? allView, org)),
+            }),
+          allOrgs: withAll
+            ? {
+                active: allView !== null,
+                onSelect: () =>
+                  void navigate({ href: paths.allView(switchAllView(activeView ?? allView)) }),
+              }
+            : null,
           onCreateOrg: createOrgAndGo,
           onSignOut: () => void signOutNow(),
           nav: (
             <MobileNav
               myTasksHref={homeOrg ? paths.orgView(orgUrlSlug(homeOrg), 'my') : null}
               active={
-                activeView !== null
+                activeView !== null || allView !== null
                   ? 'my'
                   : location.pathname.startsWith('/settings')
                     ? 'settings'
@@ -167,6 +190,7 @@ function AppLayout() {
             user={user}
             orgs={orgs}
             active={activeOrg && activeView ? { orgId: activeOrg.id, view: activeView } : null}
+            activeAllView={allView}
             locale={user.locale}
             collapsed={collapsed}
             onToggleCollapsed={onToggleCollapsed}

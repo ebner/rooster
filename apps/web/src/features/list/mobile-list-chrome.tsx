@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { type RefObject, Suspense, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useMyList } from '../../data/list';
+import { useOrgLists } from '../../data/all-views';
 import type { OrgMember } from '../../data/types';
 import { cn } from '../../lib/cn';
 import { selectedIds, useListUi } from '../../state/list-store';
@@ -57,6 +57,12 @@ function commonDue(tasks: readonly (Task | undefined)[]): DueValue {
   return tasks.every((task) => sameDue(dueOf(task), first)) ? first : noDue;
 }
 
+/** The list (or, in All organisations, the org) a new row's task goes to. */
+function draftScope(controller: ListController, draftId: string): ListController {
+  const text = titleInputHandle(draftId)?.text();
+  return controller.titleScope(draftId, text?.raw ?? '', text?.ignored ?? []).controller;
+}
+
 function groupChoices(controller: ListController): GroupChoice[] {
   const state = controller.state();
   return state
@@ -65,7 +71,6 @@ function groupChoices(controller: ListController): GroupChoice[] {
 }
 
 export interface MobileListChromeProps {
-  orgId: string;
   /** The tree grid, for the delegated swipe handler. */
   rootRef: RefObject<HTMLElement | null>;
   /** The positioned wrapper the swipe reveal is drawn in. */
@@ -73,8 +78,11 @@ export interface MobileListChromeProps {
   swipePrefs: SwipePrefs;
   /** Overdue takes no inline adds (02 §10): no FAB. */
   canAdd?: boolean;
-  /** A shared org's members (me first): the assign sheet. Null in a personal org (FR-COL-6). */
-  members?: readonly OrgMember[] | null;
+  /**
+   * A shared org's members (me first) for the tasks: the assign sheet. Null in a personal org
+   * (FR-COL-6); in All organisations, per org (null for a personal org's tasks).
+   */
+  membersFor?: ((ids: readonly string[]) => readonly OrgMember[] | null) | null;
 }
 
 /**
@@ -83,12 +91,11 @@ export interface MobileListChromeProps {
  * replace the desktop popovers (date, move, tags). Rendered by `MyListView` below 768 px.
  */
 export function MobileListChrome({
-  orgId,
   rootRef,
   layerRef,
   swipePrefs,
   canAdd = true,
-  members = null,
+  membersFor = null,
 }: MobileListChromeProps) {
   const { t } = useTranslation('mobile');
   const { t: tList } = useTranslation('list');
@@ -107,7 +114,7 @@ export function MobileListChrome({
   const tags = useTagsStore((s) => s.byId);
   const canMoveOrg = useCanMoveToOrg() && !controller.isEveryone();
   // Re-render on list changes so sheet checks and labels follow.
-  useMyList(orgId);
+  useOrgLists(controller.orgIds());
 
   const onSwipe = (rowId: string, action: SwipeRevealAction) => {
     const title = controller.task(rowId)?.title ?? '';
@@ -144,7 +151,13 @@ export function MobileListChrome({
       ? (sheetTasks[0]?.title ?? '')
       : t('subject.tasks', { count: sheetIds.length });
   const closePopover = () => controller.ui().set({ popover: null });
-  const allTags = useMemo(() => Object.values(tags), [tags]);
+  // All organisations: tags, groups and people of the tasks' own org (ADR 0073 A3).
+  const scope = controller.scoped(sheetIds) ?? controller;
+  const allTags = useMemo(
+    () => Object.values(tags).filter((tag) => scope === controller || tag.orgId === scope.orgId),
+    [tags, scope, controller],
+  );
+  const members = membersFor ? membersFor(sheetIds) : null;
   const applied = allTags
     .filter((tag) => sheetTasks.length > 0 && sheetTasks.every((x) => x?.tagIds.includes(tag.id)))
     .map((tag) => tag.id);
@@ -226,7 +239,7 @@ export function MobileListChrome({
             isOpen={groupSheetOpen}
             onOpenChange={(open) => !open && closeDraftSheet()}
             title={t('accessory.groupTitle')}
-            groups={groupChoices(controller).filter((g) => !g.inbox)}
+            groups={groupChoices(draftScope(controller, draft.id)).filter((g) => !g.inbox)}
             current={draft.groupId}
             onPick={(groupId) => controller.moveDraftToGroup(draft.id, groupId)}
           />
@@ -237,7 +250,7 @@ export function MobileListChrome({
         <SelectionBars
           count={selectedCount}
           controller={controller}
-          canAssign={members !== null}
+          canAssign={membersFor !== null}
           canMoveOrg={canMoveOrg}
           onDone={() => controller.exitSelectionMode()}
         />
@@ -281,7 +294,7 @@ export function MobileListChrome({
         isOpen={popover?.kind === 'moveTo' && sheetIds.length > 0}
         onOpenChange={(open) => !open && closePopover()}
         title={tList('bulk.moveTo')}
-        groups={groupChoices(controller)}
+        groups={groupChoices(scope)}
         current={sheetIds.length === 1 ? sheetTasks[0]?.placement?.groupId : undefined}
         subject={subject}
         onPick={(groupId) => controller.moveToGroup(groupId, sheetIds)}
@@ -334,8 +347,11 @@ function SelectionBars({
 }) {
   const { t } = useTranslation('mobile');
   const { t: tList } = useTranslation('list');
-  const bulk = (kind: 'date' | 'moveTo' | 'tag' | 'assign') =>
+  const bulk = (kind: 'date' | 'moveTo' | 'tag' | 'assign') => {
+    // All organisations: tags, groups and people belong to one org (ADR 0073 A3).
+    if (kind !== 'date' && controller.refuseAcrossOrgs(controller.selectedTaskIds())) return;
     controller.ui().set({ popover: { kind, rowId: 'bulk' } });
+  };
   const disabled = count === 0;
   const actions = [
     {

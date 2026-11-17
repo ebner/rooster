@@ -1,6 +1,7 @@
 import type { AnyRouter } from '@tanstack/react-router';
+import { allListViewOf, useLastAllView } from '../all-orgs/last-view';
 import { listViewOf, useLastListView } from '../views/last-view';
-import type { OrgViewId } from './paths';
+import type { AllViewId, OrgViewId } from './paths';
 
 export interface ScrollResets {
   /** `<main>` and the list column: another page or list view. */
@@ -12,20 +13,30 @@ export interface ScrollResets {
 let reset: ScrollResets = { page: true, task: true };
 
 /** The page a path shows: the pane's path is the list view under it. */
-function pageOf(pathname: string, lastView: OrgViewId): string {
+function pageOf(pathname: string, lastView: OrgViewId, lastAllView: AllViewId): string {
+  const allView = allListViewOf(pathname, lastAllView);
+  if (allView) return `/all/${allView}`;
   const view = listViewOf(pathname, lastView);
   const org = /^\/o\/([^/]+)\//.exec(pathname)?.[1];
   return view && org ? `/o/${org}/${view}` : pathname.replace(/\/+$/, '');
 }
 
 function taskOf(pathname: string): string | null {
-  return /^\/o\/[^/]+\/t\/([^/]+)/.exec(pathname)?.[1] ?? null;
+  return /^\/(?:o\/[^/]+|all)\/t\/([^/]+)/.exec(pathname)?.[1] ?? null;
 }
 
-/** What a navigation from `from` to `to` resets, with `lastView` under the pane. */
-export function scrollResets(from: string, to: string, lastView: OrgViewId): ScrollResets {
+/**
+ * What a navigation from `from` to `to` resets, with `lastView` under an org's pane and
+ * `lastAllView` under All organisations' pane (`/all/t/:id`, ADR 0073 A).
+ */
+export function scrollResets(
+  from: string,
+  to: string,
+  lastView: OrgViewId,
+  lastAllView: AllViewId = 'today',
+): ScrollResets {
   return {
-    page: pageOf(from, lastView) !== pageOf(to, lastView),
+    page: pageOf(from, lastView, lastAllView) !== pageOf(to, lastView, lastAllView),
     task: taskOf(from) !== taskOf(to),
   };
 }
@@ -35,7 +46,8 @@ export function trackScrollResets(router: AnyRouter): void {
   router.subscribe('onBeforeLoad', ({ fromLocation, toLocation }) => {
     if (!fromLocation) return;
     const lastView = useLastListView.getState().view;
-    reset = scrollResets(fromLocation.pathname, toLocation.pathname, lastView);
+    const lastAllView = useLastAllView.getState().view;
+    reset = scrollResets(fromLocation.pathname, toLocation.pathname, lastView, lastAllView);
   });
 }
 
@@ -47,7 +59,8 @@ export function trackScrollResets(router: AnyRouter): void {
  * each page's own offset.
  *
  * The list stays where it is while the pane opens, follows the cursor and closes over it
- * (`/o/:slug/t/:taskId` is its list view's page); another task starts the pane at its top.
+ * (`/o/:slug/t/:taskId` and `/all/t/:taskId` are their list view's page); another task starts
+ * the pane at its top.
  */
 export const scrollToTopSelectors: Array<() => Element | null> = [
   () => (reset.page ? document.querySelector('[data-scroll-main]') : null),

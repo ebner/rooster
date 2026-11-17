@@ -44,6 +44,20 @@
     }
   },
   "all": {
-    "title": "Alla organisationer"
+    "title": "Alla organisationer",
+    "rowOrg": "Organisation: {name}",
+    "draftOrg": "Hamnar i {name}",
+    "dev": {
+      "rows": "Rader från flera organisationer",
+      "draft": "Ny rad: standardorganisationen, och en som väljs med ^",
+      "suggest": "Förslagen efter ^",
+      "draftDefault": "Boka lokalen",
+      "draftToken": "Boka lokalen ^Kes",
+      "orgs": {
+        "personal": "Privat",
+        "kestrel": "Kestrel Lane",
+        "club": "Roddklubben"
+      }
+    }
   }
 }

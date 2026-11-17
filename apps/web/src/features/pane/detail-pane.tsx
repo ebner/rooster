@@ -179,7 +179,12 @@ function PaneContent({
   const prefs = useMe().data?.prefs;
   const display = useDisplayPrefs();
   const members = useOrgMembers(orgId);
-  const tagsById = useTagsStore((s) => s.byId);
+  const allTagsById = useTagsStore((s) => s.byId);
+  // All organisations holds every org's tags (ADR 0073): the pane offers its task's org's.
+  const orgTags = useMemo(
+    () => Object.values(allTagsById).filter((tag) => tag.orgId === orgId),
+    [allTagsById, orgId],
+  );
   const focus = usePaneStore((s) => s.focus);
   const titleRef = useRef<PaneTitleHandle>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -209,8 +214,8 @@ function PaneContent({
   const mobile = useIsMobile();
   const dateRef = useRef(dateCtx);
   dateRef.current = dateCtx;
-  const tagsRef = useRef(Object.values(tagsById));
-  tagsRef.current = Object.values(tagsById);
+  const tagsRef = useRef(orgTags);
+  tagsRef.current = orgTags;
 
   const slice = list.data;
   const listTask = slice?.task;
@@ -535,7 +540,7 @@ function PaneContent({
       ? t('props.you')
       : (members.data?.find((m) => m.userId === task.createdBy)?.name ?? '');
   const tagItems = task.tagIds.flatMap((id) => {
-    const tag = tagsById[id];
+    const tag = allTagsById[id];
     return tag ? [{ id: tag.id, name: tag.name, color: tag.color }] : [];
   });
   const followerIds = detail.data?.followers ?? [];
@@ -982,7 +987,7 @@ function PaneContent({
                 <Suspense fallback={null}>
                   <LazyTagPicker
                     anchor={tagButton.current}
-                    tags={Object.values(tagsById)}
+                    tags={orgTags}
                     applied={task.tagIds}
                     label={t('props.tags')}
                     onToggle={(tagId) => controller.toggleTag([taskId], tagId)}
@@ -1175,7 +1180,7 @@ function PaneContent({
           <TagSheet
             isOpen={tagsOpen}
             onOpenChange={setTagsOpen}
-            tags={Object.values(tagsById)}
+            tags={orgTags}
             applied={task.tagIds}
             subject={task.title}
             onToggle={(tagId) => controller.toggleTag([taskId], tagId)}

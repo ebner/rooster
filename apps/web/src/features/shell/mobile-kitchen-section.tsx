@@ -15,8 +15,10 @@ import { GroupSheet } from '../list/group-sheet';
 import { SheetHeader } from '../pane/sheet-header';
 import { SettingsIndex } from '../settings/settings-index';
 import { TagSheet } from '../tags/tag-sheet';
+import { useAllViewTabs } from '../views/view-tabs';
 import { fixtureMe } from './fixtures';
 import { MobileHeader, OrgSwitcherSheet } from './mobile-header';
+import { allOrgsOptionId } from './org-switcher';
 
 const noop = () => undefined;
 
@@ -79,6 +81,8 @@ export function MobileKitchenSection() {
   const { t, i18n } = useTranslation('mobile');
   const { t: tList } = useTranslation('list');
   const { t: tSettings } = useTranslation('settings');
+  const { t: tShell } = useTranslation('shell');
+  const allTabs = useAllViewTabs('today');
   const ctx = sampleDateContext(i18n.language === 'sv' ? 'sv' : 'en');
   const orgs = fixtureMe.orgs;
   const personal = orgs[0] ?? null;
@@ -158,6 +162,51 @@ export function MobileKitchenSection() {
             back={{ href: '#mobile', label: tSettings('title') }}
             syncPill={null}
             menu={<MenuItem onAction={noop}>{t('nav.settings')}</MenuItem>}
+          />
+        </Phone>
+      </Group>
+      <Group title={t('dev.allOrgs')}>
+        {/* Phase 13 (ADR 0073 A7): an All organisations screen's header and the org sheet. */}
+        <Phone>
+          <MobileHeader
+            isStatic
+            title={tShell('view.today')}
+            context={tShell('allOrgs.title')}
+            allActive
+            withAll
+            onOpenOrgs={noop}
+            orgs={orgs}
+            onSwitchOrg={noop}
+            onSwitchAll={noop}
+            syncPill={null}
+            menu={<MenuItem onAction={noop}>{t('nav.settings')}</MenuItem>}
+            views={allTabs}
+          />
+        </Phone>
+        <Phone>
+          <OrgSwitcherSheet
+            isStatic
+            isOpen
+            onOpenChange={noop}
+            orgs={orgs}
+            allActive
+            onSelect={noop}
+            onSelectAll={noop}
+            onCreateOrg={noop}
+          />
+        </Phone>
+        <Phone>
+          {/* Press-and-slide over All organisations, from Personal. */}
+          <OrgSwitcherSheet
+            isStatic
+            isOpen
+            onOpenChange={noop}
+            orgs={orgs}
+            activeOrgId={personal?.id}
+            highlightedOrgId={allOrgsOptionId}
+            onSelect={noop}
+            onSelectAll={noop}
+            onCreateOrg={noop}
           />
         </Phone>
       </Group>

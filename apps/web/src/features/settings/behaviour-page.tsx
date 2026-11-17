@@ -1,7 +1,8 @@
-import { SWIPE_ACTIONS } from '@rooster/core/limits';
-import type { SwipeAction } from '@rooster/core/schemas';
+import { START_PAGES, SWIPE_ACTIONS } from '@rooster/core/limits';
+import type { StartPage, SwipeAction } from '@rooster/core/schemas';
 import { Switch, Text } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
+import type { Org } from '../../data/types';
 import { cn } from '../../lib/cn';
 import { SegmentedControl } from '../../ui/segmented-control';
 import { Select } from '../../ui/select';
@@ -16,11 +17,22 @@ export interface BehaviourSettings {
   completeHideMs: number;
   swipeLeft: SwipeAction;
   swipeRight: SwipeAction;
+  /** ADR 0073 A4: where tasks typed in All organisations go; null: the personal org. */
+  defaultOrgId?: string | null;
+  /** ADR 0073 A6: "Open rooster on". */
+  startPage?: StartPage;
 }
+
+export type BehaviourOrg = Pick<Org, 'id' | 'name' | 'isPersonal'>;
 
 export interface BehaviourPageProps {
   value: BehaviourSettings;
   onChange: (patch: Partial<BehaviourSettings>) => void;
+  /**
+   * The user's orgs in sidebar order. From the second one on, the page shows All
+   * organisations' settings (the default organisation and the start page).
+   */
+  orgs?: readonly BehaviourOrg[] | undefined;
   /** Kitchen sink: a forced state on the switch (`data-force`). */
   'data-force'?: string;
 }
@@ -135,17 +147,78 @@ export function hideDelayValues(current: number): number[] {
 }
 
 /**
- * Settings → Behaviour (FR-SET-2): dates in task names (02 §8), how long a completed task
+ * The org the select shows for `defaultOrgId`: that org while the user is in it, else the
+ * personal one (as `defaultOrgOf` resolves it for new tasks).
+ */
+export function shownDefaultOrg(
+  orgs: readonly BehaviourOrg[],
+  defaultOrgId: string | null | undefined,
+): BehaviourOrg | undefined {
+  return (
+    (defaultOrgId ? orgs.find((org) => org.id === defaultOrgId) : undefined) ??
+    orgs.find((org) => org.isPersonal) ??
+    orgs[0]
+  );
+}
+
+/**
+ * All organisations (ADR 0073 A4, A6): the default organisation, and where rooster opens.
+ * Both only mean something with two orgs or more, so the section shows from then on.
+ */
+function AllOrgsSettings({
+  orgs,
+  value,
+  onChange,
+}: {
+  orgs: readonly BehaviourOrg[];
+  value: BehaviourSettings;
+  onChange: BehaviourPageProps['onChange'];
+}) {
+  const { t } = useTranslation('settings');
+  const shown = shownDefaultOrg(orgs, value.defaultOrgId);
+  return (
+    <SettingsSection title={t('behaviour.allOrgsTitle')} description={t('behaviour.allOrgsBody')}>
+      <Select
+        label={t('behaviour.defaultOrg')}
+        description={t('behaviour.defaultOrgBody')}
+        options={orgs.map((org) => ({ id: org.id, label: org.name }))}
+        value={shown?.id ?? ''}
+        // The personal org is stored as null, the default: it stays right if ids ever change.
+        onChange={(id) => {
+          const org = orgs.find((o) => o.id === id);
+          if (!org || org.id === shown?.id) return;
+          onChange({ defaultOrgId: org.isPersonal ? null : org.id });
+        }}
+        className="max-w-pane-min"
+      />
+      <SegmentedControl
+        label={t('behaviour.startPage.label')}
+        description={t('behaviour.startPage.body')}
+        options={START_PAGES.map((id) => ({
+          id,
+          label: t(id === 'last' ? 'behaviour.startPage.last' : 'behaviour.startPage.allToday'),
+        }))}
+        value={value.startPage ?? 'last'}
+        onChange={(startPage) => onChange({ startPage })}
+      />
+    </SettingsSection>
+  );
+}
+
+/**
+ * Settings → Behaviour (FR-SET-2): All organisations' default organisation and start page
+ * (with two orgs or more; ADR 0073), dates in task names (02 §8), how long a completed task
  * stays (02 §3.6), and the phone's swipe actions, one per direction (02 §13.2). Each change is
  * saved to `user.prefs` at once.
  */
-export function BehaviourPage({ value, onChange, 'data-force': force }: BehaviourPageProps) {
+export function BehaviourPage({ value, onChange, orgs, 'data-force': force }: BehaviourPageProps) {
   const { t } = useTranslation('settings');
   const hideValue = holdsUntilReload(value.completeHideMs)
     ? String(completeHideChoices[2])
     : String(value.completeHideMs);
   return (
     <div className="flex flex-col gap-12">
+      {orgs && orgs.length > 1 && <AllOrgsSettings orgs={orgs} value={value} onChange={onChange} />}
       <SettingsSection title={t('behaviour.datesTitle')}>
         <SettingSwitch
           label={t('behaviour.parseTitleDates')}

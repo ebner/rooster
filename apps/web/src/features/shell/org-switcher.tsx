@@ -14,6 +14,7 @@ import {
   swipeResistance,
   swipeSlopPx,
 } from '../list/gestures';
+import { AllOrgsMark } from './all-orgs-mark';
 
 /** Press-and-slide (ADR 0063): the sheet opens under the finger, and letting go picks an org. */
 export interface OrgSlide {
@@ -25,13 +26,30 @@ export interface OrgSlide {
   end: (orgId: string | null) => void;
 }
 
+/**
+ * All organisations' option id in the sheet and in press-and-slide (`data-org-option`), and
+ * its place in the swipe order. Org ids are UUIDs, so it never names an org.
+ */
+export const allOrgsOptionId = 'all';
+
 export interface OrgSwitcherProps {
-  org: Org;
+  /** The org shown; null: All organisations (ADR 0073 A7). */
+  org: Org | null;
   /** All of the user's orgs, in sidebar order: the swipe's neighbours and the dots. */
   orgs: readonly Org[];
+  /** All organisations comes first in the swipe order (with two orgs or more). */
+  withAll?: boolean | undefined;
   onOpen?: (() => void) | undefined;
   onSwitch?: ((org: Org) => void) | undefined;
+  /** A swipe onto All organisations. */
+  onSwitchAll?: (() => void) | undefined;
   slide?: OrgSlide | undefined;
+}
+
+/** One stop of the swipe order: an org, or All organisations (`org` null). */
+interface Stop {
+  id: string;
+  org: Org | null;
 }
 
 /** More orgs than this and the dots would crowd the header; the swipe still works. */
@@ -66,21 +84,38 @@ let entering: { orgId: string; from: 1 | -1 } | null = null;
  * swipe moves to the next or previous org in sidebar order, the name following the finger
  * with the neighbour's name sliding in behind it; a long-press opens the sheet under the
  * finger, and lifting over an org switches to it. Touch only: a mouse and the keyboard use
- * the sheet (and Mod+1…9).
+ * the sheet (and Mod+1…9). With two orgs or more, All organisations is the first stop of the
+ * swipe order (ADR 0073 A7).
  */
-export function OrgSwitcher({ org, orgs, onOpen, onSwitch, slide }: OrgSwitcherProps) {
+export function OrgSwitcher({
+  org,
+  orgs,
+  withAll = false,
+  onOpen,
+  onSwitch,
+  onSwitchAll,
+  slide,
+}: OrgSwitcherProps) {
   const { t } = useTranslation('mobile');
+  const { t: ts } = useTranslation('shell');
   const buttonRef = useRef<HTMLButtonElement>(null);
   const trackRef = useRef<HTMLSpanElement>(null);
   const gesture = useRef<Gesture | null>(null);
   /** The press that ended a gesture must not also open the sheet. */
   const consumed = useRef(false);
-  const live = useRef({ onSwitch, slide });
-  live.current = { onSwitch, slide };
+  const live = useRef({ onSwitch, onSwitchAll, slide });
+  live.current = { onSwitch, onSwitchAll, slide };
 
-  const index = orgs.findIndex((o) => o.id === org.id);
-  const previous = index > 0 ? orgs[index - 1] : undefined;
-  const next = index >= 0 ? orgs[index + 1] : undefined;
+  const allName = ts('allOrgs.title');
+  const stops: Stop[] = [
+    ...(withAll || org === null ? [{ id: allOrgsOptionId, org: null }] : []),
+    ...orgs.map((o) => ({ id: o.id, org: o })),
+  ];
+  const currentId = org?.id ?? allOrgsOptionId;
+  const name = org?.name ?? allName;
+  const index = stops.findIndex((stop) => stop.id === currentId);
+  const previous = index > 0 ? stops[index - 1] : undefined;
+  const next = index >= 0 ? stops[index + 1] : undefined;
 
   const setOffset = (px: number, transition: string | null) => {
     const track = trackRef.current;
@@ -97,14 +132,14 @@ export function OrgSwitcher({ org, orgs, onOpen, onSwitch, slide }: OrgSwitcherP
 
   // A committed swipe: the new org's name slides in from the side the old one left by.
   useLayoutEffect(() => {
-    if (entering?.orgId !== org.id) return;
+    if (entering?.orgId !== currentId) return;
     const from = entering.from;
     entering = null;
     const width = buttonRef.current?.getBoundingClientRect().width ?? 0;
     setOffset(from * width, null);
     trackRef.current?.getBoundingClientRect();
     setOffset(0, 'transform var(--dur-base) var(--ease-standard)');
-  }, [org.id]);
+  }, [currentId]);
 
   const stop = (g: Gesture) => {
     clearTimeout(g.timer);
@@ -153,7 +188,7 @@ export function OrgSwitcher({ org, orgs, onOpen, onSwitch, slide }: OrgSwitcherP
         stop(g);
         return;
       }
-      if (!live.current.onSwitch || orgs.length < 2) return;
+      if (!live.current.onSwitch || stops.length < 2) return;
       if (Math.abs(dx) <= swipeSlopPx || Math.abs(dx) < Math.abs(dy) * 1.2) return;
       g.phase = 'swiping';
       consumed.current = true;
@@ -197,12 +232,27 @@ export function OrgSwitcher({ org, orgs, onOpen, onSwitch, slide }: OrgSwitcherP
     setOffset(-from * width, 'transform var(--dur-fast) var(--ease-exit)');
     setTimeout(() => {
       entering = { orgId: towards.id, from };
-      live.current.onSwitch?.(towards);
+      if (towards.org) live.current.onSwitch?.(towards.org);
+      else live.current.onSwitchAll?.();
     }, motionMs('fast'));
   };
 
-  const dots = orgs.length > 1 && orgs.length <= maxDots;
-  const neighbour = (other: Org, side: 'before' | 'after') => (
+  const dots = stops.length > 1 && stops.length <= maxDots;
+  const mark = (stop: Org | null) =>
+    stop ? (
+      <Avatar
+        id={stop.id}
+        name={stop.name}
+        emoji={stop.avatarEmoji}
+        color={stop.color}
+        shape="square"
+        size={24}
+        decorative
+      />
+    ) : (
+      <AllOrgsMark size={24} />
+    );
+  const neighbour = (other: Stop, side: 'before' | 'after') => (
     <span
       aria-hidden
       className={cn(
@@ -210,16 +260,8 @@ export function OrgSwitcher({ org, orgs, onOpen, onSwitch, slide }: OrgSwitcherP
         side === 'before' ? 'right-full pe-6' : 'left-full ps-6',
       )}
     >
-      <Avatar
-        id={other.id}
-        name={other.name}
-        emoji={other.avatarEmoji}
-        color={other.color}
-        shape="square"
-        size={24}
-        decorative
-      />
-      <span className="whitespace-nowrap text-group text-text">{other.name}</span>
+      {mark(other.org)}
+      <span className="whitespace-nowrap text-group text-text">{other.org?.name ?? allName}</span>
     </span>
   );
 
@@ -241,7 +283,7 @@ export function OrgSwitcher({ org, orgs, onOpen, onSwitch, slide }: OrgSwitcherP
           }
           onOpen?.();
         }}
-        aria-label={t('org.switch', { name: org.name })}
+        aria-label={t('org.switch', { name })}
         data-testid="org-switcher"
         className={cn(
           'relative flex h-hit-touch min-w-0 cursor-default items-center overflow-hidden rounded-sm px-2',
@@ -251,16 +293,8 @@ export function OrgSwitcher({ org, orgs, onOpen, onSwitch, slide }: OrgSwitcherP
       >
         <span ref={trackRef} className="relative flex min-w-0 items-center gap-2">
           {previous && neighbour(previous, 'before')}
-          <Avatar
-            id={org.id}
-            name={org.name}
-            emoji={org.avatarEmoji}
-            color={org.color}
-            shape="square"
-            size={24}
-            decorative
-          />
-          <span className="min-w-0 truncate text-group text-text">{org.name}</span>
+          {mark(org)}
+          <span className="min-w-0 truncate text-group text-text">{name}</span>
           <ChevronDown
             className="size-4 shrink-0 text-text-secondary"
             strokeWidth={iconStrokeWidth}
@@ -274,12 +308,12 @@ export function OrgSwitcher({ org, orgs, onOpen, onSwitch, slide }: OrgSwitcherP
             data-testid="org-dots"
             className="absolute inset-x-0 bottom-0.5 flex justify-center gap-1"
           >
-            {orgs.map((o) => (
+            {stops.map((stop) => (
               <span
-                key={o.id}
+                key={stop.id}
                 className={cn(
                   'size-1 rounded-full',
-                  o.id === org.id ? 'bg-text-secondary' : 'bg-border-strong',
+                  stop.id === currentId ? 'bg-text-secondary' : 'bg-border-strong',
                 )}
               />
             ))}

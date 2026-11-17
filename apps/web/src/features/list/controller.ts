@@ -23,6 +23,7 @@ import type { OrderingIntent, Reminder, Tag, Task, TaskMove } from '@rooster/cor
 import { isUpcoming } from '@rooster/core/upcoming';
 import type { SmartView, ViewSection } from '@rooster/core/views';
 import type { DroppedOp, ListPipeline } from '../../data/list';
+import type { Org } from '../../data/types';
 import {
   type Caret,
   type Draft,
@@ -35,7 +36,13 @@ import {
   upcomingRowId,
   useListStore,
 } from '../../state/list-store';
-import { spansOrgs, type UndoEntry, useUndoStore } from '../../state/undo-store';
+import {
+  joinUndoParts,
+  spansOrgs,
+  type UndoEntry,
+  undoParts,
+  useUndoStore,
+} from '../../state/undo-store';
 import { toast } from '../../ui/toast';
 import type { ViewerDateContext } from '../dates';
 import { resolveAssigneeToken } from '../people/assignee-token';
@@ -75,6 +82,13 @@ export const completionHoldMs = 1500;
 /** `--dur-slow`: the row-height collapse. */
 export const completionCollapseMs = 250;
 
+/** Title parsing, the completion hold and the all-day reminder time (`ControllerDeps.prefs`). */
+export interface ControllerPrefs {
+  parseTitles: boolean;
+  holdMs: number;
+  allDayReminderTime?: string;
+}
+
 export interface ControllerDeps {
   orgId: string;
   userId: string;
@@ -86,7 +100,7 @@ export interface ControllerDeps {
    * User prefs: title parsing (02 §8.1), the completion hold (02 §3.6) and (P10) the all-day
    * reminder time that relative reminders on all-day tasks resolve against, read live.
    */
-  prefs?: () => { parseTitles: boolean; holdMs: number; allDayReminderTime?: string };
+  prefs?: () => ControllerPrefs;
   holdMs?: number;
   collapseMs?: number;
   /** The UI store of this list (My tasks: the app-wide one; the pane's subtasks: their own). */
@@ -123,6 +137,16 @@ export interface ViewModel {
 
 /** A parsed title plus the `>Group` (smart views) and `@name` (new tasks) it names. */
 type ParsedLine = ParsedTitle & { groupId?: string; assigneeId?: string };
+
+/** What a title being typed resolves its tokens against (`ListController.titleScope`). */
+export interface TitleScope {
+  /** The list (or, in All organisations, the org) whose groups, tags and people apply. */
+  controller: ListController;
+  /** A resolved `^org` token: highlighted, and removed from the title on commit. */
+  orgToken: Span | null;
+  /** The org a new task goes to, shown as a chip on the new row; null outside All. */
+  org: Org | null;
+}
 
 export interface CommitResult {
   /** The input should show this text again (an emptied existing title). */
@@ -222,6 +246,48 @@ export class ListController {
 
   task(id: string): Task | undefined {
     return this.state()?.tasks[id];
+  }
+
+  // -------------------------------------------------------------------------------------
+  // Phase 13 (ADR 0073 A): All organisations lists several orgs' tasks; these are the seams
+  // it overrides. A list of one org answers for itself.
+  // -------------------------------------------------------------------------------------
+
+  /** The orgs whose tasks this list shows. */
+  orgIds(): readonly string[] {
+    return [this.orgId];
+  }
+
+  /** The org a task in this list belongs to. */
+  orgOfTask(id: string): string | undefined {
+    return this.task(id) ? this.orgId : undefined;
+  }
+
+  /**
+   * The controller that acts on `ids` within one org (tags, groups and people belong to an
+   * org): this one here; All organisations hands out the org's own controller, or null when
+   * the tasks span orgs.
+   */
+  scoped(_ids: readonly string[]): ListController | null {
+    return this;
+  }
+
+  /** Says so and returns true when `ids` span orgs (for one org's commands); never here. */
+  refuseAcrossOrgs(_ids: readonly string[]): boolean {
+    return false;
+  }
+
+  /**
+   * What a title's tokens resolve against while it is typed (02 §3.4): this list's org. In
+   * All organisations a new task's `^org` token (or the default org) picks the org.
+   */
+  titleScope(_rowId: string, _text: string, _ignored: readonly Span[]): TitleScope {
+    return { controller: this, orgToken: null, org: null };
+  }
+
+  /** The orgs `^` completes to in a new task's title; none outside All organisations. */
+  orgChoices(_rowId: string): readonly Org[] {
+    return [];
   }
 
   // -------------------------------------------------------------------------------------
@@ -475,13 +541,20 @@ export class ListController {
   redo(): boolean {
     const entry = useUndoStore.getState().popRedo();
     if (!entry) return false;
-    const before = this.deps.pipeline.view(entry.orgId);
-    const fixed = spansOrgs(entry);
-    if (!before && !fixed) return false;
-    const inverseOps =
-      fixed || !before ? entry.inverseOps : inverseOfSequence(entry.redoOps, before, this.ctx());
-    this.deps.pipeline.enqueue(entry.orgId, entry.redoOps, this.reducerContext());
-    useUndoStore.getState().pushUndoKeepRedo({ ...entry, inverseOps });
+    // Phase 13: an operation over several orgs redoes each org's part (ADR 0073 A3).
+    const parts: UndoEntry[] = [];
+    for (const part of undoParts(entry)) {
+      const before = this.deps.pipeline.view(part.orgId);
+      const fixed = spansOrgs(part);
+      if (!before && !fixed) continue;
+      const inverseOps =
+        fixed || !before ? part.inverseOps : inverseOfSequence(part.redoOps, before, this.ctx());
+      this.deps.pipeline.enqueue(part.orgId, part.redoOps, this.reducerContext());
+      parts.push({ ...part, inverseOps });
+    }
+    const redone = joinUndoParts(parts);
+    if (!redone) return false;
+    useUndoStore.getState().pushUndoKeepRedo(redone);
     announce(this.t('undo.redone', { label: entry.label }));
     return true;
   }
@@ -495,18 +568,25 @@ export class ListController {
   }
 
   private applyUndo(entry: UndoEntry): void {
-    const before = this.deps.pipeline.view(entry.orgId);
-    const fixed = spansOrgs(entry);
-    if (!before && !fixed) return;
-    // Redoing a create must restore, not re-create: recompute redo from the inverse.
-    const redoOps =
-      fixed || !before ? entry.redoOps : inverseOfSequence(entry.inverseOps, before, this.ctx());
-    this.deps.pipeline.enqueue(entry.orgId, entry.inverseOps, this.reducerContext());
+    // Phase 13: an operation over several orgs undoes each org's part (ADR 0073 A3).
+    const parts: UndoEntry[] = [];
+    for (const part of undoParts(entry)) {
+      const before = this.deps.pipeline.view(part.orgId);
+      const fixed = spansOrgs(part);
+      if (!before && !fixed) continue;
+      // Redoing a create must restore, not re-create: recompute redo from the inverse.
+      const redoOps =
+        fixed || !before ? part.redoOps : inverseOfSequence(part.inverseOps, before, this.ctx());
+      this.deps.pipeline.enqueue(part.orgId, part.inverseOps, this.reducerContext());
+      parts.push({ ...part, redoOps });
+    }
+    const undone = joinUndoParts(parts);
+    if (!undone) return;
     // Stop the running hide timers. Rows held until reload (FR-SET-2) stay while completed.
     for (const id of Object.keys(this.store().hiding)) {
       if (hideTimers.has(id) || this.task(id)?.completedAt == null) this.clearHiding(id);
     }
-    useUndoStore.getState().pushRedo({ ...entry, redoOps });
+    useUndoStore.getState().pushRedo(undone);
     announce(this.t('undo.undone', { label: entry.label }));
   }
 

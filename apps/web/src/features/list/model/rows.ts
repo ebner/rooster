@@ -45,6 +45,8 @@ export interface TaskRow {
   sectionId?: string;
   /** Today (02 §10) and Upcoming (ADR 0068): the task's group name, shown as a muted chip. */
   groupChip?: string;
+  /** Phase 13 (ADR 0073 A2): All organisations shows each row's org as a chip. */
+  orgId?: string;
   /**
    * ADR 0068: the row is in the Upcoming section (an upcoming task, or a subtask under one).
    * It can't be dragged or moved, and no new rows are created next to it.

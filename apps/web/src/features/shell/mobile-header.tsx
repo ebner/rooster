@@ -11,8 +11,9 @@ import { IconButton } from '../../ui/icon-button';
 import { LogoMark } from '../../ui/logo';
 import { Menu, MenuPopover, MenuTrigger } from '../../ui/menu';
 import { SyncStatus } from '../pwa/sync-status';
+import { AllOrgsMark } from './all-orgs-mark';
 import { CreateOrgForm } from './create-org-form';
-import { type OrgSlide, OrgSwitcher } from './org-switcher';
+import { allOrgsOptionId, type OrgSlide, OrgSwitcher } from './org-switcher';
 import { nextColor } from './sidebar';
 
 export interface ViewTab {
@@ -33,6 +34,11 @@ export interface MobileHeaderProps {
   /** The user's orgs in sidebar order: a sideways swipe on the switcher moves between them. */
   orgs?: readonly Org[] | undefined;
   onSwitchOrg?: ((org: Org) => void) | undefined;
+  /** All organisations is offered (two orgs or more): first in the swipe order (ADR 0073 A7). */
+  withAll?: boolean | undefined;
+  /** An All organisations screen: the switcher shows it in place of an org. */
+  allActive?: boolean | undefined;
+  onSwitchAll?: (() => void) | undefined;
   /** Press-and-slide on the switcher (ADR 0063). */
   orgSlide?: OrgSlide | undefined;
   /** Icon actions before the ⋯ menu. */
@@ -64,6 +70,9 @@ export function MobileHeader({
   onOpenOrgs,
   orgs,
   onSwitchOrg,
+  withAll = false,
+  allActive = false,
+  onSwitchAll,
   orgSlide,
   actions,
   menu,
@@ -125,14 +134,16 @@ export function MobileHeader({
         <div className="flex h-sheet-header items-center gap-1 ps-2 pe-1">
           {/* 03 §2.10: the mark heads every phone screen; the title or org switcher names it. */}
           <LogoMark size={28} className="mx-1" />
-          {org ? (
+          {org || allActive ? (
             <>
               <h1 className="sr-only">{context ? `${title} · ${context}` : title}</h1>
               <OrgSwitcher
-                org={org}
-                orgs={orgs ?? [org]}
+                org={allActive ? null : (org ?? null)}
+                orgs={orgs ?? (org ? [org] : [])}
+                withAll={withAll}
                 onOpen={onOpenOrgs}
                 onSwitch={onSwitchOrg}
+                onSwitchAll={onSwitchAll}
                 slide={orgSlide}
               />
             </>
@@ -184,9 +195,13 @@ export interface OrgSwitcherSheetProps {
   onOpenChange: (open: boolean) => void;
   orgs: readonly Org[];
   activeOrgId?: string | undefined;
-  /** Press-and-slide: the org under the finger (ADR 0063). */
+  /** Press-and-slide: the org under the finger (ADR 0063); `allOrgsOptionId` for All. */
   highlightedOrgId?: string | null | undefined;
   onSelect: (org: Org) => void;
+  /** All organisations, the first entry (ADR 0073 A7); left out without it. */
+  onSelectAll?: (() => void) | undefined;
+  /** An All organisations screen is shown: its entry is the checked one. */
+  allActive?: boolean | undefined;
   /** Resolve to close the sheet; throw to show the error in the form. */
   onCreateOrg: (input: CreateOrgInput) => Promise<void> | void;
   isStatic?: boolean;
@@ -194,7 +209,10 @@ export interface OrgSwitcherSheetProps {
   defaultCreating?: boolean;
 }
 
-/** The header's org switcher (02 §13.1): the user's orgs in sidebar order, and "Create org". */
+/**
+ * The header's org switcher (02 §13.1): All organisations (with two orgs or more), the user's
+ * orgs in sidebar order, and "Create org".
+ */
 export function OrgSwitcherSheet({
   isOpen,
   onOpenChange,
@@ -202,6 +220,8 @@ export function OrgSwitcherSheet({
   activeOrgId,
   highlightedOrgId,
   onSelect,
+  onSelectAll,
+  allActive = false,
   onCreateOrg,
   isStatic = false,
   defaultCreating = false,
@@ -233,6 +253,20 @@ export function OrgSwitcherSheet({
         </div>
       ) : (
         <div className="flex flex-col" data-testid="org-sheet">
+          {onSelectAll && (
+            <SheetOption
+              leading={<AllOrgsMark size={24} />}
+              label={ts('allOrgs.title')}
+              data-org-option={allOrgsOptionId}
+              className={cn(highlightedOrgId === allOrgsOptionId && 'bg-bg-muted')}
+              checked={allActive}
+              aria-pressed={allActive}
+              onPress={() => {
+                onSelectAll();
+                onOpenChange(false);
+              }}
+            />
+          )}
           {orgs.map((org) => (
             <SheetOption
               key={org.id}
@@ -250,8 +284,8 @@ export function OrgSwitcherSheet({
               label={org.name}
               data-org-option={org.id}
               className={cn(org.id === highlightedOrgId && 'bg-bg-muted')}
-              checked={org.id === activeOrgId}
-              aria-pressed={org.id === activeOrgId}
+              checked={!allActive && org.id === activeOrgId}
+              aria-pressed={!allActive && org.id === activeOrgId}
               onPress={() => {
                 onSelect(org);
                 onOpenChange(false);

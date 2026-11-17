@@ -14,18 +14,23 @@ function BehaviourRoute() {
   const me = useMe();
   const update = useUpdateProfile();
   if (!me.data) return null;
-  const prefs = me.data.prefs ?? DEFAULT_PREFS;
+  // Defaults under the stored prefs: a server older than a pref leaves it out.
+  const prefs = { ...DEFAULT_PREFS, ...me.data.prefs };
   return (
     <BehaviourPage
+      orgs={me.data.orgs}
       value={{
         parseTitleDates: prefs.parseTitleDates,
         completeHideMs: prefs.completeHideMs,
         swipeLeft: prefs.swipeLeft,
         swipeRight: prefs.swipeRight,
+        defaultOrgId: prefs.defaultOrgId,
+        startPage: prefs.startPage,
       }}
       onChange={(patch: Partial<BehaviourSettings>) =>
         update
-          // `PATCH /me` takes partial prefs (FR-SET-2).
+          // `PATCH /me` takes partial prefs (FR-SET-2); online-only, and the cached `/me` is
+          // written only while the session lasts (`useUpdateProfile`, ADR 0051).
           .mutateAsync({ prefs: patch })
           .then(() => toast({ message: t('profile.saved'), durationMs: 2500 }))
           .catch(() => toast({ message: t('error.saveFailed'), tone: 'danger' }))

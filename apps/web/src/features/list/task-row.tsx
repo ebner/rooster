@@ -5,6 +5,7 @@ import { cn } from '../../lib/cn';
 import { type ListUiState, useRowUi } from '../../state/list-store';
 import { iconStrokeWidth } from '../../ui/button';
 import { TaskCheckbox } from '../../ui/task-checkbox';
+import { OrgChip } from '../all-orgs/org-chip';
 import { DateCell, type DueValue } from '../dates';
 import type { ReminderSlotProps } from '../dates/date-popover';
 import { RowAssignee } from '../people/assignee-avatar';
@@ -117,8 +118,11 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
     mobile = false,
     shared,
     everyone = false,
+    orgs,
   } = useListContext();
   const { id, task, draft, level, expandable, expanded, breadcrumb } = row;
+  // Phase 13 (ADR 0073 A2): All organisations names each row's org.
+  const org = row.orgId === undefined ? undefined : orgs?.get(row.orgId);
   const subtaskRow = compact || level > 2;
   const indent = level - baseLevel;
   // One packed subscription per row: 500 rows × several selectors per store update add up.
@@ -258,7 +262,7 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
   // 10 §5: the row reads "Book dentist, due tomorrow, not completed, 2 of 5 subtasks". Focus
   // sits on the title, so it carries the rest as its description: an attribute, not a node,
   // so the row's text stays its title.
-  const rowName = useTaskRowName(task, label, dateCtx);
+  const rowName = useTaskRowName(task, label, dateCtx, org?.name);
   return (
     <GridRow
       aria-level={level}
@@ -418,6 +422,7 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
             data-row-meta
             className="flex min-w-0 max-w-[50%] shrink-0 items-center gap-2 overflow-hidden ps-2 no-underline empty:hidden"
           >
+            {org && <OrgChip org={org} />}
             {row.groupChip !== undefined && <GroupChip name={row.groupChip} />}
             <RowTagChips task={task} />
             <DescriptionIndicator task={task} />
@@ -427,7 +432,9 @@ export const TaskRow = memo(function TaskRow({ row, compact = false }: TaskRowPr
             {task.recurrence && (
               <RepeatIndicator rule={task.recurrence} basis={task.recurrenceBasis} ctx={dateCtx} />
             )}
-            {assignee !== null && <RowAssignee orgId={controller.orgId} assigneeId={assignee} />}
+            {assignee !== null && (
+              <RowAssignee orgId={row.orgId ?? controller.orgId} assigneeId={assignee} />
+            )}
           </span>
         )}
       </GridCell>

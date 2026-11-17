@@ -19,7 +19,9 @@ import { SectionHeader } from '../list/section-header';
 import { GroupChip } from '../list/task-meta';
 import { TaskRow } from '../list/task-row';
 import { ViewEmptyState } from '../list/view-empty';
-import { fixtureIds } from '../shell/fixtures';
+import { BehaviourPage, type BehaviourSettings } from '../settings/behaviour-page';
+import { fixtureIds, fixtureMe } from '../shell/fixtures';
+import { SidebarAllSection } from '../shell/sidebar-all-section';
 import { SidebarItem } from '../shell/sidebar-item';
 import { sidebarViews } from '../shell/sidebar-views';
 
@@ -129,6 +131,53 @@ function SidebarSpecimens() {
           />
         ))}
       </div>
+    </>
+  );
+}
+
+/**
+ * Phase 13 (ADR 0073 A): the sidebar's All organisations section (summed badges, Today active;
+ * nothing overdue, Next 7 days active; the rail) and Settings → Behaviour with several orgs.
+ */
+function AllOrgsSpecimens() {
+  const { t } = useTranslation('shell');
+  const [behaviour, setBehaviour] = useState<BehaviourSettings>({
+    parseTitleDates: true,
+    completeHideMs: 1500,
+    swipeLeft: 'date',
+    swipeRight: 'complete',
+    defaultOrgId: fixtureIds.companyOrg,
+    startPage: 'all-today',
+  });
+  return (
+    <>
+      <Group title={t('allOrgs.dev.sidebar')}>
+        <figure className="flex flex-col gap-2">
+          <div className="w-sidebar rounded-md bg-bg-sidebar p-3">
+            <SidebarAllSection activeView="today" counts={{ today: 6, week: 9, overdue: 2 }} />
+          </div>
+          <figcaption className="text-xs text-text-muted">{t('allOrgs.dev.badges')}</figcaption>
+        </figure>
+        <figure className="flex flex-col gap-2">
+          <div className="w-sidebar rounded-md bg-bg-sidebar p-3">
+            <SidebarAllSection activeView="week" counts={{ today: 3, week: 5, overdue: 0 }} />
+          </div>
+          <figcaption className="text-xs text-text-muted">{t('allOrgs.dev.noOverdue')}</figcaption>
+        </figure>
+        <figure className="flex flex-col gap-2">
+          <div className="w-rail rounded-md bg-bg-sidebar p-2">
+            <SidebarAllSection rail activeView="today" counts={{ today: 6, week: 9, overdue: 2 }} />
+          </div>
+          <figcaption className="text-xs text-text-muted">{t('allOrgs.dev.rail')}</figcaption>
+        </figure>
+      </Group>
+      <Group title={t('allOrgs.dev.settings')} className="flex-col items-stretch">
+        <BehaviourPage
+          orgs={fixtureMe.orgs}
+          value={behaviour}
+          onChange={(patch) => setBehaviour((b) => ({ ...b, ...patch }))}
+        />
+      </Group>
     </>
   );
 }
@@ -249,6 +298,7 @@ export function ViewsKitchenSection() {
           <Group title={t('dev.sidebar')}>
             <SidebarSpecimens />
           </Group>
+          <AllOrgsSpecimens />
         </ListTransportContext.Provider>
       </QueryClientProvider>
     </Section>

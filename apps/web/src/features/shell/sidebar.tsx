@@ -27,11 +27,14 @@ import { cn } from '../../lib/cn';
 import { IconButton } from '../../ui/icon-button';
 import { Logo, LogoMark } from '../../ui/logo';
 import { overlayOffsetPx, popoverMotion, popoverSurface } from '../../ui/popover';
+import { hasAllOrgs } from '../all-orgs/default-org';
 import { useInboxNav } from '../collab/inbox-nav';
 import { openPalette } from '../palette/store';
+import type { AllCounts } from '../views/view-counts';
 import { CreateOrgForm } from './create-org-form';
-import { type OrgViewId, paths } from './paths';
+import { type AllViewId, type OrgViewId, paths } from './paths';
 import { reorderIntent } from './reorder';
+import { SidebarAllSection } from './sidebar-all-section';
 import { SidebarItem } from './sidebar-item';
 import { type OrgCounts, SidebarOrgSection } from './sidebar-org-section';
 import { UserMenu } from './user-menu';
@@ -47,6 +50,10 @@ export interface SidebarProps {
   orgs: readonly Org[];
   active?: SidebarActive | null | undefined;
   counts?: Partial<Record<string, OrgCounts>> | undefined;
+  /** The All organisations view shown (or under the pane), else null (ADR 0073 A). */
+  activeAllView?: AllViewId | null | undefined;
+  /** Fixed All organisations badges (kitchen sink, tests); otherwise live. */
+  allCounts?: AllCounts | undefined;
   locale: Locale;
   collapsed: boolean;
   onToggleCollapsed?: (() => void) | undefined;
@@ -65,14 +72,17 @@ export interface SidebarProps {
 const verticalOnly: Modifier = ({ transform }) => ({ ...transform, x: 0 });
 
 /**
- * 02 §2 / 03 §3.10: logo, Search, Inbox, one section per org (drag to reorder), the
- * "New organisation" entry and the user menu. 248 px wide, or a 56 px icon rail.
+ * 02 §2 / 03 §3.10: logo, Search, Inbox, All organisations (with two orgs or more), one
+ * section per org (drag to reorder), the "New organisation" entry and the user menu. 248 px
+ * wide, or a 56 px icon rail.
  */
 export function Sidebar({
   user,
   orgs,
   active,
   counts,
+  activeAllView = null,
+  allCounts,
   locale,
   collapsed,
   onToggleCollapsed,
@@ -152,8 +162,15 @@ export function Sidebar({
         )}
       </div>
 
+      {/*
+       * The rows keep their height once the sections outgrow the sidebar (`*:shrink-0`): the
+       * column scrolls instead of squeezing Search and Inbox below their target size.
+       */}
       <div
-        className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto pb-4', rail ? 'px-2' : 'px-3')}
+        className={cn(
+          'flex min-h-0 flex-1 flex-col overflow-y-auto pb-4 *:shrink-0',
+          rail ? 'px-2' : 'px-3',
+        )}
       >
         {rail && onToggleCollapsed && (
           <div className="flex justify-center pb-2">
@@ -175,6 +192,10 @@ export function Sidebar({
         <InboxEntry rail={rail} />
 
         <div className={cn('mt-4 flex flex-col', rail ? 'gap-3' : 'gap-4')}>
+          {/* From the second org on: with one org it would repeat that org's views. */}
+          {hasAllOrgs({ orgs: [...orgs] }) && (
+            <SidebarAllSection activeView={activeAllView} counts={allCounts} rail={rail} />
+          )}
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}

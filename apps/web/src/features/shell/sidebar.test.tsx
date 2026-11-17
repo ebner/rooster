@@ -173,3 +173,63 @@ describe('Sidebar rail', () => {
     expect(localStorage.getItem(sidebarStorageKey)).toBe('0');
   });
 });
+
+describe('Sidebar: All organisations (ADR 0073 A)', () => {
+  const allSection = () => screen.getByRole('region', { name: 'All organisations' });
+
+  test('sits above the orgs with Today, Next 7 days and Overdue linking to /all', () => {
+    renderSidebar();
+    const regions = within(screen.getByRole('navigation', { name: 'Main' })).getAllByRole('region');
+    expect(regions.map((r) => r.getAttribute('aria-label'))).toEqual([
+      'All organisations',
+      personal.name,
+      company.name,
+      club.name,
+    ]);
+    const links = within(allSection()).getAllByRole('link');
+    expect(links.map((l) => [l.textContent, l.getAttribute('href')])).toEqual([
+      ['Today', '/all/today'],
+      ['Next 7 days', '/all/week'],
+      ['Overdue', '/all/overdue'],
+    ]);
+  });
+
+  test('is left out with a single org', () => {
+    renderSidebar({ orgs: [personal] });
+    expect(screen.queryByRole('region', { name: 'All organisations' })).toBeNull();
+  });
+
+  test('summed badges: Today, Overdue in danger only above zero, none for Next 7 days', () => {
+    renderSidebar({ allCounts: { today: 6, week: 9, overdue: 2 } });
+    const link = (name: string) =>
+      within(allSection()).getByRole('link', { name: new RegExp(`^${name}`) });
+    expect(link('Today').textContent).toBe('Today6');
+    expect(link('Next 7 days').textContent).toBe('Next 7 days');
+    expect(link('Overdue').textContent).toBe('Overdue2');
+    expect(link('Overdue').querySelector('.text-text-danger')).not.toBeNull();
+  });
+
+  test('no Overdue badge at zero', () => {
+    renderSidebar({ allCounts: { today: 1, week: 1, overdue: 0 } });
+    expect(within(allSection()).getByRole('link', { name: 'Overdue' }).textContent).toBe('Overdue');
+  });
+
+  test('marks the All view shown (or under the pane) as the current page', () => {
+    renderSidebar({ activeAllView: 'week' });
+    expect(
+      within(allSection()).getByRole('link', { name: 'Next 7 days' }).getAttribute('aria-current'),
+    ).toBe('page');
+    // Not the orgs' own Next 7 days.
+    const orgWeek = within(screen.getByRole('region', { name: company.name })).getByRole('link', {
+      name: 'Next 7 days',
+    });
+    expect(orgWeek.getAttribute('aria-current')).toBeNull();
+  });
+
+  test('the rail names each entry with "All organisations"', () => {
+    renderSidebar({ collapsed: true, allCounts: { today: 3, week: 0, overdue: 0 } });
+    expect(
+      within(allSection()).getByRole('link', { name: 'Today · All organisations' }),
+    ).toBeTruthy();
+  });
+});

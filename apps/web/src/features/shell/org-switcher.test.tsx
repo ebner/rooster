@@ -3,8 +3,9 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Org } from '../../data/types';
 import { longPressMs } from '../list/gestures';
 import { fixtureMe } from './fixtures';
-import { OrgSwitcher } from './org-switcher';
-import { switchView } from './sidebar-views';
+import { OrgSwitcherSheet } from './mobile-header';
+import { allOrgsOptionId, OrgSwitcher } from './org-switcher';
+import { switchAllView, switchView } from './sidebar-views';
 
 function fixtureOrg(index: number): Org {
   const org = fixtureMe.orgs[index];
@@ -163,5 +164,116 @@ describe('switchView', () => {
     expect(switchView('everyone', company)).toBe('everyone');
     expect(switchView('everyone', personal)).toBe('my');
     expect(switchView(null, company)).toBe('my');
+  });
+
+  test('ADR 0073 A7 to All organisations: Today, Next 7 days and Overdue stay, else Today', () => {
+    expect(switchAllView('week')).toBe('week');
+    expect(switchAllView('overdue')).toBe('overdue');
+    expect(switchAllView('my')).toBe('today');
+    expect(switchAllView('nodate')).toBe('today');
+    expect(switchAllView('everyone')).toBe('today');
+    expect(switchAllView(null)).toBe('today');
+  });
+});
+
+describe('OrgSwitcher with All organisations (ADR 0073 A7)', () => {
+  function setupAll(org: Org | null) {
+    const onSwitch = vi.fn();
+    const onSwitchAll = vi.fn();
+    render(
+      <OrgSwitcher
+        org={org}
+        orgs={orgs}
+        withAll
+        onOpen={vi.fn()}
+        onSwitch={onSwitch}
+        onSwitchAll={onSwitchAll}
+      />,
+    );
+    return { onSwitch, onSwitchAll, button: screen.getByTestId('org-switcher') };
+  }
+
+  test('All organisations is the first stop: right from the first org goes there', () => {
+    const { onSwitch, onSwitchAll, button } = setupAll(personal);
+    drag(button, 120);
+    act(() => vi.runAllTimers());
+    expect(onSwitchAll).toHaveBeenCalledOnce();
+    expect(onSwitch).not.toHaveBeenCalled();
+  });
+
+  test('on an All screen it shows All organisations; left goes to the first org', () => {
+    const { onSwitch, button } = setupAll(null);
+    expect(button.getAttribute('aria-label')).toBe('All organisations, switch organisation');
+    expect(button.textContent).toContain('All organisations');
+    expect(screen.getAllByTestId('all-orgs-mark').length).toBeGreaterThan(0);
+    drag(button, -120);
+    act(() => vi.runAllTimers());
+    expect(onSwitch).toHaveBeenCalledWith(personal);
+  });
+
+  test('past All organisations a swipe only springs back', () => {
+    const { onSwitch, onSwitchAll, button } = setupAll(null);
+    drag(button, 120);
+    act(() => vi.runAllTimers());
+    expect(onSwitch).not.toHaveBeenCalled();
+    expect(onSwitchAll).not.toHaveBeenCalled();
+  });
+
+  test('the dots count All organisations first', () => {
+    setupAll(company);
+    const dots = screen.getByTestId('org-dots').children;
+    expect(dots).toHaveLength(3);
+    expect(dots[2]?.className).toContain('bg-text-secondary');
+  });
+});
+
+describe('OrgSwitcherSheet with All organisations (ADR 0073 A7)', () => {
+  function sheet(props: Partial<Parameters<typeof OrgSwitcherSheet>[0]> = {}) {
+    const onSelect = vi.fn();
+    const onSelectAll = vi.fn();
+    const onOpenChange = vi.fn();
+    render(
+      <OrgSwitcherSheet
+        isStatic
+        isOpen
+        onOpenChange={onOpenChange}
+        orgs={orgs}
+        activeOrgId={personal.id}
+        onSelect={onSelect}
+        onSelectAll={onSelectAll}
+        onCreateOrg={vi.fn()}
+        {...props}
+      />,
+    );
+    const options = () =>
+      [...screen.getByTestId('org-sheet').querySelectorAll('[data-org-option]')].map((el) =>
+        el.getAttribute('data-org-option'),
+      );
+    return { onSelect, onSelectAll, onOpenChange, options };
+  }
+
+  test('lists All organisations first and selects it', () => {
+    const { onSelectAll, onOpenChange, options } = sheet();
+    expect(options()).toEqual([allOrgsOptionId, personal.id, company.id]);
+    const all = screen.getByRole('button', { name: 'All organisations' });
+    expect(all.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(all);
+    expect(onSelectAll).toHaveBeenCalledOnce();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  test('on an All screen its entry is the checked one, not the org', () => {
+    sheet({ allActive: true });
+    expect(
+      screen.getByRole('button', { name: 'All organisations' }).getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(screen.getByRole('button', { name: personal.name }).getAttribute('aria-pressed')).toBe(
+      'false',
+    );
+  });
+
+  test('without onSelectAll (one org) there is no All entry', () => {
+    sheet({ onSelectAll: undefined });
+    expect(screen.queryByRole('button', { name: 'All organisations' })).toBeNull();
   });
 });

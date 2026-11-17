@@ -13,6 +13,8 @@ export interface ViewRowOptions {
   draftTask: (draft: Draft) => Task;
   /** FR-TAG-4: only rows carrying one of these tags (empty: all). */
   tagFilter?: readonly string[];
+  /** Phase 13 (ADR 0073 A2): All organisations: each task's org, shown as a chip. */
+  orgOf?: (taskId: string) => string | undefined;
 }
 
 /** Inline add goes into every section but Overdue (02 §3.4, §10). */
@@ -82,6 +84,10 @@ export function buildViewRows(
     const name = view === 'today' && groupId ? state.groups[groupId]?.name : undefined;
     return name === undefined ? {} : { groupChip: name };
   };
+  const orgOf = (taskId: string) => {
+    const orgId = options.orgOf?.(taskId);
+    return orgId === undefined ? {} : { orgId };
+  };
   const taskRow = (task: Task, sectionId: string): TaskRow => {
     const groupId = groupOfTask(state, task) ?? inboxId;
     return reuse<TaskRow>({
@@ -97,6 +103,7 @@ export function buildViewRows(
       breadcrumb: breadcrumbOf(task.parentId),
       sectionId,
       ...chipOf(groupId),
+      ...orgOf(task.id),
     });
   };
   const draftRow = (draft: Draft, sectionId: string): TaskRow =>

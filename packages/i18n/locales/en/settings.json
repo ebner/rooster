@@ -197,6 +197,16 @@
       "move": "Move to group",
       "delete": "Delete",
       "none": "Nothing"
+    },
+    "allOrgsTitle": "All organisations",
+    "allOrgsBody": "Today, Next 7 days and Overdue across every organisation you’re in.",
+    "defaultOrg": "Default organisation",
+    "defaultOrgBody": "Tasks you add in All organisations go here. Type ^ and an organisation’s name to pick another one.",
+    "startPage": {
+      "label": "Open rooster on",
+      "body": "Where rooster starts when you open it.",
+      "last": "The last view",
+      "allToday": "All organisations · Today"
     }
   },
   "data": {

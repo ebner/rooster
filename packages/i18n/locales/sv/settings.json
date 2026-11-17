@@ -197,6 +197,16 @@
       "move": "Flytta till grupp",
       "delete": "Ta bort",
       "none": "Ingenting"
+    },
+    "allOrgsTitle": "Alla organisationer",
+    "allOrgsBody": "Idag, Kommande 7 dagar och Försenade i alla organisationer du är med i.",
+    "defaultOrg": "Standardorganisation",
+    "defaultOrgBody": "Uppgifter du lägger till i Alla organisationer hamnar här. Skriv ^ och en organisations namn för att välja en annan.",
+    "startPage": {
+      "label": "Öppna rooster på",
+      "body": "Där rooster startar när du öppnar det.",
+      "last": "Den senaste vyn",
+      "allToday": "Alla organisationer · Idag"
     }
   },
   "data": {

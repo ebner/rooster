@@ -42,6 +42,11 @@ export function BulkBar({
   const [dateOpen, setDateOpen] = useState(false);
   const canMoveOrg = useCanMoveToOrg() && !everyone;
   const moveOpen = useListUi((s) => s.popover?.kind === 'moveTo' && s.popover.rowId === 'bulk');
+  // All organisations (ADR 0073 A3): tags, groups and people belong to one org, so those
+  // actions show only while the selection is in one.
+  const scope = controller.scoped(ids);
+  const canAssign =
+    shared && scope !== null && (scope === controller || scope.deps.members !== undefined);
 
   const state = controller.state();
   const values = ids.map((id) => {
@@ -90,7 +95,7 @@ export function BulkBar({
       >
         <span className="max-tablet:sr-only">{t('bulk.date')}</span>
       </Button>
-      {!everyone && (
+      {!everyone && scope && (
         <Button
           ref={moveRef}
           variant="ghost-inverse"
@@ -123,16 +128,18 @@ export function BulkBar({
           <span className="max-tablet:sr-only">{t('bulk.moveToOrg')}</span>
         </Button>
       )}
-      <Button
-        data-bulk-tag
-        variant="ghost-inverse"
-        size="sm"
-        icon={Hash}
-        onPress={() => controller.ui().set({ popover: { kind: 'tag', rowId: 'bulk' } })}
-      >
-        <span className="max-tablet:sr-only">{t('bulk.tag')}</span>
-      </Button>
-      {shared && (
+      {scope && (
+        <Button
+          data-bulk-tag
+          variant="ghost-inverse"
+          size="sm"
+          icon={Hash}
+          onPress={() => controller.ui().set({ popover: { kind: 'tag', rowId: 'bulk' } })}
+        >
+          <span className="max-tablet:sr-only">{t('bulk.tag')}</span>
+        </Button>
+      )}
+      {canAssign && (
         <Button
           data-bulk-assign
           variant="ghost-inverse"

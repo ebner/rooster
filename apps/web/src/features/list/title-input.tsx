@@ -1,4 +1,4 @@
-import { assigneeTokenAt } from '@rooster/core/dates';
+import { assigneeTokenAt, orgTokenAt } from '@rooster/core/dates';
 import { TASK_TITLE_MAX } from '@rooster/core/limits';
 import {
   type ClipboardEvent,
@@ -10,6 +10,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { Org } from '../../data/types';
 import { matches } from '../../keymap';
 import { cn } from '../../lib/cn';
 import { detectPlatform } from '../../lib/platform';
@@ -17,11 +18,14 @@ import type { Caret } from '../../state/list-store';
 import { useTagsStore } from '../../state/tags-store';
 import { Avatar } from '../../ui/avatar';
 import { isMobileViewport } from '../../ui/use-media';
+import { OrgChip } from '../all-orgs/org-chip';
+import { OrgSuggestList } from '../all-orgs/org-suggest';
+import { orgHandle, suggestOrgs } from '../all-orgs/org-token';
 import { memberHandle, resolveAssigneeToken, suggestMembers } from '../people/assignee-token';
 import type { Person } from '../people/members';
 import { TagDot } from '../tags/tag-dot';
 import { type TagOption, tagOptions } from '../tags/tag-options';
-import type { CommitResult } from './controller';
+import type { CommitResult, ListController } from './controller';
 import { useListContext } from './list-context';
 import {
   blankSpan,
@@ -88,11 +92,22 @@ interface Highlight {
   assignee: Span | null;
   /** P10 (02 §8.1): `!15m`/`!1h`/`!1d`/`!due` reminder tokens. */
   reminders: Span[];
+  /** Phase 13 (ADR 0073 A4): `^org` in a new task of All organisations. */
+  orgToken: Span | null;
+  /** The org a new task of All organisations goes to (the row's chip). */
+  org: Org | null;
 }
 
 interface Suggest {
   token: Span & { name: string };
   options: TagOption[];
+  active: number;
+}
+
+/** The `^org` autocomplete: the viewer's orgs (All organisations, ADR 0073 A4). */
+interface OrgSuggest {
+  token: Span & { query: string };
+  options: Org[];
   active: number;
 }
 
@@ -181,9 +196,12 @@ export function TitleInput({
     group: null,
     assignee: null,
     reminders: [],
+    orgToken: null,
+    org: null,
   });
   const [suggest, setSuggest] = useState<Suggest | null>(null);
   const [memberSuggest, setMemberSuggest] = useState<MemberSuggest | null>(null);
+  const [orgSuggest, setOrgSuggest] = useState<OrgSuggest | null>(null);
   const tagsById = useTagsStore((s) => s.byId);
   const [colonChip, setColonChip] = useState<'off' | 'shown' | 'declined'>('off');
   const [pasteLines, setPasteLines] = useState<string[] | null>(null);
@@ -195,17 +213,25 @@ export function TitleInput({
     return Boolean(view && draft?.sectionId && !draft.parentId);
   };
 
-  /** A new task in a shared org: `@name` picks its assignee (02 §3.4); none in personal orgs. */
-  const members = (): readonly Person[] => {
+  /**
+   * A new task in a shared org: `@name` picks its assignee (02 §3.4); none in personal orgs.
+   * `scope` is the org the task goes to (All organisations: the `^org` token's or the default).
+   */
+  const members = (scope: ListController = controller): readonly Person[] => {
     if (!shared || !controller.ui().drafts.some((d) => d.id === rowId)) return [];
-    return controller.deps.members?.() ?? [];
+    return scope.deps.members?.() ?? [];
   };
 
+  /** What the tokens resolve against: this list, or the org a new task goes to (ADR 0073). */
+  const scopeOf = (text: string) => controller.titleScope(rowId, text, spans(text));
+
   const reparse = () => {
-    const text = input.current?.value ?? '';
-    const skip = ignoredSpans(text, ignored.current);
-    const groups = Object.values(controller.state()?.groups ?? {});
-    const who = resolveAssigneeToken(text, members(), controller.deps.userId, skip);
+    const raw = input.current?.value ?? '';
+    const skip = ignoredSpans(raw, ignored.current);
+    const scope = controller.titleScope(rowId, raw, skip);
+    const text = scope.orgToken ? blankSpan(raw, scope.orgToken) : raw;
+    const groups = Object.values(scope.controller.state()?.groups ?? {});
+    const who = resolveAssigneeToken(text, members(scope.controller), controller.deps.userId, skip);
     const withoutWho = who ? blankSpan(text, who) : text;
     const group = groupTokens() ? resolveGroupToken(withoutWho, groups, skip) : null;
     // A group named like a date ("Today") is the group, not a date phrase.
@@ -216,19 +242,61 @@ export function TitleInput({
       ? titleReminderTokens(text, skip, match !== null || controller.hasDueFor(rowId))
       : [];
     setHighlight({
-      text,
+      text: raw,
       span: match ? { start: match.start, end: match.end } : null,
       tags: findTagTokens(text, skip),
       group: group ? { start: group.start, end: group.end } : null,
       assignee: who ? { start: who.start, end: who.end } : null,
       reminders: reminders.map(({ start, end }) => ({ start, end })),
+      orgToken: scope.orgToken,
+      org: scope.org,
     });
+  };
+
+  /** The org autocomplete for the `^partial` token at the caret (ADR 0073 A4). */
+  const updateOrgSuggest = () => {
+    const el = input.current;
+    const orgs = controller.orgChoices(rowId);
+    const token =
+      el && el.selectionStart === el.selectionEnd && orgs.length > 0
+        ? orgTokenAt(el.value, el.selectionStart ?? 0)
+        : null;
+    if (!token) {
+      setOrgSuggest(null);
+      return;
+    }
+    const options = suggestOrgs(token.query, orgs).slice(0, 8);
+    setOrgSuggest((current) =>
+      options.length === 0
+        ? null
+        : {
+            token,
+            options,
+            active:
+              current && current.token.start === token.start
+                ? Math.min(current.active, options.length - 1)
+                : 0,
+          },
+    );
+  };
+
+  const acceptOrg = (org: Org | undefined) => {
+    const el = input.current;
+    if (!el || !orgSuggest || !org) return;
+    const { start, end } = orgSuggest.token;
+    const insert = `${orgHandle(org, controller.orgChoices(rowId))} `;
+    const after = el.value.slice(end).replace(/^ /, '');
+    el.value = `${el.value.slice(0, start)}${insert}${after}`.slice(0, TASK_TITLE_MAX);
+    const caretAt = Math.min(start + insert.length, el.value.length);
+    el.setSelectionRange(caretAt, caretAt);
+    setOrgSuggest(null);
+    reparse();
   };
 
   /** The member autocomplete for the `@partial` token at the caret (02 §3.4). */
   const updateMemberSuggest = () => {
     const el = input.current;
-    const all = members();
+    const all = members(scopeOf(el?.value ?? '').controller);
     const token =
       el && el.selectionStart === el.selectionEnd && all.length > 0
         ? assigneeTokenAt(el.value, el.selectionStart ?? 0)
@@ -256,7 +324,7 @@ export function TitleInput({
     const el = input.current;
     if (!el || !memberSuggest || !member) return;
     const { start, end } = memberSuggest.token;
-    const insert = `${memberHandle(member, members())} `;
+    const insert = `${memberHandle(member, members(scopeOf(el.value).controller))} `;
     const after = el.value.slice(end).replace(/^ /, '');
     el.value = `${el.value.slice(0, start)}${insert}${after}`.slice(0, TASK_TITLE_MAX);
     const caretAt = Math.min(start + insert.length, el.value.length);
@@ -268,6 +336,7 @@ export function TitleInput({
   /** The autocomplete for the `#partial` token at the caret (02 §3.4). */
   const updateSuggest = () => {
     updateMemberSuggest();
+    updateOrgSuggest();
     const el = input.current;
     if (!el || el.selectionStart !== el.selectionEnd) {
       setSuggest(null);
@@ -278,7 +347,12 @@ export function TitleInput({
       setSuggest(null);
       return;
     }
-    const options = tagOptions(Object.values(tagsById), token.name, token.name !== '').slice(0, 8);
+    // All organisations: the tags of the org the new task goes to.
+    const scope = scopeOf(el.value).controller;
+    const tags = Object.values(tagsById).filter(
+      (tag) => scope === controller || tag.orgId === scope.orgId,
+    );
+    const options = tagOptions(tags, token.name, token.name !== '').slice(0, 8);
     setSuggest((current) =>
       options.length === 0
         ? null
@@ -354,7 +428,7 @@ export function TitleInput({
   });
 
   const value = () => input.current?.value ?? '';
-  const spans = () => ignoredSpans(value(), ignored.current);
+  const spans = (text = value()) => ignoredSpans(text, ignored.current);
   const apply = (result: CommitResult) => {
     if (result.restore !== undefined && input.current) {
       input.current.value = result.restore;
@@ -397,6 +471,25 @@ export function TitleInput({
       if (event.key === 'Escape') {
         event.preventDefault();
         setMemberSuggest(null);
+        return;
+      }
+    }
+    if (orgSuggest) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const step = event.key === 'ArrowDown' ? 1 : -1;
+        const count = orgSuggest.options.length;
+        setOrgSuggest({ ...orgSuggest, active: (orgSuggest.active + step + count) % count });
+        return;
+      }
+      if ((event.key === 'Enter' || event.key === 'Tab') && !event.shiftKey) {
+        event.preventDefault();
+        acceptOrg(orgSuggest.options[orgSuggest.active]);
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOrgSuggest(null);
         return;
       }
     }
@@ -494,6 +587,7 @@ export function TitleInput({
         highlight.span,
         highlight.group,
         highlight.assignee,
+        highlight.orgToken,
         ...highlight.reminders,
       ].find((s) => s && at === s.end);
       if (collapsed && span && highlight.text === el.value) {
@@ -535,9 +629,13 @@ export function TitleInput({
   const onClick = (event: MouseEvent<HTMLInputElement>) => {
     // Clicking the highlighted phrase cancels it for this edit (02 §8.1).
     const at = event.currentTarget.selectionStart ?? -1;
-    const span = [highlight.span, highlight.group, highlight.assignee, ...highlight.reminders].find(
-      (s) => s && at > s.start && at < s.end,
-    );
+    const span = [
+      highlight.span,
+      highlight.group,
+      highlight.assignee,
+      highlight.orgToken,
+      ...highlight.reminders,
+    ].find((s) => s && at > s.start && at < s.end);
     if (span && highlight.text === value()) {
       ignored.current = [...ignored.current, value().slice(span.start, span.end)];
       reparse();
@@ -547,6 +645,7 @@ export function TitleInput({
   const onBlur = () => {
     setSuggest(null);
     setMemberSuggest(null);
+    setOrgSuggest(null);
     if (committed.current) return;
     // A sheet from the accessory bar has focus for a moment; the edit resumes after it.
     if (controller.ui().suspendedEdit === rowId) return;
@@ -558,17 +657,20 @@ export function TitleInput({
     if (mirror.current && input.current) mirror.current.scrollLeft = input.current.scrollLeft;
   };
 
-  const { text, span, group, assignee } = highlight;
-  const marks = [span, group, assignee, ...highlight.tags, ...highlight.reminders].filter(
+  const { text, span, group, assignee, orgToken } = highlight;
+  const marks = [span, group, assignee, orgToken, ...highlight.tags, ...highlight.reminders].filter(
     (m): m is Span => m !== null,
   );
   const listId = `tag-suggest-${rowId}`;
   const memberListId = `member-suggest-${rowId}`;
+  const orgListId = `org-suggest-${rowId}`;
   const open = memberSuggest
     ? { id: memberListId, active: memberSuggest.active }
-    : suggest
-      ? { id: listId, active: suggest.active }
-      : null;
+    : orgSuggest
+      ? { id: orgListId, active: orgSuggest.active }
+      : suggest
+        ? { id: listId, active: suggest.active }
+        : null;
   return (
     <div className={cn('relative flex min-w-0 flex-1 items-center', className)}>
       {marks.length > 0 && (
@@ -627,7 +729,16 @@ export function TitleInput({
           ))}
         </div>
       )}
-      {suggest && !memberSuggest && (
+      {orgSuggest && !memberSuggest && (
+        <OrgSuggestList
+          id={orgListId}
+          orgs={orgSuggest.options}
+          active={orgSuggest.active}
+          onPick={(index) => acceptOrg(orgSuggest.options[index])}
+          className="absolute top-full left-0 mt-1"
+        />
+      )}
+      {suggest && !memberSuggest && !orgSuggest && (
         <div
           id={listId}
           role="listbox"
@@ -699,6 +810,7 @@ export function TitleInput({
           {t('row.colonChip', { name: value().trim().slice(0, -1) })}
         </span>
       )}
+      {highlight.org && <OrgChip org={highlight.org} draft className="ms-2" />}
       {pasteLines && (
         <span className="ms-2 inline-flex h-chip shrink-0 items-center rounded-xs bg-bg-accent-subtle px-1.5 text-xs font-medium text-text-secondary">
           {t('row.pasteChip', { count: pasteLines.length })}

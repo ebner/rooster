@@ -16,6 +16,7 @@ import type { Me, Org } from '../../data/types';
 import { useSyncStore } from '../../state/sync-store';
 import { useIsMobile, useKeyboardInset } from '../../ui/use-media';
 import { hasShortcutHandler, runShortcut, useKeymapHandlers } from '../../use-keymap';
+import { hasAllOrgs } from '../all-orgs/default-org';
 import { useViewerDateContext } from '../dates';
 import { loadGuide } from '../help/guide-content';
 import type { GuidePage } from '../help/guide-model';
@@ -314,6 +315,7 @@ function PaletteSession({ me, currentOrg }: { me: Me; currentOrg: Org | null }) 
         isAvailable: hasShortcutHandler,
         label: (id) => t(`action.${id}`),
         goToOrgLabel: (name) => t('action.goToOrg', { name }),
+        allOrgs: hasAllOrgs(me) ? { label: (view) => t(`all.${view}`) } : null,
       });
 
   const sections: PaletteSection[] = step
@@ -393,10 +395,10 @@ function PaletteSession({ me, currentOrg }: { me: Me; currentOrg: Org | null }) 
     }
     const target = paletteReturnFocus();
     closePalette(true);
+    // An action with its own address (an org past the ninth, All organisations' views) goes
+    // there; the rest dispatch like their keys.
     const handled =
-      item.commandId === 'goToOrg' && !item.args
-        ? false
-        : runShortcut(item.commandId, { target, ...item.args });
+      item.href && !item.args ? false : runShortcut(item.commandId, { target, ...item.args });
     if (!handled) fallback(item);
   };
 

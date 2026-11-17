@@ -8,7 +8,7 @@ import {
   Users,
 } from 'lucide-react';
 import type { Org } from '../../data/types';
-import type { OrgViewId } from './paths';
+import type { AllViewId, OrgViewId } from './paths';
 
 export interface SidebarViewDefinition {
   id: OrgViewId;
@@ -42,4 +42,24 @@ export function viewsFor(org: Pick<Org, 'isPersonal'>): readonly SidebarViewDefi
  */
 export function switchView(view: OrgViewId | null, org: Pick<Org, 'isPersonal'>): OrgViewId {
   return view && viewsFor(org).some((v) => v.id === view) ? view : 'my';
+}
+
+const allViewIds: readonly string[] = ['today', 'week', 'overdue'] satisfies AllViewId[];
+
+/** Whether an org view also exists in All organisations (ADR 0073 A1). */
+export function isAllViewId(view: string | null): view is AllViewId {
+  return view !== null && allViewIds.includes(view);
+}
+
+/** All organisations' views (ADR 0073 A1): the per-org entries, so icons and badges match. */
+export const allSidebarViews = sidebarViews.filter(
+  (view): view is SidebarViewDefinition & { id: AllViewId } => isAllViewId(view.id),
+);
+
+/**
+ * The All organisations view a switch from an org lands on (ADR 0073 A7): Today, Next 7 days
+ * and Overdue stay; My tasks, No date and Everyone's tasks (per org only) land on Today.
+ */
+export function switchAllView(view: OrgViewId | null): AllViewId {
+  return isAllViewId(view) ? view : 'today';
 }

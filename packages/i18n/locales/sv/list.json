@@ -333,7 +333,8 @@
     "group": "grupp",
     "groupCount": "{count, plural, one {# uppgift} other {# uppgifter}}",
     "expanded": "utfälld",
-    "collapsed": "hopfälld"
+    "collapsed": "hopfälld",
+    "org": "i {name}"
   },
   "upcoming": {
     "name": "Återkommande",
@@ -368,5 +369,9 @@
     "confirmBack": "Tillbaka",
     "confirm": "Flytta",
     "toast": "Flyttades till {org}"
+  },
+  "all": {
+    "orgSuggestions": "Organisationer",
+    "oneOrg": "Det här går bara för uppgifter från en organisation i taget."
   }
 }

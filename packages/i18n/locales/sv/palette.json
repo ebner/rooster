@@ -107,5 +107,10 @@
     "group": "Grupp: {name}",
     "org": "Organisation: {name}",
     "page": "Guidesida: {name}"
+  },
+  "all": {
+    "today": "Alla organisationer: Idag",
+    "week": "Alla organisationer: Kommande 7 dagar",
+    "overdue": "Alla organisationer: Försenade"
   }
 }

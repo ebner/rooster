@@ -107,5 +107,10 @@
     "group": "Group: {name}",
     "org": "Organisation: {name}",
     "page": "Guide page: {name}"
+  },
+  "all": {
+    "today": "All organisations: Today",
+    "week": "All organisations: Next 7 days",
+    "overdue": "All organisations: Overdue"
   }
 }

@@ -77,6 +77,7 @@
     "accessory": "Accessory bar",
     "settings": "Settings: index and a section",
     "sheetHeader": "Detail sheet header",
-    "sheets": "Bottom sheets"
+    "sheets": "Bottom sheets",
+    "allOrgs": "All organisations"
   }
 }

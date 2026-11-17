@@ -20,7 +20,8 @@ export function MoveToPopover({ anchor, ids }: { anchor: Element; ids: readonly 
   triggerRef.current = anchor;
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
-  const state = controller.state();
+  // All organisations: the groups of the tasks' own org (ADR 0073 A3).
+  const state = (controller.scoped(ids) ?? controller).state();
   const currentGroup =
     ids.length === 1 ? state?.tasks[ids[0] as string]?.placement?.groupId : undefined;
   const groups = useMemo(() => {

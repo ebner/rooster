@@ -13,7 +13,7 @@ import { openPalette, togglePalette } from '../palette/store';
 import { SyncStatus } from '../pwa/sync-status';
 import { CheatSheet, toggleCheatSheet } from './cheat-sheet';
 import { MobileHeader, OrgSwitcherSheet, type ViewTab } from './mobile-header';
-import type { OrgSlide } from './org-switcher';
+import { allOrgsOptionId, type OrgSlide } from './org-switcher';
 import { orgUrlSlug, paths } from './paths';
 import { useSidebarCollapsed } from './use-sidebar-collapsed';
 
@@ -30,6 +30,11 @@ export interface MobileShell {
   activeOrg: Org | null;
   isAdmin: boolean;
   onSelectOrg: (org: Org) => void;
+  /**
+   * All organisations (ADR 0073 A7): first in the org sheet and the swipe order when offered
+   * (two orgs or more); `active` on its screens, where the switcher shows it.
+   */
+  allOrgs?: { active: boolean; onSelect: () => void } | null | undefined;
   /** Resolve to close the sheet; throw to show the error in the form. */
   onCreateOrg: (input: CreateOrgInput) => Promise<void>;
   onSignOut: () => void;
@@ -121,6 +126,11 @@ export function AppShell({ renderSidebar, children, navKey, mobile }: AppShellPr
         move: setSlideOrgId,
         end: (orgId) => {
           setSlideOrgId(null);
+          if (orgId === allOrgsOptionId && mobile?.allOrgs) {
+            setOrgsOpen(false);
+            mobile.allOrgs.onSelect();
+            return;
+          }
           const org = orgId ? mobile?.orgs.find((o) => o.id === orgId) : undefined;
           if (!org) return;
           setOrgsOpen(false);
@@ -171,6 +181,8 @@ export function AppShell({ renderSidebar, children, navKey, mobile }: AppShellPr
               activeOrgId={mobile.activeOrg?.id}
               highlightedOrgId={slideOrgId}
               onSelect={mobile.onSelectOrg}
+              onSelectAll={mobile.allOrgs?.onSelect}
+              allActive={mobile.allOrgs?.active}
               onCreateOrg={mobile.onCreateOrg}
             />
             <CheatSheet />
@@ -262,11 +274,15 @@ export function ViewHeader({ title, context, actions, mobile }: ViewHeaderProps)
   const shell = useContext(ShellContext);
   const isMobile = useIsMobile();
   if (isMobile && shell?.mobile) {
+    const all = shell.mobile.allOrgs;
     return (
       <MobileHeader
         title={mobile?.title ?? title}
         context={context}
         org={mobile?.switcher ? shell.mobile.activeOrg : null}
+        allActive={Boolean(mobile?.switcher && all?.active)}
+        withAll={Boolean(all)}
+        onSwitchAll={all?.onSelect}
         onOpenOrgs={shell.openOrgs}
         orgs={shell.mobile.orgs}
         onSwitchOrg={shell.mobile.onSelectOrg}

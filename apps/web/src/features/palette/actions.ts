@@ -6,7 +6,7 @@ import {
   primaryKeys,
   type ShortcutId,
 } from '../../keymap';
-import { orgUrlSlug, paths } from '../shell/paths';
+import { type AllViewId, orgUrlSlug, paths } from '../shell/paths';
 import type { ActionItem } from './model';
 
 export interface ActionContext {
@@ -24,6 +24,11 @@ export interface ActionContext {
   isAvailable: (id: ShortcutId) => boolean;
   label: (id: PaletteCommandId) => string;
   goToOrgLabel: (name: string) => string;
+  /**
+   * Phase 13 (ADR 0073 A8): "All organisations: Today / Next 7 days / Overdue", the keyboard
+   * path to All organisations (no shortcut of its own); offered from the second org on.
+   */
+  allOrgs?: { label: (view: AllViewId) => string } | null;
 }
 
 /** Org views that need an org to go to (the current one, else the first). */
@@ -72,9 +77,29 @@ export function buildActions(ctx: ActionContext): ActionItem[] {
       label: ctx.label(id),
       shortcut: shortcut === '' ? null : shortcut,
     });
-    if (id === 'goMyTasks') out.push(...orgActions(ctx));
+    if (id === 'goMyTasks') out.push(...allActions(ctx), ...orgActions(ctx));
   }
   return out;
+}
+
+const allViewCommands: readonly [AllViewId, ShortcutId][] = [
+  ['today', 'goToday'],
+  ['week', 'goWeek'],
+  ['overdue', 'goOverdue'],
+];
+
+function allActions(ctx: ActionContext): ActionItem[] {
+  const all = ctx.allOrgs;
+  if (!all) return [];
+  return allViewCommands.map(([view, commandId]) => ({
+    kind: 'action',
+    key: `action:all:${view}`,
+    commandId,
+    group: 'navigation',
+    label: all.label(view),
+    shortcut: null,
+    href: paths.allView(view),
+  }));
 }
 
 function orgActions(ctx: ActionContext): ActionItem[] {

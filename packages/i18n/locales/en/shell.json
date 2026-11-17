@@ -57,5 +57,15 @@
   },
   "error": {
     "saveFailed": "Couldn’t save. Check your connection and try again."
+  },
+  "allOrgs": {
+    "title": "All organisations",
+    "dev": {
+      "sidebar": "All organisations in the sidebar",
+      "badges": "Badges, Today active",
+      "noOverdue": "Nothing overdue",
+      "rail": "Rail",
+      "settings": "Settings → Behaviour with several organisations"
+    }
   }
 }

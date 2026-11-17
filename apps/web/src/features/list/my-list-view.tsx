@@ -6,21 +6,24 @@ import { Keyboard, X } from 'lucide-react';
 import {
   memo,
   type ReactElement,
+  type ReactNode,
   type RefObject,
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useOrgLists } from '../../data/all-views';
 import { everyoneKey, useEveryone, useEveryoneStatus } from '../../data/everyone';
 import { myListKey, useListPipeline, useMyList, useMyListStatus } from '../../data/list';
 import { useMe } from '../../data/me';
 import { useOrgMembers } from '../../data/orgs';
 import { syncEngine } from '../../data/sync/engine';
 import { useTags } from '../../data/tags';
-import type { OrgMember } from '../../data/types';
+import type { Org, OrgMember } from '../../data/types';
 import { cn } from '../../lib/cn';
 import { preloadWhenIdle } from '../../lib/lazy';
 import {
@@ -59,7 +62,13 @@ import { toggleCheatSheet } from '../shell/cheat-sheet';
 import { AddGroupRowView, AddSubtaskRowView, AddTaskRow, FirstRunHint } from './add-row';
 import { announce, ListLiveRegion } from './announcer';
 import { BulkBar } from './bulk-bar';
-import { completionHoldMs, ListController, type Translate, type ViewModel } from './controller';
+import {
+  type ControllerPrefs,
+  completionHoldMs,
+  ListController,
+  type Translate,
+  type ViewModel,
+} from './controller';
 import { GroupHeader } from './group-header';
 import { LazyMoveToPopover, LazyRecurringDeletePopover, LazyTagPicker } from './lazy';
 import { ListContext, type ListContextValue } from './list-context';
@@ -300,7 +309,15 @@ const ListRows = memo(function ListRows({
     userId,
   ]);
   rowsRef.current = rows;
-  // Same row object → same element: React skips it without even a memo comparison.
+  return useRowElements(rows);
+});
+
+/**
+ * The rows' elements (ADR 0055): the same row object keeps its element, so React skips it
+ * without even a memo comparison, and task rows render in chunks (AC-11.4); the focused and
+ * edited rows keep theirs.
+ */
+export function useRowElements(rows: readonly Row[]): ReactNode[] {
   const elements = useRef(new WeakMap<Row, ReactElement>());
   const element = useRef((row: Row) => {
     let cached = elements.current.get(row);
@@ -310,7 +327,6 @@ const ListRows = memo(function ListRows({
     }
     return cached;
   }).current;
-  // Task rows render in chunks (AC-11.4); the focused and edited rows keep theirs.
   const chunks = useRef(new ChunkAssigner()).current;
   const ui = useListStore.getState();
   const pinned = new Set<string>();
@@ -325,7 +341,7 @@ const ListRows = memo(function ListRows({
         element(item)
       ),
     );
-});
+}
 
 /** The list's own text input has focus: commit it before a chord acts on the row. */
 export function activeTitle(): { rowId: string; raw: string } | null {
@@ -458,17 +474,6 @@ export function MyListView({
   const pipeline = useListPipeline();
   const queryClient = useQueryClient();
   const dateCtx = useViewerDateContext();
-  const selectedCount = useListStore((s) => Object.keys(s.selected).length);
-  const popover = useListStore((s) => s.popover);
-  const cursor = useListStore((s) => s.cursor);
-  const focusSeq = useListStore((s) => s.focusSeq);
-  const mode = useListStore((s) => s.mode);
-  const dragging = useListStore((s) => s.dragging !== null);
-  const mobile = useIsMobile();
-  // ADR 0072: with a second org, tasks can move there (Everyone's tasks: from the pane only).
-  const canMoveOrg = useCanMoveToOrg() && !everyone;
-  const root = useRef<HTMLDivElement>(null);
-  const layer = useRef<HTMLDivElement>(null);
   /** Written by `ListRows` on every render: the controller always sees the current rows. */
   const rowsRef = useRef<readonly Row[]>([]);
   /** Written by `ListRows`: the smart view's sections on screen. */
@@ -477,20 +482,12 @@ export function MyListView({
   const extraRef = useRef<Readonly<Record<string, Task>> | null>(null);
   const dateRef = useRef(dateCtx);
   dateRef.current = dateCtx;
-  const prefs = useMe().data?.prefs;
   // Re-renders only when the org's tags (or queued tag creations) change.
   const tags = useTags(orgId).data;
   useEffect(() => setTags(tags ?? []), [tags]);
   const paneRef = useRef(pane);
   paneRef.current = pane;
-  const livePrefs = {
-    parseTitles: prefs?.parseTitleDates ?? true,
-    holdMs: prefs?.completeHideMs ?? completionHoldMs,
-    // P10: optimistic reminder times for all-day tasks (ReducerContext).
-    ...(prefs?.allDayReminderTime ? { allDayReminderTime: prefs.allDayReminderTime } : {}),
-  };
-  const prefsRef = useRef(livePrefs);
-  prefsRef.current = livePrefs;
+  const prefsRef = useLivePrefs();
 
   const controller = useMemo(
     () =>
@@ -511,22 +508,155 @@ export function MyListView({
         extraTasks: () => extraRef.current ?? undefined,
         ...(shared ? { members: () => membersRef.current ?? [] } : {}),
       }),
-    [orgId, userId, pipeline, t, shared],
+    [orgId, userId, pipeline, t, shared, prefsRef],
   );
 
+  const refresh = useMemo(
+    () => async () => {
+      // 02 §13.2: flush the outbox (through the leader tab) and refetch.
+      syncEngine()?.syncNow();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: myListKey(orgId) }),
+        everyone ? queryClient.invalidateQueries({ queryKey: everyoneKey(orgId) }) : null,
+      ]);
+    },
+    [queryClient, orgId, everyone],
+  );
+
+  // The smart view's clock: today and the minute (timed overdue), in the viewer's zone.
+  const clock = useMemo<ViewClock | null>(
+    () =>
+      view ? { today: dateCtx.today, nowMs: dateCtx.nowMs, viewerTz: dateCtx.timezone } : null,
+    [view, dateCtx.today, dateCtx.nowMs, dateCtx.timezone],
+  );
+  // Stable: data changes re-render only `ListRows`, never the DnD and context layers above it.
+  const rowsElement = useMemo(
+    () => (
+      <ListRows
+        orgId={orgId}
+        userId={userId}
+        rowsRef={rowsRef}
+        view={view ?? null}
+        clock={clock}
+        viewRef={viewRef}
+        everyone={everyone ? members : null}
+        extraRef={extraRef}
+      />
+    ),
+    [orgId, userId, view, clock, everyone, members],
+  );
+  const membersFor = useCallback(() => members, [members]);
+  // ADR 0072: with a second org, tasks can move there (Everyone's tasks: from the pane only).
+  const canMoveOrg = useCanMoveToOrg() && !everyone;
+
+  return (
+    <ListViewCore
+      controller={controller}
+      status={status}
+      label={label}
+      pane={pane}
+      view={view}
+      shared={shared}
+      everyone={everyone}
+      rowsRef={rowsRef}
+      rowsElement={rowsElement}
+      membersFor={membersFor}
+      refresh={refresh}
+      canMoveOrg={canMoveOrg}
+      resetKey={`${orgId}|${view ?? ''}|${everyone}`}
+    />
+  );
+}
+
+/** Title parsing, the completion hold and the all-day reminder time, read live (02 §3.6, §8.1). */
+export function useLivePrefs(): RefObject<ControllerPrefs> {
+  const prefs = useMe().data?.prefs;
+  const livePrefs = {
+    parseTitles: prefs?.parseTitleDates ?? true,
+    holdMs: prefs?.completeHideMs ?? completionHoldMs,
+    // P10: optimistic reminder times for all-day tasks (ReducerContext).
+    ...(prefs?.allDayReminderTime ? { allDayReminderTime: prefs.allDayReminderTime } : {}),
+  };
+  const prefsRef = useRef(livePrefs);
+  prefsRef.current = livePrefs;
+  return prefsRef;
+}
+
+export interface ListViewCoreProps {
+  controller: ListController;
+  status: { ready: boolean; error: Error | null };
+  /** Accessible name of the tree grid. */
+  label: string;
+  pane?: PaneControls | undefined;
+  /** A smart view (02 §10, or All organisations' views); My tasks when absent. */
+  view?: SmartView | undefined;
+  shared: boolean;
+  everyone: boolean;
+  rowsRef: RefObject<readonly Row[]>;
+  /** The rows (subscribed to the data on their own). */
+  rowsElement: ReactNode;
+  /** The people the assignee picker offers for these tasks; null when nobody can be. */
+  membersFor: (ids: readonly string[]) => readonly OrgMember[] | null;
+  /** Pull to refresh (02 §13.2). */
+  refresh: () => Promise<void>;
+  /** ADR 0072: the selection can move to another org from the list. */
+  canMoveOrg: boolean;
+  /** A new list (org, view): drafts and selection start over. */
+  resetKey: string;
+  /** Phase 13: All organisations' orgs by id (row chips). */
+  orgs?: ReadonlyMap<string, Org> | undefined;
+}
+
+/**
+ * The list screen shared by My tasks, the smart views, Everyone's tasks and (Phase 13) All
+ * organisations: context, keys, selection, focus, the bulk bar, popovers and the phone chrome.
+ */
+export function ListViewCore({
+  controller,
+  status,
+  label,
+  pane,
+  view,
+  shared,
+  everyone,
+  rowsRef,
+  rowsElement,
+  membersFor,
+  refresh,
+  canMoveOrg,
+  resetKey,
+  orgs,
+}: ListViewCoreProps) {
+  const { t } = useTranslation('list');
+  const pipeline = useListPipeline();
+  const dateCtx = useViewerDateContext();
+  const selectedCount = useListStore((s) => Object.keys(s.selected).length);
+  const popover = useListStore((s) => s.popover);
+  const cursor = useListStore((s) => s.cursor);
+  const focusSeq = useListStore((s) => s.focusSeq);
+  const mode = useListStore((s) => s.mode);
+  const dragging = useListStore((s) => s.dragging !== null);
+  const mobile = useIsMobile();
+  const root = useRef<HTMLDivElement>(null);
+  const layer = useRef<HTMLDivElement>(null);
+  const prefs = useMe().data?.prefs;
+  const paneRef = useRef(pane);
+  paneRef.current = pane;
+  const orgId = controller.orgId;
   const context = useMemo<ListContextValue>(
     () => ({
       controller,
       dateCtx,
-      parseTitles: prefsRef.current.parseTitles,
+      parseTitles: prefs?.parseTitleDates ?? true,
       dragEnabled: !view && !everyone,
       onOpenTask: (id, focus) => paneRef.current?.open(id, focus ? 'title' : null),
       mobile,
       view,
       shared,
       everyone,
+      orgs,
     }),
-    [controller, dateCtx, prefs?.parseTitleDates, mobile, view, shared, everyone],
+    [controller, dateCtx, prefs?.parseTitleDates, mobile, view, shared, everyone, orgs],
   );
 
   useEffect(() => {
@@ -547,18 +677,6 @@ export function MyListView({
         : undefined,
     [mobile, controller],
   );
-  const refresh = useMemo(
-    () => async () => {
-      // 02 §13.2: flush the outbox (through the leader tab) and refetch.
-      syncEngine()?.syncNow();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: myListKey(orgId) }),
-        everyone ? queryClient.invalidateQueries({ queryKey: everyoneKey(orgId) }) : null,
-      ]);
-    },
-    [queryClient, orgId, everyone],
-  );
-
   // D-29: the open pane follows the selection; a multi-selection closes it (02 §3.3).
   useEffect(() => {
     const p = paneRef.current;
@@ -597,7 +715,7 @@ export function MyListView({
       selectionMode: false,
       created: null,
     });
-  }, [orgId, view, everyone]);
+  }, [resetKey]);
 
   useEffect(
     () =>
@@ -657,6 +775,9 @@ export function MyListView({
     if (!shared) return false;
     const ids = controller.selectedTaskIds();
     if (ids.length === 0) return false;
+    // All organisations: people belong to one org (ADR 0073 A3).
+    if (controller.refuseAcrossOrgs(ids)) return;
+    if (!membersFor(ids)) return false;
     useListStore
       .getState()
       .set({ popover: { kind: 'assign', rowId: ids.length > 1 ? 'bulk' : (ids[0] as string) } });
@@ -664,6 +785,8 @@ export function MyListView({
   const openTagPicker = () => {
     const ids = controller.selectedTaskIds();
     if (ids.length === 0) return false;
+    // All organisations: tags belong to one org (ADR 0073 A3); the controller says so.
+    if (controller.refuseAcrossOrgs(ids)) return;
     const store = useListStore.getState();
     store.set({ popover: { kind: 'tag', rowId: ids.length > 1 ? 'bulk' : (ids[0] as string) } });
   };
@@ -726,6 +849,7 @@ export function MyListView({
         if (everyone || controller.selectedTaskIds().length === 0) return false;
         // Nothing in Upcoming moves (ADR 0068); the controller says so.
         if (controller.movable(controller.selectedTaskIds()).length === 0) return;
+        if (controller.refuseAcrossOrgs(controller.selectedTaskIds())) return;
         useListStore
           .getState()
           .set({ popover: { kind: 'moveTo', rowId: useListStore.getState().cursor ?? '' } });
@@ -734,6 +858,7 @@ export function MyListView({
         withTitle(() => {
           if (everyone || controller.selectedTaskIds().length === 0) return false;
           if (controller.movable(controller.selectedTaskIds()).length === 0) return;
+          if (controller.refuseAcrossOrgs(controller.selectedTaskIds())) return;
           useListStore
             .getState()
             .set({ popover: { kind: 'moveTo', rowId: useListStore.getState().cursor ?? '' } });
@@ -817,38 +942,20 @@ export function MyListView({
     const picked = selectedIds(store).filter((id) => controller.task(id));
     const ids =
       picked.length > 0 ? picked : [store.cursor ?? ''].filter((id) => controller.task(id));
-    return {
-      orgId,
-      selectedTaskIds: ids,
-      makeSubtaskOf: (parentId) => {
-        controller.makeSubtaskOf(ids, parentId);
-      },
-    };
+    // All organisations: "Make subtask of…" searches one org's tasks (ADR 0073 A3).
+    const scoped = controller.scoped(ids);
+    return scoped
+      ? {
+          orgId: scoped.orgId,
+          selectedTaskIds: ids,
+          makeSubtaskOf: (parentId) => {
+            controller.makeSubtaskOf(ids, parentId);
+          },
+        }
+      : { orgId, selectedTaskIds: ids };
   }, [pane, orgId, controller, selectionKey]);
   usePaletteCommands(paletteCommands);
 
-  // The smart view's clock: today and the minute (timed overdue), in the viewer's zone.
-  const clock = useMemo<ViewClock | null>(
-    () =>
-      view ? { today: dateCtx.today, nowMs: dateCtx.nowMs, viewerTz: dateCtx.timezone } : null,
-    [view, dateCtx.today, dateCtx.nowMs, dateCtx.timezone],
-  );
-  // Stable: data changes re-render only `ListRows`, never the DnD and context layers above it.
-  const rowsElement = useMemo(
-    () => (
-      <ListRows
-        orgId={orgId}
-        userId={userId}
-        rowsRef={rowsRef}
-        view={view ?? null}
-        clock={clock}
-        viewRef={viewRef}
-        everyone={everyone ? members : null}
-        extraRef={extraRef}
-      />
-    ),
-    [orgId, userId, view, clock, everyone, members],
-  );
   // 02 §11: a drag between member sections reassigns; the picker is the keyboard path.
   const assignDrop = useMemo<AssignDrop | undefined>(
     () =>
@@ -887,6 +994,8 @@ export function MyListView({
           `[data-row-id="${popover.rowId}"] [data-focus-target], [data-row-id="${popover.rowId}"] input, [data-row-id="${popover.rowId}"]`,
         )
       : null;
+  const assignIds = popover?.kind === 'assign' ? controller.selectedTaskIds() : [];
+  const members = assignIds.length > 0 ? membersFor(assignIds) : null;
   const assignAnchor =
     popover?.kind === 'assign' && !mobile && members
       ? popover.rowId === 'bulk'
@@ -949,11 +1058,10 @@ export function MyListView({
       </div>
       {mobile && (
         <MobileListChrome
-          orgId={orgId}
           rootRef={root}
           layerRef={layer}
           canAdd={view !== 'overdue'}
-          members={members}
+          membersFor={shared ? membersFor : null}
           swipePrefs={{
             // Everyone's tasks has no groups of mine to move other people's tasks into.
             swipeLeft:
@@ -964,13 +1072,16 @@ export function MyListView({
         />
       )}
       {ids.length > 1 && <BulkBar ids={ids} />}
-      <ListMoveOrgHost
-        orgId={orgId}
-        controller={controller}
-        pane={pane}
-        mobile={mobile}
-        rootRef={root}
-      />
+      {/* All organisations moves tasks to another org from the pane only. */}
+      {orgId !== '' && (
+        <ListMoveOrgHost
+          orgId={orgId}
+          controller={controller}
+          pane={pane}
+          mobile={mobile}
+          rootRef={root}
+        />
+      )}
       {moveAnchor && (
         <Suspense fallback={null}>
           <LazyMoveToPopover anchor={moveAnchor} ids={controller.selectedTaskIds()} />
@@ -994,7 +1105,7 @@ export function MyListView({
       {assignAnchor && members && (
         <RowAssigneePicker
           anchor={assignAnchor}
-          ids={controller.selectedTaskIds()}
+          ids={assignIds}
           members={members}
           controller={controller}
         />
@@ -1018,9 +1129,14 @@ export function RowTagPicker({
 }) {
   const { t } = useTranslation('tags');
   const byId = useTagsStore((s) => s.byId);
-  const tags = useMemo(() => Object.values(byId), [byId]);
+  // All organisations: the tags of the tasks' own org (ADR 0073 A3).
+  const scope = controller.scoped(ids) ?? controller;
+  const tags = useMemo(
+    () => Object.values(byId).filter((tag) => scope === controller || tag.orgId === scope.orgId),
+    [byId, scope, controller],
+  );
   // Re-render on list changes so the checks follow the toggles.
-  useMyList(controller.orgId);
+  useOrgLists(controller.orgIds());
   const tasks = ids.map((id) => controller.task(id)).filter((x): x is Task => x !== undefined);
   const applied = tags
     .filter((tag) => tasks.length > 0 && tasks.every((task) => task.tagIds.includes(tag.id)))
