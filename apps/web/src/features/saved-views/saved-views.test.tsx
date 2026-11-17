@@ -2,12 +2,21 @@ import type { ListOp } from '@rooster/core/reducers';
 import { listOps } from '@rooster/core/reducers';
 import type { SavedView, SavedViewQuery } from '@rooster/core/schemas';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ApiError } from '../../data/errors';
 import { getListPipeline, ListTransportContext } from '../../data/list';
 import { createFixtureTransport, type FixtureTask } from '../../data/pipeline/fixture-transport';
 import { queryKeys } from '../../data/query-keys';
+import { sessionDataCleared } from '../../data/session-events';
 import type { Org, OrgMember } from '../../data/types';
 import { viewTasksKey } from '../../data/view-tasks';
 import { useListStore } from '../../state/list-store';
@@ -15,6 +24,8 @@ import { useUndoStore } from '../../state/undo-store';
 import { clearToasts, ToastRegion } from '../../ui/toast';
 import { useKeymap } from '../../use-keymap';
 import { fixtureMe } from '../shell/fixtures';
+import { emptyViewQuery } from './query';
+import { useSaveAsView } from './save-as-view';
 import { SavedViewContent } from './saved-view-screen';
 
 /** ADR 0073 B4–B7 (AC-13.3 in the component): a view's rows, header, inline add. */
@@ -30,6 +41,7 @@ const env = vi.hoisted(() => ({
 vi.mock('@tanstack/react-router', async (actual) => ({
   ...(await actual<typeof import('@tanstack/react-router')>()),
   useNavigate: () => env.navigate,
+  useLocation: () => ({ pathname: '/o/kestrel/v/gone' }),
 }));
 
 vi.mock('../../data/views', async (actual) => ({
@@ -62,6 +74,9 @@ const sharedOrg: Org = {
   role: 'member',
   collapsed: false,
 };
+
+/** The viewer, a member of the shared org (late answers check the membership). */
+const meIn = { ...fixtureMe, orgs: [...fixtureMe.orgs, sharedOrg] };
 
 function KeymapRoot() {
   useKeymap();
@@ -132,7 +147,7 @@ async function setup(
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
   });
-  queryClient.setQueryData(queryKeys.me, fixtureMe);
+  queryClient.setQueryData(queryKeys.me, meIn);
   queryClient.setQueryData(queryKeys.orgMembers(orgId), members);
   queryClient.setQueryData(queryKeys.views(orgId, false), [view]);
   render(
@@ -326,11 +341,12 @@ describe('a view (ADR 0073 B)', () => {
 });
 
 describe('a new view (/v/new)', () => {
+  let queryClient: QueryClient;
   function renderNew() {
-    const queryClient = new QueryClient({
+    queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
     });
-    queryClient.setQueryData(queryKeys.me, fixtureMe);
+    queryClient.setQueryData(queryKeys.me, meIn);
     queryClient.setQueryData(queryKeys.orgMembers(orgId), members);
     queryClient.setQueryData(queryKeys.views(orgId, false), []);
     const transport = createFixtureTransport({ userId, members: [] });
@@ -368,5 +384,87 @@ describe('a new view (/v/new)', () => {
     fireEvent.change(name, { target: { value: 'One too many' } });
     fireEvent.keyDown(name, { key: 'Enter' });
     expect(await screen.findByText(/as many views of this kind as it can \(100/)).toBeTruthy();
+  });
+
+  test('a create answered after the org was left (or the session ended) writes no caches', async () => {
+    const name = renderNew();
+    env.create.mockImplementationOnce(async (input) => {
+      // Meanwhile a fresh /me without the org pruned its caches.
+      queryClient.setQueryData(queryKeys.me, fixtureMe);
+      queryClient.removeQueries({ queryKey: ['views', orgId] });
+      return { ...input, orgId } as never;
+    });
+    fireEvent.change(name, { target: { value: 'Late' } });
+    fireEvent.keyDown(name, { key: 'Enter' });
+    await waitFor(() => expect(env.create).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(queryClient.getQueryData(queryKeys.views(orgId, false))).toBeUndefined();
+    expect(env.navigate).not.toHaveBeenCalled();
+  });
+
+  test('Save as view answered after the org was left writes no caches either', async () => {
+    const client = new QueryClient();
+    client.setQueryData(queryKeys.me, meIn);
+    client.setQueryData(queryKeys.views(orgId, false), []);
+    env.create.mockImplementationOnce(async (input) => {
+      client.setQueryData(queryKeys.me, fixtureMe);
+      client.removeQueries({ queryKey: ['views', orgId] });
+      return { ...input, orgId } as never;
+    });
+    const { result } = renderHook(() => useSaveAsView(sharedOrg), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+    act(() => result.current({ ...emptyViewQuery, due: 'overdue' }));
+    await waitFor(() => expect(env.create).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(client.getQueryData(queryKeys.views(orgId, false))).toBeUndefined();
+    expect(env.navigate).not.toHaveBeenCalled();
+  });
+});
+
+describe('a failed edit (online only, optimistic)', () => {
+  test('a list fetched meanwhile is the truth: the rollback doesn’t overwrite it', async () => {
+    const { queryClient, view } = await setup();
+    const key = queryKeys.views(orgId, false);
+    env.update.mockImplementationOnce(async () => {
+      queryClient.setQueryData(key, [{ ...view, name: 'Renamed elsewhere' }]);
+      throw new ApiError('conflict', 409);
+    });
+    const name = screen.getByTestId('view-name') as HTMLInputElement;
+    fireEvent.change(name, { target: { value: 'Mine' } });
+    fireEvent.keyDown(name, { key: 'Enter' });
+    expect(await screen.findByText("Couldn't save the view. Try again.")).toBeTruthy();
+    expect(queryClient.getQueryData<SavedView[]>(key)?.[0]?.name).toBe('Renamed elsewhere');
+  });
+
+  test('nothing fetched (offline, failing): only this view’s entry goes back', async () => {
+    const { queryClient } = await setup();
+    const key = queryKeys.views(orgId, false);
+    env.update.mockRejectedValueOnce(new ApiError('network', 0));
+    const name = screen.getByTestId('view-name') as HTMLInputElement;
+    fireEvent.change(name, { target: { value: 'Mine' } });
+    fireEvent.keyDown(name, { key: 'Enter' });
+    await waitFor(() =>
+      expect(queryClient.getQueryData<SavedView[]>(key)?.[0]?.name).toBe('Juniper'),
+    );
+  });
+
+  test('after a sign-out the old session’s views stay gone', async () => {
+    const { queryClient } = await setup();
+    const key = queryKeys.views(orgId, false);
+    env.update.mockImplementationOnce(async () => {
+      queryClient.removeQueries({ queryKey: ['views'] });
+      sessionDataCleared();
+      throw new ApiError('unauthenticated', 401);
+    });
+    const name = screen.getByTestId('view-name') as HTMLInputElement;
+    fireEvent.change(name, { target: { value: 'Mine' } });
+    fireEvent.keyDown(name, { key: 'Enter' });
+    await waitFor(() => expect(env.update).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(queryClient.getQueryData(key)).toBeUndefined();
+    expect(screen.queryByText("Couldn't save the view. Try again.")).toBeNull();
   });
 });

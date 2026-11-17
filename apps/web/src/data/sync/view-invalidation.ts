@@ -6,12 +6,23 @@ import { isViewTasksData } from '../pipeline/view-tasks-ops';
  * keys stand in: `['everyone', orgId]` (every member of a shared org, every task change there)
  * and `['my-list', orgId]` (a personal org) also refetch the org's views (`['views', orgId]`,
  * the sidebar counts) and every view's rows of that org; `['task', id]` refetches the rows of
- * the views holding that task (comment and attachment counts).
+ * the views holding that task (comment and attachment counts). `['views', orgId]` (a view
+ * changed, by someone else: this tab's own changes don't come here) refetches the org's rows.
  */
 export function invalidateViewsFor(queryClient: QueryClient, key: readonly string[]): void {
   const [root, id] = key;
   if (typeof id !== 'string') return;
-  if (root === 'everyone' || root === 'my-list') {
+  if (root === 'views') {
+    // Someone changed a view of the org (its query, perhaps): the rows' keys name only the
+    // view, so they are fetched again.
+    void queryClient.invalidateQueries({
+      queryKey: ['view-tasks'],
+      predicate: (query) => {
+        const data = query.state.data;
+        return isViewTasksData(data) ? data.orgId === id : query.meta?.orgId === id;
+      },
+    });
+  } else if (root === 'everyone' || root === 'my-list') {
     void queryClient.invalidateQueries({ queryKey: ['views', id] });
     void queryClient.invalidateQueries({
       queryKey: ['view-tasks'],

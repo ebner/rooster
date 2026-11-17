@@ -1,11 +1,11 @@
 import { uuidv7 } from '@rooster/core/ids';
-import type { SavedView, SavedViewQuery } from '@rooster/core/schemas';
+import type { SavedViewQuery } from '@rooster/core/schemas';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { errorCode } from '../../data/errors';
 import { useOrgMembers } from '../../data/orgs';
-import { queryKeys } from '../../data/query-keys';
+import { sessionScope } from '../../data/session-events';
 import { useTags } from '../../data/tags';
 import type { Org } from '../../data/types';
 import { useCreateView } from '../../data/views';
@@ -14,6 +14,7 @@ import { toast } from '../../ui/toast';
 import { orgUrlSlug, paths } from '../shell/paths';
 import { requestViewNameFocus } from './name-focus';
 import { suggestViewName } from './query';
+import { addCreatedView, mayWriteViews } from './view-cache';
 
 /**
  * "Save as view" (ADR 0073 B7): creates a private view of `org` with a query taken from a
@@ -47,16 +48,18 @@ export function useSaveAsView(org: Org | null | undefined): (query: SavedViewQue
         fallback: t('saved.suggest.fallback'),
       },
     });
+    const session = sessionScope();
     create.mutateAsync({ id: uuidv7(), name, query, shared: false }).then(
       (created) => {
-        queryClient.setQueryData<SavedView[]>(queryKeys.views(orgId, false), (list) =>
-          list?.some((v) => v.id === created.id) ? list : [...(list ?? []), created],
-        );
+        // Not after a sign-out, or once the org is left: its caches must stay gone.
+        if (!mayWriteViews(queryClient, orgId, session)) return;
+        addCreatedView(queryClient, created);
         void navigate({ href: paths.savedView(orgUrlSlug(org), created.id) });
         requestViewNameFocus();
         toast({ message: t('saved.savedAs', { name: created.name }) });
       },
       (error: unknown) =>
+        mayWriteViews(queryClient, orgId, session) &&
         toast({
           message: t(errorCode(error) === 'view_limit' ? 'saved.limit' : 'saved.saveFailed'),
           tone: 'danger',

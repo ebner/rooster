@@ -6,9 +6,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { errorCode } from '../../data/errors';
+import { ApiError, errorCode } from '../../data/errors';
 import { useListPipeline } from '../../data/list';
 import { queryKeys } from '../../data/query-keys';
+import { sessionScope } from '../../data/session-events';
 import type { Org } from '../../data/types';
 import { useArchiveView, useCreateView, useDeleteView, useUpdateView } from '../../data/views';
 import { useSyncStore } from '../../state/sync-store';
@@ -17,6 +18,7 @@ import { useViewerDateContext } from '../dates';
 import { announce } from '../list/announcer';
 import { orgUrlSlug, paths } from '../shell/paths';
 import { emptyViewQuery, viewNameMax } from './query';
+import { addCreatedView, mayWriteViews } from './view-cache';
 
 /** What the header edits: a saved view's name, query and sharing, or a new view's. */
 export interface ViewDraft {
@@ -93,7 +95,8 @@ export function useViewEditor(
   const liveKey = queryKeys.views(org.id, false);
   const patchView = (patch: SavedViewPatch) => {
     if (!view || offline()) return;
-    const before = queryClient.getQueryData<SavedView[]>(liveKey);
+    const session = sessionScope();
+    const previous = queryClient.getQueryData<SavedView[]>(liveKey)?.find((v) => v.id === view.id);
     queryClient.setQueryData<SavedView[]>(liveKey, (list) =>
       list?.map((v) =>
         v.id === view.id
@@ -106,13 +109,29 @@ export function useViewEditor(
           : v,
       ),
     );
+    // The optimistic write's place in the list's history: a fetch after it is the truth.
+    const written = queryClient.getQueryState(liveKey)?.dataUpdateCount;
     update.mutateAsync({ id: view.id, patch }).then(
       () => {
-        if (patch.query) void queryClient.invalidateQueries({ queryKey: ['view-tasks', view.id] });
+        if (patch.query && mayWriteViews(queryClient, org.id, session)) {
+          void queryClient.invalidateQueries({ queryKey: ['view-tasks', view.id] });
+        }
       },
       (error: unknown) => {
-        if (before) queryClient.setQueryData(liveKey, before);
+        // A sign-out or a left org meanwhile: its caches are gone and must stay so.
+        if (!mayWriteViews(queryClient, org.id, session)) return;
         failed(error);
+        const fetched = queryClient.getQueryState(liveKey)?.dataUpdateCount !== written;
+        if (fetched || (error instanceof ApiError && error.status === 404) || !previous) {
+          // The list was fetched since (the mutation refetches it when it settles), or the
+          // view is gone: what the server says stands.
+          if (!fetched) void queryClient.invalidateQueries({ queryKey: liveKey });
+          return;
+        }
+        // Offline or failing: only this view's own entry goes back.
+        queryClient.setQueryData<SavedView[]>(liveKey, (list) =>
+          list?.map((v) => (v.id === view.id ? previous : v)),
+        );
       },
     );
   };
@@ -120,6 +139,7 @@ export function useViewEditor(
   const createNow = (next: ViewDraft) => {
     if (creating.current || offline()) return;
     creating.current = true;
+    const session = sessionScope();
     create
       .mutateAsync({
         id: uuidv7(),
@@ -129,16 +149,14 @@ export function useViewEditor(
       })
       .then(
         (created) => {
-          // In the list before the URL names it, so the screen never shows "not found".
-          queryClient.setQueryData<SavedView[]>(liveKey, (list) =>
-            list?.some((v) => v.id === created.id) ? list : [...(list ?? []), created],
-          );
+          if (!mayWriteViews(queryClient, org.id, session)) return;
+          addCreatedView(queryClient, created);
           announce(t('saved.created', { name: created.name }));
           void navigate({ href: paths.savedView(slug, created.id), replace: true });
         },
         (error: unknown) => {
           creating.current = false;
-          failed(error);
+          if (mayWriteViews(queryClient, org.id, session)) failed(error);
         },
       );
   };

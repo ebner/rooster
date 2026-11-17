@@ -170,6 +170,8 @@ export function queryFromSearch(
   const query: SavedViewQuery = {
     ...emptyViewQuery,
     tags: tags.slice(0, viewTagsMax),
+    // The search wants every `#tag` it names (the list filters are any of them).
+    tagMode: tags.length > 1 ? 'all' : 'any',
     assignee,
     due: parsed.due ?? 'any',
     status: parsed.status === 'any' ? 'open' : parsed.status,

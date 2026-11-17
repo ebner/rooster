@@ -6,6 +6,7 @@ import { OrgNotFound } from '../../features/shell/org-not-found';
 import {
   isNewViewPath,
   listViewOf,
+  rememberListView,
   savedViewKey,
   useLastListView,
   viewOfPath,
@@ -33,8 +34,8 @@ function TasksLayout() {
     : (listViewOf(pathname, lastView) ?? 'my');
   const ownView = viewOfPath(pathname);
   useEffect(() => {
-    if (ownView) useLastListView.setState({ view: ownView });
-  }, [ownView]);
+    if (ownView) rememberListView(ownView, orgSlug);
+  }, [ownView, orgSlug]);
   if (org.data === null) return <OrgNotFound />;
   if (!org.data || !me.data) return null;
   return (

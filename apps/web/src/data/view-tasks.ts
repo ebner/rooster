@@ -42,9 +42,17 @@ export async function fetchViewTasks(
   };
 }
 
-function viewTasksQuery(pipeline: ListPipeline, orgId: string, viewId: string, completed: boolean) {
+export function viewTasksQuery(
+  pipeline: ListPipeline,
+  orgId: string,
+  viewId: string,
+  completed: boolean,
+) {
   return {
     queryKey: viewTasksKey(viewId, completed),
+    // The key names only the view: the org rides along, so a membership revoked while the
+    // first fetch is out still prunes it (`pruneOrgs`).
+    meta: { orgId },
     queryFn: ({ signal }: { signal: AbortSignal }) =>
       fetchViewTasks(pipeline, orgId, viewId, completed, signal),
     staleTime: 30_000,

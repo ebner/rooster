@@ -45,10 +45,27 @@ export function isNewViewPath(pathname: string): boolean {
  * The last list view shown (02 §2): `/o/:slug/t/:taskId` opens the pane over it, the sidebar
  * keeps it highlighted, and closing the pane returns to it. A direct load starts on My tasks.
  */
-export const useLastListView = create<{ view: ListViewKey }>(() => ({ view: 'my' }));
+export const useLastListView = create<{
+  view: ListViewKey;
+  /** The org (URL slug) of a view of the org (`v:<id>`); null for the built-in views. */
+  org: string | null;
+}>(() => ({ view: 'my', org: null }));
 
-/** The list view for `pathname`: its own, or the last one under the pane. */
+/** Records the list view shown (`viewOfPath`) in the org with URL slug `org`. */
+export function rememberListView(view: ListViewKey, org: string): void {
+  useLastListView.setState({ view, org: savedViewIdOf(view) ? org : null });
+}
+
+/**
+ * The list view for `pathname`: its own, or the last one under the pane. A view belongs to
+ * its org: under another org's pane (a task opened from the palette or the Inbox) the list
+ * is My tasks.
+ */
 export function listViewOf(pathname: string, last: ListViewKey): ListViewKey | null {
-  if (/^\/o\/[^/]+\/t\//.test(pathname)) return last;
+  const pane = /^\/o\/([^/]+)\/t\//.exec(pathname);
+  if (pane) {
+    const { org } = useLastListView.getState();
+    return savedViewIdOf(last) && org !== null && org !== pane[1] ? 'my' : last;
+  }
   return viewOfPath(pathname);
 }

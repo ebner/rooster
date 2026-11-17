@@ -58,6 +58,11 @@ describe('Save as view', () => {
       status: 'done',
     });
     expect(queryFromSearch(parseSearchQuery('@me'), { tags, members })?.assignee).toBe('me');
+    // Several #tags in a search all apply (the list filters take any of them).
+    expect(queryFromSearch(parseSearchQuery('#juniper #fika'), { tags, members })).toMatchObject({
+      tags: ['t1', 't2'],
+      tagMode: 'all',
+    });
     // Nothing of it applies (an unknown tag): no view.
     expect(queryFromSearch(parseSearchQuery('#nope'), { tags, members })).toBeNull();
     expect(searchHasFilters(parseSearchQuery('banners'))).toBe(false);

@@ -5,7 +5,8 @@ import { describe, expect, test } from 'vitest';
 import { getListPipeline } from './list';
 import { createFixtureTransport } from './pipeline/fixture-transport';
 import { applyOpToViewTasks, type ViewTasksData } from './pipeline/view-tasks-ops';
-import { fetchViewTasks, viewCounts, viewTasksKey } from './view-tasks';
+import { orgOfQuery } from './sync/engine';
+import { fetchViewTasks, viewCounts, viewTasksKey, viewTasksQuery } from './view-tasks';
 
 /** ADR 0073 B: a view's rows cache, kept optimistic by the pipeline. */
 
@@ -250,3 +251,18 @@ describe('viewCounts', () => {
     expect(viewCounts({ ...base, items }, query, matchCtx)).toEqual({ open: 4, done: 8 });
   });
 });
+
+describe('revocation', () => {
+  test('a view’s rows still waiting for their first answer name their org (pruned with it)', async () => {
+    const { pipeline, queryClient } = await viewSetup();
+    transportHangs(pipeline);
+    void queryClient.prefetchQuery(viewTasksQuery(pipeline, org, 'v1', false));
+    const query = queryClient.getQueryCache().find({ queryKey: viewTasksKey('v1', false) });
+    expect(query?.state.data).toBeUndefined();
+    expect(orgOfQuery(query?.queryKey ?? [], query?.state.data, query?.meta)).toBe(org);
+  });
+});
+
+function transportHangs(pipeline: { transport: { fetchViewTasks?: unknown } }) {
+  pipeline.transport.fetchViewTasks = () => new Promise(() => {});
+}

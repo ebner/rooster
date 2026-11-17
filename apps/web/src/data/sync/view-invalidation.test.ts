@@ -44,6 +44,15 @@ describe('invalidateViewsFor', () => {
   });
 });
 
+describe('a view changed by someone else', () => {
+  test("['views', org]: the org’s rows are fetched again (their key has no query)", () => {
+    const { queryClient, stale } = setup();
+    invalidateViewsFor(queryClient, ['views', org]);
+    expect(stale(['view-tasks', 'v1', 'open'])).toBe(true);
+    expect(stale(['view-tasks', 'v2', 'open'])).toBe(false);
+  });
+});
+
 describe('dropGoneViewCaches', () => {
   test('a view gone from its org’s live list loses its rows’ caches', () => {
     const { queryClient } = setup();

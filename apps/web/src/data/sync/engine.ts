@@ -172,7 +172,13 @@ const orgScopedRoots: ReadonlySet<unknown> = new Set([
  * Org-scoped query keys are `[root, orgId, …]`; task details and a view's rows
  * (`['view-tasks', viewId, …]`) carry their org in the data.
  */
-function orgOfQuery(queryKey: readonly unknown[], data: unknown): string | undefined {
+export function orgOfQuery(
+  queryKey: readonly unknown[],
+  data: unknown,
+  meta?: Readonly<Record<string, unknown>>,
+): string | undefined {
+  // A view's rows still waiting for their first answer have no data yet: their org is in meta.
+  if (queryKey[0] === 'view-tasks' && typeof meta?.orgId === 'string') return meta.orgId;
   if (queryKey[0] === 'task' || queryKey[0] === 'view-tasks') {
     const orgId = (data as { orgId?: unknown } | undefined)?.orgId;
     return typeof orgId === 'string' ? orgId : undefined;
@@ -700,7 +706,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
           );
         }
         if (!orgScopedRoots.has(root)) return false;
-        const orgId = orgOfQuery(query.queryKey, query.state.data);
+        const orgId = orgOfQuery(query.queryKey, query.state.data, query.meta);
         if (orgId === undefined || allowed.has(orgId)) return false;
         revoked.add(orgId);
         return true;
