@@ -274,3 +274,100 @@ export function viewCounts(
   }
   return counts;
 }
+
+/**
+ * Phase 13 (ADR 0073 A): the smart views of All organisations, across every org the viewer is
+ * a member of. No date stays per org (it is about filing).
+ */
+export const ALL_VIEWS = ['today', 'week', 'overdue'] as const;
+export type AllView = (typeof ALL_VIEWS)[number];
+
+/** One org's list for the All views; the array order is the viewer's sidebar order. */
+export interface AllViewSource {
+  orgId: string;
+  source: ViewSource;
+}
+
+export interface AllViewItem {
+  orgId: string;
+  taskId: string;
+}
+
+/** A section of an All view: as `ViewSection`, with each row's org. */
+export interface AllViewSection {
+  id: string;
+  kind: Exclude<ViewSectionKind, 'flat'>;
+  /** The due date a task typed in this section gets; null for `overdue` (no inline add). */
+  date: IsoDate | null;
+  items: readonly AllViewItem[];
+}
+
+/**
+ * The sections of an All view (ADR 0073 A2): the per-org sections of `selectView`, merged.
+ * Within a section rows go by due date and time (timed before untimed on a day), then the
+ * viewer's own order: the org's place in `sources`, then its My tasks order. Sections are
+ * those of the per-org view: Today is Overdue (when non-empty) plus Today, Next 7 days always
+ * has its seven days, Overdue is `[]` with nothing overdue.
+ */
+export function selectAllView(
+  sources: readonly AllViewSource[],
+  view: AllView,
+  ctx: ViewContext,
+): AllViewSection[] {
+  const merged = new Map<
+    string,
+    { section: Omit<AllViewSection, 'items'>; rows: { task: Task; org: number; rank: number }[] }
+  >();
+  sources.forEach(({ source }, org) => {
+    for (const section of selectView(source, view, ctx)) {
+      let entry = merged.get(section.id);
+      if (!entry) {
+        entry = {
+          section: {
+            id: section.id,
+            kind: section.kind as AllViewSection['kind'],
+            date: section.date,
+          },
+          rows: [],
+        };
+        merged.set(section.id, entry);
+      }
+      section.taskIds.forEach((taskId, rank) => {
+        const task = source.tasks[taskId];
+        if (task) entry.rows.push({ task, org, rank });
+      });
+    }
+  });
+  // `selectView` lists Today's overdue section first and Next 7 days in date order; an org
+  // whose overdue section is empty mustn't move it behind today.
+  const order = (id: string) => (id === 'overdue' ? 0 : 1);
+  return [...merged.values()]
+    .sort(
+      (a, b) =>
+        order(a.section.id) - order(b.section.id) || compareKeys(a.section.id, b.section.id),
+    )
+    .map(({ section, rows }) => ({
+      ...section,
+      items: rows
+        .sort((a, b) => compareDue(a.task, b.task) || a.org - b.org || a.rank - b.rank)
+        .map(({ task, org }) => ({
+          orgId: (sources[org] as AllViewSource).orgId,
+          taskId: task.id,
+        })),
+    }));
+}
+
+/** The All organisations badges (ADR 0073 A5): each org's counts, summed. */
+export function allViewCounts(
+  sources: readonly AllViewSource[],
+  ctx: Omit<ViewContext, 'showCompleted'>,
+): Pick<ViewCounts, AllView> {
+  const total = { today: 0, week: 0, overdue: 0 };
+  for (const { source } of sources) {
+    const counts = viewCounts(source, ctx);
+    total.today += counts.today;
+    total.week += counts.week;
+    total.overdue += counts.overdue;
+  }
+  return total;
+}

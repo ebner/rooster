@@ -66,6 +66,8 @@ export const prefsExample = {
   allDayReminderTime: '09:00',
   digestTime: '07:00',
   emailMode: 'batch',
+  defaultOrgId: null,
+  startPage: 'last',
 };
 
 export const meExample = {

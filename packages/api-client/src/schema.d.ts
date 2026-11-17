@@ -2441,7 +2441,9 @@ export interface components {
          *         "reminderTime": "08:00",
          *         "allDayReminderTime": "09:00",
          *         "digestTime": "07:00",
-         *         "emailMode": "batch"
+         *         "emailMode": "batch",
+         *         "defaultOrgId": null,
+         *         "startPage": "last"
          *       },
          *       "isAdmin": false,
          *       "orgs": [
@@ -2504,7 +2506,9 @@ export interface components {
          *       "reminderTime": "08:00",
          *       "allDayReminderTime": "09:00",
          *       "digestTime": "07:00",
-         *       "emailMode": "batch"
+         *       "emailMode": "batch",
+         *       "defaultOrgId": null,
+         *       "startPage": "last"
          *     }
          */
         Prefs: {
@@ -2519,6 +2523,9 @@ export interface components {
             digestTime: string;
             /** @enum {string} */
             emailMode: "immediate" | "batch";
+            defaultOrgId: string | null;
+            /** @enum {string} */
+            startPage: "last" | "all-today";
         };
         /**
          * @example {
@@ -2586,6 +2593,9 @@ export interface components {
                 digestTime?: string;
                 /** @enum {string} */
                 emailMode?: "immediate" | "batch";
+                defaultOrgId?: string | null;
+                /** @enum {string} */
+                startPage?: "last" | "all-today";
             };
         };
         /**

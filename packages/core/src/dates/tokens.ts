@@ -127,6 +127,11 @@ export function findAssigneeToken(
   return found;
 }
 
+/** Lower case without accents, trimmed: how typed tokens are compared with names. */
+function fold(s: string): string {
+  return s.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase().trim();
+}
+
 export interface MemberMatch {
   userId: string;
   /** The query is the whole name (or email), ignoring case and accents. */
@@ -143,7 +148,6 @@ export function matchMembers(
   members: readonly AssigneeCandidate[],
   viewerId?: string,
 ): MemberMatch[] {
-  const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase().trim();
   const q = fold(query);
   const ranked: { userId: string; rank: number; exact: boolean }[] = [];
   for (const member of members) {
@@ -224,4 +228,95 @@ export function findReminderTokens(title: string): ReminderTokenMatch[] {
   return reminderTokenSpans(title)
     .filter((span) => isTokenTail(title.slice(span.end), true))
     .map((span) => ({ ...span, text: title.slice(span.start, span.end) }));
+}
+
+/** Phase 13 (ADR 0073 A4): the `^org` token of an All organisations view. */
+export interface OrgTokenMatch {
+  start: number;
+  end: number;
+  /** The text after `^` (without the quotes of `^"Kestrel Lane"`). */
+  query: string;
+  /** The org it names, or null when none or several match (the token then stays text). */
+  orgId: string | null;
+}
+
+export interface OrgCandidate {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+const ORG_TOKEN_RE = /(?<=^|\s)\^(?:"([^"\n]+)"|([^\s"]\S*))/gu;
+
+/**
+ * `^org` (`^` + non-space) or `^"Org name"`, anywhere in the title like `#tag`, outside backtick
+ * escapes; the last one that names exactly one org wins (else the last one, unresolved). An org
+ * is named by its name or slug, see `matchOrgs`. A token that resolves is removed from the
+ * title on create; one that doesn't stays text.
+ */
+export function findOrgToken(title: string, orgs: readonly OrgCandidate[]): OrgTokenMatch | null {
+  const escaped = escapeSpans(title);
+  let found: OrgTokenMatch | null = null;
+  for (const m of title.matchAll(ORG_TOKEN_RE)) {
+    const span = { start: m.index, end: m.index + m[0].length };
+    if (overlapsAny(span, escaped)) continue;
+    const query = (m[1] ?? m[2]) as string;
+    const matches = matchOrgs(query, orgs);
+    const exact = matches.filter((c) => c.exact);
+    const pick = exact.length === 1 ? exact[0] : matches.length === 1 ? matches[0] : undefined;
+    const match = { ...span, query, orgId: pick?.orgId ?? null };
+    if (match.orgId !== null || found === null || found.orgId === null) found = match;
+  }
+  return found;
+}
+
+export interface OrgMatch {
+  orgId: string;
+  /** The query is the whole name or the slug, ignoring case and accents. */
+  exact: boolean;
+}
+
+/**
+ * Orgs a typed `^query` can mean, best first: the whole name or slug, then the name starting
+ * with it, then a later word of the name starting with it, then the slug starting with it.
+ * Case and accents are ignored. An empty query lists every org, in the given order.
+ */
+export function matchOrgs(query: string, orgs: readonly OrgCandidate[]): OrgMatch[] {
+  const q = fold(query);
+  const ranked: { orgId: string; rank: number; exact: boolean }[] = [];
+  for (const org of orgs) {
+    const name = fold(org.name);
+    const slug = fold(org.slug);
+    let rank = -1;
+    if (name === q || slug === q) rank = 0;
+    else if (name.startsWith(q)) rank = 1;
+    else if (name.split(/\s+/).some((word) => word.startsWith(q))) rank = 2;
+    else if (slug.startsWith(q)) rank = 3;
+    if (rank >= 0) ranked.push({ orgId: org.id, rank, exact: rank === 0 });
+  }
+  return ranked.sort((a, b) => a.rank - b.rank).map(({ orgId, exact }) => ({ orgId, exact }));
+}
+
+/**
+ * The `^partial` token the caret is in or right after, for the autocomplete popover. `^"Kestrel
+ * La` (an open quote) runs to the closing quote, if any.
+ */
+export function orgTokenAt(
+  text: string,
+  caret: number,
+): { start: number; end: number; query: string } | null {
+  const before = text.slice(0, caret);
+  const quoted = /(?:^|\s)\^"([^"\n]*)$/u.exec(before);
+  if (quoted) {
+    const start = caret - (quoted[1] as string).length - 2;
+    const close = /^[^"\n]*"/.exec(text.slice(caret));
+    const end = close ? caret + close[0].length : caret;
+    return { start, end, query: text.slice(start + 2, close ? end - 1 : end) };
+  }
+  const m = /(?:^|\s)\^([^\s"]\S*|)$/u.exec(before);
+  if (!m) return null;
+  const start = caret - (m[1] as string).length - 1;
+  let end = caret;
+  while (end < text.length && /\S/u.test(text[end] as string)) end += 1;
+  return { start, end, query: text.slice(start + 1, end) };
 }

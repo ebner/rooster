@@ -53,6 +53,12 @@ export const SNIPPET_MARK_END = '\uE001';
 
 export const SWIPE_ACTIONS = ['complete', 'date', 'move', 'delete', 'none'] as const;
 
+/**
+ * Phase 13 (ADR 0073 A6): where rooster opens. `last`: the last list view shown in this
+ * browser (Personal → My tasks the first time); `all-today`: All organisations → Today.
+ */
+export const START_PAGES = ['last', 'all-today'] as const;
+
 export const DEFAULT_PREFS: Prefs = {
   parseTitleDates: true,
   completeHideMs: 1500,
@@ -62,4 +68,6 @@ export const DEFAULT_PREFS: Prefs = {
   allDayReminderTime: '09:00',
   digestTime: '07:00',
   emailMode: 'batch',
+  defaultOrgId: null,
+  startPage: 'last',
 };

@@ -71,3 +71,38 @@ export type TaskView = z.infer<typeof taskViewSchema>;
 export type TaskCompletedFilter = z.infer<typeof taskCompletedFilterSchema>;
 export type TaskQuery = z.infer<typeof taskQuerySchema>;
 export type TaskPage = z.infer<typeof taskPageSchema>;
+
+/**
+ * Phase 13 (ADR 0073 A9): `GET /me/views/{view}`, a smart view across every org the actor is a
+ * member of (and the grant reaches), in the sections of All organisations on the web
+ * (`selectAllView`). Not paged.
+ */
+export const ALL_VIEW_NAMES = ['today', 'week', 'overdue'] as const;
+export const allViewNameSchema = z.enum(ALL_VIEW_NAMES);
+
+export const allViewQuerySchema = z.object({
+  /** Default `false` (open tasks only); `any` includes completed ones in their sections. */
+  completed: taskCompletedFilterSchema.optional(),
+});
+
+export const allViewSectionSchema = z.object({
+  /** `overdue`, `today`, or the ISO date of a Next 7 days `day`. */
+  id: z.string(),
+  kind: z.enum(['overdue', 'today', 'day']),
+  /** The due date a task created in this section gets; null for `overdue`. */
+  date: isoDateSchema.nullable(),
+  /** Each task carries its `orgId`; the actor's placement as in every task payload. */
+  items: z.array(taskSchema),
+});
+
+export const allViewSchema = z.object({
+  view: allViewNameSchema,
+  /** The actor's today, in their timezone. */
+  today: isoDateSchema,
+  sections: z.array(allViewSectionSchema),
+});
+
+export type AllViewName = z.infer<typeof allViewNameSchema>;
+export type AllViewQuery = z.infer<typeof allViewQuerySchema>;
+export type AllViewSectionDto = z.infer<typeof allViewSectionSchema>;
+export type AllViewDto = z.infer<typeof allViewSchema>;

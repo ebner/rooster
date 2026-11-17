@@ -7,11 +7,13 @@ export interface Span {
 }
 
 const ESCAPE_RE = /`[^`]*`/g;
-// `#tag`, `@name`, `@"Quoted name"`, `>Group` and `>"Quoted group"`, each starting a
-// whitespace-separated word. `@` must be followed by a letter (or a quote) so `@ 9am` / `@9am`
-// stay time phrases.
-const INLINE_TOKEN_RE = /(?<=^|\s)(?:#\S+|@\p{L}\S*|@"[^"\n]*"|>"[^"\n]*"|>\S+)/gu;
-const TITLE_TAIL_RE = /^(?:\s+(?:#\S+|@\p{L}\S*|@"[^"\n]*"|>"[^"\n]*"|>\S+))*\s*$/u;
+// `#tag`, `@name`, `@"Quoted name"`, `>Group`, `>"Quoted group"`, and (Phase 13) `^org` and
+// `^"Quoted org"`, each starting a whitespace-separated word. `@` must be followed by a letter
+// (or a quote) so `@ 9am` / `@9am` stay time phrases.
+const INLINE_TOKEN_RE =
+  /(?<=^|\s)(?:#\S+|@\p{L}\S*|@"[^"\n]*"|>"[^"\n]*"|>\S+|\^"[^"\n]*"|\^[^\s"]\S*)/gu;
+const TITLE_TAIL_RE =
+  /^(?:\s+(?:#\S+|@\p{L}\S*|@"[^"\n]*"|>"[^"\n]*"|>\S+|\^"[^"\n]*"|\^[^\s"]\S*))*\s*$/u;
 
 function spansOf(re: RegExp, text: string): Span[] {
   return [...text.matchAll(re)].map((m) => ({ start: m.index, end: m.index + m[0].length }));
@@ -22,7 +24,7 @@ export function escapeSpans(title: string): Span[] {
   return spansOf(ESCAPE_RE, title);
 }
 
-/** Inline `#tag`, `@name` and `>Group` tokens; a date phrase never matches inside one. */
+/** Inline `#tag`, `@name`, `>Group` and `^org` tokens; a date phrase never matches inside one. */
 export function inlineTokenSpans(title: string): Span[] {
   return spansOf(INLINE_TOKEN_RE, title);
 }

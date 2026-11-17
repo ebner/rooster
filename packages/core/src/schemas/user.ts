@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   dateFormatSchema,
+  idSchema,
   localeSchema,
   timeFormatSchema,
   timeSchema,
@@ -29,10 +30,11 @@ export const timeZoneSchema = z
   .string()
   .refine(isValidTimeZone, { error: 'Expected an IANA timezone such as Europe/Stockholm' });
 
-import { DEFAULT_PREFS, SWIPE_ACTIONS } from '../limits.ts';
+import { DEFAULT_PREFS, START_PAGES, SWIPE_ACTIONS } from '../limits.ts';
 
-export { DEFAULT_PREFS, SWIPE_ACTIONS } from '../limits.ts';
+export { DEFAULT_PREFS, START_PAGES, SWIPE_ACTIONS } from '../limits.ts';
 export const swipeActionSchema = z.enum(SWIPE_ACTIONS);
+export const startPageSchema = z.enum(START_PAGES);
 
 /** `user.prefs` (05 §2). Every key is optional in storage; reads apply `DEFAULT_PREFS`. */
 export const prefsSchema = z.object({
@@ -50,6 +52,14 @@ export const prefsSchema = z.object({
   digestTime: timeSchema,
   /** P7 (FR-NOT-3): notification emails at once, or batched every 15 minutes. */
   emailMode: z.enum(['immediate', 'batch']),
+  /**
+   * Phase 13 (ADR 0073 A4): where a task typed in an All organisations view goes. Null: the
+   * personal org. The server accepts only an org the user is a member of; clients treat an
+   * org they no longer see as null.
+   */
+  defaultOrgId: idSchema.nullable(),
+  /** Phase 13 (ADR 0073 A6): Settings → Behaviour, "Open rooster on". */
+  startPage: startPageSchema,
 });
 
 export const prefsPatchSchema = prefsSchema.partial();
@@ -117,6 +127,7 @@ export const sessionSchema = z.object({
 export type Prefs = z.infer<typeof prefsSchema>;
 export type PrefsPatch = z.infer<typeof prefsPatchSchema>;
 export type SwipeAction = z.infer<typeof swipeActionSchema>;
+export type StartPage = z.infer<typeof startPageSchema>;
 export type Me = z.infer<typeof meSchema>;
 export type MePatch = z.infer<typeof mePatchSchema>;
 export type Session = z.infer<typeof sessionSchema>;

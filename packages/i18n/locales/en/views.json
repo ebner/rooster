@@ -42,5 +42,8 @@
       "slides": "Send the slides",
       "offsite": "Plan the team offsite"
     }
+  },
+  "all": {
+    "title": "All organisations"
   }
 }

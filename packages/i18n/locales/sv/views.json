@@ -42,5 +42,8 @@
       "slides": "Skicka bilderna",
       "offsite": "Planera teamets konferens"
     }
+  },
+  "all": {
+    "title": "Alla organisationer"
   }
 }

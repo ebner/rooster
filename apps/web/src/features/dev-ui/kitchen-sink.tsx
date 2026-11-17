@@ -30,6 +30,7 @@ import { TaskCheckbox } from '../../ui/task-checkbox';
 import { ToastView, toast } from '../../ui/toast';
 import { Tooltip, tooltipSurface } from '../../ui/tooltip';
 import { AccessKitchenSection } from '../access/kitchen-sink-section';
+import { AllOrgsKitchenSection } from '../all-orgs/kitchen-sink-section';
 import { AttachmentsKitchenSection } from '../attachments/kitchen-sink-section';
 import { CollabKitchenSection } from '../collab/kitchen-sink-section';
 import { DatesSection } from '../dates/kitchen-sink-section';
@@ -775,6 +776,7 @@ export function KitchenSink() {
         <TagsKitchenSection />
         <MobileKitchenSection />
         <ViewsKitchenSection />
+        <AllOrgsKitchenSection />
         <PaletteKitchenSection />
         <PeopleKitchenSection />
         <CollabKitchenSection />

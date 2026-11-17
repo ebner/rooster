@@ -3,6 +3,12 @@ import type { Org } from '../../data/types';
 /** Views a sidebar org section can link to (02 §2). `everyone` is for shared orgs only. */
 export type OrgViewId = 'my' | 'today' | 'week' | 'overdue' | 'nodate' | 'everyone';
 
+/**
+ * Phase 13 (ADR 0073 A): the views of All organisations, across every org (`/all/<view>`).
+ * The same names as core `ALL_VIEWS`.
+ */
+export type AllViewId = 'today' | 'week' | 'overdue';
+
 export type SettingsSection =
   | 'profile'
   | 'behaviour'
@@ -23,6 +29,10 @@ export const paths = {
   orgView: (slug: string, view: OrgViewId) => `/o/${slug}/${view}`,
   task: (slug: string, taskId: string) => `/o/${slug}/t/${taskId}`,
   orgSettings: (slug: string) => `/o/${slug}/settings`,
+  /** Phase 13 (ADR 0073 A8): All organisations → Today, Next 7 days, Overdue. */
+  allView: (view: AllViewId) => `/all/${view}`,
+  /** The detail pane over the last All organisations view. */
+  allTask: (taskId: string) => `/all/t/${taskId}`,
   orgInvites: (slug: string) => `/o/${slug}/settings#invites`,
   /** Phones: the settings index; tablet and up redirect to the first section. */
   settingsIndex: '/settings',

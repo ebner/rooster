@@ -1759,7 +1759,9 @@
             "reminderTime": "08:00",
             "allDayReminderTime": "09:00",
             "digestTime": "07:00",
-            "emailMode": "batch"
+            "emailMode": "batch",
+            "defaultOrgId": null,
+            "startPage": "last"
           },
           "isAdmin": false,
           "orgs": [
@@ -1838,6 +1840,20 @@
               "immediate",
               "batch"
             ]
+          },
+          "defaultOrgId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "startPage": {
+            "type": "string",
+            "enum": [
+              "last",
+              "all-today"
+            ]
           }
         },
         "required": [
@@ -1848,7 +1864,9 @@
           "reminderTime",
           "allDayReminderTime",
           "digestTime",
-          "emailMode"
+          "emailMode",
+          "defaultOrgId",
+          "startPage"
         ],
         "example": {
           "parseTitleDates": true,
@@ -1858,7 +1876,9 @@
           "reminderTime": "08:00",
           "allDayReminderTime": "09:00",
           "digestTime": "07:00",
-          "emailMode": "batch"
+          "emailMode": "batch",
+          "defaultOrgId": null,
+          "startPage": "last"
         }
       },
       "Org": {
@@ -2038,6 +2058,20 @@
                 "enum": [
                   "immediate",
                   "batch"
+                ]
+              },
+              "defaultOrgId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "startPage": {
+                "type": "string",
+                "enum": [
+                  "last",
+                  "all-today"
                 ]
               }
             },

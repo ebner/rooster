@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ViewTab } from '../shell/mobile-header';
-import { type OrgViewId, paths } from '../shell/paths';
+import { type AllViewId, type OrgViewId, paths } from '../shell/paths';
 import { viewsFor } from '../shell/sidebar-views';
 
 /**
@@ -25,5 +25,22 @@ export function useViewTabs(
         isActive: view.id === active,
       })),
     [t, orgSlug, active, isPersonal],
+  );
+}
+
+const allTabs: readonly AllViewId[] = ['today', 'week', 'overdue'];
+
+/** Phase 13 (02 §13.1): All organisations' view switcher, Today · 7 days · Overdue. */
+export function useAllViewTabs(active: AllViewId | null): ViewTab[] {
+  const { t } = useTranslation('mobile');
+  return useMemo(
+    () =>
+      allTabs.map((id) => ({
+        id,
+        label: t(`views.tab.${id}`),
+        href: paths.allView(id),
+        isActive: id === active,
+      })),
+    [t, active],
   );
 }
