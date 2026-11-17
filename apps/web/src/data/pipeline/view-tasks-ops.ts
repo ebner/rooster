@@ -21,6 +21,12 @@ export interface ViewTasksData {
   counts: { open: number; done: number };
   /** The rows as the server sent them (before the queued ops): what `counts` describe. */
   baseline?: readonly Task[];
+  /**
+   * The server's rows with every op confirmed since (the base the queue is replayed onto, as
+   * my-list's): a cache no screen showed while ops went by is rebuilt from it when shown again,
+   * offline too (`ListPipeline.replayViewTasks`).
+   */
+  confirmed?: readonly Task[];
 }
 
 export function isViewTasksData(data: unknown): data is ViewTasksData {

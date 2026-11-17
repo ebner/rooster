@@ -32,7 +32,7 @@ import { SavedViewContent } from './saved-view-screen';
 
 const env = vi.hoisted(() => ({
   navigate: vi.fn(),
-  update: vi.fn(async (vars: { id: string; patch: unknown }) => vars),
+  update: vi.fn(async (vars: { id: string; patch: unknown }): Promise<unknown> => vars),
   create: vi.fn(async (input: { id: string; name: string }) => input),
   archive: vi.fn(async (vars: unknown) => vars),
   remove: vi.fn(async (id: string) => id),
@@ -138,6 +138,8 @@ async function setup(
     ...options.view,
   };
   transport.views.set(viewId, view);
+  // The server answers with the changed view.
+  env.update.mockImplementation(async ({ patch }) => ({ ...view, ...(patch as object) }));
   const sent: ListOp[] = [];
   const send = transport.send;
   transport.send = (op, org) => {
@@ -378,6 +380,19 @@ describe('a new view (/v/new)', () => {
     );
   });
 
+  test('after a failed create, Escape cancels: the blur creates nothing', async () => {
+    env.create.mockRejectedValueOnce(new ApiError('network', 0));
+    const name = renderNew();
+    fireEvent.change(name, { target: { value: 'Launch' } });
+    fireEvent.keyDown(name, { key: 'Enter' });
+    expect(await screen.findByText("Couldn't save the view. Try again.")).toBeTruthy();
+    fireEvent.focus(name);
+    fireEvent.keyDown(name, { key: 'Escape' });
+    fireEvent.blur(name);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(env.create).toHaveBeenCalledTimes(1);
+  });
+
   test('the view limit (409 view_limit) says so', async () => {
     env.create.mockRejectedValueOnce(new ApiError('view_limit', 409));
     const name = renderNew();
@@ -449,6 +464,66 @@ describe('a failed edit (online only, optimistic)', () => {
     await waitFor(() =>
       expect(queryClient.getQueryData<SavedView[]>(key)?.[0]?.name).toBe('Juniper'),
     );
+  });
+
+  test('the cache only ever holds answers; a failure drops the local edit', async () => {
+    const { queryClient } = await setup();
+    const key = queryKeys.views(orgId, false);
+    const seen: string[] = [];
+    queryClient.getQueryCache().subscribe(() => {
+      const name = queryClient.getQueryData<SavedView[]>(key)?.[0]?.name;
+      if (name) seen.push(name);
+    });
+    let reject: (error: unknown) => void = () => {};
+    env.update.mockImplementationOnce(
+      () =>
+        new Promise((_, no) => {
+          reject = no;
+        }),
+    );
+    const name = screen.getByTestId('view-name') as HTMLInputElement;
+    fireEvent.change(name, { target: { value: 'Mine' } });
+    fireEvent.keyDown(name, { key: 'Enter' });
+    // Shown at once, in the header only.
+    await waitFor(() => expect(name.value).toBe('Mine'));
+    act(() => reject(new ApiError('network', 0)));
+    await waitFor(() => expect(name.value).toBe('Juniper'));
+    expect(seen).not.toContain('Mine');
+  });
+
+  test('overlapping failures each drop their own edit, whatever order they answer in', async () => {
+    await setup();
+    const rejects: ((error: unknown) => void)[] = [];
+    env.update.mockImplementation(
+      () =>
+        new Promise((_, no) => {
+          rejects.push(no);
+        }),
+    );
+    const name = screen.getByTestId('view-name') as HTMLInputElement;
+    fireEvent.change(name, { target: { value: 'One' } });
+    fireEvent.keyDown(name, { key: 'Enter' });
+    fireEvent.click(screen.getByTestId('view-chip-due'));
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'No date' }));
+    await waitFor(() => expect(rejects).toHaveLength(2));
+    act(() => rejects[1]?.(new ApiError('network', 0)));
+    act(() => rejects[0]?.(new ApiError('network', 0)));
+    await waitFor(() => expect(name.value).toBe('Juniper'));
+    expect(screen.getByTestId('view-chip-due').textContent).toContain('Any date');
+  });
+
+  test('a success writes the server’s view into the cache', async () => {
+    const { queryClient, view } = await setup();
+    env.update.mockImplementationOnce(async () => ({ ...view, name: 'As saved' }));
+    const name = screen.getByTestId('view-name') as HTMLInputElement;
+    fireEvent.change(name, { target: { value: 'As typed' } });
+    fireEvent.keyDown(name, { key: 'Enter' });
+    await waitFor(() =>
+      expect(queryClient.getQueryData<SavedView[]>(queryKeys.views(orgId, false))?.[0]?.name).toBe(
+        'As saved',
+      ),
+    );
+    await waitFor(() => expect(name.value).toBe('As saved'));
   });
 
   test('after a sign-out the old session’s views stay gone', async () => {

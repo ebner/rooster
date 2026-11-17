@@ -39,6 +39,7 @@ export async function fetchViewTasks(
     items: pipeline.withPendingViewTasks(orgId, page.items, viewTasksKey(viewId, completed)),
     counts: page.counts,
     baseline: page.items,
+    confirmed: page.items,
   };
 }
 

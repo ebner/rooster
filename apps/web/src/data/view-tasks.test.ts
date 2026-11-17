@@ -266,3 +266,58 @@ describe('revocation', () => {
 function transportHangs(pipeline: { transport: { fetchViewTasks?: unknown } }) {
   pipeline.transport.fetchViewTasks = () => new Promise(() => {});
 }
+
+describe('a view shown again', () => {
+  test('offline: rebuilt from its confirmed rows and the queue (ops went by while hidden)', async () => {
+    const { pipeline, queryClient, transport } = await viewSetup();
+    transport.send = () => new Promise(() => {});
+    const key = viewTasksKey('v1', false);
+    queryClient.setQueryData(key, await fetchViewTasks(pipeline, org, 'v1', false));
+    const tagged = Object.values(transport.state(org).tasks).find((t) => t.title === 'Tagged');
+    pipeline.enqueue(org, [listOps.completeTask(tagged?.id as string, true)], ctx);
+    const hidden = queryClient.getQueryData<ViewTasksData>(key);
+    expect(hidden?.items.find((t) => t.title === 'Tagged')?.completedAt).toBeNull();
+    pipeline.replayViewTasks(key);
+    const shown = queryClient.getQueryData<ViewTasksData>(key);
+    expect(shown?.items.find((t) => t.title === 'Tagged')?.completedAt).not.toBeNull();
+  });
+
+  test('ops confirmed while it was hidden are in its confirmed rows', async () => {
+    const { pipeline, queryClient, transport } = await viewSetup();
+    const key = viewTasksKey('v1', false);
+    queryClient.setQueryData(key, await fetchViewTasks(pipeline, org, 'v1', false));
+    const tagged = Object.values(transport.state(org).tasks).find((t) => t.title === 'Tagged');
+    pipeline.enqueue(org, [listOps.deleteTask(tagged?.id as string)], ctx);
+    await pipeline.idle();
+    pipeline.replayViewTasks(key);
+    const shown = queryClient.getQueryData<ViewTasksData>(key);
+    expect(shown?.items.some((t) => t.title === 'Tagged')).toBe(false);
+  });
+});
+
+describe('ops the views’ reducer can’t follow', () => {
+  test('a group deleted with its tasks: the views and their rows are fetched again', async () => {
+    const transport = createFixtureTransport({
+      userId: me,
+      tasks: { 1: [{ title: 'In a group', tags: ['juniper'] }] },
+    });
+    await transport.fetchMyList(org);
+    const tagId = transport.tags(org)[0]?.id as string;
+    transport.views.set('v1', { id: 'v1', orgId: org, query: { ...query, tags: [tagId] } });
+    const queryClient = new QueryClient();
+    const pipeline = getListPipeline(queryClient, transport);
+    await queryClient.fetchQuery({
+      queryKey: ['my-list', org],
+      queryFn: () => pipeline.fetch(org),
+    });
+    const key = viewTasksKey('v1', false);
+    queryClient.setQueryData(key, await fetchViewTasks(pipeline, org, 'v1', false));
+    observe(queryClient, key);
+    queryClient.setQueryData(['views', org, 'live'], []);
+    const group = Object.values(transport.state(org).groups).find((g) => g.kind !== 'inbox');
+    pipeline.enqueue(org, [listOps.deleteGroup(group?.id as string, { deleteTasks: true })], ctx);
+    await pipeline.idle();
+    expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(['views', org, 'live'])?.isInvalidated).toBe(true);
+  });
+});

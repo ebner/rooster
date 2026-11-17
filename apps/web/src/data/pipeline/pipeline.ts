@@ -79,10 +79,14 @@ function touchesTasks(op: ListOpSpec): boolean {
 
 /** Whether `op` can change which tasks a view counts as open or done (the sidebar counts). */
 function changesCounts(op: ListOpSpec): boolean {
+  if (refetchesViews.has(op.kind)) return true;
   if (!op.kind.startsWith('task.') || orderOnlyKinds.has(op.kind)) return false;
   if (op.kind === 'task.patch') return 'assigneeId' in op.payload || 'dueDate' in op.payload;
   return true;
 }
+
+/** Ops that change tasks the views' reducer doesn't see (a group's tasks): refetched. */
+const refetchesViews: ReadonlySet<string> = new Set(['group.delete', 'group.restore']);
 
 /** The key of a deleted row in one cache (`deletedRows`). */
 function recallKey(cache: string, id: string): string {
@@ -695,6 +699,18 @@ export class ListPipeline {
       });
   }
 
+  /**
+   * A view's rows shown again (ADR 0073 B): while no screen showed them, ops only marked them
+   * stale. They are rebuilt from their confirmed base and the queue, so they are right before
+   * the refetch, and offline without one.
+   */
+  replayViewTasks(key: QueryKey): void {
+    const data = this.queryClient.getQueryData(key);
+    if (!isViewTasksData(data) || !data.confirmed) return;
+    const items = this.withPendingViewTasks(data.orgId, data.confirmed, key);
+    this.queryClient.setQueryData(key, { ...data, items });
+  }
+
   /** Refetches the rows of the views of these orgs (they have no confirmed base here). */
   private refetchViewTasks(orgIds: readonly string[]): void {
     const orgs = new Set(orgIds);
@@ -1242,15 +1258,33 @@ export class ListPipeline {
     if (refetch) {
       void this.queryClient.invalidateQueries({ queryKey: everyoneRootKey(item.orgId) });
     }
-    let refetchViews = op.kind === 'task.moveToOrg';
+    // Ops the views' reducer can't follow (a group deleted with its tasks, or restored): the
+    // server's rows. This tab's own SSE events don't refetch views (the pipeline merges ops).
+    let refetchViews = op.kind === 'task.moveToOrg' || refetchesViews.has(op.kind);
     for (const [key, data, shown] of this.viewTaskCaches(item.orgId)) {
-      if (!shown) continue;
-      const merged = mergeViewTasksResponse(data.items, op, response);
-      // A task the view lacks may match now (tagged, reassigned, restored): only the server
-      // knows its row.
-      refetchViews ||= merged.refetch || mayJoinView(op, data.items);
-      if (settledRows && merged.tasks !== data.items) {
-        this.queryClient.setQueryData(key, { ...data, items: merged.tasks });
+      const cache = hashKey(key);
+      // The confirmed base takes every confirmed op, shown or not.
+      const confirmed = data.confirmed
+        ? mergeViewTasksResponse(
+            applyOpToViewTasks(data.confirmed, op, this.rowContext(item, cache), data.orgId),
+            op,
+            response,
+          ).tasks
+        : undefined;
+      let items = data.items;
+      if (shown) {
+        const merged = mergeViewTasksResponse(data.items, op, response);
+        // A task the view lacks may match now (tagged, reassigned, restored): only the server
+        // knows its row.
+        refetchViews ||= merged.refetch || mayJoinView(op, data.items);
+        if (settledRows) items = merged.tasks;
+      }
+      if (items !== data.items || confirmed !== data.confirmed) {
+        this.queryClient.setQueryData(key, {
+          ...data,
+          items,
+          ...(confirmed ? { confirmed } : {}),
+        });
       }
     }
     if (refetchViews) this.refetchViewTasks(listOrgs(item));

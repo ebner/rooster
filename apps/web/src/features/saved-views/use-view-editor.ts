@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ApiError, errorCode } from '../../data/errors';
+import { errorCode } from '../../data/errors';
 import { useListPipeline } from '../../data/list';
 import { queryKeys } from '../../data/query-keys';
 import { sessionScope } from '../../data/session-events';
@@ -19,6 +19,9 @@ import { announce } from '../list/announcer';
 import { orgUrlSlug, paths } from '../shell/paths';
 import { emptyViewQuery, viewNameMax } from './query';
 import { addCreatedView, mayWriteViews } from './view-cache';
+
+/** A field's edit waiting for its answer, and its place in the order of edits. */
+type Edits = Partial<Record<keyof ViewDraft, { value: unknown; seq: number }>>;
 
 /** What the header edits: a saved view's name, query and sharing, or a new view's. */
 export interface ViewDraft {
@@ -50,9 +53,9 @@ function cleanName(name: string): string {
 
 /**
  * The header's changes (ADR 0073 B7): a saved view is changed at once (online only, like org
- * settings; the views list is updated before the request so the rows re-filter at once, and
- * put back when it fails); a new view lives here until it is named, then it is created and the
- * URL takes its ID.
+ * settings). The edit shows here at once (the rows re-filter by `draft.query`); the views
+ * cache only ever takes the server's answers, checked against the session and the org. A new
+ * view lives here until it is named, then it is created and the URL takes its ID.
  */
 export function useViewEditor(
   org: Org,
@@ -75,8 +78,21 @@ export function useViewEditor(
     () => initial ?? { name: '', query: emptyViewQuery, shared: false },
   );
   const creating = useRef(false);
+  /**
+   * A saved view's edits on their way to the server (B7: changes save at once). They show
+   * here only: the views cache takes nothing but the server's answers, so a failure has
+   * nothing to roll back there (it drops its edit and refetches). Per field, the latest edit.
+   */
+  const [edits, setEdits] = useState<Edits>({});
+  const editSeq = useRef(0);
+  /** Per field, the newest edit whose answer was written to the cache. */
+  const answered = useRef<Partial<Record<keyof ViewDraft, number>>>({});
   const draft: ViewDraft = view
-    ? { name: view.name, query: view.query, shared: view.shared }
+    ? {
+        name: (edits.name?.value as string | undefined) ?? view.name,
+        query: (edits.query?.value as SavedViewQuery | undefined) ?? view.query,
+        shared: (edits.shared?.value as boolean | undefined) ?? view.shared,
+      }
     : local;
 
   const offline = () => {
@@ -93,45 +109,43 @@ export function useViewEditor(
   const forget = (id: string) => queryClient.removeQueries({ queryKey: ['view-tasks', id] });
 
   const liveKey = queryKeys.views(org.id, false);
+  const settle = (seq: number, fields: readonly (keyof ViewDraft)[]) =>
+    setEdits((current) => {
+      const next = { ...current };
+      for (const field of fields) if (next[field]?.seq === seq) delete next[field];
+      return next;
+    });
   const patchView = (patch: SavedViewPatch) => {
     if (!view || offline()) return;
     const session = sessionScope();
-    const previous = queryClient.getQueryData<SavedView[]>(liveKey)?.find((v) => v.id === view.id);
-    queryClient.setQueryData<SavedView[]>(liveKey, (list) =>
-      list?.map((v) =>
-        v.id === view.id
-          ? {
-              ...v,
-              name: patch.name ?? v.name,
-              query: patch.query ?? v.query,
-              shared: patch.shared ?? v.shared,
-            }
-          : v,
-      ),
+    const seq = ++editSeq.current;
+    const fields = (Object.keys(patch) as (keyof ViewDraft)[]).filter(
+      (field) => patch[field] !== undefined,
     );
-    // The optimistic write's place in the list's history: a fetch after it is the truth.
-    const written = queryClient.getQueryState(liveKey)?.dataUpdateCount;
+    setEdits((current) => {
+      const next = { ...current };
+      for (const field of fields) next[field] = { value: patch[field], seq };
+      return next;
+    });
     update.mutateAsync({ id: view.id, patch }).then(
-      () => {
-        if (patch.query && mayWriteViews(queryClient, org.id, session)) {
-          void queryClient.invalidateQueries({ queryKey: ['view-tasks', view.id] });
-        }
-      },
-      (error: unknown) => {
+      (saved) => {
         // A sign-out or a left org meanwhile: its caches are gone and must stay so.
         if (!mayWriteViews(queryClient, org.id, session)) return;
-        failed(error);
-        const fetched = queryClient.getQueryState(liveKey)?.dataUpdateCount !== written;
-        if (fetched || (error instanceof ApiError && error.status === 404) || !previous) {
-          // The list was fetched since (the mutation refetches it when it settles), or the
-          // view is gone: what the server says stands.
-          if (!fetched) void queryClient.invalidateQueries({ queryKey: liveKey });
-          return;
+        // An older answer arriving after a newer one's doesn't overwrite it.
+        if (!fields.some((field) => (answered.current[field] ?? 0) > seq)) {
+          for (const field of fields) answered.current[field] = seq;
+          queryClient.setQueryData<SavedView[]>(liveKey, (list) =>
+            list?.map((v) => (v.id === saved.id ? { ...v, ...saved } : v)),
+          );
         }
-        // Offline or failing: only this view's own entry goes back.
-        queryClient.setQueryData<SavedView[]>(liveKey, (list) =>
-          list?.map((v) => (v.id === view.id ? previous : v)),
-        );
+        settle(seq, fields);
+        if (patch.query) void queryClient.invalidateQueries({ queryKey: ['view-tasks', view.id] });
+      },
+      (error: unknown) => {
+        if (!mayWriteViews(queryClient, org.id, session)) return;
+        failed(error);
+        settle(seq, fields);
+        void queryClient.invalidateQueries({ queryKey: liveKey });
       },
     );
   };
@@ -165,7 +179,7 @@ export function useViewEditor(
     const name = cleanName(raw);
     if (name === '') return;
     if (view) {
-      if (name !== view.name) patchView({ name });
+      if (name !== draft.name) patchView({ name });
       return;
     }
     // A new view: also the same name again, after a create that failed (or was offline).

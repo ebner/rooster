@@ -102,7 +102,14 @@ const SavedViewRows = memo(function SavedViewRows({
   const showCompleted = useListStore((s) => s.showCompleted);
   const drafts = useListStore((s) => s.drafts);
   const hiding = useListStore((s) => s.hiding);
-  const data = useViewTasks(orgId, viewId, needsCompleted(query, showCompleted)).data;
+  const completed = needsCompleted(query, showCompleted);
+  const pipeline = useListPipeline();
+  // Shown again: rebuilt from the confirmed rows and the queue (offline too, before a refetch).
+  useEffect(
+    () => pipeline.replayViewTasks(viewTasksKey(viewId, completed)),
+    [pipeline, viewId, completed],
+  );
+  const data = useViewTasks(orgId, viewId, completed).data;
   const byId = useMemo(
     () => (data ? Object.fromEntries(data.items.map((t) => [t.id, t])) : null),
     [data],

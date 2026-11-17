@@ -44,6 +44,7 @@ export function ViewNameInput({
   const [value, setValue] = useState(name);
   const ref = useRef<HTMLInputElement>(null);
   const editing = useRef(false);
+  const skipBlur = useRef(false);
   useEffect(() => {
     if (!editing.current) setValue(name);
   }, [name]);
@@ -56,16 +57,20 @@ export function ViewNameInput({
     focus();
     return subscribeNameFocus(focus);
   }, []);
-  const commit = () => {
+  /** `explicit`: Enter. Only that retries a failed create with the same name, never a blur. */
+  const commit = (explicit: boolean) => {
     editing.current = false;
     const next = value.trim();
-    if (next === '' || (next === name && !retry)) setValue(name);
+    if (next === '' || (next === name && !(retry && explicit))) setValue(name);
     else onCommit(next);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      commit();
+      commit(true);
+      // The blur that follows commits nothing more (the name is the committed one now).
+      editing.current = false;
+      skipBlur.current = true;
       event.currentTarget.blur();
     } else if (event.key === 'Escape') {
       event.preventDefault();
@@ -88,7 +93,10 @@ export function ViewNameInput({
         editing.current = true;
         setValue(e.target.value);
       }}
-      onBlur={commit}
+      onBlur={() => {
+        if (skipBlur.current) skipBlur.current = false;
+        else commit(false);
+      }}
       onKeyDown={onKeyDown}
       className={cn(
         'min-w-0 flex-1 truncate rounded-xs bg-transparent px-1 -ms-1 text-lg text-text outline-none',
