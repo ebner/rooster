@@ -405,4 +405,42 @@ describe('views from the command line (ADR 0073 B12)', () => {
     expect(rows.filter((l) => !l.includes('Completed'))).toHaveLength(1);
     expect(t.frame()).toContain('Ada (you) (1)');
   });
+
+  it('TUI: a held row deleted elsewhere goes; a held subtask keeps its breadcrumb', async () => {
+    const { ada, cli, slug, tasks } = await seed();
+    expect((await ada.api('PATCH', '/api/v1/me', { prefs: { completeHideMs: 0 } })).status).toBe(
+      200,
+    );
+    expect((await cli.run(['org', 'use', slug])).code).toBe(0);
+    const t = await openTui(cli, { columns: 140, rows: 40 });
+    tuis.push(t);
+    await t.waitFor((f) => f.includes('# Juniper'));
+    await t.press('g', '1');
+    await t.waitFor((f) => f.includes('Ada (you) (2)'));
+    const rowOf = (f: string, title: string) =>
+      f.split('\n').filter((l) => l.includes(title) && !l.includes('Completed'));
+    const selected = (f: string) => f.split('\n').find((l) => l.includes('│ › ')) ?? '';
+    const selectRow = async (title: string) => {
+      await t.press('\u001b[H');
+      for (let i = 0; i < 20 && !selected(t.frame()).includes(title); i++) await t.press('j');
+      expect(selected(t.frame())).toContain(title);
+    };
+    // The subtask: its parent "Not Juniper" isn't in the view, only its breadcrumb.
+    await selectRow('Juniper subtask');
+    expect(selected(t.frame())).toContain('Not Juniper › Juniper subtask');
+    await t.press('x');
+    await t.waitFor((f) => f.includes('Completed “Juniper subtask”') && f.includes('● synced'));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(rowOf(t.frame(), 'Juniper subtask')).toEqual([
+      expect.stringContaining('Not Juniper › Juniper subtask'),
+    ]);
+    // A held row deleted on the web leaves with the refresh (SSE) instead of staying selectable.
+    await selectRow('Ada today');
+    await t.press('x');
+    await t.waitFor((f) => f.includes('Completed “Ada today”') && f.includes('● synced'));
+    expect((await ada.api('DELETE', `/api/v1/tasks/${tasks.adaToday?.id}`)).status).toBe(204);
+    await t.waitFor((f) => rowOf(f, 'Ada today').length === 0);
+    // The other held row stays.
+    expect(rowOf(t.frame(), 'Juniper subtask')).toHaveLength(1);
+  });
 });

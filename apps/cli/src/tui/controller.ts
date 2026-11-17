@@ -550,8 +550,15 @@ export class TuiController {
    */
   private async fetchSaved(viewId: string | null): Promise<Task[] | 'gone' | null> {
     if (viewId === null) return null;
+    // A row completed here stays in place for `completeHideMs` (`keep`): while one is held, the
+    // completed matches (and their breadcrumbs' parents) are fetched too, and `savedLines` hides
+    // all but the held ones. A held row the server no longer has (deleted meanwhile) goes.
+    const holding = (this.state.viewTasks ?? []).some(
+      (t) => t.completedAt !== null && this.keep.has(t.id),
+    );
     try {
-      return (await fetchViewTasks(this.api, viewId, this.state.showCompleted)).items as Task[];
+      return (await fetchViewTasks(this.api, viewId, this.state.showCompleted || holding))
+        .items as Task[];
     } catch (error) {
       if (error instanceof RoosterApiError && error.status === 404) return 'gone';
       throw error;
@@ -602,13 +609,7 @@ export class TuiController {
         message: { text: this.t('msg.viewGone'), tone: 'info', retry: false },
       };
     }
-    // A row completed here stays in place for `completeHideMs` (`keep`), though the refetch
-    // without completed tasks no longer has it.
-    const fetched = new Set(viewTasks.map((t) => t.id));
-    const held = (this.state.viewTasks ?? []).filter(
-      (t) => this.keep.has(t.id) && !fetched.has(t.id),
-    );
-    return { views, viewTasks: held.length === 0 ? viewTasks : [...viewTasks, ...held] };
+    return { views, viewTasks };
   }
 
   private async loadOrg(org: Org): Promise<void> {
