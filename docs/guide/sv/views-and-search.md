@@ -21,6 +21,16 @@ Varje rad visar sin grupp som en liten etikett. I sidofältet räknas öppna upp
 
 ![Kommande 7 dagar, ett avsnitt per dag](../../screenshots/next-7-days.desktop.light.png)
 
+## Alla organisationer
+
+Är du med i mer än en organisation finns **Alla organisationer** högst upp i sidofältet, med Idag, Kommande 7 dagar och Försenade för alla på en gång: ett ställe där du ser vad som förfaller, oavsett om det gäller jobbet, hemmet eller föreningen. Siffrorna räknar ihop alla organisationer.
+
+- Avsnitten är desamma som i varje organisations vyer (Försenade och sedan Idag; ett avsnitt per dag), med alla organisationers uppgifter blandade efter datum. Varje rad har en liten etikett med organisationens avatar.
+- Raderna fungerar som vanligt: markera som klar, byt datum, tagga, tilldela eller öppna dem. Varje ändring sparas i uppgiftens egen organisation, och allt fungerar utan uppkoppling.
+- **En ny uppgift** hamnar i din **standardorganisation** (Personligt, om du inte ändrar det under [Inställningar → Beteende](./settings-and-data.md#beteende)). Den nya raden visar organisationen som en dämpad etikett. Vill du välja en annan skriver du `^` och dess namn: `Boka lokalen ^Kestrel`. Förslag visas medan du skriver, och etiketten följer med. Uppgiften hamnar i organisationens inkorg, eller i en grupp du anger med `>Grupp`.
+- Utan datum och Mina uppgifter finns kvar i varje organisation: de handlar om var en uppgift är sorterad.
+- Med tangentbordet öppnar du paletten (Ctrl+K) och väljer **Alla organisationer: Idag** (eller Kommande 7 dagar, Försenade). Vill du att rooster startar på Alla organisationer · Idag, se [Beteende](./settings-and-data.md#beteende).
+
 ## Allas uppgifter
 
 Delade organisationer har också **Allas uppgifter**, alla öppna uppgifter grupperade per person (G, sedan E). Se [Samarbete](./collaboration.md#allas-uppgifter).

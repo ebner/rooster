@@ -53,7 +53,7 @@ Global flags: `--org <slug>`, `--profile <name>`, `--json`, `--quiet` (IDs only)
 | Command | Description |
 |---|---|
 | `rooster` | On a TTY, opens the **TUI**. Otherwise it is the same as `rooster ls`. |
-| `rooster ls [view]` | View is `my` (default), `today`, `week`, `overdue`, `nodate` or `everyone`. Flags: `--group <name>`, `--tag <t>`, `--completed`, `--all-orgs`, `--subtasks`, `--upcoming` (My tasks only: also list the **Recurring** section, ADR 0068; without it a muted line says how many tasks it holds). The human output is grouped by group headers. `--json` lists every task and marks each with `upcoming: true\|false`. |
+| `rooster ls [view]` | View is `my` (default), `today`, `week`, `overdue`, `nodate` or `everyone`. Flags: `--group <name>`, `--tag <t>`, `--completed`, `--all-orgs`, `--subtasks`, `--upcoming` (My tasks only: also list the **Recurring** section, ADR 0068; without it a muted line says how many tasks it holds). The human output is grouped by group headers. `--json` lists every task and marks each with `upcoming: true\|false`. Phase 13: `today`, `week` and `overdue` with `--all-orgs` (and without `--group`) are one listing in All organisations' sections from `GET /me/views/<view>`, each row with its org (`--json`: a flat array in section order; an older server without the route gets the per-org listing). |
 | `rooster today` / `rooster week` | Aliases. |
 | `rooster add <title…>` | The title is NL-parsed server-side (`parse:true`), e.g. `rooster add "Book dentist fri #health >Today"`. **Quote the title**: unquoted, `#` starts a shell comment and `>` redirects output. Multiple unquoted words are joined with spaces, but the docs and `--help` always show the quoted form. Flags: `--due <phrase\|date>`, `--time HH:MM`, `--start <date>`, `--group <name>`, `--top`/`--bottom` (default top of the group, or the Inbox when no group is given), `--tag <t>` (repeatable), `--assign <email\|name\|me>`, `--parent <ref>`, `--desc <text>`, `--desc-file <path\|->`, `--no-parse`, (P10) `--remind <15m\|1h\|1d\|due\|"fri 14:00">` (repeatable). The title token `!1h` works too. It prints the created task line. |
 | `rooster show <ref>` | Full details: Markdown description rendered for the terminal, subtasks, tags and (P6) recent comments. |
@@ -154,7 +154,7 @@ Built with **Ink 8**. It is a full-screen, keyboard-only mini rooster.
 | Tool | Input | Notes |
 |---|---|---|
 | `list_orgs` | — | |
-| `list_tasks` | `{org?, view?: my\|today\|week\|overdue\|nodate\|everyone, group?, tag?, includeCompleted?}` | Returns compact rows: seq, title, due, group, tags. |
+| `list_tasks` | `{org?, view?: my\|today\|week\|overdue\|nodate\|everyone, group?, tag?, includeCompleted?, allOrgs?}` | Returns compact rows: seq, title, due, group, tags. Phase 13: `allOrgs: true` (with today, week or overdue, without `org`/`group`) reads `GET /me/views/<view>`; each row names its org. |
 | `list_views` | `{org?}` | Phase 13 (ADR 0073); `list_tasks` also takes `{view}` (a view's name or id). |
 | `get_task` | `{ref}` | Includes description and subtasks. |
 | `search_tasks` | `{query, allOrgs?}` | |

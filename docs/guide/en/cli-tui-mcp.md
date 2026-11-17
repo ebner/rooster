@@ -33,6 +33,7 @@ The login is stored in your system's keychain, or in a file only you can read wh
 
 ```sh
 rooster today                     # due today or overdue; also: rooster week, rooster ls overdue
+rooster ls today --all-orgs       # the same across every organisation, like All organisations
 rooster ls                        # My tasks, by group
 rooster add "Book dentist fri #health >Today"
 rooster add "Send invoice tomorrow 14:00 !1h"           # with a reminder an hour before

@@ -72,7 +72,7 @@
 | PATCH `/views/:id` · DELETE `/views/:id` | `{name?, query?, shared?}`; private views only by their creator; shared ones by any member. | 13 |
 | POST `/views/:id/move` · POST `/views/:id/archive` · POST `/views/:id/restore` | The actor's own sidebar order `{beforeId?, afterId?}`; archive and restore. | 13 |
 | GET `/views/:id/tasks?completed=false\|true` | The view's rows (TaskDTO, grouped by the client) and `{open, done}` counts. | 13 |
-| GET `/me/views/today\|week\|overdue` | Phase 13 (ADR 0073 A): the smart view across every org the actor is a member of (grant-filtered). | 13 |
+| GET `/me/views/today\|week\|overdue` | Phase 13 (ADR 0073 A): the smart view across every org the actor is a member of, in sidebar order; orgs a grant doesn't reach are left out and rows outside a group constraint dropped. `?completed=false\|true\|any` (default `false`). Not paged: `{view, today, sections: [{id, kind: overdue\|today\|day, date, items: Task[]}]}`, the sections of core `selectAllView`. `PATCH /me` accepts `prefs.defaultOrgId` only for a member org (`422`); `GET /me` reads one the user left as null. | 13 |
 | GET `/orgs/:orgId/tasks` | **General query** for CLI, MCP and Everyone. Query params: `view=my\|today\|week\|overdue\|nodate\|everyone`, `assignee=me\|<userId>\|none\|any` (repeatable, OR-combined), `hasDue=true\|false`, `groupId`, `tag` (repeatable), `dueFrom`, `dueTo`, `completed=false\|true\|any`, `parentId`, `q`, `limit`, `cursor`, `include=description,subtasks`. | 2/6 |
 
 ### 2.4 Tasks

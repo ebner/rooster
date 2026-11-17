@@ -21,6 +21,16 @@ Each row shows its group as a small chip. The sidebar counts open tasks for Toda
 
 ![Next 7 days, one section per day](../../screenshots/next-7-days.desktop.light.png)
 
+## All organisations
+
+If you're in more than one organisation, the top of the sidebar has **All organisations** with Today, Next 7 days and Overdue across all of them: one place to see what's due, whether it's work, home or the club. The badges add up every organisation's counts.
+
+- The sections are the same as in each organisation's views (Overdue, then Today; one section per day), with every organisation's tasks mixed by date. Each row has a small chip with its organisation's avatar.
+- Rows work as anywhere else: complete, re-date, tag, assign or open them. Each change is saved in the task's own organisation, and it all works offline.
+- **Adding a task** puts it in your **default organisation** (Personal, unless you change it in [Settings → Behaviour](./settings-and-data.md#behaviour)). The new row shows that organisation as a muted chip. To pick another, type `^` and its name: `Book the venue ^Kestrel`. Suggestions appear as you type, and the chip follows. The task goes to that organisation's Inbox, or to a group you name with `>Group`.
+- No date and My tasks stay in each organisation: they're about where a task is filed.
+- To go there from the keyboard, open the palette (Ctrl+K) and choose **All organisations: Today** (or Next 7 days, Overdue). To start rooster on All organisations · Today, see [Behaviour](./settings-and-data.md#behaviour).
+
 ## Everyone's tasks
 
 Shared organisations also have **Everyone's tasks**, all open tasks grouped by person (G then E). See [Working together](./collaboration.md#everyones-tasks).

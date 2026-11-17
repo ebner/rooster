@@ -33,6 +33,7 @@ Inloggningen sparas i systemets nyckelring, eller i en fil som bara du kan läsa
 
 ```sh
 rooster today                     # förfaller idag eller är försenat; även: rooster week, rooster ls overdue
+rooster ls today --all-orgs       # samma sak i alla organisationer, som Alla organisationer
 rooster ls                        # Mina uppgifter, per grupp
 rooster add "Boka tandläkare fre #hälsa >Idag"
 rooster add "Skicka faktura imorgon 14:00 !1h"         # med en påminnelse en timme innan
