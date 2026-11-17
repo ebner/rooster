@@ -34,7 +34,7 @@ The better-auth CLI generates these through the Drizzle adapter, and they are ke
 
 | Table | Purpose | Additional fields (better-auth `additionalFields`) |
 |---|---|---|
-| `user` | id, name, email, emailVerified, image, createdAt, updatedAt | `locale TEXT NOT NULL DEFAULT 'en'` (en/sv) · `timezone TEXT NOT NULL DEFAULT 'UTC'` · `week_start INTEGER NOT NULL DEFAULT 1` (0=Sun, 1=Mon) · `date_format TEXT NOT NULL DEFAULT 'MMM d'` (or `d MMM`) · `time_format TEXT NOT NULL DEFAULT '24h'` · `prefs TEXT NOT NULL DEFAULT '{}'` (JSON: parseTitleDates, completeHideMs, swipeLeft, swipeRight, reminderTime, allDayReminderTime (P10, default 09:00), digestTime, emailMode) · `disabled_at INTEGER` · (P10) `avatar_at INTEGER` (set while an uploaded avatar is the picture) · `oidc_image TEXT` (the provider's picture, restored by `DELETE /me/avatar`) |
+| `user` | id, name, email, emailVerified, image, createdAt, updatedAt | `locale TEXT NOT NULL DEFAULT 'en'` (en/sv) · `timezone TEXT NOT NULL DEFAULT 'UTC'` · `week_start INTEGER NOT NULL DEFAULT 1` (0=Sun, 1=Mon) · `date_format TEXT NOT NULL DEFAULT 'MMM d'` (or `d MMM`) · `time_format TEXT NOT NULL DEFAULT '24h'` · `prefs TEXT NOT NULL DEFAULT '{}'` (JSON: parseTitleDates, completeHideMs, swipeLeft, swipeRight, reminderTime, allDayReminderTime (P10, default 09:00), digestTime, emailMode; Phase 13: defaultOrgId, startPage `last`|`all-today`) · `disabled_at INTEGER` · (P10) `avatar_at INTEGER` (set while an uploaded avatar is the picture) · `oidc_image TEXT` (the provider's picture, restored by `DELETE /me/avatar`) |
 | `session` | token, userId, expiresAt, ipAddress, userAgent, `activeOrganizationId` | — |
 | `account` | provider links (providerId, accountId, tokens) | — |
 | `verification` | — | — |
@@ -56,6 +56,29 @@ Invariant: an org with `is_personal = 1` has exactly one `member` row (role `own
 ## 3. Rooster tables
 
 ```sql
+-- Phase 13 (ADR 0073 B): views (saved queries). `query` is JSON validated by core's zod schema:
+-- {tags: id[], tagMode: 'any'|'all', assignee: 'anyone'|'me'|'unassigned'|userId,
+--  due: 'any'|'today'|'week'|'overdue'|'none', status: 'open'|'done'|'any'}. A deleted tag is
+-- removed from every query; a merged one remapped. Member removal deletes their private views.
+CREATE TABLE saved_view (
+  id          TEXT PRIMARY KEY,
+  org_id      TEXT NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
+  created_by  TEXT NOT NULL REFERENCES user(id),
+  shared      INTEGER NOT NULL DEFAULT 0,   -- always 0 in a personal org
+  name        TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 60),
+  query       TEXT NOT NULL,
+  archived_at INTEGER,
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL
+) STRICT;
+-- Each member's own sidebar order of the views they see.
+CREATE TABLE saved_view_pref (
+  user_id  TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+  view_id  TEXT NOT NULL REFERENCES saved_view(id) ON DELETE CASCADE,
+  position TEXT NOT NULL,                  -- fractional key
+  PRIMARY KEY (user_id, view_id)
+) STRICT;
+
 -- Sidebar order and per-org UI prefs for a user
 CREATE TABLE org_member_pref (
   user_id      TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,

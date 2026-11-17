@@ -39,7 +39,8 @@ This document defines **exact behaviour**. Visual styling (sizes, colours, type)
 - **Sidebar.** It contains:
   - The logo, Search (opens the palette) and the Inbox (notifications, from P6) with an unread count.
   - Then one **section per org**, in user order, draggable. The org header has an avatar, the name, and a "⋯" menu (org settings, invite, collapse).
-  - Under each org: My tasks (open count), smart views (Today with a count, Next 7 days, Overdue with a red count only when > 0, No date), and Everyone's tasks (shared orgs only).
+  - Above the orgs (Phase 13, ADR 0073 A): **All organisations** with Today, Next 7 days and Overdue across every org, with summed badges.
+  - Under each org: My tasks (open count), smart views (Today with a count, Next 7 days, Overdue with a red count only when > 0, No date), Everyone's tasks (shared orgs only), and (Phase 13, ADR 0073 B) **Views**: shared and private views in the member's own order (drag), each with its open count (`#` icon for a project view, ⌕ otherwise), and "+ New view".
   - At the bottom: the user menu (settings, language, sign out).
   - The sidebar collapses to a 56 px icon rail with Ctrl/Cmd+\\ or the collapse button. The state is persisted.
 - **Header.** It shows the view title, the org name in muted text, a filter button (tags, show completed), and a "⋯" menu (add group, show completed, collapse all, expand all, export, print).
@@ -393,6 +394,19 @@ A tiny status label sits in the toolbar's left area:
 - **No date:** a flat list of My tasks with no due date, sorted by group order and then position (it mirrors the My tasks order).
 - All smart views include **subtasks assigned to me** as rows with breadcrumbs. They exclude completed tasks unless "Show completed" is on.
 
+### 10.1 All organisations (Phase 13, ADR 0073 A)
+- `/all/today`, `/all/week`, `/all/overdue`: the same sections as the per-org views, mixed across orgs; each row carries its org's avatar/colour chip (its accessible name includes the org). Order within a section: due time, then the viewer's org order, group order and position.
+- Rows are fully editable; every op is queued under the task's own org. No drag (sorted view).
+- Inline add: the default organisation (`prefs.defaultOrgId`) shown as a muted chip on the draft; `^org` (name or slug, autocompleted) picks another org; the date comes from the section; the Inbox unless `>Group` names a group of the target org. Overdue has no add row.
+- Keyboard: palette entries "All organisations: Today / Next 7 days / Overdue"; no shortcut of its own.
+- Start page: Settings → Behaviour, "Open rooster on: the last view / All · Today".
+
+### 10.2 Views and project views (Phase 13, ADR 0073 B)
+- A view's header is editable inline: name, then the query as chips (tags with any/all, assignee, due, status), then Private/Shared; each chip opens the existing picker. "+ New view" opens an empty one; "Save as view" comes from the My tasks tag filter, Everyone's filters and a filtered palette search. No modal.
+- Rows: grouped by person (me, members alphabetically, Unassigned; none in a personal org), each by due date, then created. A task shows when it matches itself (a tagged subtask with a breadcrumb; untagged subtasks of a tagged parent show only as its count). Completed hidden; "Show completed" in the header.
+- Project view (exactly one tag): inline add gives the tag and the section's person (top of their Inbox; Unassigned stays unassigned); the header shows "7 open · 12 done"; ⋯ → Archive. Shared views say "Everyone in <org> can see these tasks anyway; a view only gathers them."
+- Phones: views follow Everyone in the view switcher; the chips in a sheet.
+
 ## 11. Everyone's tasks (P6)
 
 - Sections per assignee: me first, then other members alphabetically, then *Unassigned*. Each section header has an avatar, name and open count.
@@ -419,7 +433,7 @@ A tiny status label sits in the toolbar's left area:
   - The org switcher button on the left: avatar, org name and ▾. It opens a bottom sheet listing the orgs, with "Create org". A sideways swipe on it moves to the next or previous org, with dots under the name for the position, and press-and-slide (hold, slide to an org in the sheet, lift) picks any org. A switch keeps the view where the other org has it (ADR 0063).
   - Centre: nothing.
   - Right: the offline/sync pill (when relevant) and ⋯.
-- **View switcher:** a horizontally scrollable segmented control below the header: My tasks · Today · 7 days · Overdue · No date · Everyone. It sticks to the top while scrolling.
+- **View switcher:** a horizontally scrollable segmented control below the header: My tasks · Today · 7 days · Overdue · No date · Everyone (Phase 13: then the org's views). It sticks to the top while scrolling. Phase 13: **All organisations** is the first entry of the org sheet and of the swipe order; its switcher shows Today · 7 days · Overdue.
 - **Bottom nav (64 px + safe area):** My tasks · Search · Inbox (badge; added in P6) · Settings. Icons with labels; the active tab is shown in the accent colour.
 - **FAB:** a 56 px accent (amber) circle with "+", 16 px above the bottom nav at the right. It is hidden while the keyboard is open.
 

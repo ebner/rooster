@@ -40,7 +40,7 @@ Capabilities are coarse **actions**. They are what a client requests, what `scop
 | `tasks:write` | Create, edit, complete and reopen tasks; move them within and between groups; reorder; subtasks; tag and untag; restore | `tasks:read` |
 | `comments:write` | Post, edit and delete **own** comments; follow and unfollow | `tasks:read` |
 | `tasks:assign` | Assign tasks to **other** members, or unassign them. Assigning to oneself needs only `tasks:write`. | `tasks:write` |
-| `groups:write` | Create, rename, reorder and collapse groups. Deleting a group needs `tasks:delete`. | `tasks:read` |
+| `groups:write` | Create, rename, reorder and collapse groups. Deleting a group needs `tasks:delete`. Phase 13: also create, edit, order, archive and delete views (ADR 0073). | `tasks:read` |
 | `tasks:delete` | Soft-delete tasks and groups. OAuth and MCP clients get it only when the user ticks "Allow deleting tasks" on the consent screen (ADR 0041). | `tasks:write` |
 | `admin` | The admin routes (users, allowlist, backups, search reindex, system). Offered only to instance admins, on PAT creation and CLI login, never to OAuth or MCP clients; checked against the user's current admin role on every request (ADR 0041). | — |
 | `notifications:read` | The inbox and the unread count | — |
@@ -158,7 +158,7 @@ Scopes can't say "write only in Prio" (RFC 9396 §1), so each grant also stores 
 
   | Tool | Scope |
   |---|---|
-  | `list_*`, `get_task`, `search_tasks` | `tasks:read` |
+  | `list_*` (incl. `list_views`, Phase 13), `get_task`, `search_tasks` | `tasks:read` |
   | `create_task`, `update_task`, `complete_task`, `move_task`, `move_task_to_org` | `tasks:write` |
   | `update_task` with `assignee` other than me | `tasks:assign` |
   | `create_group` | `groups:write` |

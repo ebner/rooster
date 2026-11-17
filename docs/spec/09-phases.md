@@ -325,6 +325,25 @@ Specified 2026-10-21 (11 §9, ADR 0065) and scheduled the same day. A minor rele
 - AC-12.3 A PAT created with audience `mcp` and `tasks:read` lists tasks at `/mcp` from a client given only a static `Authorization` header, gets `403` naming `tasks:write` for `create_task`, and is refused by `/api/v1`. An `api` PAT is refused by `/mcp`. Revoking the token fails the next call with `401`.
 - AC-12.4 `rooster login` on a new instance completes through the device grant, survives an access-token expiry by refreshing (two concurrent commands don't revoke the grant), and `rooster logout` revokes it. A CLI device session created by 1.7 still works. `rooster mcp setup --remote --client claude-code` writes a config with `rooster mcp header` as the header helper, and `rooster mcp header` prints a working `/mcp` token.
 
+## Phase 13: Views, project views and All organisations
+
+Specified and scheduled 2026-11-17 (ADR 0073, FR-VIEW-5–7; answers Q-01). Additive: a minor release. Build Part A first; the two share the computed-list rendering (sorted sections, editable rows, org chips). Run it like the earlier phases: a contract commit (core schemas: the view query, DTOs, `prefs.defaultOrgId`/`startPage`, the `^org` token in core `dates/tokens`), then parallel agents with file ownership (server / core+data / web UI / CLI+TUI+MCP), a full pipeline and a Codex review of the server (grants on views and `/me/views`).
+
+| WP | Content |
+|---|---|
+| 13.1 All organisations (web) | `/all/today\|week\|overdue` computed from the per-org `my-list` caches (works offline): date sections mixed across orgs, org chips, editable rows queued under each task's org, summed badges, inline add to `prefs.defaultOrgId` with the `^org` token and its chip, Settings → Behaviour (default organisation, start page), palette entries, the phone org sheet and swipe order (02 §10.1, §13). |
+| 13.2 All organisations (server, CLI, MCP) | `GET /me/views/{today,week,overdue}` (grant-filtered); `rooster ls today --all-orgs` on it; `list_tasks` across orgs for agents where it fits (07, 11). |
+| 13.3 Views (server) | `saved_view` and `saved_view_pref` (migration), the endpoints of 06 §2.3, per-member order, archive, tag delete/merge remapping, member-removal cleanup, SSE `['views', orgId]`, grants (`tasks:read` to read, `groups:write` to manage), authz matrix rows. |
+| 13.4 Views (web) | The sidebar Views section (drag order, counts, icons), the inline header with query chips and Private/Shared, rows grouped by person then due date, Show completed, project-view add (tag + section person) and counts, archive, Org settings → Views, "Save as view" from the tag filter, Everyone's filters and the palette, phone switcher and sheet (02 §10.2). |
+| 13.5 Views (CLI, TUI, MCP) | `rooster view ls`, `rooster ls --view`, views in the TUI view bar, `list_views` and `list_tasks {view}`. |
+
+**Acceptance criteria**
+- AC-13.1 A user in Personal and two shared orgs sees, in All · Today, the overdue and today tasks of all three in date sections with the right org chips; completing one from Kestrel updates Kestrel's own Today and both badges; it works offline from the cache and syncs later.
+- AC-13.2 Typing "Book the venue ^Kes" in All · Today creates the task due today in Kestrel Lane's Inbox; without the token it goes to the default organisation; changing the default in Settings changes the chip. The start page setting opens All · Today.
+- AC-13.3 A member creates a shared view "#juniper" in Kestrel; every member sees it in their sidebar and orders it independently; it lists all members' open #juniper tasks grouped by person; a task typed under Amara gets #juniper and lands at the top of Amara's Inbox; the header shows open and done counts; archiving hides it for everyone and Org settings → Views restores it. A private view is invisible to other members (API 404).
+- AC-13.4 Deleting the tag removes it from every view's query; merging remaps it. A grant limited to one group sees only the rows it may read in a view; `groups:write` is required to manage views.
+- AC-13.5 `rooster ls --view Juniper` and MCP `list_tasks {view: "Juniper"}` return the same rows as the web view; `rooster ls today --all-orgs` matches All · Today.
+
 ---
 
 ## Backlog

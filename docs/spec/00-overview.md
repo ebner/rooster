@@ -39,7 +39,7 @@ A list that behaves like a text editor. You open rooster in the morning and see 
 ## Non-goals (explicitly out of scope)
 
 - Kanban boards, timelines, Gantt charts, portfolios, goals and workload views.
-- Projects as multi-homed task containers. Org-wide lists are limited to the "Everyone's tasks" overview.
+- Projects as multi-homed task containers. Org-wide lists are limited to the "Everyone's tasks" overview and **views** (saved queries; a single-tag view is a project view, ADR 0073), which gather tasks without owning them.
 - Custom fields, forms, automation rules engines, dependencies and time tracking.
 - Native iOS or Android apps. The PWA is the mobile app.
 - Horizontal scaling or multi-node deployment. A single node with SQLite is the explicit design point.
@@ -126,6 +126,6 @@ These decisions come from the product requirements and from technical research. 
 
 | ID | Question | Default until decided |
 |---|---|---|
-| Q-01 | A cross-org "All" tab, for a Today view across private and business tasks? | Not built. Revisit after v1.0. |
+| Q-01 | A cross-org "All" tab, for a Today view across private and business tasks? | **Decided (ADR 0073, Phase 13):** "All organisations" with Today, Next 7 days and Overdue across every org. |
 | Q-02 | Per-task private flag inside business orgs? | Not built (D-03). |
 | Q-03 | Dark theme? | Not built (D-22). Tokens are ready. |

@@ -59,6 +59,7 @@ Global flags: `--org <slug>`, `--profile <name>`, `--json`, `--quiet` (IDs only)
 | `rooster show <ref>` | Full details: Markdown description rendered for the terminal, subtasks, tags and (P6) recent comments. |
 | `rooster edit <ref>` | `--title`, `--due <phrase\|none>`, `--time`, `--start`, `--desc`, `--desc-file`, `--editor` (opens `$EDITOR` with the description; saves on exit), `--assign`, `--parent <ref\|none>`. P10: `--remind <15m\|1h\|1d\|due\|"fri 14:00">` (repeatable) and `--no-remind`. |
 | `rooster done <ref…>` / `rooster undone <ref…>` | Complete or reopen. Shows the next recurrence when one is created. |
+| `rooster view ls` · `rooster ls --view <name>` | Phase 13 (ADR 0073): the org's views; a view's rows. `rooster ls today --all-orgs` uses `GET /me/views/today`. |
 | `rooster mv <ref…> --group <name>` | `--top` (default) / `--bottom` / `--after <ref>` / `--before <ref>`. |
 | `rooster mv <ref…> --to-org <org> [--group <name>] [--yes]` | ADR 0072: moves the tasks with their subtasks to another org, at the top of `--group` there (default: the first normal group). When other people's comments or files would become visible to new people it asks on a terminal, and needs `--yes` otherwise (exit 2). Prints the new refs. |
 | `rooster rm <ref…>` | Soft delete (asks for confirmation when more than 3 tasks, unless `--yes`). `rooster restore <ref>`. |
@@ -154,6 +155,7 @@ Built with **Ink 8**. It is a full-screen, keyboard-only mini rooster.
 |---|---|---|
 | `list_orgs` | — | |
 | `list_tasks` | `{org?, view?: my\|today\|week\|overdue\|nodate\|everyone, group?, tag?, includeCompleted?}` | Returns compact rows: seq, title, due, group, tags. |
+| `list_views` | `{org?}` | Phase 13 (ADR 0073); `list_tasks` also takes `{view}` (a view's name or id). |
 | `get_task` | `{ref}` | Includes description and subtasks. |
 | `search_tasks` | `{query, allOrgs?}` | |
 | `create_task` | `{title, due?, group?, tags?, description?, parent?, assignee?, remind?}` | `due` accepts NL phrases; `remind` (P10) takes `15m`/`1h`/`1d`/`due` or an absolute time, and creates a reminder for the grant's user. |
