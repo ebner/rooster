@@ -24,8 +24,25 @@ env:
   TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
+  # The image and the CLI binaries ship THIRD-PARTY-NOTICES.txt, so the tag's copy must match its
+  # dependencies. CI only warns on main (Dependabot can't regenerate it); `pnpm release` does
+  # (ADR 0071). A manual rebuild of an older tag skips this, like the image.
+  notices:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: THIRD-PARTY-NOTICES.txt matches the tag's dependencies
+        run: node scripts/third-party-notices.mjs --check
+
   image:
     if: github.event_name == 'push'
+    needs: notices
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

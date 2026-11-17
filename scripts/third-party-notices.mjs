@@ -2,7 +2,8 @@
 // `pnpm notices`: writes THIRD-PARTY-NOTICES.txt, the licences and notices of the third-party
 // software in rooster's distributions: the Docker image (the server bundle, the native modules
 // installed next to it and the web app it serves) and the CLI (dist/rooster.mjs and the
-// Bun-compiled binaries). `--check` writes nothing and exits 1 when the file is out of date (CI).
+// Bun-compiled binaries). `--check` writes nothing; it exits 2 when the file is only out of date
+// (CI warns: `pnpm release` regenerates it, ADR 0071) and 1 when the notices can't be produced.
 //
 // The dependency graph comes from the installed node_modules (pnpm's layout: a package's
 // dependencies are its siblings in node_modules/.pnpm/<id>/node_modules), not from a build, so
@@ -828,7 +829,7 @@ if (current === content) {
   if (!check) console.log(`notices: ${OUT} is up to date`);
 } else if (check) {
   console.error(`notices: ${OUT} is out of date; run pnpm notices`);
-  process.exit(1);
+  process.exit(2);
 } else {
   writeFileSync(file, content);
   console.log(`notices: wrote ${OUT}`);

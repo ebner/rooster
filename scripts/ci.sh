@@ -10,6 +10,21 @@ cd "$(dirname "$0")/.."
 
 step() { printf '\n\033[1;34m▶ %s\033[0m\n' "$*"; }
 
+# THIRD-PARTY-NOTICES.txt against the installed dependencies (ADR 0071). Only out of date is a
+# warning: a dependency PR (Dependabot) can't regenerate it, `pnpm release` does, and the release
+# workflow checks the tag strictly. A licence the generator can't resolve still fails here.
+notices_check() {
+  local status=0
+  node scripts/third-party-notices.mjs --check || status=$?
+  if ((status == 2)); then
+    local message="THIRD-PARTY-NOTICES.txt is out of date; pnpm release regenerates it (or run pnpm notices)"
+    if [[ -n "${GITHUB_ACTIONS:-}" ]]; then echo "::warning title=Third-party notices::$message"; fi
+    printf '\033[1;33mwarning: %s\033[0m\n' "$message"
+  elif ((status != 0)); then
+    return "$status"
+  fi
+}
+
 stage_static() {
   step "lint";         pnpm lint
   step "typecheck";    pnpm typecheck
@@ -17,7 +32,7 @@ stage_static() {
   step "secret scan";  bash scripts/secret-scan.sh   # needs the full git history
   step "i18n";         pnpm i18n:check
   step "docs";         pnpm docs:keyboard --check   # the keyboard page matches keymap.ts (ADR 0053)
-  step "notices";      pnpm notices:check   # THIRD-PARTY-NOTICES.txt matches the installed dependencies
+  step "notices";      notices_check
   step "api client";   pnpm gen:api && git diff --exit-code -- apps/server/openapi.json packages/api-client/src/schema.d.ts
 }
 

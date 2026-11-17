@@ -10,7 +10,8 @@
 #   1. Preflight (seconds): main, up to date with origin, the tag is free, the notes are written,
 #      the migration fixture is from the latest release that changed the schema, Docker is up.
 #   2. Bump every package.json, the Dockerfile's ROOSTER_VERSION, the CHANGELOG heading (with
-#      the release's migrations) and the What's new headings, then regenerate the API document.
+#      the release's migrations) and the What's new headings, then regenerate the API document
+#      and THIRD-PARTY-NOTICES.txt (CI only warns when it lags the dependencies; ADR 0071).
 #   3. The whole pipeline with the image (scripts/ci.sh --with-docker) and without e2e retries
 #      (only the timing budgets get one), so a flaky test fails here rather than in CI. It holds
 #      the e2e lock.
@@ -114,6 +115,7 @@ node -e '
   fs.writeFileSync("CHANGELOG.md", text);' "$version" "$(date +%F)"
 sed -i -E "s/^## Unreleased$/## $version\n\n_$(date +%F)_/" "${whats_new[@]}"
 pnpm gen:api >/dev/null
+node scripts/third-party-notices.mjs
 # Staged, so the pipeline's "the API client is generated" check compares against the bump.
 git add -u   # tracked files only: build output never lands in the release
 
