@@ -166,7 +166,11 @@ test('AC-1.5 dragging an org above Personal persists across reload (pointer and 
   await signInAs(page, uniqueEmail('dora.dragger'));
   await createOrg(page, 'Book club');
   await page.reload();
-  const sections = sidebar(page).getByRole('region');
+  // With a second org, All organisations leads the sidebar (ADR 0073 A1); it never moves.
+  await expect(sidebar(page).getByRole('region').first()).toHaveAccessibleName('All organisations');
+  const sections = sidebar(page)
+    .getByRole('region')
+    .and(page.locator(':not([data-testid="sidebar-all-orgs"])'));
   await expect(sections).toHaveCount(2);
   await expect(sections.nth(0)).toHaveAccessibleName('Personal');
 
