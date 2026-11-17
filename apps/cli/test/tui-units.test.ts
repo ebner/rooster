@@ -465,6 +465,21 @@ describe('ADR 0073 B4: a view in the TUI model', () => {
     expect(sub?.kind === 'task' && sub.breadcrumb).toBe('cy1');
   });
 
+  it('people sort in the user’s language (me.locale), not the terminal’s (AC-13.5)', () => {
+    const people = [
+      { userId: 'me', name: 'Ada', image: null, role: 'owner', joinedAt: 0 },
+      { userId: 'asa', name: 'Åsa', image: null, role: 'member', joinedAt: 0 },
+      { userId: 'zed', name: 'Zed', image: null, role: 'member', joinedAt: 0 },
+    ] as LinesInput['members'];
+    const order = (viewerLocale: string) =>
+      saved({ members: people, viewerLocale })
+        .flatMap((l) => (l.kind === 'section' ? [l.title] : []))
+        .slice(1, 3);
+    // DATES.locale is en: Swedish sorts Å after Z, English with A.
+    expect(order('sv')).toEqual(['Zed', 'Åsa']);
+    expect(order('en')).toEqual(['Åsa', 'Zed']);
+  });
+
   it('completed rows: shown with H, held in place after x, hidden otherwise', () => {
     expect(saved().some((l) => l.key === 'done')).toBe(false);
     expect(saved({ showCompleted: true }).some((l) => l.key === 'done')).toBe(true);

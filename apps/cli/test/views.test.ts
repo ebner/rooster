@@ -284,6 +284,46 @@ describe('rooster ls --view (ADR 0073 B4, B12)', () => {
   });
 });
 
+describe('the order of people follows the user’s language (AC-13.5)', () => {
+  it('a Swedish user with an English CLI gets the web’s (Swedish) order', async () => {
+    const ASA = '01a00000-0000-7000-8000-0000000000e1';
+    const ZED = '01a00000-0000-7000-8000-0000000000e2';
+    const api = fakeApi({
+      'GET /api/v1/me': { ...ME, locale: 'sv', orgs: [ORG] },
+      'GET /api/v1/orgs/*/views': [JUNIPER],
+      'GET /api/v1/views/*/tasks': {
+        items: [
+          task({ title: 'Zed’s', assigneeId: ZED }),
+          task({ title: 'Åsa’s', assigneeId: ASA }),
+        ],
+        counts: { open: 2, done: 0 },
+      },
+      'GET /api/v1/orgs/*/members': [
+        MEMBERS[0],
+        { userId: ASA, name: 'Åsa', image: null, role: 'member', joinedAt: 0 },
+        { userId: ZED, name: 'Zed', image: null, role: 'member', joinedAt: 0 },
+      ],
+      'GET /api/v1/orgs/*/tags': [],
+    });
+    const cli = cliHarness({}, { fetch: api.fetch });
+    try {
+      const env = { ...FAKE_ENV, ROOSTER_PROFILE: 'default' };
+      expect((await cli.run(['config', 'set', 'locale', 'en'], { env })).code).toBe(0);
+      const res = await cli.run(['ls', '--view', 'Juniper', '--json'], { env });
+      expect(res.code, res.stderr).toBe(0);
+      expect(JSON.parse(res.stdout).map((t: { title: string }) => t.title)).toEqual([
+        'Zed’s',
+        'Åsa’s',
+      ]);
+      // The CLI itself still speaks English.
+      const text = await cli.run(['ls', '--view', 'Juniper'], { env });
+      expect(stripAnsi(text.stdout)).toContain('2 open · 0 done');
+    } finally {
+      cli.cleanup();
+    }
+  });
+});
+
 describe('a view’s query from the API (type-cast, so checked)', () => {
   it('reads a valid query; anything else lists every row the server sent', () => {
     expect(viewQuery(JUNIPER as never)).toEqual(JUNIPER.query);

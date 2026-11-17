@@ -146,7 +146,8 @@ export async function runViewList(
     viewerId: me.id,
     due: { today: ctx.today, nowMs: ctx.nowMs, viewerTz: ctx.timezone },
     members,
-    locale: currentLocale(),
+    // The user's own language, as the web sorts the people (not the CLI's, which may differ).
+    locale: me.locale,
     isPersonal: org.isPersonal,
     showCompleted: flags.completed,
   })

@@ -382,6 +382,7 @@ export class TuiController {
       everyone: s.everyone,
       saved: this.savedRows(s),
       isPersonal: s.org.isPersonal,
+      viewerLocale: s.me.locale,
       search: s.search,
       t: this.deps.t,
     });

@@ -104,6 +104,11 @@ export interface LinesInput {
   everyone: readonly Task[] | null;
   /** The open view's definition and rows (`GET /views/:id/tasks`). */
   saved?: { view: SavedView; tasks: readonly Task[] } | null;
+  /**
+   * The user's language (`me.locale`) for the order of a view's people, as the web sorts them;
+   * the terminal's own language may differ. Default: the dates' locale.
+   */
+  viewerLocale?: string;
   /** A personal org: a view there has no person sections (B4). */
   isPersonal?: boolean;
   search: { query: string; hits: readonly Task[] } | null;
@@ -366,7 +371,7 @@ function savedLines(input: LinesInput): Line[] {
     viewerId: input.viewerId,
     due: { today: input.dates.today, nowMs: input.dates.nowMs, viewerTz: input.dates.timezone },
     members,
-    locale: input.dates.locale,
+    locale: input.viewerLocale ?? input.dates.locale,
     isPersonal: input.isPersonal === true,
     // Completed rows are filtered here, so the ones held in place stay.
     showCompleted: true,
