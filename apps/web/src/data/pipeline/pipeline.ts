@@ -6,6 +6,7 @@ import {
   findComment,
   mergeCommentResponse,
 } from '@rooster/core/activity';
+import { todayIn } from '@rooster/core/dates';
 import { applyOpToTaskList, mergeTaskListResponse, rowsDeletedWith } from '@rooster/core/everyone';
 import { uuidv7 } from '@rooster/core/ids';
 import {
@@ -20,7 +21,14 @@ import {
   opEntityIds,
   type ReducerContext,
 } from '@rooster/core/reducers';
-import type { ActivityPage, Comment, Task, TaskDetail } from '@rooster/core/schemas';
+import { matchesViewFilters } from '@rooster/core/saved-views';
+import type {
+  ActivityPage,
+  Comment,
+  SavedViewQuery,
+  Task,
+  TaskDetail,
+} from '@rooster/core/schemas';
 import { hashKey, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { type SyncState, useSyncStore } from '../../state/sync-store';
 import { ApiError } from '../errors';
@@ -700,6 +708,49 @@ export class ListPipeline {
   }
 
   /**
+   * A hidden view's base after a confirmation: written without making it look fetched, so a
+   * cache marked stale (a task may newly match) still refetches when shown.
+   */
+  private writeHidden(key: QueryKey, next: ViewTasksData): void {
+    const state = this.queryClient.getQueryState(key);
+    this.queryClient.setQueryData(key, next, { updatedAt: state?.dataUpdatedAt ?? 0 });
+    if (state?.isInvalidated) {
+      void this.queryClient.invalidateQueries({ queryKey: key, exact: true, refetchType: 'none' });
+    }
+  }
+
+  /**
+   * A confirmed create (or copy) joins a view's base only when it matches the view's query
+   * (from the cached views list): the base is persisted and must not take every new task of
+   * the org. Without the query, the row stays out and the rows are marked stale.
+   */
+  private onlyMatchingNew(
+    key: QueryKey,
+    data: ViewTasksData,
+    item: Queued,
+    tasks: readonly Task[],
+  ): readonly Task[] {
+    const { op } = item;
+    const added = op.kind === 'task.create' || op.kind === 'task.duplicate' ? op.payload.id : null;
+    if (added === null || tasks === data.confirmed) return tasks;
+    const row = tasks.find((t) => t.id === added);
+    if (!row || data.confirmed?.some((t) => t.id === added)) return tasks;
+    const view = this.queryClient
+      .getQueryData<readonly { id: string; query: SavedViewQuery }[]>(['views', data.orgId, 'live'])
+      ?.find((v) => v.id === key[1]);
+    const now = this.now();
+    const tz = item.ctx.timezone ?? 'UTC';
+    const due = { today: todayIn(tz, now), nowMs: now, viewerTz: tz };
+    if (view && matchesViewFilters(row, view.query, { viewerId: item.ctx.userId, due })) {
+      return tasks;
+    }
+    if (!view) {
+      void this.queryClient.invalidateQueries({ queryKey: key, exact: true, refetchType: 'none' });
+    }
+    return tasks.filter((t) => t.id !== added);
+  }
+
+  /**
    * A view's rows shown again (ADR 0073 B): while no screen showed them, ops only marked them
    * stale. They are rebuilt from their confirmed base and the queue, so they are right before
    * the refetch, and offline without one.
@@ -1211,6 +1262,8 @@ export class ListPipeline {
     }
     for (const [key, data, shown] of this.viewTaskCaches(item.orgId)) {
       if (!shown) {
+        // Its base loses these rows when the delete is confirmed (or replayed): an undo needs them.
+        this.rememberDeleted(hashKey(key), data.confirmed ?? data.items, deletes);
         if (touchesTasks(op)) {
           void this.queryClient.invalidateQueries({
             queryKey: key,
@@ -1265,11 +1318,16 @@ export class ListPipeline {
       const cache = hashKey(key);
       // The confirmed base takes every confirmed op, shown or not.
       const confirmed = data.confirmed
-        ? mergeViewTasksResponse(
-            applyOpToViewTasks(data.confirmed, op, this.rowContext(item, cache), data.orgId),
-            op,
-            response,
-          ).tasks
+        ? this.onlyMatchingNew(
+            key,
+            data,
+            item,
+            mergeViewTasksResponse(
+              applyOpToViewTasks(data.confirmed, op, this.rowContext(item, cache), data.orgId),
+              op,
+              response,
+            ).tasks,
+          )
         : undefined;
       let items = data.items;
       if (shown) {
@@ -1280,11 +1338,9 @@ export class ListPipeline {
         if (settledRows) items = merged.tasks;
       }
       if (items !== data.items || confirmed !== data.confirmed) {
-        this.queryClient.setQueryData(key, {
-          ...data,
-          items,
-          ...(confirmed ? { confirmed } : {}),
-        });
+        const next = { ...data, items, ...(confirmed ? { confirmed } : {}) };
+        if (shown) this.queryClient.setQueryData(key, next);
+        else this.writeHidden(key, next);
       }
     }
     if (refetchViews) this.refetchViewTasks(listOrgs(item));

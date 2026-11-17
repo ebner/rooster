@@ -321,3 +321,98 @@ describe('ops the views’ reducer can’t follow', () => {
     expect(queryClient.getQueryState(['views', org, 'live'])?.isInvalidated).toBe(true);
   });
 });
+
+describe('a hidden view’s confirmed base', () => {
+  test('a confirmation keeps it marked stale (it still refetches when shown)', async () => {
+    const { pipeline, queryClient, transport } = await viewSetup();
+    const key = viewTasksKey('v1', false);
+    queryClient.setQueryData(key, await fetchViewTasks(pipeline, org, 'v1', false));
+    await queryClient.invalidateQueries({ queryKey: key, refetchType: 'none' });
+    const tagged = Object.values(transport.state(org).tasks).find((t) => t.title === 'Tagged');
+    pipeline.enqueue(org, [listOps.completeTask(tagged?.id as string, true)], ctx);
+    await pipeline.idle();
+    const data = queryClient.getQueryData<ViewTasksData>(key);
+    expect(data?.confirmed?.find((t) => t.id === tagged?.id)?.completedAt).not.toBeNull();
+    expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
+  });
+
+  test('an undone delete brings the subtree back there too', async () => {
+    const queryClient = new QueryClient();
+    const transport = createFixtureTransport({ userId: me });
+    transport.send = () => new Promise(() => {});
+    const pipeline = getListPipeline(queryClient, transport);
+    const key = viewTasksKey('v1', false);
+    const rows = [task('p'), task('c', { parentId: 'p' })];
+    queryClient.setQueryData(key, {
+      orgId: org,
+      items: rows,
+      counts: { open: 2, done: 0 },
+      baseline: rows,
+      confirmed: rows,
+    } satisfies ViewTasksData);
+    pipeline.enqueue(org, [listOps.deleteTask('p')], ctx);
+    pipeline.enqueue(org, [listOps.restoreTask('p')], ctx);
+    pipeline.replayViewTasks(key);
+    expect(
+      queryClient
+        .getQueryData<ViewTasksData>(key)
+        ?.items.map((t) => t.id)
+        .sort(),
+    ).toEqual(['c', 'p']);
+  });
+
+  test('a confirmed create joins it only when it matches the view’s query', async () => {
+    const { pipeline, queryClient, tagId } = await viewSetup();
+    const key = viewTasksKey('v1', false);
+    queryClient.setQueryData(key, await fetchViewTasks(pipeline, org, 'v1', false));
+    queryClient.setQueryData(
+      ['views', org, 'live'],
+      [{ id: 'v1', query: { ...query, tags: [tagId] } }],
+    );
+    pipeline.enqueue(
+      org,
+      [
+        listOps.createTask({ id: 'n-plain', title: 'Not about it' }),
+        listOps.createTask({ id: 'n-tagged', title: 'About it', tagIds: [tagId] }),
+      ],
+      ctx,
+    );
+    await pipeline.idle();
+    const ids = queryClient.getQueryData<ViewTasksData>(key)?.confirmed?.map((t) => t.id);
+    expect(ids).toContain('n-tagged');
+    expect(ids).not.toContain('n-plain');
+  });
+
+  test('without the view’s query a create stays out, and the rows are marked stale', async () => {
+    const { pipeline, queryClient } = await viewSetup();
+    const key = viewTasksKey('v1', false);
+    queryClient.setQueryData(key, await fetchViewTasks(pipeline, org, 'v1', false));
+    pipeline.enqueue(org, [listOps.createTask({ id: 'n-1', title: 'Unknown' })], ctx);
+    await pipeline.idle();
+    expect(
+      queryClient.getQueryData<ViewTasksData>(key)?.confirmed?.some((t) => t.id === 'n-1'),
+    ).toBe(false);
+    expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
+  });
+
+  test('shown online, a view always asks the server again (even when fresh)', async () => {
+    const { pipeline, queryClient, transport } = await viewSetup();
+    let fetches = 0;
+    const fetch = transport.fetchViewTasks?.bind(transport);
+    transport.fetchViewTasks = (...args) => {
+      fetches += 1;
+      return fetch?.(...args) as never;
+    };
+    const options = viewTasksQuery(pipeline, org, 'v1', false);
+    await queryClient.fetchQuery(options);
+    expect(fetches).toBe(1);
+    const stop = new QueryObserver(queryClient, options).subscribe(() => {});
+    await waitForFetches(() => fetches, 2);
+    stop();
+  });
+});
+
+async function waitForFetches(count: () => number, n: number) {
+  for (let i = 0; i < 50 && count() < n; i++) await new Promise((r) => setTimeout(r, 5));
+  expect(count()).toBe(n);
+}

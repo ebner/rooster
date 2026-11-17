@@ -512,6 +512,37 @@ describe('a failed edit (online only, optimistic)', () => {
     expect(screen.getByTestId('view-chip-due').textContent).toContain('Any date');
   });
 
+  test('a late rename answer never brings back the query an edit since replaced', async () => {
+    const { queryClient, view } = await setup();
+    const key = queryKeys.views(orgId, false);
+    let answerRename: (saved: unknown) => void = () => {};
+    env.update
+      .mockImplementationOnce(
+        () =>
+          new Promise((yes) => {
+            answerRename = yes;
+          }),
+      )
+      .mockImplementationOnce(async () => ({
+        ...view,
+        query: { ...view.query, due: 'none' },
+      }));
+    const name = screen.getByTestId('view-name') as HTMLInputElement;
+    fireEvent.change(name, { target: { value: 'Renamed' } });
+    fireEvent.keyDown(name, { key: 'Enter' });
+    fireEvent.click(screen.getByTestId('view-chip-due'));
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'No date' }));
+    await waitFor(() =>
+      expect(queryClient.getQueryData<SavedView[]>(key)?.[0]?.query.due).toBe('none'),
+    );
+    // The rename's answer was made before the query changed.
+    act(() => answerRename({ ...view, name: 'Renamed' }));
+    await waitFor(() =>
+      expect(queryClient.getQueryData<SavedView[]>(key)?.[0]?.name).toBe('Renamed'),
+    );
+    expect(queryClient.getQueryData<SavedView[]>(key)?.[0]?.query.due).toBe('none');
+  });
+
   test('a success writes the server’s view into the cache', async () => {
     const { queryClient, view } = await setup();
     env.update.mockImplementationOnce(async () => ({ ...view, name: 'As saved' }));

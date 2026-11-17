@@ -131,11 +131,15 @@ export function useViewEditor(
       (saved) => {
         // A sign-out or a left org meanwhile: its caches are gone and must stay so.
         if (!mayWriteViews(queryClient, org.id, session)) return;
-        // An older answer arriving after a newer one's doesn't overwrite it.
-        if (!fields.some((field) => (answered.current[field] ?? 0) > seq)) {
-          for (const field of fields) answered.current[field] = seq;
+        // Only the fields this answer owns, and only over older answers: a late rename's view
+        // never brings back the query an edit since replaced.
+        const owned = fields.filter((field) => (answered.current[field] ?? 0) <= seq);
+        if (owned.length > 0) {
+          for (const field of owned) answered.current[field] = seq;
+          const answer: Partial<ViewDraft> = {};
+          for (const field of owned) Object.assign(answer, { [field]: saved[field] });
           queryClient.setQueryData<SavedView[]>(liveKey, (list) =>
-            list?.map((v) => (v.id === saved.id ? { ...v, ...saved } : v)),
+            list?.map((v) => (v.id === saved.id ? { ...v, ...answer } : v)),
           );
         }
         settle(seq, fields);

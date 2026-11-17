@@ -57,6 +57,9 @@ export function viewTasksQuery(
     queryFn: ({ signal }: { signal: AbortSignal }) =>
       fetchViewTasks(pipeline, orgId, viewId, completed, signal),
     staleTime: 30_000,
+    // Shown while online, a view always asks the server again: whatever a hidden cache missed
+    // heals there; the confirmed base only serves offline.
+    refetchOnMount: 'always',
     refetchOnWindowFocus: true,
     // "Show completed" switches to the other cache of the same view: its rows stay meanwhile.
     placeholderData: <T>(previous: T | undefined, query?: { queryKey: readonly unknown[] }) =>
