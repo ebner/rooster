@@ -2,7 +2,9 @@
 
 What changed for you in each version of rooster, newest first. After an update, rooster offers this page once. You can open it at any time from Settings or the guide's page list. The notes for whoever runs rooster (upgrades, settings, security) are in the [changelog](../../../CHANGELOG.md).
 
-## Unreleased
+## 1.11.0
+
+_2026-11-17_
 
 - **Views and projects.** Save a set of filters (tags, person, due date, status) as a view in the sidebar: private, or shared with everyone in the organisation. A view with one tag is a project: tasks you add get the tag and the person you typed them under, the header shows how many are open and done, and you archive it when the project is over. Create one with **+ New view**, or with **Save as view** from a filter or a palette search. See [Views and projects](./views-and-search.md#views-and-projects).
 - **All organisations.** In more than one organisation? The top of the sidebar now has Today, Next 7 days and Overdue across all of them, with each task's organisation shown as a small chip. Tasks you add there go to your default organisation, or to another one if you type `^` and its name. In Settings → Behaviour you can choose the default organisation and open rooster on All organisations · Today. See [All organisations](./views-and-search.md#all-organisations).
