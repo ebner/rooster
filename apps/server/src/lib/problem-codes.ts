@@ -63,6 +63,10 @@ export const PROBLEM_CODES = {
     detail: 'A tag with that name already exists in this organisation.',
   },
   too_many_reminders: { status: 409, detail: 'A task can have at most 5 reminders.' },
+  view_limit: {
+    status: 409,
+    detail: 'An organisation can have at most 100 shared views (archived ones included).',
+  },
   push_keys_from_env: {
     status: 409,
     detail: 'The VAPID keys come from the environment and cannot be replaced here.',

@@ -4,6 +4,7 @@ import { uuidv7 } from '@rooster/core/ids';
 import { compareKeys, generateNKeysBetween, rebalanceKeys } from '@rooster/core/ordering';
 import {
   matchesSavedView,
+  matchesViewFilters,
   remapViewQuery,
   type SavedViewContext,
   savedViewCounts,
@@ -53,6 +54,39 @@ export type ViewRow = typeof savedView.$inferSelect;
 
 const viewNotFound = () => new AppError('not_found', 404, 'View not found.');
 const idConflict = () => new AppError('id_conflict', 409, 'That ID is already in use.');
+
+/**
+ * Bounded work (ADR 0056): an org holds at most this many shared views, and each member at most
+ * this many private ones in it, archived ones included (the archived list is counted too). A
+ * list request then counts at most 2 × VIEW_LIMIT views over the org's tasks.
+ */
+export const VIEW_LIMIT = 100;
+
+const viewLimit = (shared: boolean) =>
+  new AppError(
+    'view_limit',
+    409,
+    shared
+      ? `An organisation can have at most ${VIEW_LIMIT} shared views (archived ones included); delete some first.`
+      : `You can have at most ${VIEW_LIMIT} private views in an organisation (archived ones included); delete some first.`,
+  );
+
+/** `409 view_limit` when the bucket a view is about to join (shared, or `ownerId`'s private) is full. */
+function requireRoom(tx: Tx, orgId: string, shared: boolean, ownerId: string): void {
+  const row = tx
+    .select({ n: sql<number>`count(*)` })
+    .from(savedView)
+    .where(
+      and(
+        eq(savedView.orgId, orgId),
+        shared
+          ? eq(savedView.shared, true)
+          : and(eq(savedView.shared, false), eq(savedView.createdBy, ownerId)),
+      ),
+    )
+    .get();
+  if ((row?.n ?? 0) >= VIEW_LIMIT) throw viewLimit(shared);
+}
 
 /** A view's stored query; one that no longer parses reads as the defaults (never a 500). */
 function parseQuery(raw: string): SavedViewQuery {
@@ -183,6 +217,42 @@ function readableOrgTasks(tx: Tx, actor: Actor, orgId: string): { rows: TaskRow[
     else list.push(t.tagId);
   }
   return { rows, tasks: rows.map((r) => toTaskDto(r, null, {}, extras)) };
+}
+
+const DUE_ONLY = savedViewQuerySchema.parse({ status: 'any' });
+
+/**
+ * Open/done counts of many views over the same tasks. Each task's due buckets (today, week,
+ * overdue, none) are classified once per filter in use, with core's matcher on a query that
+ * filters only by due; each view then checks only tags, assignee and completion (core's matcher
+ * with `due: 'any'`, which skips the date work). The result equals `savedViewCounts`.
+ */
+function viewCounter(
+  tasks: readonly Task[],
+  ctx: SavedViewContext,
+): (query: SavedViewQuery) => { open: number; done: number } {
+  const buckets = new Map<SavedViewQuery['due'], Uint8Array>();
+  const inBucket = (due: SavedViewQuery['due']): Uint8Array => {
+    let hits = buckets.get(due);
+    if (hits === undefined) {
+      const query = { ...DUE_ONLY, due };
+      hits = Uint8Array.from(tasks, (t) => (matchesViewFilters(t, query, ctx) ? 1 : 0));
+      buckets.set(due, hits);
+    }
+    return hits;
+  };
+  return (query) => {
+    const due = query.due === 'any' ? null : inBucket(query.due);
+    const rest = query.due === 'any' ? query : { ...query, due: 'any' as const };
+    const counts = { open: 0, done: 0 };
+    tasks.forEach((t, i) => {
+      if (due !== null && due[i] === 0) return;
+      if (!matchesViewFilters(t, rest, ctx)) return;
+      if (t.completedAt === null) counts.open++;
+      else counts.done++;
+    });
+    return counts;
+  };
 }
 
 /** The view filters' context: the viewer, and their today in their own timezone. */
@@ -378,10 +448,8 @@ export class ViewService {
       const placed = orderedViews(tx, actor.userId, org.id, query.archived === 'true');
       if (placed.length === 0) return [];
       const { tasks } = readableOrgTasks(tx, actor, org.id);
-      const ctx = viewerContext(tx, actor.userId, this.now());
-      return placed.map((p) =>
-        toViewDto(p.row, p.position, savedViewCounts(tasks, parseQuery(p.row.query), ctx).open),
-      );
+      const count = viewCounter(tasks, viewerContext(tx, actor.userId, this.now()));
+      return placed.map((p) => toViewDto(p.row, p.position, count(parseQuery(p.row.query)).open));
     });
   }
 
@@ -411,6 +479,7 @@ export class ViewService {
         }
       }
       this.validateQuery(tx, org.id, query);
+      requireRoom(tx, org.id, shared, actor.userId);
       const now = this.now();
       const row: ViewRow = {
         id: input.id ?? uuidv7(),
@@ -432,7 +501,8 @@ export class ViewService {
 
   /**
    * Puts `row` at `target` in the user's own order of the org's live views, storing the keys of
-   * every view they see first (the domain must be complete to place between two of them).
+   * every view they see first (the domain must be complete to place between two of them, and a
+   * view they never ordered keeps its place when `row` lands after it).
    */
   private placeForActor(tx: Tx, userId: string, row: ViewRow, target: OrderTarget): string {
     const others = orderedViews(tx, userId, row.orgId, false).filter((p) => p.row.id !== row.id);
@@ -482,6 +552,8 @@ export class ViewService {
             [{ path: 'shared', message: 'Its creator is no longer a member' }],
           );
         }
+        // The view joins the shared views, or its creator's private ones.
+        requireRoom(tx, row.orgId, patch.shared, row.createdBy);
         changes.shared = patch.shared;
       }
       if (Object.keys(changes).length === 0) return this.dto(tx, actor, row, before);
@@ -494,6 +566,12 @@ export class ViewService {
         tx.delete(savedViewPref)
           .where(and(eq(savedViewPref.viewId, row.id), ne(savedViewPref.userId, row.createdBy)))
           .run();
+      }
+      if (changes.shared === true && next.archivedAt === null) {
+        // Newly visible to the other members: at the end of each one's order, however old.
+        for (const userId of memberIds(tx, row.orgId)) {
+          if (userId !== row.createdBy) this.placeForActor(tx, userId, next, 'end');
+        }
       }
       this.emit(tx, actor, 'view.updated', next, viewsAudience(tx, row.orgId, [row, next]));
       return this.dto(tx, actor, next, before);
@@ -538,7 +616,7 @@ export class ViewService {
 
   /**
    * Archive (it leaves every sidebar, and every member's key for it goes) or restore (back at
-   * the end of the restorer's order, and at the end of everyone else's). Idempotent.
+   * the end of the order of everyone who sees it). Idempotent.
    */
   setArchived(actor: Actor, viewId: string, archived: boolean, _meta?: OpMeta): SavedView {
     return immediate(this.deps.db, (tx) => {
@@ -552,7 +630,16 @@ export class ViewService {
         .where(eq(savedView.id, row.id))
         .run();
       tx.delete(savedViewPref).where(eq(savedViewPref.viewId, row.id)).run();
-      const position = archived ? undefined : this.placeForActor(tx, actor.userId, next, 'end');
+      let position: string | undefined;
+      if (!archived) {
+        // Back at the end of every order that shows it (each member's for a shared view),
+        // however old the view is: each order is stored first, so it stays as it was seen.
+        const userIds = next.shared ? memberIds(tx, row.orgId) : [row.createdBy];
+        for (const userId of userIds) {
+          const key = this.placeForActor(tx, userId, next, 'end');
+          if (userId === actor.userId) position = key;
+        }
+      }
       this.emit(
         tx,
         actor,

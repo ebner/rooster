@@ -14,7 +14,7 @@ import sharp from 'sharp';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { App } from '../src/app.ts';
 import type { AppDb } from '../src/db/client.ts';
-import { account, attachment, oauthClient, user } from '../src/db/schema/index.ts';
+import { account, attachment, oauthClient, savedView, user } from '../src/db/schema/index.ts';
 import { NAMED_SCHEMAS } from '../src/lib/openapi.ts';
 import { checkResponse, type RouteContract, routeContracts } from '../src/lib/response-contract.ts';
 import type { Actor } from '../src/services/index.ts';
@@ -304,6 +304,25 @@ function viewSetup(f: Fixture): void {
     shared: true,
   });
   viewIds.set(f, view.id);
+}
+/** The owner's private views in the shared org, up to the limit (100). */
+function fillPrivateViews(f: Fixture): void {
+  const now = Date.now();
+  for (let i = 0; i < 100; i++) {
+    f.db.orm
+      .insert(savedView)
+      .values({
+        id: uuidv7(),
+        orgId: f.orgId,
+        createdBy: f.ownerId,
+        shared: false,
+        name: `Private ${i}`,
+        query: '{}',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+  }
 }
 function viewOf(f: Fixture): string {
   const id = viewIds.get(f);
@@ -1322,6 +1341,12 @@ const SPECS: Record<string, Spec> = {
         }),
       },
       {
+        status: 409,
+        code: 'view_limit',
+        setup: fillPrivateViews,
+        request: (f) => ({ path: `/api/v1/orgs/${f.orgId}/views`, body: { name: 'X', query: {} } }),
+      },
+      {
         status: 422,
         name: 'a tag of another org',
         code: 'validation_failed',
@@ -1335,6 +1360,15 @@ const SPECS: Record<string, Spec> = {
   'PATCH /api/v1/views/{id}': {
     setup: viewSetup,
     ok: (f) => ({ path: `/api/v1/views/${viewOf(f)}`, body: { name: 'Renamed', shared: false } }),
+    cases: [
+      {
+        status: 409,
+        code: 'view_limit',
+        name: 'unshared into a full private bucket',
+        setup: fillPrivateViews,
+        request: (f) => ({ path: `/api/v1/views/${viewOf(f)}`, body: { shared: false } }),
+      },
+    ],
   },
   'DELETE /api/v1/views/{id}': {
     setup: viewSetup,

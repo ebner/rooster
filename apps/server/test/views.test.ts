@@ -1,5 +1,6 @@
 // Phase 13 (ADR 0073 B, WP 13.3): views, saved queries in one org. AC-13.3 (shared and private
 // views, per-member order, open/done counts, archive) and AC-13.4 (tag delete and merge, grants).
+import { uuidv7 } from '@rooster/core/ids';
 import { selectSavedView } from '@rooster/core/saved-views';
 import type { SavedView, SavedViewTasks, Tag, Task } from '@rooster/core/schemas';
 import { and, eq } from 'drizzle-orm';
@@ -195,6 +196,70 @@ describe('AC-13.3 views', () => {
     expect(names(await views(amara, org.id))).toEqual(['Other', 'Juniper']);
     expect(names(await views(bea, org.id))).toEqual(['Other', 'Juniper']);
     expect(names(await views(bea, org.id, true))).toEqual([]);
+  });
+
+  it('a restored or newly shared view lands at the end for everyone, however old', async () => {
+    const { amara, bea, cy, org } = await team();
+    const a = await newView(amara, org.id, { name: 'A', query: {}, shared: true });
+    await newView(amara, org.id, { name: 'B', query: {}, shared: true });
+    // Neither Bea nor Cy has ordered anything: their orders are by creation.
+    await amara.ok('POST', `/api/v1/views/${a.id}/archive`);
+    await amara.ok('POST', `/api/v1/views/${a.id}/restore`);
+    for (const c of [amara, bea, cy]) expect(names(await views(c, org.id))).toEqual(['B', 'A']);
+    // An older private view, shared later, goes after the newer shared ones.
+    const old = await newView(bea, org.id, { name: 'Old', query: {} });
+    await newView(amara, org.id, { name: 'C', query: {}, shared: true });
+    await bea.ok('PATCH', `/api/v1/views/${old.id}`, { shared: true });
+    expect(names(await views(amara, org.id))).toEqual(['B', 'A', 'C', 'Old']);
+    expect(names(await views(cy, org.id))).toEqual(['B', 'A', 'C', 'Old']);
+    // Its creator keeps the place it had.
+    expect(names(await views(bea, org.id))).toEqual(['B', 'A', 'Old', 'C']);
+  });
+
+  it('caps views: 100 shared per org and 100 private per member, archived ones included', async () => {
+    const { ctx, amara, bea, org } = await team();
+    const insert = (createdBy: string, shared: boolean, n: number) => {
+      for (let i = 0; i < n; i++) {
+        ctx.db.orm
+          .insert(savedView)
+          .values({
+            id: uuidv7(),
+            orgId: org.id,
+            createdBy,
+            shared,
+            name: `V${i}`,
+            query: '{}',
+            archivedAt: i === 0 ? NOW : null,
+            createdAt: NOW,
+            updatedAt: NOW,
+          })
+          .run();
+      }
+    };
+    insert(amara.userId, true, 99);
+    insert(amara.userId, false, 100);
+    const last = await newView(bea, org.id, { name: 'Shared 100', query: {}, shared: true });
+    const full = async (c: Caller, body: Record<string, unknown>) => {
+      const res = await c.call('POST', `/api/v1/orgs/${org.id}/views`, body);
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ code: 'view_limit' });
+    };
+    await full(bea, { name: 'One more', query: {}, shared: true });
+    await full(amara, { name: 'Private 101', query: {} });
+    // Bea's private bucket is her own; sharing it into the full shared bucket is refused.
+    const mine = await newView(bea, org.id, { name: 'Bea’s', query: {} });
+    const res = await bea.call('PATCH', `/api/v1/views/${mine.id}`, { shared: true });
+    expect(res.status).toBe(409);
+    // Unsharing into Amara's full private bucket is refused too.
+    expect((await bea.call('PATCH', `/api/v1/views/${last.id}`, { shared: false })).status).toBe(
+      200,
+    );
+    const amaras = (await views(amara, org.id)).find((v) => v.shared);
+    const unshare = await amara.call('PATCH', `/api/v1/views/${amaras?.id}`, { shared: false });
+    expect(unshare.status).toBe(409);
+    // Deleting makes room.
+    await bea.ok('DELETE', `/api/v1/views/${mine.id}`, undefined, 204);
+    await newView(bea, org.id, { name: 'Shared again', query: {}, shared: true });
   });
 
   it('a repeated create with the same id returns the view; other content is 409', async () => {

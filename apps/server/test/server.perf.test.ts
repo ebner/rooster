@@ -205,3 +205,55 @@ describe('[perf] AC-11.4 server performance with a 2,000-task org', () => {
     expect(percentile(all, 95)).toBeLessThanOrEqual(MUTATION_P95_BUDGET_MS * SLACK);
   }, 120_000);
 });
+
+// Phase 13 (ADR 0073 B): GET /orgs/{orgId}/views counts every view over the org's tasks. With
+// the view limit (100 shared + 100 private) and each task's due buckets classified once per
+// request, a full org stays cheap; counting each view with the date work took seconds.
+const VIEWS_BUDGET_MS = 100;
+
+describe('[perf] views: 200 views × 2,000 timed tasks due today', () => {
+  it(`GET /orgs/{orgId}/views takes ≤ ${VIEWS_BUDGET_MS} ms`, async () => {
+    const ctx = listCtx({ clock: () => Date.UTC(2026, 9, 9, 8) });
+    const owner = ctx.user('views@example.com', 'Owner');
+    const org = await owner.ok<{ id: string }>('POST', '/api/v1/orgs', { name: 'Views' }, 201);
+    const { tasks, tags, views } = ctx.app.services;
+    const tagIds = TAGS.map((name) => tags.create(owner.actor, org.id, { name }).id);
+    for (let i = 0; i < 2_000; i++) {
+      tasks.create(
+        owner.actor,
+        org.id,
+        {
+          title: `Due today ${i}`,
+          dueDate: '2026-10-09',
+          dueTime: `${String(9 + (i % 12)).padStart(2, '0')}:00`,
+          dueTz: 'Europe/Stockholm',
+          tagIds: [tagIds[i % tagIds.length] as string],
+        },
+        meta(),
+      );
+    }
+    const dues = ['today', 'week', 'overdue', 'none', 'any'] as const;
+    for (let i = 0; i < 200; i++) {
+      views.create(owner.actor, org.id, {
+        name: `View ${i}`,
+        query: {
+          tags: [tagIds[i % tagIds.length] as string],
+          tagMode: 'any',
+          assignee: i % 2 === 0 ? 'me' : 'anyone',
+          due: dues[i % dues.length] as (typeof dues)[number],
+          status: 'open',
+        },
+        shared: i < 100,
+      });
+    }
+    const path = `/api/v1/orgs/${org.id}/views`;
+    for (let i = 0; i < 3; i++) await timed(() => owner.call('GET', path), 200);
+    const times: number[] = [];
+    for (let i = 0; i < 15; i++) times.push(await timed(() => owner.call('GET', path), 200));
+    const listed = await owner.ok<{ openCount: number }[]>('GET', path);
+    expect(listed).toHaveLength(200);
+    expect(listed[0]?.openCount).toBe(250);
+    console.warn('[perf] views', JSON.stringify({ medianMs: round(percentile(times, 50)) }));
+    expect(percentile(times, 50)).toBeLessThanOrEqual(VIEWS_BUDGET_MS * SLACK);
+  }, 120_000);
+});
