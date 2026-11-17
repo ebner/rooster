@@ -4,6 +4,7 @@ Vad som har ändrats för dig i varje version av rooster, med den senaste först
 
 ## Unreleased
 
+- **Vyer och projekt.** Spara en uppsättning filter (taggar, person, förfallodatum, status) som en vy i sidofältet: privat eller delad med alla i organisationen. En vy med en tagg är ett projekt: uppgifter du lägger till får taggen och personen du skrev dem under, rubriken visar hur många som är öppna och klara, och du arkiverar den när projektet är över. Skapa en med **+ Ny vy**, eller med **Spara som vy** från ett filter eller en sökning i paletten. Se [Vyer och projekt](./views-and-search.md#vyer-och-projekt).
 - **Alla organisationer.** Med i mer än en organisation? Högst upp i sidofältet finns nu Idag, Kommande 7 dagar och Försenade för alla på en gång, med varje uppgifts organisation som en liten etikett. Uppgifter du lägger till där hamnar i din standardorganisation, eller i en annan om du skriver `^` och dess namn. Under Inställningar → Beteende väljer du standardorganisation och kan låta rooster öppnas på Alla organisationer · Idag. Se [Alla organisationer](./views-and-search.md#alla-organisationer).
 - **Flytta en uppgift till en annan organisation.** Skapade du en uppgift i fel organisation? Välj **Flytta till organisation…** i uppgiftens meny, i paletten (Ctrl+K) eller i raden för markerade uppgifter, och sedan organisation och grupp. Deluppgifter, kommentarer och bilagor följer med, och Ångra flyttar tillbaka den. Se [Flytta till en annan organisation](./my-tasks.md#flytta-till-en-annan-organisation). På kommandoraden finns `rooster mv --to-org`.
 

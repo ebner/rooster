@@ -155,7 +155,7 @@ Built with **Ink 8**. It is a full-screen, keyboard-only mini rooster.
 |---|---|---|
 | `list_orgs` | — | |
 | `list_tasks` | `{org?, view?: my\|today\|week\|overdue\|nodate\|everyone, group?, tag?, includeCompleted?, allOrgs?}` | Returns compact rows: seq, title, due, group, tags. Phase 13: `allOrgs: true` (with today, week or overdue, without `org`/`group`) reads `GET /me/views/<view>`; each row names its org. |
-| `list_views` | `{org?}` | Phase 13 (ADR 0073); `list_tasks` also takes `{view}` (a view's name or id). |
+| `list_views` | `{org?}` | Phase 13 (ADR 0073): id, name, `project`, `shared`, `open`, `archived`. `list_tasks.view` is a string: a built-in view name, else a view's name or id (built-in names win; an archived view only by id). |
 | `get_task` | `{ref}` | Includes description and subtasks. |
 | `search_tasks` | `{query, allOrgs?}` | |
 | `create_task` | `{title, due?, group?, tags?, description?, parent?, assignee?, remind?}` | `due` accepts NL phrases; `remind` (P10) takes `15m`/`1h`/`1d`/`due` or an absolute time, and creates a reminder for the grant's user. |

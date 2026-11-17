@@ -58,6 +58,7 @@ Open them from the **⋯** menu next to an organisation in the sidebar (**Organi
 - **Members:** change someone's role (**Owner** or **Member**) or **Remove** them. Their tasks become unassigned and their groups are deleted. Every organisation keeps at least one owner.
 - **Invites:** invite by email or create an **Invite link**, used **Once** or **Many times**, that expires after a number of days. Open invites are listed and can be revoked. Without email set up on the server, both give you a link to copy.
 - **Tags:** rename a tag, change its colour, merge it into another tag (**Merge into…**), or delete it from every task.
+- **Views:** the organisation's views (shared ones and your own) with **Archive** and **Delete**, and the archived ones with **Restore**. See [Views and projects](./views-and-search.md#views-and-projects).
 - **Danger zone:** **Leave…** the organisation (you need a new invite to come back), or, as an owner, **Delete…** it with all its tasks, groups and tags, after typing its name.
 
 See [Working together](./collaboration.md) for what members share.

@@ -48,6 +48,7 @@ rooster tag 42 +brådskande -senare
 rooster sub 42 "Ring banken"      # en deluppgift
 rooster comment 42 "Har skickat utkastet"
 rooster search "faktura #ekonomi"
+rooster view ls                   # organisationens vyer; rooster ls --view Juniper listar en per person
 rooster open 42                   # öppna uppgiften i webbläsaren
 ```
 
@@ -100,6 +101,7 @@ Kör `rooster` utan argument i en terminal för att öppna en version av rooster
 | `u` / `Ctrl+R` | Ångra / gör om |
 | `/` | Sök |
 | `g` och sedan `m` `t` `w` `o` `n` `e` | Mina uppgifter, Idag, Kommande 7 dagar, Försenade, Utan datum, Allas uppgifter |
+| `g` och sedan `1`–`9` | Organisationens vyer, i din ordning |
 | `1`–`9` | Byt organisation |
 | `H` | Visa eller dölj klara uppgifter |
 | `?` | Alla tangenter, och hur de skiljer sig från webben |

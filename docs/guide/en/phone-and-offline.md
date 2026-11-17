@@ -18,7 +18,7 @@ On iPhone and iPad the installed app keeps its own storage, so you sign in once 
 ![The organisation switcher sheet on a phone](../../screenshots/org-switcher.phone.light.png)
 
 - **Header:** the organisation switcher on the left (tap the name to switch, or to create a **New organisation**), and on the right the sync status and a **More** menu. To switch faster, swipe the name left or right for the next or previous organisation (the dots under it show where you are), or hold the name, slide your finger to an organisation and let go. You stay on the same view, so Today stays Today. With more than one organisation, **All organisations** comes first in the sheet and in the swipe order; its view switcher has Today · 7 days · Overdue.
-- **View switcher:** My tasks · Today · 7 days · Overdue · No date · Everyone. It stays at the top while you scroll.
+- **View switcher:** My tasks · Today · 7 days · Overdue · No date · Everyone, then the organisation's [views](./views-and-search.md#views-and-projects) (their filters are under the filter button in the header). It stays at the top while you scroll.
 - **Bottom bar:** My tasks · Search · Inbox · Settings.
 - **Add button (+):** adds a task at the top of the first group, or of the current view. The keyboard opens with a bar above it: **Date**, **Group**, **Add tag** and **Next**. **Next** saves the task and starts another one; tap outside to finish. Dates typed in the title work as on a computer; see [Dates and repeating tasks](./dates-and-repeats.md).
 

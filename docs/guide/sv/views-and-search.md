@@ -31,6 +31,18 @@ Varje rad visar sin grupp som en liten etikett. I sidofältet räknas öppna upp
 - Utan datum och Mina uppgifter finns kvar i varje organisation: de handlar om var en uppgift är sorterad.
 - Med tangentbordet öppnar du paletten (Ctrl+K) och väljer **Alla organisationer: Idag** (eller Kommande 7 dagar, Försenade). Vill du att rooster startar på Alla organisationer · Idag, se [Beteende](./settings-and-data.md#beteende).
 
+## Vyer och projekt
+
+En **vy** samlar de uppgifter i en organisation som matchar några filter och håller dem ett klick bort i sidofältet: allt som är taggat *juniper*, det som saknar ansvarig, det du gjorde klart den här veckan. Den flyttar aldrig uppgifter: de ligger kvar i var och ens grupper.
+
+- **Skapa en** med **+ Ny vy** under organisationen i sidofältet, eller med **Spara som vy** från taggfiltret i Mina uppgifter, från filtren i Allas uppgifter eller från en sökning i paletten som använder filter (`#juniper @amara due:vecka`). Ge den ett namn och välj sedan vad den ska samla med etiketterna under namnet: **Taggar** (någon av eller alla), **Ansvarig** (vem som helst, jag, ingen eller en medlem), **Förfaller** och **Status**.
+- **Privat eller Delad:** en privat vy är bara din. En delad syns i alla medlemmars sidofält, och alla medlemmar kan ändra, arkivera eller ta bort den. Att dela en vy visar inget nytt: alla i en organisation kan se alla dess uppgifter ändå; en vy samlar dem bara. I din personliga organisation är alla vyer privata.
+- **Raderna** grupperas per person (du först, sedan de andra efter namn, sist *Ingen ansvarig*), var och en efter förfallodatum. En uppgift syns när den själv matchar: en taggad deluppgift syns under sin egen ansvarige med förälderns namn, och en taggad uppgift tar inte med sina otaggade deluppgifter. Klara uppgifter döljs tills du slår på **Visa klara**. Raderna fungerar som överallt annars.
+- **En projektvy** är en vy med exakt en tagg. En uppgift du lägger till i den får taggen och personen i avsnittet där du skrev den (överst i personens inkorg; under *Ingen ansvarig* förblir den utan ansvarig), och rubriken visar hur det går: ”7 öppna · 12 klara”. När projektet är klart väljer du **⋯ → Arkivera vyn**: vyn försvinner ur alla sidofält, och [Organisationsinställningar → Vyer](./settings-and-data.md#organisationsinställningar) tar tillbaka den.
+- **Din egen ordning:** dra vyerna i sidofältet (eller lyft en med handtaget från tangentbordet) för att ordna dem; varje medlem har sin egen ordning. Siffran vid en vy räknar dess öppna uppgifter.
+- **Taggarna ändras, vyerna följer med:** en tagg som byter namn finns kvar i sina vyer, en sammanslagen ersätts av taggen den gick upp i, och en borttagen tagg försvinner ur alla vyer.
+- Med tangentbordet har paletten (Ctrl+K) **Gå till vy**, **Ny vy**, **Spara sökningen som vy** och alla åtgärder för den öppna vyn.
+
 ## Allas uppgifter
 
 Delade organisationer har också **Allas uppgifter**, alla öppna uppgifter grupperade per person (G, sedan E). Se [Samarbete](./collaboration.md#allas-uppgifter).

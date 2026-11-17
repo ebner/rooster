@@ -31,6 +31,18 @@ If you're in more than one organisation, the top of the sidebar has **All organi
 - No date and My tasks stay in each organisation: they're about where a task is filed.
 - To go there from the keyboard, open the palette (Ctrl+K) and choose **All organisations: Today** (or Next 7 days, Overdue). To start rooster on All organisations · Today, see [Behaviour](./settings-and-data.md#behaviour).
 
+## Views and projects
+
+A **view** gathers the tasks of one organisation that match a few filters, and keeps them a click away in the sidebar: everything tagged *juniper*, what's unassigned, what you finished this week. It never moves tasks: they stay in each person's groups.
+
+- **Create one** with **+ New view** under the organisation in the sidebar, or with **Save as view** from the tag filter in My tasks, from the filters of Everyone's tasks, or from a palette search that uses filters (`#juniper @amara due:week`). Name it, then choose what it gathers with the chips under the name: **Tags** (any or all of them), **Assignee** (anyone, me, unassigned or a member), **Due** and **Status**.
+- **Private or Shared:** a private view is only yours. A shared one shows in every member's sidebar, and any member may change, archive or delete it. Sharing a view shows nothing new: everyone in an organisation can see all its tasks anyway; a view only gathers them. In your personal organisation every view is private.
+- **Rows** are grouped by person (you first, then the others by name, then *Unassigned*), each by due date. A task shows when it matches itself: a tagged subtask shows under its own assignee with its parent's name, and a tagged task doesn't pull in its untagged subtasks. Completed tasks are hidden until you turn on **Show completed**. Rows work as anywhere else.
+- **A project view** is a view with exactly one tag. A task you add in it gets the tag and the person of the section you typed it in (landing at the top of their Inbox; under *Unassigned* it stays unassigned), and the header shows the progress: "7 open · 12 done". When the project is done, **⋯ → Archive view**: the view leaves every sidebar, and [Organisation settings → Views](./settings-and-data.md#organisation-settings) brings it back.
+- **Your own order:** drag views in the sidebar (or lift one with its grip from the keyboard) to order them; each member has their own order. The number next to a view counts its open tasks.
+- **Tags change, views follow:** a renamed tag stays in its views, a merged one is replaced by the tag it went into, and a deleted tag leaves every view.
+- From the keyboard, the palette (Ctrl+K) has **Go to view**, **New view**, **Save search as view** and every action on the open view.
+
 ## Everyone's tasks
 
 Shared organisations also have **Everyone's tasks**, all open tasks grouped by person (G then E). See [Working together](./collaboration.md#everyones-tasks).

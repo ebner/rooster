@@ -48,6 +48,7 @@ rooster tag 42 +urgent -later
 rooster sub 42 "Call the bank"    # a subtask
 rooster comment 42 "Sent the draft"
 rooster search "invoice #finance"
+rooster view ls                   # the organisation's views; rooster ls --view Juniper lists one by person
 rooster open 42                   # open the task in the browser
 ```
 
@@ -100,6 +101,7 @@ Run `rooster` with no arguments in a terminal to open a full-screen, keyboard-on
 | `u` / `Ctrl+R` | Undo / redo |
 | `/` | Search |
 | `g` then `m` `t` `w` `o` `n` `e` | My tasks, Today, Next 7 days, Overdue, No date, Everyone's tasks |
+| `g` then `1`–`9` | The organisation's views, in your order |
 | `1`–`9` | Switch organisation |
 | `H` | Show or hide completed tasks |
 | `?` | All keys, and how they differ from the web |

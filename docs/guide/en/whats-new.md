@@ -4,6 +4,7 @@ What changed for you in each version of rooster, newest first. After an update, 
 
 ## Unreleased
 
+- **Views and projects.** Save a set of filters (tags, person, due date, status) as a view in the sidebar: private, or shared with everyone in the organisation. A view with one tag is a project: tasks you add get the tag and the person you typed them under, the header shows how many are open and done, and you archive it when the project is over. Create one with **+ New view**, or with **Save as view** from a filter or a palette search. See [Views and projects](./views-and-search.md#views-and-projects).
 - **All organisations.** In more than one organisation? The top of the sidebar now has Today, Next 7 days and Overdue across all of them, with each task's organisation shown as a small chip. Tasks you add there go to your default organisation, or to another one if you type `^` and its name. In Settings → Behaviour you can choose the default organisation and open rooster on All organisations · Today. See [All organisations](./views-and-search.md#all-organisations).
 - **Move a task to another organisation.** Created a task in the wrong organisation? Choose **Move to organisation…** in the task's menu, in the palette (Ctrl+K) or in the bar for selected tasks, then the organisation and the group. Subtasks, comments and attachments come along, and Undo moves it back. See [Move to another organisation](./my-tasks.md#move-to-another-organisation). The command line has `rooster mv --to-org`.
 

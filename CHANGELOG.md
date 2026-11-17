@@ -7,6 +7,7 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 ## [Unreleased]
 
 ### Added
+- **Views and project views** (ADR 0073 B, FR-VIEW-6, FR-VIEW-7): saved queries in an organisation (tags any/all, assignee, due, status), private or shared with every member, in each member's own sidebar order, with archive and restore; a view with one tag is a project view (inline add gives the tag and the section's person; open/done counts). API: `GET/POST /api/v1/orgs/{orgId}/views`, `PATCH/DELETE /api/v1/views/{id}`, `POST /api/v1/views/{id}/move|archive|restore`, `GET /api/v1/views/{id}/tasks`; reading needs `tasks:read`, managing `groups:write`. A deleted tag leaves every view's query and a merged one is remapped. `rooster view ls`, `rooster ls --view <name>`, views in the TUI's view bar, MCP `list_views` and `list_tasks {view}`.
 - **All organisations** (ADR 0073 A, FR-VIEW-5): Today, Next 7 days and Overdue across every organisation the user is a member of, at the top of the sidebar and first in the phone org sheet, with summed badges; computed from the cached lists, so it works offline. New tasks there go to the default organisation (`prefs.defaultOrgId`) or the one named with the `^org` title token. `prefs.startPage` can open the app on All organisations · Today. `GET /api/v1/me/views/{today|week|overdue}` serves the same view to the CLI (`rooster ls today --all-orgs`) and MCP (`list_tasks {allOrgs: true}`), filtered by the grant like every read. `PATCH /me` accepts `prefs.defaultOrgId` only for an org the user is a member of.
 - **Move tasks to another organisation** (ADR 0072, FR-ORG-8): `POST /api/v1/tasks/move-to-org` and its preview move tasks with their whole subtrees to another org the actor is a member of. The tasks get new numbers there (old refs such as `acme#42` still resolve, and a task that moves back gets its number back), tags are matched by name and created when missing, the roots become the mover's, and followers, reminders and notifications of people outside the target org are removed; they get an in-app `moved_away` notice. In the web app (pane menu, palette, bulk bar, phone selection mode), `rooster mv --to-org`, the TUI move picker and the MCP tool `move_task_to_org` (`tasks:write`).
 - **The project site** at https://ebner.github.io/rooster/ (ADR 0070): a landing page and the user guide, in English and Swedish, with a demo of the date parser running in the browser. It is built from `apps/site` and deployed to GitHub Pages by `.github/workflows/pages.yml` for each release tag. The README is shorter and links to it.
@@ -16,6 +17,7 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ### Migrations
 - `0017_task_former_seq`: the numbers tasks had in orgs they moved away from.
+- `0018_saved_views`: views (`saved_view`) and each member's order of them (`saved_view_pref`).
 
 ## [1.10.1] - 2026-11-12
 

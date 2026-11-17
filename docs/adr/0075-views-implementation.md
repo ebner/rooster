@@ -1,0 +1,40 @@
+# ADR 0075: Views and project views, implementation (Phase 13 Part B)
+
+- Status: accepted
+- Date: 2026-11-17
+- Implements: ADR 0073 Part B (FR-VIEW-6, FR-VIEW-7, WP 13.3–13.5, AC-13.3, AC-13.4, AC-13.5)
+- Code: core `saved-views.ts` and `schemas/views.ts`; `ViewService` (`services/view-service.ts`) behind `routes/views.ts`, migration `0018_saved_views`; web `features/saved-views/`, `data/views.ts`, `data/view-tasks.ts`, `data/pipeline/view-tasks-ops.ts`, `data/sync/view-invalidation.ts`, `features/shell/sidebar-saved-views.tsx`, `features/org-settings/views-section.tsx`; CLI `commands/views.ts`, `saved-views.ts`; MCP `saved-views.ts`
+
+## Context
+ADR 0073 decided what views are. This records what the spec left open while building them.
+
+## Decisions
+
+### Core
+1. **One matcher and one selector** for every client: `matchesSavedView` (tags any/all, assignee, due as the smart views classify it, status with "Show completed") and `selectSavedView` (sections: me, members alphabetically, former members by ID, Unassigned; every member's section present for its inline add unless the query names one person; one section in a personal org; rows by due date, then created). `savedViewCounts` counts the filters' matches by completion, ignoring the status filter. A project view is a query with exactly one tag (`isProjectView`). `remapViewQuery` handles tag deletes and merges.
+
+### Server
+2. **Visibility:** a view is visible to members of its live org when it is shared or theirs; anything else is `404`, the same as an unknown view, on every route (also as an ordering neighbour).
+3. **Grants:** reading needs `tasks:read`; managing (create, change, delete, move, archive, restore) needs `groups:write` with write access to the whole org (`authorizeOrgWide`, as for groups), because a shared view affects every member. The SSE key `['views', orgId]` reaches a grant only with `tasks:read`.
+4. **Order:** each member's own (`saved_view_pref`). Views a member never ordered follow their ordered ones, in created order, with keys generated after the last stored one; a create, move or restore stores (materialises) the member's keys. Archive drops every member's key; restore and a share put the view at the end for everyone.
+5. **Unshare** is open to any member and makes the view private to its creator (other members' keys go); it is refused (`422`) when the creator has left, since the view would be nobody's. **Delete** is permanent and needs `groups:write`, not `tasks:delete` (tasks and tags stay).
+6. **Idempotent create** (same `id`, creator, org, name, effective `shared` and normalised query returns the view; else `409 id_conflict`). Duplicate tags are dropped; only new tags and a changed assignee are validated, so a stale assignee doesn't block a rename. A stored query that no longer parses reads as the defaults.
+7. **Rows:** `GET /views/{id}/tasks` returns every readable live match plus the readable ancestor chain of matching subtasks (for breadcrumbs; clients regroup with the selector, which drops them). Counts are over readable tasks.
+8. **Tags and members:** a deleted tag leaves every query of the org (archived views too) and a merged one is remapped, in the same transaction. A member's removal deletes their private views in that org and their order of its views; shared views they created stay. Moving tasks between orgs doesn't touch views. Views are not part of the org export.
+9. **SSE:** `['views', orgId]` after commit to every member for a shared view (or one that was shared), the owner for a private one, the actor for a move. Task changes emit no new key: clients refetch view counts and rows on `['everyone', orgId]` (shared orgs) and `['my-list', orgId]` (personal).
+
+### Web
+10. **Rows cache:** `['view-tasks', viewId, 'open'|'all']` works like Everyone's: queued ops are replayed over each fetch, the pipeline writes every op into the org's view caches and merges confirmations, and rows are always regrouped with the core selector against the view's current query (a task that stops matching leaves at once; chip edits re-filter before the refetch). It refetches when a confirmed op may make a task it doesn't hold match. Views and their rows are persisted, so a view opens offline. Counts are the server's plus local changes since the fetch.
+11. **Managing views is online-only** (like org settings; hard rule 4 covers tasks, groups, tags and placements): edits save at once, optimistically in the views cache, reverted with a toast on error or offline.
+12. **New views are private.** `/o/<slug>/v/new` is local until named. **Save as view** creates the view at once, named from its query (tag names, else person · due · status), and opens it with the name selected. My tasks' tag filter becomes a view across people; several members from Everyone's filters become *anyone*; a palette search drops free text and maps a missing `is:` to open.
+13. **Editing in a view** uses Everyone's behaviour in a shared org (assignees on rows, drag between person sections reassigns, no Move to group, Move to organisation from the pane); a personal-org view keeps Move to group. A view's tags go to every task typed in it, subtasks included. Show completed is the list's toggle (Shift+H); counts show for project views only.
+14. **Sidebar:** under each org, after Everyone's tasks and a little space, the views in the member's order (no heading; a list named "Views in <org>" for screen readers), `#` for a project view, ⌕ otherwise, with the open count; "+ New view" last and muted, also with no views. Drag by pointer, or lift with the grip from the keyboard; a lifted grip carries `data-overlay` so the list's keys stay out (also for org sections, which had the same leak). The rail shows views without "+ New view" or drag.
+15. **Org settings → Views** lists live and archived views with Archive, Restore and Delete (inline confirm); shared orgs show the B13 note.
+16. **Start page and switching:** a view's path is a list path the start page can restore (not `/v/new`); a view the cached list proves gone falls back to that org's My tasks, and the not-found screen forgets the path. Switching org from a view lands on My tasks. Phone tabs show the views' full names after Everyone; their query is in a sheet behind the header's filter button.
+
+### CLI, TUI, MCP
+17. `rooster ls --view` finds a view by id (live, then archived), then by case-insensitive exact name (also `#name`); ambiguous or unknown names exit 4 listing candidates. It refuses a built-in view name, `--group`, `--tag`, `--all-orgs` and `--upcoming`. Text output leaves out empty person sections; a former member's section is "Former member". In the TUI, `g` then `1`–`9` opens the nth view, and a task typed in a view gets the query's tags (and the section's person). MCP `list_tasks.view` is a string: built-in names win on a clash; an archived view is reachable by id only.
+
+## Consequences
+- A new client of views groups rows with `selectSavedView`, never by itself.
+- A new write that changes which tasks match a view (a task field, a tag) needs no server change: the existing task keys refresh views.

@@ -58,6 +58,7 @@ Export och papperskorgen kräver en anslutning.
 - **Medlemmar:** ändra någons roll (**Ägare** eller **Medlem**) eller **Ta bort** personen. Personens uppgifter blir utan ansvarig och personens grupper tas bort. Varje organisation har alltid minst en ägare.
 - **Inbjudningar:** bjud in via e-post eller skapa en **Inbjudningslänk** som kan användas **En gång** eller **Flera gånger** och som går ut efter ett antal dagar. Öppna inbjudningar listas och kan återkallas. Om servern inte skickar e-post får du en länk att kopiera i båda fallen.
 - **Taggar:** byt namn på en tagg, ändra dess färg, slå ihop den med en annan tagg (**Slå ihop med…**) eller ta bort den från alla uppgifter.
+- **Vyer:** organisationens vyer (de delade och dina egna) med **Arkivera** och **Ta bort**, och de arkiverade med **Återställ**. Se [Vyer och projekt](./views-and-search.md#vyer-och-projekt).
 - **Farozon:** **Lämna…** organisationen (du behöver en ny inbjudan för att komma tillbaka), eller, som ägare, **Ta bort…** den med alla uppgifter, grupper och taggar, efter att du har skrivit dess namn.
 
 I [Samarbete](./collaboration.md) står vad medlemmar delar.
