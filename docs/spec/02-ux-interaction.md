@@ -38,7 +38,8 @@ This document defines **exact behaviour**. Visual styling (sizes, colours, type)
 
 - **Sidebar.** It contains:
   - The logo, Search (opens the palette) and the Inbox (notifications, from P6) with an unread count.
-  - Then one **section per org**, in user order, draggable. The org header has an avatar, the name, and a "⋯" menu (org settings, invite, collapse).
+  - Then one **section per org**, in user order, draggable. The org header has a chevron, an avatar, the name, and a "⋯" menu (org settings, invite, collapse); the header toggles the section (pointer or Enter/Space). Hairlines separate the sections, and a section's items are indented under its header (ADR 0076).
+  - **Collapse defaults** (ADR 0076): with three orgs or more, an org's section starts collapsed unless it is the org in the URL; with fewer, every section starts open. An explicit open or collapse wins and is kept per user on the browser (a collapse stored in the server pref `collapsed` counts as explicit); navigating into an org the user collapsed doesn't expand it. All organisations collapses the same way, on the browser only.
   - Above the orgs (Phase 13, ADR 0073 A): **All organisations** with Today, Next 7 days and Overdue across every org, with summed badges.
   - Under each org: My tasks (open count), smart views (Today with a count, Next 7 days, Overdue with a red count only when > 0, No date), Everyone's tasks (shared orgs only), and (Phase 13, ADR 0073 B) **Views**: shared and private views in the member's own order (drag), each with its open count (`#` icon for a project view, ⌕ otherwise), and "+ New view".
   - At the bottom: the user menu (settings, language, sign out).

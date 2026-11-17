@@ -199,6 +199,7 @@ function AppLayout() {
                 ? { orgId: activeOrg.id, view: activeView, savedViewId }
                 : null
             }
+            activeOrgId={activeOrg?.id ?? null}
             activeAllView={allView}
             locale={user.locale}
             collapsed={collapsed}

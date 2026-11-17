@@ -6,6 +6,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Changed
+- **Sidebar sections** (ADR 0076): each organisation (and All organisations) has a full-height header with an always-visible chevron, a 24 px avatar and the name in the primary text colour; a hairline separates the sections, and a section's items are indented along a guide in the org's colour. From three organisations on, the sections of orgs other than the one in the URL start collapsed. An explicit open or collapse is kept per user in the browser's local storage (swept on sign-out) and still written to `PATCH /api/v1/me/orgs/{orgId}` `{collapsed}`; a collapse stored there counts as explicit. All organisations collapses too, in the browser only.
+
 ## [1.11.0] - 2026-11-17
 
 ### Added

@@ -5,6 +5,7 @@ import { expectAxeClean } from './support/a11y';
 import { apiCall, signInAs, uniqueEmail } from './support/auth';
 import { createTask, groupId, myList, personalOrg, waitForSync } from './support/p3';
 import { viewerToday } from './support/p5-views';
+import { expandSection } from './support/sidebar';
 import { expect, reload, test } from './support/test';
 
 /** Phase 13, WP 13.1 (ADR 0073 A): All organisations on desktop against the real server. */
@@ -115,6 +116,8 @@ test('AC-13.1 All · Today mixes every org’s overdue and today tasks with org 
     .click();
   await expect(page).toHaveURL(/\/all\/today$/);
   await expect(row(page, 'Fix the oar')).toBeVisible();
+  // Collapsed while another org is shown (three orgs, ADR 0076): open it while online.
+  await expandSection(page, 'Rowing club');
   await context.setOffline(true);
   await row(page, 'Fix the oar').locator('label').first().click();
   await expect(row(page, 'Fix the oar')).toHaveCount(0, { timeout: 5_000 });

@@ -19,7 +19,7 @@ Every task belongs to exactly one organisation. Use them to keep private and wor
 - **Personal** is yours alone. It can't be shared, renamed or deleted, and it has no collaboration features.
 - **Shared organisations** have members who can see every task in them, assign tasks to each other and comment. See [Working together](./collaboration.md).
 
-Each organisation is a section in the sidebar, with My tasks, the smart views (Today, Next 7 days, Overdue, No date) and, in shared organisations, Everyone's tasks. Drag an organisation's header to reorder the sidebar. **Ctrl+1** to **Ctrl+9** (⌘ on a Mac) jumps to My tasks of the first nine organisations.
+Each organisation is a section in the sidebar, with My tasks, the smart views (Today, Next 7 days, Overdue, No date) and, in shared organisations, Everyone's tasks. Drag an organisation's header to reorder the sidebar, and click its name to fold the section away or open it again. With three organisations or more, only the one you're in starts open; a section you fold or open yourself stays that way on this browser. **Ctrl+1** to **Ctrl+9** (⌘ on a Mac) jumps to My tasks of the first nine organisations.
 
 To create an organisation, choose **New organisation** in the sidebar, give it a name, an icon and a colour, and press **Create organisation**. You become its owner. To invite people, open the organisation's **⋯** menu and choose **Invite people**.
 

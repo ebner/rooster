@@ -44,6 +44,7 @@ import { ViewHeader } from '../shell/app-shell';
 import { CreateOrgForm } from '../shell/create-org-form';
 import { fixtureIds, fixtureMe } from '../shell/fixtures';
 import { Sidebar } from '../shell/sidebar';
+import { SidebarAllSection } from '../shell/sidebar-all-section';
 import { SidebarItem } from '../shell/sidebar-item';
 import { SidebarOrgSection } from '../shell/sidebar-org-section';
 import { Group, Section, Specimen } from './layout';
@@ -98,8 +99,11 @@ function SidebarSection() {
   const [railOrgs] = useState(fixtureMe.orgs);
   const locale = isLocale(i18n.language) ? i18n.language : 'en';
   const company = fixtureMe.orgs[1] as Org;
+  const uncoloured = sample.orgs.map((o) => ({ ...o, color: null }));
+  // Each frame keeps its open and collapsed sections under its own (fake) user, so a toggle in
+  // one doesn't move another, and a fresh browser shows the defaults (ADR 0076).
+  const user = (frame: string) => ({ ...fixtureMe.user, id: `kitchen-sink-${frame}` });
   const common = {
-    user: fixtureMe.user,
     locale,
     onToggleCollapsed: noop,
     onCreateOrg: (input: { name: string }) => {
@@ -111,13 +115,29 @@ function SidebarSection() {
   return (
     <Section id="sidebar" title={t('section.sidebar')}>
       <Group title={t('group.sidebarFrames')} className="items-stretch">
-        <Specimen label={t('state.expanded')}>
+        <Specimen label={t('state.withColours')}>
           <div className="overflow-hidden rounded-lg border border-border">
             <Sidebar
               {...common}
+              user={user('coloured')}
               orgs={sample.orgs}
-              active={{ orgId: fixtureIds.personalOrg, view: 'my' }}
-              counts={{ [fixtureIds.companyOrg]: { my: 7 } }}
+              active={{ orgId: fixtureIds.companyOrg, view: 'my' }}
+              counts={{ [fixtureIds.companyOrg]: { my: 7, today: 2, overdue: 1 } }}
+              allCounts={{ today: 3, week: 5, overdue: 1 }}
+              collapsed={false}
+              onReorder={(intent) => sample.reorder(intent.orgId, intent.afterId)}
+              onToggleOrgCollapsed={(orgId) => sample.toggle(orgId)}
+            />
+          </div>
+        </Specimen>
+        <Specimen label={t('state.withoutColours')}>
+          <div className="overflow-hidden rounded-lg border border-border">
+            <Sidebar
+              {...common}
+              user={user('uncoloured')}
+              orgs={uncoloured}
+              active={{ orgId: fixtureIds.personalOrg, view: 'today' }}
+              counts={{ [fixtureIds.personalOrg]: { my: 4, today: 2 } }}
               collapsed={false}
               onReorder={(intent) => sample.reorder(intent.orgId, intent.afterId)}
               onToggleOrgCollapsed={(orgId) => sample.toggle(orgId)}
@@ -128,6 +148,7 @@ function SidebarSection() {
           <div className="overflow-hidden rounded-lg border border-border">
             <Sidebar
               {...common}
+              user={user('rail')}
               orgs={railOrgs}
               active={{ orgId: fixtureIds.companyOrg, view: 'my' }}
               collapsed
@@ -176,6 +197,21 @@ function SidebarSection() {
             ))}
           </SortableContext>
         </DndContext>
+      </Group>
+      <Group title={t('group.allOrgsHeader')}>
+        {(['expanded', 'collapsed'] as const).map((state) => (
+          <Specimen
+            key={state}
+            label={t(`state.${state}`)}
+            className="w-sidebar bg-bg-sidebar px-3 py-2"
+          >
+            <SidebarAllSection
+              activeView={state === 'expanded' ? 'today' : null}
+              counts={{ today: 3, week: 5, overdue: 1 }}
+              collapsed={state === 'collapsed'}
+            />
+          </Specimen>
+        ))}
       </Group>
       <Group title={t('group.viewHeader')} className="flex-col items-stretch">
         <div className="w-full overflow-hidden rounded-lg border border-border">

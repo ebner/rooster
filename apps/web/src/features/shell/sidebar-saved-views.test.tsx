@@ -228,7 +228,8 @@ describe('the views part in the sidebar', () => {
   }
 
   test('follows Everyone’s tasks in its own org; every org offers "New view"', () => {
-    renderSidebar();
+    // Two orgs: both open (from three on, only the org in the URL is; ADR 0076).
+    renderSidebar({ orgs: [personal, company] });
     const org = screen.getByRole('region', { name: company.name });
     const links = within(org)
       .getAllByRole('link')

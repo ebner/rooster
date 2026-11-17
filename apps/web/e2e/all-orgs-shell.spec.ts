@@ -3,6 +3,7 @@ import { addDays } from '@rooster/core/dates';
 import { apiCall, signInAs, uniqueEmail } from './support/auth';
 import { createTask, personalOrg, waitForSync } from './support/p3';
 import { viewerToday } from './support/p5-views';
+import { expandSection, sectionToggle } from './support/sidebar';
 import { expect, test } from './support/test';
 
 /**
@@ -89,7 +90,10 @@ test('AC-13.1 All organisations sums the badges of every org; completing a task 
   await expect(allLink(page, /^Overdue/)).toHaveAttribute('href', '/all/overdue');
   if (shots) await sidebar(page).screenshot({ path: `${shots}/1440-sidebar-all.png` });
 
-  // Complete Harbour's overdue task in Harbour's own Today.
+  // Three orgs: those not in the URL start collapsed (ADR 0076). Complete Harbour's overdue
+  // task in Harbour's own Today.
+  await expect(sectionToggle(page, 'Harbour')).toHaveAttribute('aria-expanded', 'false');
+  await expandSection(page, 'Harbour');
   await region(page, 'Harbour')
     .getByRole('link', { name: /^Today/ })
     .click();
@@ -142,6 +146,7 @@ test('AC-13.2 the start page setting opens All organisations · Today; "The last
 }) => {
   const { harbour } = await setup(page, 'all.start');
   // The last list view shown in this browser.
+  await expandSection(page, 'Harbour');
   await region(page, 'Harbour')
     .getByRole('link', { name: /^Next 7 days/ })
     .click();

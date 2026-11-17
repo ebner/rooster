@@ -4,7 +4,6 @@ import type { SavedView, SavedViewMove } from '@rooster/core/schemas';
 import {
   ArrowDown,
   ArrowUp,
-  ChevronDown,
   ChevronsDownUp,
   ChevronsUpDown,
   GripVertical,
@@ -25,6 +24,12 @@ import { type OrgCounts, useOrgCountsHook, useSavedViewsHook } from '../views/vi
 import { type OrgViewId, orgUrlSlug, paths } from './paths';
 import { SidebarItem } from './sidebar-item';
 import { SidebarSavedViews } from './sidebar-saved-views';
+import {
+  SectionChevron,
+  SectionItems,
+  sectionDividerClass,
+  sectionHeaderButtonClass,
+} from './sidebar-section-header';
 import { type SidebarViewDefinition, viewsFor } from './sidebar-views';
 
 export type { OrgCounts };
@@ -47,16 +52,21 @@ export interface SidebarOrgSectionProps {
   canMoveUp: boolean;
   canMoveDown: boolean;
   onMove: (direction: 'up' | 'down') => void;
+  /** Whether the section is collapsed (`orgSectionCollapsed`); the rail ignores it. */
+  collapsed?: boolean | undefined;
   onToggleCollapsed: () => void;
+  /** A hairline above the section: every section but the sidebar's first has one. */
+  divider?: boolean;
   rail?: boolean;
   /** Kitchen sink: render the header in a forced state. */
   'data-force'?: string;
 }
 
 /**
- * One org in the sidebar (02 §2, 03 §3.10): a header (avatar, name, grip, "⋯") and
- * its views. The whole header is a pointer drag source; keyboard users lift the
- * section with the grip button (Space, arrows, Space) or use Move up/down. The grip
+ * One org in the sidebar (02 §2, 03 §3.10, ADR 0076): a header row (chevron, avatar, name,
+ * grip, "⋯") and its views, indented past a guide in the org's colour. The header's toggle
+ * opens and collapses the section. The whole header is a pointer drag source; keyboard users
+ * lift the section with the grip button (Space, arrows, Space) or use Move up/down. The grip
  * sits beside "⋯" (not in the left gutter) so it keeps a 28 px target (WCAG 2.5.8).
  */
 export function SidebarOrgSection({
@@ -70,7 +80,9 @@ export function SidebarOrgSection({
   canMoveUp,
   canMoveDown,
   onMove,
+  collapsed: collapsedProp,
   onToggleCollapsed,
+  divider = false,
   rail = false,
   'data-force': force,
 }: SidebarOrgSectionProps) {
@@ -85,7 +97,7 @@ export function SidebarOrgSection({
   const dragged = useRef(false);
   if (isDragging) dragged.current = true;
   const views = viewsFor(org);
-  const collapsed = org.collapsed && !rail;
+  const collapsed = (collapsedProp ?? org.collapsed) && !rail;
   const useLiveCounts = useOrgCountsHook();
   const live = useLiveCounts(org.id);
   const shown = counts ?? live;
@@ -105,7 +117,7 @@ export function SidebarOrgSection({
       <section
         ref={setNodeRef}
         aria-label={org.name}
-        className="flex flex-col items-center gap-0.5"
+        className={cn('flex flex-col items-center gap-0.5', divider && sectionDividerClass)}
       >
         <span className="flex h-control-sm items-center" title={org.name}>
           <Avatar
@@ -148,9 +160,12 @@ export function SidebarOrgSection({
       style={style}
       aria-label={org.name}
       data-org-id={org.id}
+      data-collapsed={collapsed ? '' : undefined}
       className={cn(
-        'relative flex flex-col gap-0.5 rounded-md',
-        isDragging && 'z-(--z-drag) bg-bg-elevated shadow-lg',
+        'relative flex flex-col gap-1 rounded-md',
+        divider && sectionDividerClass,
+        // Lifted, the section is a card: its divider stays behind with the column.
+        isDragging && 'z-(--z-drag) border-transparent bg-bg-elevated shadow-lg',
       )}
     >
       <div
@@ -160,7 +175,7 @@ export function SidebarOrgSection({
           listeners?.onPointerDown?.(event);
         }}
         data-force={force}
-        className="group/header relative flex h-control-sm items-center gap-1 pe-0.5"
+        className="group/header relative flex h-control items-center gap-0.5 pe-0.5 pointer-coarse:h-hit-touch"
       >
         <AriaButton
           onPress={() => {
@@ -169,32 +184,19 @@ export function SidebarOrgSection({
           }}
           aria-expanded={!collapsed}
           aria-controls={listId}
-          className={cn(
-            'flex h-control-sm min-w-0 flex-1 cursor-default items-center gap-2 rounded-sm px-2 text-xs font-semibold text-text-muted',
-            'transition-colors duration-(--dur-fast) ease-standard hover:text-text-secondary',
-            'outline-offset-0 focus-ring:outline-2 focus-ring:outline-border-focus',
-          )}
+          className={sectionHeaderButtonClass}
         >
-          <span className="flex w-5 shrink-0 justify-center">
-            <Avatar
-              id={org.id}
-              name={org.name}
-              emoji={org.avatarEmoji}
-              color={org.color}
-              shape="square"
-              size={16}
-              decorative
-            />
-          </span>
-          <span className="min-w-0 truncate">{org.name}</span>
-          <ChevronDown
-            className={cn(
-              'size-3 shrink-0 transition duration-(--dur-fast) ease-standard',
-              collapsed ? '-rotate-90 opacity-100' : 'opacity-0 group-hover/header:opacity-100',
-            )}
-            strokeWidth={iconStrokeWidth}
-            aria-hidden
+          <SectionChevron collapsed={collapsed} />
+          <Avatar
+            id={org.id}
+            name={org.name}
+            emoji={org.avatarEmoji}
+            color={org.color}
+            shape="square"
+            size={24}
+            decorative
           />
+          <span className="ms-1 min-w-0 truncate">{org.name}</span>
         </AriaButton>
         <button
           type="button"
@@ -256,7 +258,7 @@ export function SidebarOrgSection({
           </MenuPopover>
         </MenuTrigger>
       </div>
-      <div id={listId} hidden={collapsed} className="flex flex-col gap-0.5">
+      <SectionItems id={listId} hidden={collapsed} color={org.color}>
         <ul className="flex flex-col gap-0.5">
           {views.map((view) => (
             <li key={view.id}>
@@ -279,7 +281,7 @@ export function SidebarOrgSection({
           onMove={moveView}
           forceDragging={forceViewDragging}
         />
-      </div>
+      </SectionItems>
     </section>
   );
 }

@@ -219,9 +219,10 @@ describe('Sidebar: All organisations (ADR 0073 A)', () => {
     expect(
       within(allSection()).getByRole('link', { name: 'Next 7 days' }).getAttribute('aria-current'),
     ).toBe('page');
-    // Not the orgs' own Next 7 days.
+    // Not the orgs' own Next 7 days (collapsed with three orgs and none in the URL: ADR 0076).
     const orgWeek = within(screen.getByRole('region', { name: company.name })).getByRole('link', {
       name: 'Next 7 days',
+      hidden: true,
     });
     expect(orgWeek.getAttribute('aria-current')).toBeNull();
   });

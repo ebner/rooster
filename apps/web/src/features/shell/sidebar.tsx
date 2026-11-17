@@ -38,6 +38,14 @@ import { reorderIntent } from './reorder';
 import { SidebarAllSection } from './sidebar-all-section';
 import { SidebarItem } from './sidebar-item';
 import { type OrgCounts, SidebarOrgSection } from './sidebar-org-section';
+import { sectionDividerClass } from './sidebar-section-header';
+import {
+  allOrgsSectionId,
+  allSectionCollapsed,
+  orgSectionCollapsed,
+  setSectionState,
+  useSectionStates,
+} from './sidebar-sections';
 import { UserMenu } from './user-menu';
 
 export interface SidebarActive {
@@ -53,6 +61,11 @@ export interface SidebarProps {
   /** In the user's sidebar order. */
   orgs: readonly Org[];
   active?: SidebarActive | null | undefined;
+  /**
+   * The org in the URL, also off its lists (settings, the pane): its section opens unless the
+   * user collapsed it (ADR 0076). Defaults to `active`'s org.
+   */
+  activeOrgId?: string | null | undefined;
   counts?: Partial<Record<string, OrgCounts>> | undefined;
   /** Fixed views per org ID (kitchen sink, tests); otherwise live per org. */
   savedViews?: Partial<Record<string, readonly SavedView[]>> | undefined;
@@ -66,6 +79,7 @@ export interface SidebarProps {
   collapsed: boolean;
   onToggleCollapsed?: (() => void) | undefined;
   onReorder: (intent: OrgReorderIntent) => void;
+  /** An explicit collapse or expand, for the server pref (`PATCH /me/orgs/:id`). */
   onToggleOrgCollapsed: (orgId: string, collapsed: boolean) => void;
   /** Resolve to close the popover; throw to show the error inside it. */
   onCreateOrg: (input: CreateOrgInput) => Promise<void> | void;
@@ -82,12 +96,14 @@ const verticalOnly: Modifier = ({ transform }) => ({ ...transform, x: 0 });
 /**
  * 02 §2 / 03 §3.10: logo, Search, Inbox, All organisations (with two orgs or more), one
  * section per org (drag to reorder), the "New organisation" entry and the user menu. 248 px
- * wide, or a 56 px icon rail.
+ * wide, or a 56 px icon rail. Hairlines part the sections; from three orgs on, those not in
+ * the URL start collapsed (ADR 0076).
  */
 export function Sidebar({
   user,
   orgs,
   active,
+  activeOrgId = active?.orgId ?? null,
   counts,
   savedViews,
   onMoveSavedView,
@@ -134,6 +150,22 @@ export function Sidebar({
     onDragCancel: ({ active: a }) => t('dnd.cancelled', { name: nameOf(a.id) }),
   };
   const instructions: ScreenReaderInstructions = { draggable: t('dnd.instructions') };
+
+  const explicit = useSectionStates(user.id);
+  const isCollapsed = (org: Org) =>
+    orgSectionCollapsed({
+      stored: explicit(org.id),
+      serverCollapsed: org.collapsed,
+      active: org.id === activeOrgId,
+      orgCount: orgs.length,
+    });
+  const toggleOrg = (org: Org) => {
+    const next = !isCollapsed(org);
+    setSectionState(user.id, org.id, next ? 'closed' : 'open');
+    onToggleOrgCollapsed(org.id, next);
+  };
+  const allCollapsed = allSectionCollapsed(explicit(allOrgsSectionId));
+  const withAll = hasAllOrgs({ orgs: [...orgs] });
 
   const move = (orgId: string, to: number) => {
     const intent = reorderIntent(ids, ids.indexOf(orgId), to);
@@ -201,10 +233,19 @@ export function Sidebar({
         />
         <InboxEntry rail={rail} />
 
-        <div className={cn('mt-4 flex flex-col', rail ? 'gap-3' : 'gap-4')}>
+        {/* Each section brings its own room above its header (`pt-3`), the first one too. */}
+        <div className="mt-3 flex flex-col gap-3 *:pt-3">
           {/* From the second org on: with one org it would repeat that org's views. */}
-          {hasAllOrgs({ orgs: [...orgs] }) && (
-            <SidebarAllSection activeView={activeAllView} counts={allCounts} rail={rail} />
+          {withAll && (
+            <SidebarAllSection
+              activeView={activeAllView}
+              counts={allCounts}
+              rail={rail}
+              collapsed={allCollapsed}
+              onToggleCollapsed={() =>
+                setSectionState(user.id, allOrgsSectionId, allCollapsed ? 'open' : 'closed')
+              }
+            />
           )}
           <DndContext
             sensors={sensors}
@@ -227,16 +268,20 @@ export function Sidebar({
                   canMoveUp={index > 0}
                   canMoveDown={index < orgs.length - 1}
                   onMove={(direction) => move(org.id, direction === 'up' ? index - 1 : index + 1)}
-                  onToggleCollapsed={() => onToggleOrgCollapsed(org.id, !org.collapsed)}
+                  collapsed={isCollapsed(org)}
+                  onToggleCollapsed={() => toggleOrg(org)}
+                  divider={withAll || index > 0}
                 />
               ))}
             </SortableContext>
           </DndContext>
-          <CreateOrgEntry
-            rail={rail}
-            defaultColor={nextColor(orgs.length)}
-            onCreateOrg={onCreateOrg}
-          />
+          <div className={sectionDividerClass}>
+            <CreateOrgEntry
+              rail={rail}
+              defaultColor={nextColor(orgs.length)}
+              onCreateOrg={onCreateOrg}
+            />
+          </div>
         </div>
       </div>
 

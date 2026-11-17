@@ -91,6 +91,58 @@ test('rail state survives a reload (Ctrl+\\)', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Expand sidebar' })).toBeVisible();
 });
 
+test('ADR 0076 from three orgs on, only the org in the URL starts open; a choice is kept', async ({
+  page,
+}) => {
+  await signInAs(page, uniqueEmail('sections.keeper'));
+  const orgs: { id: string; slug: string }[] = [];
+  for (const name of ['Northwind', 'Book club']) {
+    const res = await apiCall(page, 'POST', '/api/v1/orgs', { name });
+    expect(res.status()).toBe(201);
+    orgs.push((await res.json()) as { id: string; slug: string });
+  }
+  const [north, club] = orgs as [{ id: string; slug: string }, { id: string; slug: string }];
+  await page.goto(`/o/${north.slug}/my`);
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  const toggle = (name: string) =>
+    nav.getByRole('region', { name }).getByRole('button', { name, exact: true });
+  await expect(toggle('Northwind')).toHaveAttribute('aria-expanded', 'true');
+  await expect(toggle('Personal')).toHaveAttribute('aria-expanded', 'false');
+  await expect(toggle('Book club')).toHaveAttribute('aria-expanded', 'false');
+  await expect(
+    nav.getByRole('region', { name: 'Personal' }).getByRole('link', { name: /^My tasks/ }),
+  ).toBeHidden();
+
+  // From the keyboard: open Book club, collapse Northwind (the org in the URL).
+  await toggle('Book club').focus();
+  await page.keyboard.press('Enter');
+  await expect(toggle('Book club')).toHaveAttribute('aria-expanded', 'true');
+  await toggle('Northwind').focus();
+  await page.keyboard.press('Space');
+  await expect(toggle('Northwind')).toHaveAttribute('aria-expanded', 'false');
+  // The collapse is the server pref too, as before.
+  await expect
+    .poll(async () => {
+      const me = (await (await apiCall(page, 'GET', '/api/v1/me')).json()) as {
+        orgs: { id: string; collapsed: boolean }[];
+      };
+      return me.orgs.find((o) => o.id === north.id)?.collapsed;
+    })
+    .toBe(true);
+
+  // Kept across a reload and while another org is shown; Northwind stays collapsed in its URL.
+  await page.goto(`/o/${club.slug}/today`);
+  await expect(toggle('Book club')).toHaveAttribute('aria-expanded', 'true');
+  await page.goto(`/o/${north.slug}/today`);
+  await expect(toggle('Northwind')).toHaveAttribute('aria-expanded', 'false');
+  await expect(toggle('Book club')).toHaveAttribute('aria-expanded', 'true');
+  // Personal, never touched, opens while it is the org in the URL (Ctrl+1).
+  await page.keyboard.press('Control+1');
+  await expect(page).toHaveURL(/\/o\/[^/]+\/my$/);
+  await expect(toggle('Personal')).toHaveAttribute('aria-expanded', 'true');
+  await expectNoAxeViolations(page);
+});
+
 test('the new-organisation popover is axe-clean', async ({ page }) => {
   await signInAs(page, uniqueEmail('popo.ver'));
   await page.getByRole('button', { name: 'New organisation' }).click();

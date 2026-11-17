@@ -2,6 +2,10 @@
 
 What changed for you in each version of rooster, newest first. After an update, rooster offers this page once. You can open it at any time from Settings or the guide's page list. The notes for whoever runs rooster (upgrades, settings, security) are in the [changelog](../../../CHANGELOG.md).
 
+## Unreleased
+
+- **A clearer sidebar with several organisations.** Each organisation now has a proper heading with its icon and an arrow to fold it, a thin line separates the sections, and the views under an organisation are indented along a line in its colour. With three organisations or more, only the one you're in starts open; fold or open any section yourself and it stays that way. All organisations folds too. See [Getting started](./getting-started.md).
+
 ## 1.11.0
 
 _2026-11-17_

@@ -19,7 +19,7 @@ Varje uppgift hör till exakt en organisation. Använd dem för att hålla isär
 - **Personligt** är bara din. Den kan inte delas, döpas om eller tas bort, och den saknar allt som har med samarbete att göra.
 - **Delade organisationer** har medlemmar som ser alla uppgifter i organisationen, tilldelar varandra uppgifter och kommenterar. Läs mer i [Samarbete](./collaboration.md).
 
-Varje organisation är ett avsnitt i sidofältet, med Mina uppgifter, de smarta vyerna (Idag, Kommande 7 dagar, Försenade, Utan datum) och, i delade organisationer, Allas uppgifter. Dra i en organisations rubrik för att ändra ordningen. **Ctrl+1** till **Ctrl+9** (⌘ på Mac) går direkt till Mina uppgifter i de nio första organisationerna.
+Varje organisation är ett avsnitt i sidofältet, med Mina uppgifter, de smarta vyerna (Idag, Kommande 7 dagar, Försenade, Utan datum) och, i delade organisationer, Allas uppgifter. Dra i en organisations rubrik för att ändra ordningen, och klicka på namnet för att fälla ihop avsnittet eller fälla ut det igen. Med tre organisationer eller fler är bara den du är i utfälld från början; ett avsnitt som du själv fäller ihop eller ut förblir så i den här webbläsaren. **Ctrl+1** till **Ctrl+9** (⌘ på Mac) går direkt till Mina uppgifter i de nio första organisationerna.
 
 För att skapa en organisation väljer du **Ny organisation** i sidofältet, ger den namn, ikon och färg och trycker på **Skapa organisation**. Du blir ägare. Vill du bjuda in andra öppnar du organisationens **⋯**-meny och väljer **Bjud in personer**.
 
