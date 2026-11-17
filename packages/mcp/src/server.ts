@@ -1078,7 +1078,8 @@ async function allOrgsView(
       const page = await queryView(ctx.client, org.id, {
         view,
         groupId: undefined,
-        tag: undefined,
+        // Filtered by the server before its page limit, not after.
+        tag: filter.tag,
         includeCompleted: filter.includeCompleted,
       });
       listed.push(...page.tasks);

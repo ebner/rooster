@@ -239,6 +239,17 @@ describe('rooster ls <view> --all-orgs (ADR 0073 A9)', () => {
     expect(
       await json(cli, ['ls', 'week', '--all-orgs', '--tag', 'urgent', '--tag', 'nope']),
     ).toEqual([]);
+    // A tag ID works too, as on the per-org query route.
+    const clubId = (tasks.clubToday as TaskJson).orgId;
+    const clubTags = await user.api<{ id: string; name: string }[]>(
+      'GET',
+      `/api/v1/orgs/${clubId}/tags`,
+    );
+    const urgent = clubTags.data.find((tag) => tag.name === 'urgent')?.id as string;
+    expect(urgent).toBeDefined();
+    expect(
+      (await json(cli, ['ls', 'week', '--all-orgs', '--tag', urgent])).map((t) => t.title),
+    ).toEqual(['Club today']);
     // In Swedish (the server setting is the CLI's language).
     expect((await user.api('PATCH', '/api/v1/me', { locale: 'sv' })).status).toBe(200);
     const sv = stripAnsi((await cli.run(['ls', 'today', '--all-orgs'])).stdout).split('\n');

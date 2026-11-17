@@ -322,6 +322,33 @@ describe('list_tasks', () => {
     expect(dataOf(result).tasks.map((t: { ref: string }) => t.ref)).toEqual(['ada#3', 'acme#9']);
   });
 
+  it('allOrgs fallback: the server filters by tag before its page limit', async () => {
+    const tagged = task({ id: 't', seq: 500, dueDate: '2026-10-09', tagIds: [TAG.id] });
+    const untagged = Array.from({ length: 200 }, (_, i) =>
+      task({ id: `u${i}`, seq: i + 1, dueDate: '2026-10-09' }),
+    );
+    const { mcp, api } = await start({
+      ...baseRoutes(),
+      // An older server: 200 untagged rows on the first page, the tagged one after them.
+      'GET /api/v1/orgs/*/tasks': (call: { path: string; query: URLSearchParams }) => {
+        if (call.path.includes(PERSONAL.id)) return { items: [], nextCursor: null };
+        if (call.query.get('tag') !== null) return { items: [tagged], nextCursor: null };
+        return call.query.get('cursor') === null
+          ? { items: untagged, nextCursor: 'next' }
+          : { items: [tagged], nextCursor: null };
+      },
+    });
+    const result = await mcp.callTool({
+      name: 'list_tasks',
+      arguments: { view: 'today', allOrgs: true, tag: '#mail' },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(
+      api.calls.filter((c) => c.path.endsWith('/tasks')).map((c) => c.query.get('tag')),
+    ).toEqual(['mail', 'mail']);
+    expect(dataOf(result).tasks.map((t: { ref: string }) => t.ref)).toEqual(['acme#500']);
+  });
+
   it('an unknown group is a tool error, not a protocol error', async () => {
     const { mcp } = await start(baseRoutes());
     const result = await mcp.callTool({ name: 'list_tasks', arguments: { group: 'Nope' } });

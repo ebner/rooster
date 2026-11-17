@@ -124,13 +124,16 @@ function bySubtaskPosition(a: Task, b: Task): number {
   return compareKeys(a.subtaskPosition ?? '', b.subtaskPosition ?? '') || compareKeys(a.id, b.id);
 }
 
-/** Tag names → ids (case-insensitive); an unknown name matches nothing (ADR 0007 §13). */
+/** Tag IDs or names (case-insensitive) → ids; an unknown one matches nothing (ADR 0007 §13). */
 async function tagFilter(runtime: Runtime, orgId: string, names: readonly string[]) {
   if (names.length === 0) return null;
   const tags = await runtime.tags(orgId);
+  // An ID first, then a name, as the query route's `tag` reads it.
   return names.map(
     (name) =>
-      tags.find((tag) => tag.name.toLocaleLowerCase() === name.toLocaleLowerCase())?.id ?? null,
+      tags.find((tag) => tag.id === name)?.id ??
+      tags.find((tag) => tag.name.toLocaleLowerCase() === name.toLocaleLowerCase())?.id ??
+      null,
   );
 }
 
