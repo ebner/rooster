@@ -1536,7 +1536,12 @@ export class TaskService {
       previewOrgMove(
         tx,
         actor,
-        planOrgMove(tx, actor, { ids: parseIdList(query.ids), orgId: query.orgId }),
+        planOrgMove(
+          tx,
+          actor,
+          { ids: parseIdList(query.ids), orgId: query.orgId, groupId: query.groupId },
+          { preview: true },
+        ),
       ),
     );
   }

@@ -97,6 +97,7 @@ export function planOrgMove(
     afterId?: string | null | undefined;
     beforeId?: string | null | undefined;
   },
+  options: { preview?: boolean } = {},
 ): OrgMovePlan {
   const ids = [...new Set(input.ids)];
   if (ids.length === 0) throw invalidIds('Name at least one task');
@@ -196,7 +197,10 @@ export function planOrgMove(
       listGroups(tx, actor.userId, target.id).find((g) => g.kind === 'normal') ??
       inboxOf(tx, actor.userId, target.id);
   }
-  authorizeGroupTarget(tx, actor, target.id, group.id);
+  // A preview without a named group doesn't know where the client will land the tasks: a grant
+  // that may write only some target groups must still be able to preview before picking one.
+  const unnamed = input.groupId == null && input.afterId == null && input.beforeId == null;
+  if (!(options.preview && unnamed)) authorizeGroupTarget(tx, actor, target.id, group.id);
 
   const sourceMembers = new Set(memberIds(tx, sourceId));
   const targetMembers = new Set(memberIds(tx, target.id));

@@ -382,6 +382,12 @@ export const taskMoveToOrgPreviewQuerySchema = z.object({
   /** Comma-separated task ids (1–200), as for the move. */
   ids: z.string().min(1),
   orgId: idSchema,
+  /**
+   * The group the client means to land the tasks in, when it knows it. Without one the landing
+   * group isn't checked against a grant (the move checks it), so a grant that may write only
+   * some target groups can preview before picking one.
+   */
+  groupId: idSchema.optional(),
 });
 export const taskMoveToOrgPreviewSchema = z.object({
   /** Roots that would move (selected tasks whose ancestor is also selected travel with it). */

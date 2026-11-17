@@ -63,6 +63,7 @@ Recorded from the implementation (2026-11-17).
 - **The old parent** of a detached subtask gets no activity entry.
 - **Grants:** like duplicate and restore, the check also covers where every moved task lands in the actor's list. The preview applies the same rules (a read-only grant gets `403`).
 - **`visibleKeys`** (grant-access.ts) judges a task's prior group by the event's org rather than the task's current org, so a grant reading one group of the source org still learns that the task left.
+- **The preview checks the landing group only when the client names one** (`groupId` is an optional preview parameter): without one, a grant that may write only some target groups must still be able to preview before picking. The web previews selections above 200 tasks in chunks and adds them up.
 - **Old refs:** `GET /tasks/resolve` falls back to `task_former_seq` only when nothing matches `org#n`, and only for members of the task's current org whose grant reaches it; everyone else gets `404`. The table has an extra index on `(task_id, org_id)`.
 - **Events:** one domain event, `task.org_moved`, with the source audience (reach captured before the move, Trash included) and the target audience; `['tags', target]` when a tag was created; `['notifications']` for everyone whose notifications were deleted or re-pointed.
 

@@ -10639,6 +10639,7 @@ export interface operations {
                 ids: string;
                 /** @description The target org (ID). */
                 orgId: string;
+                groupId?: string;
             };
             header?: never;
             path?: never;

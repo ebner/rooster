@@ -1,3 +1,4 @@
+import { BULK_MAX } from '@rooster/core/limits';
 import { orderedGroups } from '@rooster/core/reducers';
 import type { Group, TaskMoveToOrgPreview } from '@rooster/core/schemas';
 import { useQuery } from '@tanstack/react-query';
@@ -13,18 +14,44 @@ export function previewIds(ids: readonly string[]): string {
   return [...new Set(ids)].sort().join(',');
 }
 
-/** GET /tasks/move-to-org/preview (06, ADR 0072 §19): no side effects. */
-export function fetchMoveToOrgPreview(
+/**
+ * GET /tasks/move-to-org/preview (06, ADR 0072 §19): no side effects. The endpoint takes at most
+ * `BULK_MAX` ids, like the move, which the controller sends in chunks; so does this, adding the
+ * chunks up. A task and a selected descendant in different chunks are then counted twice, which
+ * only overstates the numbers the confirmation shows; `exposes` and `newTags` stay exact.
+ */
+export async function fetchMoveToOrgPreview(
   ids: readonly string[],
   orgId: string,
   signal?: AbortSignal,
 ): Promise<TaskMoveToOrgPreview> {
-  return unwrap(
-    api.GET('/api/v1/tasks/move-to-org/preview', {
-      params: { query: { ids: previewIds(ids), orgId } },
-      ...(signal ? { signal } : {}),
-    }),
+  const unique = previewIds(ids).split(',');
+  const chunks: string[][] = [];
+  for (let i = 0; i < unique.length; i += BULK_MAX) chunks.push(unique.slice(i, i + BULK_MAX));
+  const parts = await Promise.all(
+    chunks.map((chunk) =>
+      unwrap(
+        api.GET('/api/v1/tasks/move-to-org/preview', {
+          params: { query: { ids: chunk.join(','), orgId } },
+          ...(signal ? { signal } : {}),
+        }),
+      ),
+    ),
   );
+  return parts.reduce((sum, part) => ({
+    tasks: sum.tasks + part.tasks,
+    subtasks: sum.subtasks + part.subtasks,
+    comments: sum.comments + part.comments,
+    attachments: sum.attachments + part.attachments,
+    exposes: sum.exposes || part.exposes,
+    newTags: [
+      ...sum.newTags,
+      ...part.newTags.filter(
+        (name) => !sum.newTags.some((t) => t.toLocaleLowerCase() === name.toLocaleLowerCase()),
+      ),
+    ],
+    reassigned: sum.reassigned + part.reassigned,
+  }));
 }
 
 /**

@@ -575,6 +575,31 @@ describe('ADR 0072 move tasks between organisations', () => {
     expect(wholePage.items.map((n) => n.data.taskTitle)).toEqual(['Secret plan']);
   });
 
+  it('a grant writing only some target groups can preview, then move into one (Codex P2)', async () => {
+    const w = await world();
+    const { ctx, ann, kestrel, riverside } = w;
+    const prio = await groupNamed(ann, 'Prio', riverside.id);
+    const today = await groupNamed(ann, 'Today', riverside.id);
+    const token = await pat(ann, ['tasks:read', 'tasks:write'], {
+      orgs: [
+        { orgId: kestrel.id, read: 'all', write: 'all' },
+        { orgId: riverside.id, read: 'all', write: { groups: [prio.id] } },
+      ],
+    });
+    const api = bearer(ctx, token.token);
+    const x = await createTask(ann, { title: 'X' }, kestrel.id);
+    const path = `/api/v1/tasks/move-to-org/preview?ids=${x.id}&orgId=${riverside.id}`;
+    expect((await api.ok<TaskMoveToOrgPreview>('GET', path)).tasks).toBe(1);
+    expect((await api.ok<TaskMoveToOrgPreview>('GET', `${path}&groupId=${prio.id}`)).tasks).toBe(1);
+    await api.problem('GET', `${path}&groupId=${today.id}`, undefined, 403);
+    const moved = await api.ok<TaskMoveToOrgResult>('POST', '/api/v1/tasks/move-to-org', {
+      ids: [x.id],
+      orgId: riverside.id,
+      groupId: prio.id,
+    });
+    expect(moved.tasks[0]?.placement?.groupId).toBe(prio.id);
+  });
+
   it('errors: 404, 410, 422 same_org and mixed orgs', async () => {
     const w = await world();
     const { ann, bo, kestrel, riverside } = w;
