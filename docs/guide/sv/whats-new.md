@@ -2,7 +2,9 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
-## Unreleased
+## 1.11.1
+
+_2026-11-18_
 
 - **Tydligare sidofält med flera organisationer.** Varje organisation har nu en riktig rubrik med sin ikon och en pil för att fälla ihop den, en tunn linje skiljer avsnitten åt, och vyerna under en organisation är indragna längs en linje i dess färg. Med tre organisationer eller fler är bara den du är i utfälld från början; fäll ihop eller ut ett avsnitt själv så förblir det så. Även Alla organisationer kan fällas ihop. Se [Kom igång](./getting-started.md).
 
