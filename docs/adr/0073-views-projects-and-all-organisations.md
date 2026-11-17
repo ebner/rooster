@@ -1,6 +1,6 @@
 # ADR 0073: Views, projects and the "All organisations" section
 
-- Status: accepted (2026-11-17), scheduled as Phase 13 (09); Part A implemented (ADR 0074), Part B not yet
+- Status: accepted (2026-11-17), scheduled as Phase 13 (09); implemented: Part A in ADR 0074, Part B in ADR 0075
 - Date: 2026-11-17
 - Amends: 00 Non-goals ("Org-wide lists are limited to the 'Everyone's tasks' overview") and Q-01 (a cross-org "All" tab); 01 FR-VIEW; 02 §2 (sidebar), §10 (smart views), §13 (phone); 05 (new tables, `user.prefs`); 06 (new endpoints); 07 (CLI, TUI, MCP); 11 §5.2 (tools)
 

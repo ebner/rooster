@@ -327,7 +327,7 @@ Specified 2026-10-21 (11 §9, ADR 0065) and scheduled the same day. A minor rele
 
 ## Phase 13: Views, project views and All organisations
 
-Specified and scheduled 2026-11-17 (ADR 0073, FR-VIEW-5–7; answers Q-01). Additive: a minor release. Build Part A first; the two share the computed-list rendering (sorted sections, editable rows, org chips). Run it like the earlier phases: a contract commit (core schemas: the view query, DTOs, `prefs.defaultOrgId`/`startPage`, the `^org` token in core `dates/tokens`), then parallel agents with file ownership (server / core+data / web UI / CLI+TUI+MCP), a full pipeline and a Codex review of the server (grants on views and `/me/views`).
+Specified and scheduled 2026-11-17 (ADR 0073, FR-VIEW-5–7; answers Q-01); implemented the same day (Part A: ADR 0074, Part B: ADR 0075). Additive: a minor release. Build Part A first; the two share the computed-list rendering (sorted sections, editable rows, org chips). Run it like the earlier phases: a contract commit (core schemas: the view query, DTOs, `prefs.defaultOrgId`/`startPage`, the `^org` token in core `dates/tokens`), then parallel agents with file ownership (server / core+data / web UI / CLI+TUI+MCP), a full pipeline and a Codex review of the server (grants on views and `/me/views`).
 
 | WP | Content |
 |---|---|
