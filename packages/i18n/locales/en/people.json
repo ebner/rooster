@@ -33,7 +33,8 @@
     "members": "People",
     "membersAnnounce": "{count, plural, =0 {Showing everyone} one {Showing # person} other {Showing # people}}",
     "clear": "Clear filters",
-    "cleared": "Filters cleared"
+    "cleared": "Filters cleared",
+    "saveAsView": "Save as view"
   },
   "dev": {
     "section": "Assignment and Everyone’s tasks",

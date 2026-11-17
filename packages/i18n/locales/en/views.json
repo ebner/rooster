@@ -61,6 +61,92 @@
     }
   },
   "saved": {
-    "title": "Views"
+    "title": "Views",
+    "offline": "Views can only be changed while you're online.",
+    "saveFailed": "Couldn't save the view. Try again.",
+    "created": "View “{name}” created",
+    "archived": "Archived “{name}”. Organisation settings → Views restores it.",
+    "restore": "Restore",
+    "deleted": "Deleted “{name}”",
+    "savedAs": "Saved as the view “{name}”",
+    "name": {
+      "label": "View name",
+      "placeholder": "Name this view"
+    },
+    "newHint": "Name the view to save it, then choose what it gathers with the filters below.",
+    "counts": "{open} open · {done} done",
+    "countsLabel": "{open, plural, one {# open task} other {# open tasks}}, {done, plural, one {# done} other {# done}}",
+    "sharedNote": "Everyone in {org} can see these tasks anyway; a view only gathers them.",
+    "assignee": {
+      "anyone": "Anyone",
+      "me": "Me"
+    },
+    "tagMode": {
+      "label": "Match",
+      "any": "Any of these tags",
+      "all": "All of these tags"
+    },
+    "due": {
+      "any": "Any date",
+      "today": "Due today",
+      "week": "Next 7 days",
+      "overdue": "Overdue",
+      "none": "No date"
+    },
+    "status": {
+      "open": "Open",
+      "done": "Done",
+      "any": "Open and done"
+    },
+    "sharing": {
+      "private": "Private",
+      "shared": "Shared"
+    },
+    "chips": {
+      "label": "What the view gathers",
+      "tags": "Tags: {value}",
+      "noTags": "Any tag",
+      "tagsPicker": "Tags of this view",
+      "tagModeLabel": "Match: {value}",
+      "assignee": "Assignee: {value}",
+      "assigneeMenu": "Assignee",
+      "due": "Due: {value}",
+      "dueMenu": "Due",
+      "status": "Status: {value}",
+      "statusMenu": "Status",
+      "sharing": "Visibility: {value}",
+      "sharingMenu": "Who sees this view",
+      "button": "Filters",
+      "sheet": "View settings"
+    },
+    "menu": {
+      "label": "View actions",
+      "archive": "Archive view",
+      "delete": "Delete view…"
+    },
+    "confirmDelete": {
+      "text": "Delete “{name}”? Its tasks and tags stay.",
+      "confirm": "Delete view",
+      "cancel": "Cancel"
+    },
+    "notFound": {
+      "title": "This view isn't available",
+      "body": "It may have been archived or deleted, or it is someone else's private view.",
+      "back": "Back to My tasks"
+    },
+    "suggest": {
+      "fallback": "New view"
+    },
+    "dev": {
+      "project": "A project view (one tag): open and done counts",
+      "chipsSet": "Chips with every filter set",
+      "sections": "Rows by person, with add rows",
+      "newView": "+ New view: an empty, editable header",
+      "sheet": "Phones: the chips in a sheet",
+      "names": {
+        "juniper": "Juniper",
+        "launch": "Spring launch"
+      }
+    }
   }
 }

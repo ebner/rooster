@@ -15,7 +15,8 @@
     "clear": "Rensa filtret",
     "empty": "Organisationen har inga taggar än",
     "announce": "Visar uppgifter taggade {names}",
-    "cleared": "Taggfiltret har rensats"
+    "cleared": "Taggfiltret har rensats",
+    "saveAsView": "Spara som vy"
   },
   "settings": {
     "title": "Taggar",

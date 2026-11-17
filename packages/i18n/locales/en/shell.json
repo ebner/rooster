@@ -67,5 +67,26 @@
       "rail": "Rail",
       "settings": "Settings → Behaviour with several organisations"
     }
+  },
+  "savedViews": {
+    "label": "Views in {name}",
+    "new": "New view",
+    "reorder": "Reorder {name}",
+    "dev": {
+      "sidebar": "Views in the sidebar (project #, plain ⌕, counts, active)",
+      "empty": "An organisation without views: only “New view”",
+      "dragging": "A view lifted",
+      "rail": "Rail",
+      "newActive": "“New view” open",
+      "tabs": "Phone view switcher with views",
+      "settings": "Organisation settings → Views",
+      "names": {
+        "juniper": "Juniper",
+        "launch": "Spring launch",
+        "mine": "Mine this week",
+        "unassigned": "Nobody’s yet",
+        "old": "Website relaunch"
+      }
+    }
   }
 }

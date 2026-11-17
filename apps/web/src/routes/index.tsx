@@ -17,6 +17,9 @@ export const Route = createFileRoute('/')({
     const me =
       context.queryClient.getQueryData<Me>(queryKeys.me) ??
       (await context.queryClient.ensureQueryData(meQueryOptions).catch(() => undefined));
-    throw redirect({ href: startPath(me), replace: true });
+    // A remembered view that the cached views show is gone opens its org's My tasks instead.
+    const views = (orgId: string) =>
+      context.queryClient.getQueryData<readonly { id: string }[]>(queryKeys.views(orgId, false));
+    throw redirect({ href: startPath(me, undefined, views), replace: true });
   },
 });

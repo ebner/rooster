@@ -3,6 +3,8 @@ import type {
   ActivityPage,
   ActivityQuery,
   MyList,
+  SavedViewTasks,
+  SavedViewTasksQuery,
   Tag,
   TaskDetail,
   TaskPage,
@@ -190,6 +192,13 @@ export const httpTransport: ListTransport = {
         ...(signal ? { signal } : {}),
       }),
     )) as TaskPage,
+  fetchViewTasks: async (id: string, query: SavedViewTasksQuery, signal?: AbortSignal) =>
+    (await settle(
+      api.GET('/api/v1/views/{id}/tasks', {
+        params: { path: { id }, query: wire(query) },
+        ...(signal ? { signal } : {}),
+      }),
+    )) as SavedViewTasks,
   fetchActivity: async (id: string, query: ActivityQuery, signal?: AbortSignal) =>
     (await settle(
       api.GET('/api/v1/tasks/{id}/activity', {

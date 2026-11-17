@@ -123,6 +123,11 @@ export interface ControllerDeps {
    * personal org, where nothing is assigned (FR-COL-6).
    */
   members?: () => readonly Person[];
+  /**
+   * Phase 13 (ADR 0073 B6): tags every task created in this list gets (a view's tags), read
+   * live; the title's own `#tags` add to them.
+   */
+  newTaskTags?: () => readonly string[];
 }
 
 /**
@@ -1136,6 +1141,9 @@ export class ListController {
       const id = i === 0 ? draft.id : uuidv7();
       createdHere.add(id);
       const { ids: tagIds, newNames } = this.resolveTags(p.tags ?? []);
+      for (const tagId of this.deps.newTaskTags?.() ?? []) {
+        if (!tagIds.includes(tagId)) tagIds.push(tagId);
+      }
       const groupId = p.groupId ?? draft.groupId;
       let where: Partial<TaskCreateBody>;
       if (draft.parentId) {

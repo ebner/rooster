@@ -74,7 +74,14 @@
     "expandAllGroups": "Expand all groups",
     "printList": "Print list",
     "addGroupAtEnd": "Add group at the end",
-    "moveToOrg": "Move to organisation…"
+    "moveToOrg": "Move to organisation…",
+    "newView": "New view",
+    "goToView": "Go to view: {name}",
+    "saveAsView": "Save search as view",
+    "renameView": "Rename view",
+    "toggleViewShared": "Share view or make it private",
+    "archiveView": "Archive view",
+    "deleteView": "Delete view…"
   },
   "dev": {
     "section": "Command palette",

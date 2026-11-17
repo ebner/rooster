@@ -35,6 +35,8 @@ export interface SidebarItemProps {
   shortcut?: string | undefined;
   isActive?: boolean;
   isDisabled?: boolean;
+  /** Muted label and icon: an entry that creates rather than shows ("+ New view"). */
+  quiet?: boolean;
   /** Icon-only rail rendering; the label moves into a tooltip. */
   rail?: boolean;
   /** Extra tooltip context in the rail, e.g. the org name. */
@@ -56,6 +58,7 @@ export function SidebarItem({
   shortcut,
   isActive = false,
   isDisabled = false,
+  quiet = false,
   rail = false,
   railHint,
   'data-force': force,
@@ -63,6 +66,7 @@ export function SidebarItem({
 }: SidebarItemProps) {
   const className = cn(
     sidebarItemClass,
+    quiet && !isActive && 'text-text-muted',
     isActive && sidebarItemActiveClass,
     rail && 'justify-center px-0',
   );

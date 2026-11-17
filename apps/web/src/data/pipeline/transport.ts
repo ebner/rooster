@@ -3,6 +3,8 @@ import type {
   ActivityPage,
   ActivityQuery,
   MyList,
+  SavedViewTasks,
+  SavedViewTasksQuery,
   Tag,
   TaskDetail,
   TaskPage,
@@ -23,6 +25,15 @@ export interface ListTransport {
   fetchTags: (orgId: string) => Promise<Tag[]>;
   /** GET /orgs/:orgId/tasks: one page (P6: `view=everyone` for Everyone's tasks). */
   fetchTasks: (orgId: string, query: TaskQuery, signal?: AbortSignal) => Promise<TaskPage>;
+  /**
+   * Phase 13 (ADR 0073 B): GET /views/:id/tasks, a view's matches and its open/done counts.
+   * Optional so test doubles of the older surface still type-check.
+   */
+  fetchViewTasks?: (
+    viewId: string,
+    query: SavedViewTasksQuery,
+    signal?: AbortSignal,
+  ) => Promise<SavedViewTasks>;
   /** GET /tasks/:id/activity (P6): one page of the feed, newest page without a cursor. */
   fetchActivity: (
     taskId: string,

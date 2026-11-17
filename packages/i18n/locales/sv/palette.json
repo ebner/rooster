@@ -74,7 +74,14 @@
     "expandAllGroups": "Fäll ut alla grupper",
     "printList": "Skriv ut listan",
     "addGroupAtEnd": "Lägg till grupp sist",
-    "moveToOrg": "Flytta till organisation…"
+    "moveToOrg": "Flytta till organisation…",
+    "newView": "Ny vy",
+    "goToView": "Gå till vyn: {name}",
+    "saveAsView": "Spara sökningen som vy",
+    "renameView": "Byt namn på vyn",
+    "toggleViewShared": "Dela vyn eller gör den privat",
+    "archiveView": "Arkivera vyn",
+    "deleteView": "Ta bort vyn…"
   },
   "dev": {
     "section": "Kommandopalett",

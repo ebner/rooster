@@ -170,6 +170,32 @@
       "deleteFailed": "Det gick inte att ta bort organisationen. Försök igen.",
       "deleted": "{name} har tagits bort",
       "cancel": "Avbryt"
+    },
+    "views": {
+      "title": "Vyer",
+      "description": "Vyer samlar uppgifter efter tagg, person och datum. Arkiverade vyer försvinner från allas sidofält tills de återställs.",
+      "sharedNote": "Alla i {org} kan ändå se de här uppgifterna; en vy samlar dem bara.",
+      "live": "I sidofältet",
+      "empty": "Inga vyer än. Skapa en med ”Ny vy” i sidofältet.",
+      "archivedTitle": "Arkiverade",
+      "archivedEmpty": "Inga arkiverade vyer.",
+      "shared": "Delad",
+      "private": "Bara du",
+      "project": "Projektvy",
+      "open": "{count, plural, one {# öppen} other {# öppna}}",
+      "archive": "Arkivera",
+      "archiveNamed": "Arkivera {name}",
+      "restore": "Återställ",
+      "restoreNamed": "Återställ {name}",
+      "delete": "Ta bort",
+      "deleteNamed": "Ta bort {name}",
+      "deleteConfirm": "Ta bort vyn ”{name}” för alla som ser den? Uppgifterna och taggarna lämnas orörda.",
+      "deleteConfirmPrivate": "Ta bort vyn ”{name}”? Uppgifterna och taggarna lämnas orörda.",
+      "deleteAction": "Ta bort vyn",
+      "cancel": "Avbryt",
+      "archived": "Arkiverade ”{name}”",
+      "restored": "Återställde ”{name}”",
+      "deleted": "Tog bort ”{name}”"
     }
   },
   "error": {

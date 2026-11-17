@@ -1,4 +1,4 @@
-import { SlidersHorizontal } from 'lucide-react';
+import { Bookmark, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { create } from 'zustand';
 import type { OrgMember } from '../../data/types';
@@ -36,9 +36,15 @@ export function activeFilterCount(filters: EveryoneFilters): number {
 export function EveryoneFilterButton({
   members,
   meId,
+  onSaveAsView,
 }: {
   members: readonly OrgMember[];
   meId: string;
+  /**
+   * Phase 13 (ADR 0073 B7): "Save as view" with these filters and the tag filter; offered
+   * while one of them is on (`filtered`).
+   */
+  onSaveAsView?: { run: () => void; filtered: boolean } | undefined;
 }) {
   const { t } = useTranslation('people');
   const filters = useEveryoneFilters();
@@ -112,17 +118,26 @@ export function EveryoneFilterButton({
             ]}
           </MenuGroup>
         </Menu>
-        {count > 0 && (
+        {(count > 0 || onSaveAsView?.filtered) && (
           <>
             <MenuSeparator />
             <Menu
               aria-label={t('filter.clear')}
-              onAction={() => {
+              onAction={(key) => {
+                if (key === 'saveAsView') {
+                  onSaveAsView?.run();
+                  return;
+                }
                 filters.reset();
                 announce(t('filter.cleared'));
               }}
             >
-              <MenuItem id="clear">{t('filter.clear')}</MenuItem>
+              {count > 0 ? <MenuItem id="clear">{t('filter.clear')}</MenuItem> : null}
+              {onSaveAsView?.filtered ? (
+                <MenuItem id="saveAsView" icon={Bookmark} data-testid="everyone-save-as-view">
+                  {t('filter.saveAsView')}
+                </MenuItem>
+              ) : null}
             </Menu>
           </>
         )}

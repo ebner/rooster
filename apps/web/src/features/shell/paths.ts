@@ -30,6 +30,8 @@ export const paths = {
   task: (slug: string, taskId: string) => `/o/${slug}/t/${taskId}`,
   /** Phase 13 (ADR 0073 B): a view of the org (`saved_view`); the pane opens over it. */
   savedView: (slug: string, viewId: string) => `/o/${slug}/v/${viewId}`,
+  /** "+ New view" (ADR 0073 B7): an unsaved view with an editable header, created on save. */
+  newSavedView: (slug: string) => `/o/${slug}/v/new`,
   orgSettings: (slug: string) => `/o/${slug}/settings`,
   /** Phase 13 (ADR 0073 A8): All organisations → Today, Next 7 days, Overdue. */
   allView: (view: AllViewId) => `/all/${view}`,
@@ -52,3 +54,13 @@ export const paths = {
   help: '/help',
   helpPage: (slug: string) => `/help/${slug}`,
 } as const;
+
+const savedViewPath = /^\/o\/[^/]+\/v\/([^/]+)\/?$/;
+
+/**
+ * The view a path shows (`/o/<slug>/v/<id>`, ADR 0073 B): its ID, `'new'` for "+ New view", or
+ * null for any other path (the pane over a view is `/o/<slug>/t/<id>`, as for every list).
+ */
+export function savedViewIdOfPath(pathname: string): string | null {
+  return savedViewPath.exec(pathname)?.[1] ?? null;
+}

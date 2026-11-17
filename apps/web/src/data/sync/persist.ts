@@ -61,6 +61,9 @@ export const persistedRoots: ReadonlySet<string> = new Set([
   'tags',
   'task',
   'notifications',
+  // Phase 13 (ADR 0073 B): an org's views and a view's rows open offline too.
+  'views',
+  'view-tasks',
 ]);
 
 export function isPersistedQuery(query: Pick<Query, 'queryKey' | 'state'>): boolean {

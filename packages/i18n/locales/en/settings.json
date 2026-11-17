@@ -170,6 +170,32 @@
       "deleteFailed": "Couldn’t delete the organisation. Try again.",
       "deleted": "Deleted {name}",
       "cancel": "Cancel"
+    },
+    "views": {
+      "title": "Views",
+      "description": "Views gather tasks by tag, person and date. Archived views leave every sidebar until they are restored.",
+      "sharedNote": "Everyone in {org} can see these tasks anyway; a view only gathers them.",
+      "live": "In the sidebar",
+      "empty": "No views yet. Create one with “New view” in the sidebar.",
+      "archivedTitle": "Archived",
+      "archivedEmpty": "No archived views.",
+      "shared": "Shared",
+      "private": "Only you",
+      "project": "Project view",
+      "open": "{count, plural, one {# open} other {# open}}",
+      "archive": "Archive",
+      "archiveNamed": "Archive {name}",
+      "restore": "Restore",
+      "restoreNamed": "Restore {name}",
+      "delete": "Delete",
+      "deleteNamed": "Delete {name}",
+      "deleteConfirm": "Delete the view “{name}” for everyone who sees it? Its tasks and tags stay as they are.",
+      "deleteConfirmPrivate": "Delete the view “{name}”? Its tasks and tags stay as they are.",
+      "deleteAction": "Delete view",
+      "cancel": "Cancel",
+      "archived": "Archived “{name}”",
+      "restored": "Restored “{name}”",
+      "deleted": "Deleted “{name}”"
     }
   },
   "error": {

@@ -33,7 +33,8 @@
     "members": "Personer",
     "membersAnnounce": "{count, plural, =0 {Visar alla} one {Visar # person} other {Visar # personer}}",
     "clear": "Rensa filtren",
-    "cleared": "Filtren har rensats"
+    "cleared": "Filtren har rensats",
+    "saveAsView": "Spara som vy"
   },
   "dev": {
     "section": "Tilldelning och Allas uppgifter",

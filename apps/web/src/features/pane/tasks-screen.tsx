@@ -1,10 +1,11 @@
 import type { ListState } from '@rooster/core/reducers';
 import { useNavigate, useParams, useRouter } from '@tanstack/react-router';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMyListSelect } from '../../data/list';
 import { useOrgMembers } from '../../data/orgs';
 import type { Org } from '../../data/types';
+import { preloadWhenIdle } from '../../lib/lazy';
 import { useListStore } from '../../state/list-store';
 import { usePaneStore } from '../../state/pane-store';
 import { isMobileViewport } from '../../ui/use-media';
@@ -16,10 +17,14 @@ import {
   useListPrint,
 } from '../list/header-actions';
 import { MyListView } from '../list/my-list-view';
-import { EveryoneFilterButton } from '../people/everyone-filters';
+import { EveryoneFilterButton, useEveryoneFilters } from '../people/everyone-filters';
+import { LazySavedViewContent } from '../saved-views/lazy';
+import { queryFromEveryone, queryFromTagFilter } from '../saved-views/query';
+import { useSaveAsView } from '../saved-views/save-as-view';
 import { ViewBody, ViewHeader } from '../shell/app-shell';
 import { type OrgViewId, paths } from '../shell/paths';
 import { TagFilterButton } from '../tags/tag-filter';
+import { type ListViewKey, orgViewOf, savedViewIdOf } from '../views/last-view';
 import { useViewTabs } from '../views/view-tabs';
 import { InteractionPrefetch } from './description-field';
 import { DetailPane } from './detail-pane';
@@ -46,7 +51,7 @@ export function createPaneControls(deps: {
   go: (href: string, replace: boolean) => void;
   orgSlug: string;
   /** The list view under the pane (02 §2): closing returns to it. */
-  view?: () => OrgViewId;
+  view?: () => ListViewKey;
   focusList: () => void;
   /**
    * Phones (02 §13.4): the sheet is a history entry, so closing it steps back when this
@@ -68,7 +73,7 @@ export function createPaneControls(deps: {
       const hadFocus = focusInPane();
       deps.setCurrent(null);
       usePaneStore.getState().setFullScreen(false);
-      if (!deps.back?.()) deps.go(paths.orgView(deps.orgSlug, deps.view?.() ?? 'my'), true);
+      if (!deps.back?.()) deps.go(listViewHref(deps.orgSlug, deps.view?.() ?? 'my'), true);
       if (hadFocus) deps.focusList();
     },
     followToOrg: (orgSlug) => {
@@ -81,6 +86,12 @@ export function createPaneControls(deps: {
       store.setFullScreen(!store.fullScreen);
     },
   };
+}
+
+/** The address of a list view of the org: a built-in one, or a view (`v:<id>`, ADR 0073 B). */
+export function listViewHref(orgSlug: string, view: ListViewKey): string {
+  const saved = savedViewIdOf(view);
+  return saved ? paths.savedView(orgSlug, saved) : paths.orgView(orgSlug, orgViewOf(view) ?? 'my');
 }
 
 /** Esc out of the pane (02 §9.1): focus returns to the selected row, if any. */
@@ -99,8 +110,11 @@ export function TasksScreen({
   org: Org;
   orgSlug: string;
   userId: string;
-  /** My tasks or a smart view (02 §10); the pane opens over it. */
-  view?: OrgViewId;
+  /**
+   * My tasks, a smart view (02 §10), Everyone's tasks, or (Phase 13) a view of the org
+   * (`v:<id>`, `v:new` for "+ New view"); the pane opens over it.
+   */
+  view?: ListViewKey;
 }) {
   const { t } = useTranslation('shell');
   const { t: tPane } = useTranslation('pane');
@@ -115,18 +129,35 @@ export function TasksScreen({
   const fullScreen = usePaneStore((s) => s.fullScreen);
   const viewRef = useRef(view);
   viewRef.current = view;
+  const savedViewId = savedViewIdOf(view);
   const shared = !org.isPersonal;
   // FR-COL-6: a personal org has no Everyone's tasks; its URL shows My tasks.
   const everyone = view === 'everyone' && shared;
+  const builtIn: OrgViewId = orgViewOf(view) ?? 'my';
   const tabs = useViewTabs(org, orgSlug, everyone || view !== 'everyone' ? view : 'my');
-  const title = t(`view.${everyone || view !== 'everyone' ? view : 'my'}`);
+  const title = t(`view.${everyone || builtIn !== 'everyone' ? builtIn : 'my'}`);
   const members = useOrgMembers(everyone ? org.id : undefined).data;
   const menuView: ListMenuView = everyone
     ? 'everyone'
-    : view === 'my' || view === 'everyone'
+    : builtIn === 'my' || builtIn === 'everyone'
       ? 'my'
       : 'smart';
   useListPrint();
+  useEffect(() => preloadWhenIdle([LazySavedViewContent.preload]), []);
+  // ADR 0073 B7: "Save as view" from My tasks' tag filter and Everyone's filters.
+  const saveAs = useSaveAsView(org);
+  const tagFilter = useListStore((s) => s.tagFilter);
+  const everyoneFilters = useEveryoneFilters();
+  const tagSaveAs = everyone
+    ? (tagIds: string[]) => saveAs(queryFromEveryone({ ...everyoneFilters, tagIds }))
+    : builtIn === 'my'
+      ? (tagIds: string[]) => saveAs(queryFromTagFilter(tagIds))
+      : undefined;
+  const everyoneSaveAs = {
+    filtered:
+      tagFilter.length > 0 || everyoneFilters.due !== 'any' || everyoneFilters.members.length > 0,
+    run: () => saveAs(queryFromEveryone({ ...everyoneFilters, tagIds: tagFilter })),
+  };
   useEffect(() => {
     if (view === 'everyone' && !shared && !taskId) {
       void navigate({ href: paths.orgView(orgSlug, 'my'), replace: true });
@@ -194,57 +225,80 @@ export function TasksScreen({
       label={tPane('label')}
       onDismiss={() => pane.close()}
       list={
-        <>
-          <InteractionPrefetch />
-          <ViewHeader
-            title={title}
-            context={org.name}
-            actions={
-              everyone ? (
-                <>
-                  <EveryoneFilterButton members={members ?? []} meId={userId} />
-                  <TagFilterButton orgId={org.id} />
-                  <ListHeaderMenu orgId={org.id} view={menuView} />
-                </>
-              ) : (
-                <>
-                  <TagFilterButton orgId={org.id} />
-                  <ShowCompletedToggle />
-                  <ListHeaderMenu orgId={org.id} view={menuView} />
-                </>
-              )
-            }
-            mobile={{
-              switcher: true,
-              actions: everyone ? (
-                <>
-                  <EveryoneFilterButton members={members ?? []} meId={userId} />
-                  <TagFilterButton orgId={org.id} />
-                </>
-              ) : (
-                <TagFilterButton orgId={org.id} />
-              ),
-              // 02 §2: the list's ⋯ items (Everyone's tasks lists open tasks only, 02 §11).
-              menu: <ListMenuItems orgId={org.id} view={menuView} mobile />,
-              views: tabs,
-            }}
-          />
-          {/* Printed above the list only (styles/print.css). */}
-          <p data-print-title className="hidden">
-            {title} <span>{org.name}</span>
-          </p>
-          <ViewBody>
-            <MyListView
-              orgId={org.id}
-              userId={userId}
-              label={title}
-              pane={pane}
-              view={view === 'my' || view === 'everyone' ? undefined : view}
-              shared={shared}
-              everyone={everyone}
+        savedViewId ? (
+          <>
+            <InteractionPrefetch />
+            <Suspense fallback={null}>
+              <LazySavedViewContent
+                org={org}
+                userId={userId}
+                viewId={savedViewId}
+                pane={pane}
+                tabs={tabs}
+              />
+            </Suspense>
+          </>
+        ) : (
+          <>
+            <InteractionPrefetch />
+            <ViewHeader
+              title={title}
+              context={org.name}
+              actions={
+                everyone ? (
+                  <>
+                    <EveryoneFilterButton
+                      members={members ?? []}
+                      meId={userId}
+                      onSaveAsView={everyoneSaveAs}
+                    />
+                    <TagFilterButton orgId={org.id} onSaveAsView={tagSaveAs} />
+                    <ListHeaderMenu orgId={org.id} view={menuView} />
+                  </>
+                ) : (
+                  <>
+                    <TagFilterButton orgId={org.id} onSaveAsView={tagSaveAs} />
+                    <ShowCompletedToggle />
+                    <ListHeaderMenu orgId={org.id} view={menuView} />
+                  </>
+                )
+              }
+              mobile={{
+                switcher: true,
+                actions: everyone ? (
+                  <>
+                    <EveryoneFilterButton
+                      members={members ?? []}
+                      meId={userId}
+                      onSaveAsView={everyoneSaveAs}
+                    />
+                    <TagFilterButton orgId={org.id} onSaveAsView={tagSaveAs} />
+                  </>
+                ) : (
+                  <TagFilterButton orgId={org.id} onSaveAsView={tagSaveAs} />
+                ),
+                // 02 §2: the list's ⋯ items (Everyone's tasks lists open tasks only, 02 §11).
+                menu: <ListMenuItems orgId={org.id} view={menuView} mobile />,
+                views: tabs,
+              }}
             />
-          </ViewBody>
-        </>
+            {/* Printed above the list only (styles/print.css). */}
+            <p data-print-title className="hidden">
+              {title} <span>{org.name}</span>
+            </p>
+            <ViewBody>
+              <MyListView
+                orgId={org.id}
+                userId={userId}
+                label={title}
+                pane={pane}
+                view={builtIn === 'my' || builtIn === 'everyone' ? undefined : builtIn}
+                shared={shared}
+                everyone={everyone}
+              />
+            </ViewBody>
+          </>
+        )
       }
       pane={
         taskId ? (

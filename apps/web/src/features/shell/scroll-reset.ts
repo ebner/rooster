@@ -1,7 +1,7 @@
 import type { AnyRouter } from '@tanstack/react-router';
 import { allListViewOf, useLastAllView } from '../all-orgs/last-view';
-import { listViewOf, useLastListView } from '../views/last-view';
-import type { AllViewId, OrgViewId } from './paths';
+import { type ListViewKey, listViewOf, useLastListView } from '../views/last-view';
+import type { AllViewId } from './paths';
 
 export interface ScrollResets {
   /** `<main>` and the list column: another page or list view. */
@@ -13,7 +13,7 @@ export interface ScrollResets {
 let reset: ScrollResets = { page: true, task: true };
 
 /** The page a path shows: the pane's path is the list view under it. */
-function pageOf(pathname: string, lastView: OrgViewId, lastAllView: AllViewId): string {
+function pageOf(pathname: string, lastView: ListViewKey, lastAllView: AllViewId): string {
   const allView = allListViewOf(pathname, lastAllView);
   if (allView) return `/all/${allView}`;
   const view = listViewOf(pathname, lastView);
@@ -32,7 +32,7 @@ function taskOf(pathname: string): string | null {
 export function scrollResets(
   from: string,
   to: string,
-  lastView: OrgViewId,
+  lastView: ListViewKey,
   lastAllView: AllViewId = 'today',
 ): ScrollResets {
   return {

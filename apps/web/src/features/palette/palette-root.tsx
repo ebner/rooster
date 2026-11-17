@@ -11,8 +11,10 @@ import { useNavigate, useParams } from '@tanstack/react-router';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { findOrg, useMe } from '../../data';
+import { useOrgMembers } from '../../data/orgs';
 import { cachedListStates, useSearch } from '../../data/search';
 import type { Me, Org } from '../../data/types';
+import { useViews } from '../../data/views';
 import { useSyncStore } from '../../state/sync-store';
 import { useIsMobile, useKeyboardInset } from '../../ui/use-media';
 import { hasShortcutHandler, runShortcut, useKeymapHandlers } from '../../use-keymap';
@@ -21,6 +23,8 @@ import { useViewerDateContext } from '../dates';
 import { loadGuide } from '../help/guide-content';
 import type { GuidePage } from '../help/guide-model';
 import { type Highlighted, searchGuide } from '../help/guide-search';
+import { queryFromSearch, searchHasFilters } from '../saved-views/query';
+import { useSaveAsView } from '../saved-views/save-as-view';
 import { orgUrlSlug, paths } from '../shell/paths';
 import { buildActions } from './actions';
 import { currentPaletteCommands, subscribePaletteCommands } from './commands';
@@ -93,6 +97,11 @@ export function PaletteRoot() {
       if (!me?.user.isAdmin) return false;
       go(paths.admin);
     },
+    // Phase 13 (ADR 0073 B7): "+ New view" in the current org.
+    newView: () => {
+      if (!currentOrg) return false;
+      go(paths.savedView(orgUrlSlug(currentOrg), 'new'));
+    },
   });
 
   if (!open || !me) return null;
@@ -139,6 +148,18 @@ function useGuidePages(wanted: boolean, locale: Locale): readonly GuidePage[] | 
 
 const segments = (parts: readonly Highlighted[]) =>
   parts.map((part) => ({ text: part.text, mark: part.match }));
+
+/** "Save as view" leads the actions of a filtered search (after its task results). */
+function withSaveAs(sections: PaletteSection[], item: ActionItem | null): PaletteSection[] {
+  if (!item) return sections;
+  const actions = sections.find((section) => section.id === 'actions');
+  if (actions) {
+    return sections.map((section) =>
+      section === actions ? { ...section, items: [item, ...section.items] } : section,
+    );
+  }
+  return [...sections, { id: 'actions', items: [item] }];
+}
 
 function PaletteSession({ me, currentOrg }: { me: Me; currentOrg: Org | null }) {
   const { t, i18n } = useTranslation('palette');
@@ -303,6 +324,31 @@ function PaletteSession({ me, currentOrg }: { me: Me; currentOrg: Org | null }) 
     [guidePages, helpQuery],
   );
 
+  // Phase 13 (ADR 0073 B7, B12): the current org's views, and "Save as view" for a search
+  // that filters (`#tag`, `@person`, `due:`, `is:`).
+  const views = useViews(currentOrg?.id).data;
+  const members = useOrgMembers(
+    currentOrg && !currentOrg.isPersonal ? currentOrg.id : undefined,
+  ).data;
+  const saveAs = useSaveAsView(currentOrg);
+  const savedQuery =
+    currentOrg && !step && searchHasFilters(parsed)
+      ? queryFromSearch(parsed, {
+          tags: Object.values(tagsById).filter((tag) => tag.orgId === currentOrg.id),
+          members: members ?? [],
+        })
+      : null;
+  const saveAsItem: ActionItem | null = savedQuery
+    ? {
+        kind: 'action',
+        key: 'action:saveAsView',
+        commandId: 'saveAsView',
+        group: 'list',
+        label: t('action.saveAsView'),
+        shortcut: null,
+      }
+    : null;
+
   const actions: ActionItem[] = step
     ? []
     : buildActions({
@@ -316,9 +362,17 @@ function PaletteSession({ me, currentOrg }: { me: Me; currentOrg: Org | null }) 
         label: (id) => t(`action.${id}`),
         goToOrgLabel: (name) => t('action.goToOrg', { name }),
         allOrgs: hasAllOrgs(me) ? { label: (view) => t(`all.${view}`) } : null,
+        views:
+          currentOrg && views
+            ? views.map((view) => ({
+                id: view.id,
+                label: t('action.goToView', { name: view.name }),
+                href: paths.savedView(orgUrlSlug(currentOrg), view.id),
+              }))
+            : [],
       });
 
-  const sections: PaletteSection[] = step
+  const built: PaletteSection[] = step
     ? [
         ...(query.trim() === '' && recents.length > 0
           ? [{ id: 'recent' as const, items: recents }]
@@ -334,6 +388,7 @@ function PaletteSession({ me, currentOrg }: { me: Me; currentOrg: Org | null }) 
         guide,
         searchMode: mode === 'search',
       });
+  const sections = withSaveAs(built, saveAsItem);
 
   const active = nextActiveKey(sections, activeKey);
   const waiting =
@@ -377,6 +432,11 @@ function PaletteSession({ me, currentOrg }: { me: Me; currentOrg: Org | null }) 
       if (!org) return;
       closePalette(true);
       void navigate({ href: paths.task(orgUrlSlug(org), item.task.id) });
+      return;
+    }
+    if (item.commandId === 'saveAsView') {
+      closePalette(true);
+      if (savedQuery) saveAs(savedQuery);
       return;
     }
     if (item.commandId === 'makeSubtaskOf') {

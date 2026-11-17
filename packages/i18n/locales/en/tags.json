@@ -15,7 +15,8 @@
     "clear": "Clear filter",
     "empty": "No tags in this organisation yet",
     "announce": "Showing tasks tagged {names}",
-    "cleared": "Tag filter cleared"
+    "cleared": "Tag filter cleared",
+    "saveAsView": "Save as view"
   },
   "settings": {
     "title": "Tags",

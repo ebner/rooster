@@ -67,5 +67,26 @@
       "rail": "Ikonlist",
       "settings": "Inställningar → Beteende med flera organisationer"
     }
+  },
+  "savedViews": {
+    "label": "Vyer i {name}",
+    "new": "Ny vy",
+    "reorder": "Flytta {name}",
+    "dev": {
+      "sidebar": "Vyer i sidofältet (projekt #, vanlig ⌕, antal, aktiv)",
+      "empty": "En organisation utan vyer: bara ”Ny vy”",
+      "dragging": "En lyft vy",
+      "rail": "Ikonfält",
+      "newActive": "”Ny vy” öppen",
+      "tabs": "Mobilens vyväljare med vyer",
+      "settings": "Organisationsinställningar → Vyer",
+      "names": {
+        "juniper": "Juniper",
+        "launch": "Vårlanseringen",
+        "mine": "Mina den här veckan",
+        "unassigned": "Ingen ansvarig än",
+        "old": "Nya webbplatsen"
+      }
+    }
   }
 }

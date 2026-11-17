@@ -29,6 +29,11 @@ export interface ActionContext {
    * path to All organisations (no shortcut of its own); offered from the second org on.
    */
   allOrgs?: { label: (view: AllViewId) => string } | null;
+  /**
+   * Phase 13 (ADR 0073 B12): "Go to view …", one per view of the current org (in the viewer's
+   * order), after Everyone's tasks.
+   */
+  views?: readonly { id: string; label: string; href: string }[];
 }
 
 /** Org views that need an org to go to (the current one, else the first). */
@@ -53,6 +58,8 @@ function visible(id: PaletteCommandId, ctx: ActionContext): boolean {
       return ctx.isAvailable(id);
     default:
       if (orgViews.has(id)) return ctx.orgs.length > 0;
+      // "+ New view" needs an org.
+      if (id === 'newView') return ctx.currentOrg !== null;
       if (id === 'openOrgSettings') return ctx.currentOrg !== null;
       if (id === 'openAdmin') return ctx.isAdmin;
       return true;
@@ -78,6 +85,7 @@ export function buildActions(ctx: ActionContext): ActionItem[] {
       shortcut: shortcut === '' ? null : shortcut,
     });
     if (id === 'goMyTasks') out.push(...allActions(ctx), ...orgActions(ctx));
+    if (id === 'goEveryone') out.push(...viewActions(ctx));
   }
   return out;
 }
@@ -117,4 +125,16 @@ function orgActions(ctx: ActionContext): ActionItem[] {
       href: paths.orgView(orgUrlSlug(org), 'my'),
     };
   });
+}
+
+function viewActions(ctx: ActionContext): ActionItem[] {
+  return (ctx.views ?? []).map((view) => ({
+    kind: 'action',
+    key: `action:goToView:${view.id}`,
+    commandId: 'goToView',
+    group: 'navigation',
+    label: view.label,
+    shortcut: null,
+    href: view.href,
+  }));
 }

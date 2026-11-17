@@ -41,6 +41,7 @@ import {
   restoredBases,
   writeCacheOwner as writeOwner,
 } from './persist';
+import { invalidateViewsFor } from './view-invalidation';
 
 /** 04 §6.2: the outbox is retried at least this often while ops are queued. */
 export const flushIntervalMs = 30_000;
@@ -163,11 +164,16 @@ const orgScopedRoots: ReadonlySet<unknown> = new Set([
   'search',
   'org-members',
   'org-invites',
+  'views',
+  'view-tasks',
 ]);
 
-/** Org-scoped query keys are `[root, orgId, …]`; task details carry their org in the data. */
+/**
+ * Org-scoped query keys are `[root, orgId, …]`; task details and a view's rows
+ * (`['view-tasks', viewId, …]`) carry their org in the data.
+ */
 function orgOfQuery(queryKey: readonly unknown[], data: unknown): string | undefined {
-  if (queryKey[0] === 'task') {
+  if (queryKey[0] === 'task' || queryKey[0] === 'view-tasks') {
     const orgId = (data as { orgId?: unknown } | undefined)?.orgId;
     return typeof orgId === 'string' ? orgId : undefined;
   }
@@ -494,7 +500,10 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   const events = new EventStream({
     clientId,
     ...(options.eventSource ? { factory: options.eventSource } : {}),
-    invalidate: (key) => void queryClient.invalidateQueries({ queryKey: [...key] }),
+    invalidate: (key) => {
+      void queryClient.invalidateQueries({ queryKey: [...key] });
+      invalidateViewsFor(queryClient, key);
+    },
     onConnect: () => {
       // The very first open right after start follows fresh fetches; later ones may have
       // missed events (there is no replay log): refetch everything active.

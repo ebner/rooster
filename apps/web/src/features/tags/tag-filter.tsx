@@ -1,4 +1,4 @@
-import { Filter } from 'lucide-react';
+import { Bookmark, Filter } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useTags } from '../../data/tags';
 import { cn } from '../../lib/cn';
@@ -12,7 +12,14 @@ import { TagDot } from './tag-dot';
  * FR-TAG-4: the tag filter in the My tasks header. Rows show when they carry any of the
  * chosen tags; group headers stay (02 §2). The filter lasts for the session.
  */
-export function TagFilterButton({ orgId }: { orgId: string }) {
+export function TagFilterButton({
+  orgId,
+  onSaveAsView,
+}: {
+  orgId: string;
+  /** Phase 13 (ADR 0073 B7): "Save as view" with the chosen tags, where the list offers it. */
+  onSaveAsView?: ((tagIds: string[]) => void) | undefined;
+}) {
   const { t } = useTranslation('tags');
   const tags = useTags(orgId).data ?? [];
   const filter = useListStore((s) => s.tagFilter);
@@ -63,8 +70,19 @@ export function TagFilterButton({ orgId }: { orgId: string }) {
         {active.length > 0 && (
           <>
             <MenuSeparator />
-            <Menu aria-label={t('filter.clear')} onAction={() => set([])}>
+            <Menu
+              aria-label={t('filter.clear')}
+              onAction={(key) => {
+                if (key === 'saveAsView') onSaveAsView?.(active);
+                else set([]);
+              }}
+            >
               <MenuItem id="clear">{t('filter.clear')}</MenuItem>
+              {onSaveAsView ? (
+                <MenuItem id="saveAsView" icon={Bookmark} data-testid="tag-filter-save-as-view">
+                  {t('filter.saveAsView')}
+                </MenuItem>
+              ) : null}
             </Menu>
           </>
         )}

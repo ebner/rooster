@@ -44,6 +44,7 @@ import { Route as AppOOrgSlugTasksOverdueRouteImport } from './routes/_app/o.$or
 import { Route as AppOOrgSlugTasksTodayRouteImport } from './routes/_app/o.$orgSlug._tasks.today'
 import { Route as AppOOrgSlugTasksWeekRouteImport } from './routes/_app/o.$orgSlug._tasks.week'
 import { Route as AppOOrgSlugTasksTTaskIdRouteImport } from './routes/_app/o.$orgSlug._tasks.t.$taskId'
+import { Route as AppOOrgSlugTasksVViewIdRouteImport } from './routes/_app/o.$orgSlug._tasks.v.$viewId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -221,6 +222,11 @@ const AppOOrgSlugTasksTTaskIdRoute = AppOOrgSlugTasksTTaskIdRouteImport.update({
   path: '/t/$taskId',
   getParentRoute: () => AppOOrgSlugTasksRoute,
 } as any)
+const AppOOrgSlugTasksVViewIdRoute = AppOOrgSlugTasksVViewIdRouteImport.update({
+  id: '/v/$viewId',
+  path: '/v/$viewId',
+  getParentRoute: () => AppOOrgSlugTasksRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -257,6 +263,7 @@ export interface FileRoutesByFullPath {
   '/o/$orgSlug/today': typeof AppOOrgSlugTasksTodayRoute
   '/o/$orgSlug/week': typeof AppOOrgSlugTasksWeekRoute
   '/o/$orgSlug/t/$taskId': typeof AppOOrgSlugTasksTTaskIdRoute
+  '/o/$orgSlug/v/$viewId': typeof AppOOrgSlugTasksVViewIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -291,6 +298,7 @@ export interface FileRoutesByTo {
   '/o/$orgSlug/today': typeof AppOOrgSlugTasksTodayRoute
   '/o/$orgSlug/week': typeof AppOOrgSlugTasksWeekRoute
   '/o/$orgSlug/t/$taskId': typeof AppOOrgSlugTasksTTaskIdRoute
+  '/o/$orgSlug/v/$viewId': typeof AppOOrgSlugTasksVViewIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -329,6 +337,7 @@ export interface FileRoutesById {
   '/_app/o/$orgSlug/_tasks/today': typeof AppOOrgSlugTasksTodayRoute
   '/_app/o/$orgSlug/_tasks/week': typeof AppOOrgSlugTasksWeekRoute
   '/_app/o/$orgSlug/_tasks/t/$taskId': typeof AppOOrgSlugTasksTTaskIdRoute
+  '/_app/o/$orgSlug/_tasks/v/$viewId': typeof AppOOrgSlugTasksVViewIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -367,6 +376,7 @@ export interface FileRouteTypes {
     | '/o/$orgSlug/today'
     | '/o/$orgSlug/week'
     | '/o/$orgSlug/t/$taskId'
+    | '/o/$orgSlug/v/$viewId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -401,6 +411,7 @@ export interface FileRouteTypes {
     | '/o/$orgSlug/today'
     | '/o/$orgSlug/week'
     | '/o/$orgSlug/t/$taskId'
+    | '/o/$orgSlug/v/$viewId'
   id:
     | '__root__'
     | '/'
@@ -438,6 +449,7 @@ export interface FileRouteTypes {
     | '/_app/o/$orgSlug/_tasks/today'
     | '/_app/o/$orgSlug/_tasks/week'
     | '/_app/o/$orgSlug/_tasks/t/$taskId'
+    | '/_app/o/$orgSlug/_tasks/v/$viewId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -698,6 +710,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOOrgSlugTasksTTaskIdRouteImport
       parentRoute: typeof AppOOrgSlugTasksRoute
     }
+    '/_app/o/$orgSlug/_tasks/v/$viewId': {
+      id: '/_app/o/$orgSlug/_tasks/v/$viewId'
+      path: '/v/$viewId'
+      fullPath: '/o/$orgSlug/v/$viewId'
+      preLoaderRoute: typeof AppOOrgSlugTasksVViewIdRouteImport
+      parentRoute: typeof AppOOrgSlugTasksRoute
+    }
   }
 }
 
@@ -752,6 +771,7 @@ interface AppOOrgSlugTasksRouteChildren {
   AppOOrgSlugTasksTodayRoute: typeof AppOOrgSlugTasksTodayRoute
   AppOOrgSlugTasksWeekRoute: typeof AppOOrgSlugTasksWeekRoute
   AppOOrgSlugTasksTTaskIdRoute: typeof AppOOrgSlugTasksTTaskIdRoute
+  AppOOrgSlugTasksVViewIdRoute: typeof AppOOrgSlugTasksVViewIdRoute
 }
 
 const AppOOrgSlugTasksRouteChildren: AppOOrgSlugTasksRouteChildren = {
@@ -762,6 +782,7 @@ const AppOOrgSlugTasksRouteChildren: AppOOrgSlugTasksRouteChildren = {
   AppOOrgSlugTasksTodayRoute: AppOOrgSlugTasksTodayRoute,
   AppOOrgSlugTasksWeekRoute: AppOOrgSlugTasksWeekRoute,
   AppOOrgSlugTasksTTaskIdRoute: AppOOrgSlugTasksTTaskIdRoute,
+  AppOOrgSlugTasksVViewIdRoute: AppOOrgSlugTasksVViewIdRoute,
 }
 
 const AppOOrgSlugTasksRouteWithChildren =

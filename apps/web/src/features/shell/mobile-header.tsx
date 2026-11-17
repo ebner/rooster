@@ -161,13 +161,30 @@ export function MobileHeader({
 
 /**
  * The view switcher (02 §13.1): a horizontally scrollable segmented control of the org's
- * views. P4 has My tasks; Today, 7 days, Overdue, No date (P5) and Everyone (P6) append.
+ * views. P4 has My tasks; Today, 7 days, Overdue, No date (P5) and Everyone (P6) append, then
+ * the org's own views (Phase 13). The current tab is scrolled into sight: a view's tab sits at
+ * the far end.
  */
 export function ViewSwitcher({ views }: { views: readonly ViewTab[] }) {
   const { t } = useTranslation('mobile');
+  const scroller = useRef<HTMLDivElement>(null);
+  const activeId = views.find((view) => view.isActive)?.id;
+  useEffect(() => {
+    const box = scroller.current;
+    const tab = activeId ? box?.querySelector<HTMLElement>('[aria-current="page"]') : null;
+    if (!box || !tab) return;
+    // Only sideways: scrollIntoView would also move the page under the sticky header.
+    const outer = box.getBoundingClientRect();
+    const inner = tab.getBoundingClientRect();
+    if (inner.left < outer.left) box.scrollLeft -= outer.left - inner.left;
+    else if (inner.right > outer.right) box.scrollLeft += inner.right - outer.right;
+  }, [activeId]);
   return (
     <nav aria-label={t('views.label')} className="flex h-view-switcher items-center px-3">
-      <div className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1 [scrollbar-width:none]">
+      <div
+        ref={scroller}
+        className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1 [scrollbar-width:none]"
+      >
         {views.map((view) => (
           <AriaLink
             key={view.id}

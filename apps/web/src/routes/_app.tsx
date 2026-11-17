@@ -28,7 +28,7 @@ import { AppShell } from '../features/shell/app-shell';
 import { MobileNav } from '../features/shell/mobile-nav';
 import { type OrgViewId, orgUrlSlug, paths } from '../features/shell/paths';
 import { Sidebar } from '../features/shell/sidebar';
-import { switchAllView, switchView } from '../features/shell/sidebar-views';
+import { orgListViewOf, switchAllView, switchView } from '../features/shell/sidebar-views';
 import { rememberListPath } from '../features/shell/start-page';
 import { listViewOf, useLastListView } from '../features/views/last-view';
 import { LiveViewCounts } from '../features/views/view-counts';
@@ -128,8 +128,12 @@ function AppLayout() {
 
   const { user, orgs } = me.data;
   const activeOrg = orgSlug ? findOrg(orgs, orgSlug) : null;
-  // The pane (`/t/:taskId`) sits over the last list view (02 §2).
-  const activeView = listViewOf(location.pathname, lastView);
+  // The pane (`/t/:taskId`) sits over the last list view (02 §2): a built-in view, or one of
+  // the org's views (ADR 0073 B, `/o/:slug/v/:id`).
+  const { view: activeView, savedViewId } = orgListViewOf(
+    location.pathname,
+    listViewOf(location.pathname, lastView),
+  );
   // All organisations (ADR 0073 A): its view, or the last one under its pane (`/all/t/:id`).
   const allView = allListViewOf(location.pathname, lastAllView);
   const withAll = hasAllOrgs(me.data);
@@ -158,7 +162,8 @@ function AppLayout() {
           activeOrg: activeOrg ?? null,
           isAdmin: user.isAdmin,
           // ADR 0063: a switch keeps the view (Today stays Today) where the other org has it;
-          // so does one from All organisations, whose views every org has (ADR 0073 A7).
+          // so does one from All organisations, whose views every org has (ADR 0073 A7). A view
+          // of the org belongs to it alone: from there a switch lands on My tasks (B12).
           onSelectOrg: (org) =>
             void navigate({
               href: paths.orgView(orgUrlSlug(org), switchView(activeView ?? allView, org)),
@@ -176,7 +181,7 @@ function AppLayout() {
             <MobileNav
               myTasksHref={homeOrg ? paths.orgView(orgUrlSlug(homeOrg), 'my') : null}
               active={
-                activeView !== null || allView !== null
+                activeView !== null || savedViewId !== null || allView !== null
                   ? 'my'
                   : location.pathname.startsWith('/settings')
                     ? 'settings'
@@ -189,7 +194,11 @@ function AppLayout() {
           <Sidebar
             user={user}
             orgs={orgs}
-            active={activeOrg && activeView ? { orgId: activeOrg.id, view: activeView } : null}
+            active={
+              activeOrg && (activeView || savedViewId)
+                ? { orgId: activeOrg.id, view: activeView, savedViewId }
+                : null
+            }
             activeAllView={allView}
             locale={user.locale}
             collapsed={collapsed}

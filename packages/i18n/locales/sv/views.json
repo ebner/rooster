@@ -61,6 +61,92 @@
     }
   },
   "saved": {
-    "title": "Vyer"
+    "title": "Vyer",
+    "offline": "Vyer kan bara ändras när du är online.",
+    "saveFailed": "Det gick inte att spara vyn. Försök igen.",
+    "created": "Vyn ”{name}” har skapats",
+    "archived": "”{name}” har arkiverats. Du återställer den under Organisationsinställningar → Vyer.",
+    "restore": "Återställ",
+    "deleted": "”{name}” har tagits bort",
+    "savedAs": "Sparad som vyn ”{name}”",
+    "name": {
+      "label": "Vyns namn",
+      "placeholder": "Ge vyn ett namn"
+    },
+    "newHint": "Ge vyn ett namn så sparas den. Välj sedan vad den ska samla med filtren nedan.",
+    "counts": "{open} öppna · {done} klara",
+    "countsLabel": "{open, plural, one {# öppen uppgift} other {# öppna uppgifter}}, {done, plural, one {# klar} other {# klara}}",
+    "sharedNote": "Alla i {org} kan se de här uppgifterna ändå; en vy samlar dem bara.",
+    "assignee": {
+      "anyone": "Vem som helst",
+      "me": "Jag"
+    },
+    "tagMode": {
+      "label": "Matchning",
+      "any": "Någon av taggarna",
+      "all": "Alla taggarna"
+    },
+    "due": {
+      "any": "Vilket datum som helst",
+      "today": "Idag",
+      "week": "Kommande 7 dagar",
+      "overdue": "Försenade",
+      "none": "Utan datum"
+    },
+    "status": {
+      "open": "Öppna",
+      "done": "Klara",
+      "any": "Öppna och klara"
+    },
+    "sharing": {
+      "private": "Privat",
+      "shared": "Delad"
+    },
+    "chips": {
+      "label": "Vad vyn samlar",
+      "tags": "Taggar: {value}",
+      "noTags": "Alla taggar",
+      "tagsPicker": "Vyns taggar",
+      "tagModeLabel": "Matchning: {value}",
+      "assignee": "Ansvarig: {value}",
+      "assigneeMenu": "Ansvarig",
+      "due": "Förfaller: {value}",
+      "dueMenu": "Förfaller",
+      "status": "Status: {value}",
+      "statusMenu": "Status",
+      "sharing": "Synlighet: {value}",
+      "sharingMenu": "Vem som ser vyn",
+      "button": "Filter",
+      "sheet": "Vyns inställningar"
+    },
+    "menu": {
+      "label": "Vyåtgärder",
+      "archive": "Arkivera vyn",
+      "delete": "Ta bort vyn…"
+    },
+    "confirmDelete": {
+      "text": "Ta bort ”{name}”? Uppgifterna och taggarna finns kvar.",
+      "confirm": "Ta bort vyn",
+      "cancel": "Avbryt"
+    },
+    "notFound": {
+      "title": "Vyn är inte tillgänglig",
+      "body": "Den kan ha arkiverats eller tagits bort, eller så är den någon annans privata vy.",
+      "back": "Tillbaka till Mina uppgifter"
+    },
+    "suggest": {
+      "fallback": "Ny vy"
+    },
+    "dev": {
+      "project": "En projektvy (en tagg): öppna och klara",
+      "chipsSet": "Chips med alla filter valda",
+      "sections": "Rader per person, med rader för nya uppgifter",
+      "newView": "+ Ny vy: en tom rubrik att fylla i",
+      "sheet": "Mobil: filterchipsen i ett ark",
+      "names": {
+        "juniper": "Juniper",
+        "launch": "Vårlanseringen"
+      }
+    }
   }
 }

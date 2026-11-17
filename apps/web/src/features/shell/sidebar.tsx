@@ -15,6 +15,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
+import type { SavedView, SavedViewMove } from '@rooster/core/schemas';
 import type { Locale } from '@rooster/i18n/core';
 import type { TagColor } from '@rooster/tokens';
 import { Bell, PanelLeftClose, PanelLeftOpen, Plus, Search } from 'lucide-react';
@@ -41,7 +42,10 @@ import { UserMenu } from './user-menu';
 
 export interface SidebarActive {
   orgId: string;
-  view: OrgViewId;
+  /** A built-in view, or null when a view of the org (ADR 0073 B) is shown. */
+  view: OrgViewId | null;
+  /** The org's view shown (or under the pane), `'new'` for "+ New view". */
+  savedViewId?: string | null | undefined;
 }
 
 export interface SidebarProps {
@@ -50,6 +54,10 @@ export interface SidebarProps {
   orgs: readonly Org[];
   active?: SidebarActive | null | undefined;
   counts?: Partial<Record<string, OrgCounts>> | undefined;
+  /** Fixed views per org ID (kitchen sink, tests); otherwise live per org. */
+  savedViews?: Partial<Record<string, readonly SavedView[]>> | undefined;
+  /** With `savedViews`: where a view reorder goes. */
+  onMoveSavedView?: ((id: string, intent: SavedViewMove) => unknown) | undefined;
   /** The All organisations view shown (or under the pane), else null (ADR 0073 A). */
   activeAllView?: AllViewId | null | undefined;
   /** Fixed All organisations badges (kitchen sink, tests); otherwise live. */
@@ -81,6 +89,8 @@ export function Sidebar({
   orgs,
   active,
   counts,
+  savedViews,
+  onMoveSavedView,
   activeAllView = null,
   allCounts,
   locale,
@@ -210,6 +220,9 @@ export function Sidebar({
                   org={org}
                   rail={rail}
                   activeView={active?.orgId === org.id ? active.view : null}
+                  activeSavedViewId={active?.orgId === org.id ? active.savedViewId : null}
+                  savedViews={savedViews?.[org.id]}
+                  onMoveSavedView={onMoveSavedView}
                   counts={counts?.[org.id]}
                   canMoveUp={index > 0}
                   canMoveDown={index < orgs.length - 1}

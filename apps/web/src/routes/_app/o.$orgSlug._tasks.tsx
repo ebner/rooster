@@ -3,12 +3,19 @@ import { useEffect } from 'react';
 import { useMe, useOrg } from '../../data';
 import { TasksScreen } from '../../features/pane/tasks-screen';
 import { OrgNotFound } from '../../features/shell/org-not-found';
-import { listViewOf, useLastListView, viewOfPath } from '../../features/views/last-view';
+import {
+  isNewViewPath,
+  listViewOf,
+  savedViewKey,
+  useLastListView,
+  viewOfPath,
+} from '../../features/views/last-view';
 
 /**
  * My tasks and the smart views with the detail pane (02 §2, §9, §10). One layout for
- * `/my`, `/today`, `/week`, `/overdue`, `/nodate` and `/t/:taskId`, so the list stays mounted
- * (selection, drafts, scroll) while the pane opens, follows and closes over the last view.
+ * `/my`, `/today`, `/week`, `/overdue`, `/nodate`, `/everyone`, (Phase 13) the org's views
+ * `/v/:viewId` and `/t/:taskId`, so the list stays mounted (selection, drafts, scroll) while
+ * the pane opens, follows and closes over the last view.
  */
 export const Route = createFileRoute('/_app/o/$orgSlug/_tasks')({
   component: TasksLayout,
@@ -20,7 +27,10 @@ function TasksLayout() {
   const org = useOrg(orgSlug);
   const me = useMe();
   const lastView = useLastListView((s) => s.view);
-  const view = listViewOf(pathname, lastView) ?? 'my';
+  // "+ New view" (`/o/:slug/v/new`) shows a view not created yet; it is no last view.
+  const view = isNewViewPath(pathname)
+    ? savedViewKey('new')
+    : (listViewOf(pathname, lastView) ?? 'my');
   const ownView = viewOfPath(pathname);
   useEffect(() => {
     if (ownView) useLastListView.setState({ view: ownView });

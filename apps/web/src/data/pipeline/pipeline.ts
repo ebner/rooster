@@ -21,12 +21,18 @@ import {
   type ReducerContext,
 } from '@rooster/core/reducers';
 import type { ActivityPage, Comment, Task, TaskDetail } from '@rooster/core/schemas';
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { type SyncState, useSyncStore } from '../../state/sync-store';
 import { ApiError } from '../errors';
 import type { SyncChannel, SyncMessage, WireError } from '../sync/channel';
 import type { Outbox, OutboxRecord } from '../sync/outbox';
 import { classifyFailure, type ListTransport, RateLimitedError } from './transport';
+import {
+  applyOpToViewTasks,
+  isViewTasksData,
+  mergeViewTasksResponse,
+  type ViewTasksData,
+} from './view-tasks-ops';
 
 /** 02 §14: 1, 2, 4, 8, 16, 30 s, capped. */
 export const backoffScheduleMs = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000] as const;
@@ -38,8 +44,39 @@ export const taskDetailKey = (taskId: string) => ['task', taskId] as const;
 export const tagsKey = (orgId: string) => ['tags', orgId] as const;
 /** P6: the root of every Everyone's tasks cache of an org (`['everyone', orgId, filters]`: `Task[]`). */
 export const everyoneRootKey = (orgId: string) => ['everyone', orgId] as const;
+/** Phase 13 (ADR 0073 B): the root of every view's rows (`['view-tasks', viewId, completed]`). */
+export const viewTasksRootKey = ['view-tasks'] as const;
 /** P6: a task's comment and activity feed (`InfiniteData<ActivityPage>`, newest page first). */
 export const activityKey = (taskId: string) => ['activity', taskId] as const;
+
+/** Ops that can make a task the view's rows lack match its query. */
+const joiningKinds: ReadonlySet<string> = new Set([
+  'task.addTag',
+  'task.patch',
+  'task.complete',
+  'task.restore',
+  'task.bulk',
+  'task.duplicate',
+]);
+
+/** Task ops that never change which tasks a view counts. */
+const orderOnlyKinds: ReadonlySet<string> = new Set([
+  'task.move',
+  'task.reorder',
+  'task.expanded',
+  'task.follow',
+]);
+
+/** Phase 13 (ADR 0073 B): whether `op` may add a row the view's cache doesn't have. */
+function mayJoinView(op: ListOpSpec, items: readonly Task[]): boolean {
+  if (!joiningKinds.has(op.kind)) return false;
+  // A title or description never decides a match.
+  if (op.kind === 'task.patch' && !('assigneeId' in op.payload) && !('dueDate' in op.payload)) {
+    return false;
+  }
+  const ids = new Set(items.map((t) => t.id));
+  return opEntityIds(op).some((id) => !ids.has(id));
+}
 
 /** A queued op is exactly what the outbox stores. */
 type Queued = OutboxRecord;
@@ -591,6 +628,43 @@ export class ListPipeline {
   }
 
   /**
+   * Phase 13 (ADR 0073 B): for the query function of a view's rows (`['view-tasks', …]`), as
+   * `withPendingTasks`, with the views' own row rule (every match is a row).
+   */
+  withPendingViewTasks(orgId: string, tasks: readonly Task[]): Task[] {
+    let rows = tasks;
+    for (const item of this.queue) {
+      if (item.orgId === orgId) {
+        rows = applyOpToViewTasks(rows, item.op, this.rowContext(item), orgId);
+      }
+    }
+    return rows as Task[];
+  }
+
+  /** The cached rows of every view of `orgId` (`['view-tasks', viewId, …]`, ADR 0073 B). */
+  private viewTaskCaches(orgId: string): [QueryKey, ViewTasksData][] {
+    return this.queryClient
+      .getQueriesData<ViewTasksData>({ queryKey: viewTasksRootKey })
+      .flatMap(([key, data]) =>
+        isViewTasksData(data) && data.orgId === orgId
+          ? [[key, data] as [QueryKey, ViewTasksData]]
+          : [],
+      );
+  }
+
+  /** Refetches the rows of the views of these orgs (they have no confirmed base here). */
+  private refetchViewTasks(orgIds: readonly string[]): void {
+    const orgs = new Set(orgIds);
+    void this.queryClient.invalidateQueries({
+      queryKey: viewTasksRootKey,
+      predicate: (query) => {
+        const data = query.state.data;
+        return !isViewTasksData(data) || orgs.has(data.orgId);
+      },
+    });
+  }
+
+  /**
    * For the query function of `['activity', taskId]`: one fetched page with the task's queued
    * comment ops applied. `newest` is the page fetched without a cursor, the only one queued
    * comments are appended to.
@@ -1065,6 +1139,11 @@ export class ListPipeline {
       const next = applyOpToTaskList(rows, op, this.rowContext(item));
       if (next !== rows) this.queryClient.setQueryData(key, next);
     }
+    for (const [key, data] of this.viewTaskCaches(item.orgId)) {
+      for (const [id, gone] of rowsDeletedWith(data.items, deletes)) this.deletedRows.set(id, gone);
+      const next = applyOpToViewTasks(data.items, op, this.rowContext(item), data.orgId);
+      if (next !== data.items) this.queryClient.setQueryData(key, { ...data, items: next });
+    }
     const taskId = commentTaskId(op);
     if (taskId === null) return;
     const key = activityKey(taskId);
@@ -1098,6 +1177,24 @@ export class ListPipeline {
     if (refetch) {
       void this.queryClient.invalidateQueries({ queryKey: everyoneRootKey(item.orgId) });
     }
+    let refetchViews = op.kind === 'task.moveToOrg';
+    for (const [key, data] of this.viewTaskCaches(item.orgId)) {
+      const merged = mergeViewTasksResponse(data.items, op, response);
+      // A task the view lacks may match now (tagged, reassigned, restored): only the server
+      // knows its row.
+      refetchViews ||= merged.refetch || mayJoinView(op, data.items);
+      if (settledRows && merged.tasks !== data.items) {
+        this.queryClient.setQueryData(key, { ...data, items: merged.tasks });
+      }
+    }
+    if (refetchViews) this.refetchViewTasks(listOrgs(item));
+    // The sidebar's open counts of the org's views (ADR 0073 B9): this tab's own changes reach
+    // no SSE key in a personal org.
+    if (op.kind.startsWith('task.') && !orderOnlyKinds.has(op.kind)) {
+      for (const org of listOrgs(item)) {
+        void this.queryClient.invalidateQueries({ queryKey: ['views', org] });
+      }
+    }
     const taskId = commentTaskId(op);
     const commentId = commentIdOf(op);
     if (taskId === null || commentId === null || busy.has(commentId)) return;
@@ -1117,6 +1214,7 @@ export class ListPipeline {
     for (const orgId of listOrgs(item)) {
       void this.queryClient.invalidateQueries({ queryKey: everyoneRootKey(orgId) });
     }
+    this.refetchViewTasks(listOrgs(item));
     const taskId = commentTaskId(item.op);
     if (taskId !== null) void this.queryClient.invalidateQueries({ queryKey: activityKey(taskId) });
   }

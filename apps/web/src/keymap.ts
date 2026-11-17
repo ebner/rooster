@@ -226,6 +226,14 @@ export const keymap = {
   openAdmin: { keys: [], scope: 'palette', section: 'general', palette: 'navigation' },
   // The header ⋯ → Add group: a new group at the end (Tab+N adds one at the cursor).
   addGroupAtEnd: { keys: [], scope: 'palette', section: 'groups', palette: 'list' },
+  // Phase 13 (ADR 0073 B7, B12): views. "Go to view …" entries are generated per view.
+  newView: { keys: [], scope: 'palette', section: 'general', palette: 'navigation' },
+  goToView: { keys: [], scope: 'palette', section: 'general' },
+  saveAsView: { keys: [], scope: 'palette', section: 'general', palette: 'list' },
+  renameView: { keys: [], scope: 'palette', section: 'general', palette: 'list' },
+  toggleViewShared: { keys: [], scope: 'palette', section: 'general', palette: 'list' },
+  archiveView: { keys: [], scope: 'palette', section: 'general', palette: 'list' },
+  deleteView: { keys: [], scope: 'palette', section: 'general', palette: 'list' },
 } as const satisfies Record<string, ShortcutDefinition>;
 
 export type ShortcutId = keyof typeof keymap;

@@ -10,6 +10,11 @@ export interface EveryoneRowOptions {
   draftTask: (draft: Draft) => Task;
   /** The Inbox a task created for me lands in (02 §11). */
   inboxId: string;
+  /**
+   * Phase 13 (ADR 0073 B4): false leaves out the member headers (a view in a personal org has
+   * one section, the viewer's). Default true.
+   */
+  headers?: boolean;
 }
 
 /**
@@ -36,19 +41,21 @@ export function buildEveryoneRows(
   const rows: Row[] = [];
   sections.forEach((section, index) => {
     const shown = section.taskIds.flatMap((id) => (tasks[id] ? [tasks[id] as Task] : []));
-    rows.push(
-      reuse({
-        kind: 'section',
-        id: sectionRowId(section.id),
-        sectionId: section.id,
-        sectionKind: 'flat',
-        date: null,
-        count: shown.filter((t) => t.completedAt === null).length,
-        first: index === 0,
-        assigneeId: section.assigneeId,
-        person: section.member,
-      }),
-    );
+    if (options.headers !== false) {
+      rows.push(
+        reuse({
+          kind: 'section',
+          id: sectionRowId(section.id),
+          sectionId: section.id,
+          sectionKind: 'flat',
+          date: null,
+          count: shown.filter((t) => t.completedAt === null).length,
+          first: index === 0,
+          assigneeId: section.assigneeId,
+          person: section.member,
+        }),
+      );
+    }
     const items: (Task | TaskRow)[] = [...shown];
     for (const draft of draftsBySection.get(section.id) ?? []) {
       const at =

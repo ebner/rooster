@@ -1,3 +1,4 @@
+import { todayIn } from '@rooster/core/dates';
 import { compareRows, isRow } from '@rooster/core/everyone';
 import { uuidv7 } from '@rooster/core/ids';
 import { DEFAULT_PREFS } from '@rooster/core/limits';
@@ -22,6 +23,7 @@ import {
   tasksInGroup,
 } from '@rooster/core/reducers';
 import { type ReminderSpec, resolveFireAt } from '@rooster/core/reminders';
+import { matchesSavedView, savedViewCounts } from '@rooster/core/saved-views';
 import type {
   ActivityItem,
   ActivityPage,
@@ -29,6 +31,8 @@ import type {
   Group,
   MyList,
   Reminder,
+  SavedView,
+  SavedViewTasks,
   Tag,
   Task,
   TaskDetail,
@@ -98,6 +102,8 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
   comments: Map<string, Comment & { deleted?: boolean }>;
   /** P10: the fixture user's reminders by task. */
   reminders: Map<string, Reminder[]>;
+  /** Phase 13 (ADR 0073 B): the views `fetchViewTasks` answers for, by ID. */
+  views: Map<string, Pick<SavedView, 'id' | 'orgId' | 'query'>>;
 } {
   const { userId, latencyMs = 0 } = options;
   const owner = {
@@ -402,9 +408,12 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
     return undefined;
   };
 
+  const views = new Map<string, Pick<SavedView, 'id' | 'orgId' | 'query'>>();
+
   return {
     state: stateOf,
     tags: tagsOf,
+    views,
     descriptions,
     comments,
     reminders,
@@ -481,6 +490,40 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
       const items = rows.slice(offset, offset + limit);
       const next = offset + limit < rows.length ? String(offset + limit) : null;
       return structuredClone({ items, nextCursor: next } satisfies TaskPage);
+    },
+    fetchViewTasks: async (viewId, query) => {
+      await wait();
+      const view = views.get(viewId);
+      if (!view) throw new ApiError('not_found', 404);
+      const ctx = {
+        viewerId: userId,
+        due: {
+          today: todayIn(owner.timezone, Date.now()),
+          nowMs: Date.now(),
+          viewerTz: owner.timezone,
+        },
+      };
+      const tasks = Object.values(stateOf(view.orgId).tasks);
+      const items = tasks
+        .filter((t) =>
+          matchesSavedView(t, view.query, { ...ctx, showCompleted: query.completed === 'true' }),
+        )
+        .sort(compareRows);
+      // As the server: the ancestors of matching subtasks come along for breadcrumbs.
+      const state = stateOf(view.orgId);
+      const ids = new Set(items.map((t) => t.id));
+      const parents: Task[] = [];
+      for (const task of items) {
+        for (const parent of ancestorsOf(state, task.id)) {
+          if (ids.has(parent.id)) continue;
+          ids.add(parent.id);
+          parents.push(parent);
+        }
+      }
+      return structuredClone({
+        items: [...items, ...parents],
+        counts: savedViewCounts(tasks, view.query, ctx),
+      } satisfies SavedViewTasks);
     },
     fetchActivity: async (taskId, query) => {
       await wait();

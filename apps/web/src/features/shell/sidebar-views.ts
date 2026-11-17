@@ -8,7 +8,8 @@ import {
   Users,
 } from 'lucide-react';
 import type { Org } from '../../data/types';
-import type { AllViewId, OrgViewId } from './paths';
+import { type ListViewKey, orgViewOf, savedViewIdOf } from '../views/last-view';
+import { type AllViewId, type OrgViewId, savedViewIdOfPath } from './paths';
 
 export interface SidebarViewDefinition {
   id: OrgViewId;
@@ -62,4 +63,21 @@ export const allSidebarViews = sidebarViews.filter(
  */
 export function switchAllView(view: OrgViewId | null): AllViewId {
   return isAllViewId(view) ? view : 'today';
+}
+
+export interface OrgListView {
+  /** A built-in view (My tasks, the smart views, Everyone's tasks), or null. */
+  view: OrgViewId | null;
+  /** A view of the org (ADR 0073 B): its ID, or `'new'` for "+ New view"; else null. */
+  savedViewId: string | null;
+}
+
+/**
+ * What the sidebar marks in an org for `pathname`, given its list view (`listViewOf`: its own,
+ * or the last one under the pane, a view as `v:<id>`): "+ New view" on `/o/<slug>/v/new`,
+ * which shows no list yet, else the built-in view or the view.
+ */
+export function orgListViewOf(pathname: string, listView: ListViewKey | null): OrgListView {
+  if (savedViewIdOfPath(pathname) === 'new') return { view: null, savedViewId: 'new' };
+  return { view: orgViewOf(listView), savedViewId: savedViewIdOf(listView) };
 }

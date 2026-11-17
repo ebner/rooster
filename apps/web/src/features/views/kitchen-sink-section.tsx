@@ -21,6 +21,7 @@ import { TaskRow } from '../list/task-row';
 import { ViewEmptyState } from '../list/view-empty';
 import { BehaviourPage, type BehaviourSettings } from '../settings/behaviour-page';
 import { fixtureIds, fixtureMe } from '../shell/fixtures';
+import { SavedViewsKitchenSpecimens } from '../shell/saved-views-kitchen';
 import { SidebarAllSection } from '../shell/sidebar-all-section';
 import { SidebarItem } from '../shell/sidebar-item';
 import { sidebarViews } from '../shell/sidebar-views';
@@ -182,7 +183,7 @@ function AllOrgsSpecimens() {
   );
 }
 
-/** Kitchen-sink entries for the smart views (Phase 5, WP 5.1). */
+/** Kitchen-sink entries for the smart views (Phase 5, WP 5.1) and the views' shell (Phase 13). */
 export function ViewsKitchenSection() {
   const { t } = useTranslation('views');
   const setup = useMemo(
@@ -299,6 +300,7 @@ export function ViewsKitchenSection() {
             <SidebarSpecimens />
           </Group>
           <AllOrgsSpecimens />
+          <SavedViewsKitchenSpecimens />
         </ListTransportContext.Provider>
       </QueryClientProvider>
     </Section>

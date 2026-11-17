@@ -16,7 +16,9 @@ import {
   useUpdateOrg,
 } from '../../data';
 import { useDeleteTag, useMergeTag, useTags, useUpdateTag } from '../../data/tags';
+import { useArchiveView, useDeleteView, useViews } from '../../data/views';
 import { OrgSettingsPage } from '../../features/org-settings/org-settings-page';
+import { ViewsSection } from '../../features/org-settings/views-section';
 import { ViewBody, ViewHeader } from '../../features/shell/app-shell';
 import { OrgNotFound } from '../../features/shell/org-not-found';
 import { TagsSection } from '../../features/tags/tags-section';
@@ -48,6 +50,10 @@ function OrgSettingsRoute() {
   const mergeTag = useMergeTag(orgId ?? '');
   const deleteTag = useDeleteTag(orgId ?? '');
   const { t: tTags } = useTranslation('tags');
+  const views = useViews(orgId);
+  const archivedViews = useViews(orgId, { archived: true });
+  const archiveView = useArchiveView(orgId ?? '');
+  const deleteView = useDeleteView(orgId ?? '');
 
   if (org.data === null) return <OrgNotFound />;
   if (!org.data || !orgId || !me.data) return null;
@@ -134,6 +140,31 @@ function OrgSettingsRoute() {
                   fail(error);
                 }
               }}
+            />
+          }
+          viewsSection={
+            <ViewsSection
+              org={current}
+              views={views.data ?? []}
+              archived={archivedViews.data ?? []}
+              onArchive={(view) =>
+                archiveView
+                  .mutateAsync({ id: view.id, archived: true })
+                  .then(() => toast({ message: t('org.views.archived', { name: view.name }) }))
+                  .catch(fail)
+              }
+              onRestore={(view) =>
+                archiveView
+                  .mutateAsync({ id: view.id, archived: false })
+                  .then(() => toast({ message: t('org.views.restored', { name: view.name }) }))
+                  .catch(fail)
+              }
+              onDelete={(view) =>
+                deleteView
+                  .mutateAsync(view.id)
+                  .then(() => toast({ message: t('org.views.deleted', { name: view.name }) }))
+                  .catch(fail)
+              }
             />
           }
           onLeaveOrg={async () => {

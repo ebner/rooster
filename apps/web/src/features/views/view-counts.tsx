@@ -1,4 +1,5 @@
 import type { ListState } from '@rooster/core/reducers';
+import type { SavedView, SavedViewMove } from '@rooster/core/schemas';
 import {
   type AllView,
   type AllViewSource,
@@ -10,6 +11,7 @@ import { type QueryObserverResult, useQueries } from '@tanstack/react-query';
 import { createContext, type ReactNode, useCallback, useContext, useMemo } from 'react';
 import { myListKey, useListPipeline, useMyListSelect } from '../../data/list';
 import { useMe } from '../../data/me';
+import { useMoveView, useViews } from '../../data/views';
 import { useViewerDateContext } from '../dates';
 import type { OrgViewId } from '../shell/paths';
 
@@ -107,6 +109,55 @@ export function useAllViewCounts(): AllCounts | undefined {
   return useContext(AllCountsContext)();
 }
 
+/** An org's views for the sidebar and the phone's switcher (ADR 0073 B9, B12). */
+export interface OrgSavedViews {
+  /** The live views in the viewer's own order; undefined until loaded (or outside the app). */
+  views: readonly SavedView[] | undefined;
+  /** Moves a view in the viewer's own order (06 §1 intent). Rejects when it failed. */
+  move: (id: string, intent: SavedViewMove) => Promise<unknown>;
+}
+
+const noSavedViews: OrgSavedViews = { views: undefined, move: async () => undefined };
+
+/**
+ * One org's views (`['views', orgId, 'live']`, refetched on SSE): the query result is shared
+ * structurally, so the sidebar's views part re-renders only when a view (or its count) changes.
+ */
+function useLiveSavedViews(orgId: string): OrgSavedViews {
+  const views = useViews(orgId).data;
+  const { mutateAsync } = useMoveView(orgId);
+  const move = useCallback(
+    (id: string, intent: SavedViewMove) => mutateAsync({ id, intent }),
+    [mutateAsync],
+  );
+  return useMemo(() => ({ views, move }), [views, move]);
+}
+
+/**
+ * How the sidebar and the phone's view switcher get an org's views: none outside the app
+ * (tests, the kitchen sink); `LiveViewCounts` supplies the live hook, fixed while mounted.
+ */
+const SavedViewsContext = createContext<(orgId: string) => OrgSavedViews>(() => noSavedViews);
+
+export function useSavedViewsHook(): (orgId: string) => OrgSavedViews {
+  return useContext(SavedViewsContext);
+}
+
+/** Fixed views per org (the kitchen sink, tests): what `LiveViewCounts` would load. */
+export function FixedSavedViews({
+  views,
+  children,
+}: {
+  views: Partial<Record<string, readonly SavedView[]>>;
+  children: ReactNode;
+}) {
+  const hook = useCallback(
+    (orgId: string): OrgSavedViews => ({ views: views[orgId], move: noSavedViews.move }),
+    [views],
+  );
+  return <SavedViewsContext.Provider value={hook}>{children}</SavedViewsContext.Provider>;
+}
+
 /** Provides live sidebar badges for every org (the signed-in layout). */
 export function LiveViewCounts({ children }: { children: ReactNode }) {
   const viewerId = useMe().data?.user.id;
@@ -119,7 +170,11 @@ export function LiveViewCounts({ children }: { children: ReactNode }) {
   return (
     <CountsClockContext.Provider value={clock}>
       <OrgCountsContext.Provider value={useLiveOrgCounts}>
-        <AllCountsContext.Provider value={useLiveAllCounts}>{children}</AllCountsContext.Provider>
+        <AllCountsContext.Provider value={useLiveAllCounts}>
+          <SavedViewsContext.Provider value={useLiveSavedViews}>
+            {children}
+          </SavedViewsContext.Provider>
+        </AllCountsContext.Provider>
       </OrgCountsContext.Provider>
     </CountsClockContext.Provider>
   );

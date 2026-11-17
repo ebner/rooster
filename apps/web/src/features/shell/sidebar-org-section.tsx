@@ -1,5 +1,6 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import type { SavedView, SavedViewMove } from '@rooster/core/schemas';
 import {
   ArrowDown,
   ArrowUp,
@@ -20,16 +21,27 @@ import { Avatar } from '../../ui/avatar';
 import { iconStrokeWidth } from '../../ui/button';
 import { IconButton } from '../../ui/icon-button';
 import { Menu, MenuItem, MenuPopover, MenuSeparator, MenuTrigger } from '../../ui/menu';
-import { type OrgCounts, useOrgCountsHook } from '../views/view-counts';
+import { type OrgCounts, useOrgCountsHook, useSavedViewsHook } from '../views/view-counts';
 import { type OrgViewId, orgUrlSlug, paths } from './paths';
 import { SidebarItem } from './sidebar-item';
+import { SidebarSavedViews } from './sidebar-saved-views';
 import { type SidebarViewDefinition, viewsFor } from './sidebar-views';
 
 export type { OrgCounts };
 
+const noViews: readonly SavedView[] = [];
+
 export interface SidebarOrgSectionProps {
   org: Org;
   activeView: OrgViewId | null;
+  /** The org's view shown (or under the pane), `'new'` for "+ New view" (ADR 0073 B). */
+  activeSavedViewId?: string | null | undefined;
+  /** Fixed views (kitchen sink, tests); otherwise live from `['views', orgId]`. */
+  savedViews?: readonly SavedView[] | undefined;
+  /** With `savedViews`: where a reorder goes. */
+  onMoveSavedView?: ((id: string, intent: SavedViewMove) => unknown) | undefined;
+  /** Kitchen sink: the first view lifted. */
+  forceViewDragging?: boolean;
   /** Fixed badges (kitchen sink, tests); otherwise live from the org's cached list. */
   counts?: OrgCounts | undefined;
   canMoveUp: boolean;
@@ -50,6 +62,10 @@ export interface SidebarOrgSectionProps {
 export function SidebarOrgSection({
   org,
   activeView,
+  activeSavedViewId = null,
+  savedViews,
+  onMoveSavedView,
+  forceViewDragging = false,
   counts,
   canMoveUp,
   canMoveDown,
@@ -73,6 +89,9 @@ export function SidebarOrgSection({
   const useLiveCounts = useOrgCountsHook();
   const live = useLiveCounts(org.id);
   const shown = counts ?? live;
+  const liveViews = useSavedViewsHook()(org.id);
+  const orgViews = savedViews ?? liveViews.views ?? noViews;
+  const moveView = onMoveSavedView ?? liveViews.move;
   /** 02 §2 / 03 §3.10: counts only where the view has a badge; Overdue in danger. */
   const badge = (view: SidebarViewDefinition) => ({
     count: view.badge ? shown?.[view.id] : undefined,
@@ -111,6 +130,14 @@ export function SidebarOrgSection({
             {...badge(view)}
           />
         ))}
+        <SidebarSavedViews
+          rail
+          orgName={org.name}
+          slug={slug}
+          views={orgViews}
+          activeViewId={activeSavedViewId}
+          onMove={moveView}
+        />
       </section>
     );
   }
@@ -175,6 +202,8 @@ export function SidebarOrgSection({
           {...attributes}
           onKeyDown={listeners?.onKeyDown as KeyboardEventHandler<HTMLButtonElement> | undefined}
           aria-label={t('org.reorder', { name: org.name })}
+          // While lifted, the keys belong to the drag, not to the list's navigate keys.
+          data-overlay={isDragging ? '' : undefined}
           className={cn(
             'flex size-control-sm shrink-0 cursor-grab items-center justify-center rounded-sm text-icon-subtle hover:bg-bg-muted',
             'opacity-0 transition-opacity duration-(--dur-fade) group-hover/header:opacity-100 focus-ring:opacity-100',
@@ -227,19 +256,30 @@ export function SidebarOrgSection({
           </MenuPopover>
         </MenuTrigger>
       </div>
-      <ul id={listId} hidden={collapsed} className="flex flex-col gap-0.5">
-        {views.map((view) => (
-          <li key={view.id}>
-            <SidebarItem
-              icon={view.icon}
-              label={t(`view.${view.id}`)}
-              href={paths.orgView(slug, view.id)}
-              isActive={activeView === view.id}
-              {...badge(view)}
-            />
-          </li>
-        ))}
-      </ul>
+      <div id={listId} hidden={collapsed} className="flex flex-col gap-0.5">
+        <ul className="flex flex-col gap-0.5">
+          {views.map((view) => (
+            <li key={view.id}>
+              <SidebarItem
+                icon={view.icon}
+                label={t(`view.${view.id}`)}
+                href={paths.orgView(slug, view.id)}
+                isActive={activeView === view.id}
+                {...badge(view)}
+              />
+            </li>
+          ))}
+        </ul>
+        {/* A drag context of its own: a view moves among the org's views, never between orgs. */}
+        <SidebarSavedViews
+          orgName={org.name}
+          slug={slug}
+          views={orgViews}
+          activeViewId={activeSavedViewId}
+          onMove={moveView}
+          forceDragging={forceViewDragging}
+        />
+      </div>
     </section>
   );
 }

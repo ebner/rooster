@@ -605,6 +605,11 @@ export interface ListViewCoreProps {
   resetKey: string;
   /** Phase 13: All organisations' orgs by id (row chips). */
   orgs?: ReadonlyMap<string, Org> | undefined;
+  /**
+   * Phase 13 (ADR 0073 B4): a sorted list without a smart view (a view of the org): no drag
+   * to reorder and no groups to add or fold, as in the smart views.
+   */
+  sorted?: boolean | undefined;
 }
 
 /**
@@ -626,6 +631,7 @@ export function ListViewCore({
   canMoveOrg,
   resetKey,
   orgs,
+  sorted = false,
 }: ListViewCoreProps) {
   const { t } = useTranslation('list');
   const pipeline = useListPipeline();
@@ -648,7 +654,7 @@ export function ListViewCore({
       controller,
       dateCtx,
       parseTitles: prefs?.parseTitleDates ?? true,
-      dragEnabled: !view && !everyone,
+      dragEnabled: !view && !everyone && !sorted,
       onOpenTask: (id, focus) => paneRef.current?.open(id, focus ? 'title' : null),
       mobile,
       view,
@@ -656,7 +662,7 @@ export function ListViewCore({
       everyone,
       orgs,
     }),
-    [controller, dateCtx, prefs?.parseTitleDates, mobile, view, shared, everyone, orgs],
+    [controller, dateCtx, prefs?.parseTitleDates, mobile, view, shared, everyone, orgs, sorted],
   );
 
   useEffect(() => {
@@ -923,7 +929,7 @@ export function ListViewCore({
           pane.toggleFullScreen();
         }),
       // The header ⋯ (02 §2): smart views and Everyone's tasks have no groups to add or fold.
-      ...(view || everyone
+      ...(view || everyone || sorted
         ? {}
         : {
             collapseAllGroups: () => controller.setAllCollapsed(true),

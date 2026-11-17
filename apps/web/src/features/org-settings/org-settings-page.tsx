@@ -26,9 +26,11 @@ export interface OrgSettingsPageProps {
   onLeaveOrg: () => Promise<void>;
   /** FR-SET-4 / FR-TAG-3: the Tags section, rendered before the danger zone. */
   tagsSection?: ReactNode;
+  /** Phase 13 (ADR 0073 B10): the Views section, after Tags. */
+  viewsSection?: ReactNode;
 }
 
-/** FR-SET-4: General, Members, Invites (owners of shared orgs), Tags and the danger zone. */
+/** FR-SET-4: General, Members, Invites (owners of shared orgs), Tags, Views and the danger zone. */
 export function OrgSettingsPage({
   org,
   currentUserId,
@@ -45,6 +47,7 @@ export function OrgSettingsPage({
   onDeleteOrg,
   onLeaveOrg,
   tagsSection,
+  viewsSection,
 }: OrgSettingsPageProps) {
   const { t } = useTranslation('settings');
   const isOwner = org.role === 'owner';
@@ -80,6 +83,7 @@ export function OrgSettingsPage({
         )
       )}
       {tagsSection}
+      {viewsSection}
       <DangerZone org={org} isSoleOwner={isSoleOwner} onDelete={onDeleteOrg} onLeave={onLeaveOrg} />
     </div>
   );

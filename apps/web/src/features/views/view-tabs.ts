@@ -1,30 +1,46 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ViewTab } from '../shell/mobile-header';
-import { type AllViewId, type OrgViewId, paths } from '../shell/paths';
+import { type AllViewId, paths } from '../shell/paths';
 import { viewsFor } from '../shell/sidebar-views';
+import { type ListViewKey, savedViewIdOf } from './last-view';
+import { useSavedViewsHook } from './view-counts';
+
+/** A saved view's tab ID (never one of the built-in view IDs). */
+export const savedViewTabId = (viewId: string) => `view-${viewId}`;
 
 /**
  * The phone's view switcher (02 §13.1): My tasks · Today · 7 days · Overdue · No date ·
  * Everyone, in the sidebar's order; Everyone in shared orgs only (FR-COL-6). Labels are the
- * short phone ones (`mobile:views.tab.<id>`).
+ * short phone ones (`mobile:views.tab.<id>`). Then the org's views (ADR 0073 B12), in the
+ * member's own order, under their names. `active` may be a view's `v:<id>` key (`listViewOf`);
+ * `activeSavedViewId` marks one explicitly.
  */
 export function useViewTabs(
-  org: { isPersonal: boolean },
+  org: { id: string; isPersonal: boolean },
   orgSlug: string,
-  active: OrgViewId,
+  active: ListViewKey | null,
+  activeSavedViewId: string | null = savedViewIdOf(active),
 ): ViewTab[] {
   const { t } = useTranslation('mobile');
-  const { isPersonal } = org;
+  const { id: orgId, isPersonal } = org;
+  const savedViews = useSavedViewsHook()(orgId).views;
   return useMemo(
-    () =>
-      viewsFor({ isPersonal }).map((view) => ({
+    () => [
+      ...viewsFor({ isPersonal }).map((view) => ({
         id: view.id,
         label: t(`views.tab.${view.id}`),
         href: paths.orgView(orgSlug, view.id),
-        isActive: view.id === active,
+        isActive: activeSavedViewId === null && view.id === active,
       })),
-    [t, orgSlug, active, isPersonal],
+      ...(savedViews ?? []).map((view) => ({
+        id: savedViewTabId(view.id),
+        label: view.name,
+        href: paths.savedView(orgSlug, view.id),
+        isActive: view.id === activeSavedViewId,
+      })),
+    ],
+    [t, orgSlug, active, activeSavedViewId, isPersonal, savedViews],
   );
 }
 

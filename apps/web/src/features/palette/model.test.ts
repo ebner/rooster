@@ -270,6 +270,20 @@ describe('actions from the registry (04 §5.3)', () => {
     expect(buildActions(actionContext()).some((a) => a.commandId === 'openAdmin')).toBe(false);
   });
 
+  test('Phase 13: "Go to view …" per view after Everyone; "New view" needs an org', () => {
+    const actions = buildActions(
+      actionContext({ views: [{ id: 'v1', label: 'Go to view: Juniper', href: '/o/x/v/v1' }] }),
+    );
+    const ids = actions.map((a) => a.key);
+    const view = actions.find((a) => a.key === 'action:goToView:v1');
+    expect(view).toMatchObject({ commandId: 'goToView', href: '/o/x/v/v1', shortcut: null });
+    expect(ids.indexOf('action:goToView:v1')).toBe(ids.indexOf('action:goEveryone') + 1);
+    expect(actions.some((a) => a.commandId === 'newView')).toBe(true);
+    expect(
+      buildActions(actionContext({ currentOrg: null })).some((a) => a.commandId === 'newView'),
+    ).toBe(false);
+  });
+
   test('unavailable commands and the phone sidebar toggle are hidden', () => {
     const actions = buildActions(actionContext({ isAvailable: () => false, phone: true }));
     expect(actions.some((a) => a.commandId === 'toggleSidebar')).toBe(false);
