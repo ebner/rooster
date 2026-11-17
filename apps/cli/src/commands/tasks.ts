@@ -542,17 +542,35 @@ function completeCommand(completed: boolean) {
 export const doneCommand = completeCommand(true);
 export const undoneCommand = completeCommand(false);
 
-export const mvCommand = defineCommand({
-  meta: () => ({ name: 'mv', description: t('cmd.mv') }),
-  args: () => ({
+const mvArgs = () =>
+  ({
     refs: { type: 'positional', required: true, description: t('arg.refs') },
     group: { type: 'string', valueHint: 'name', description: t('mv.arg.group') },
     top: { type: 'boolean', description: t('mv.arg.top') },
     bottom: { type: 'boolean', description: t('mv.arg.bottom') },
     after: { type: 'string', valueHint: 'ref', description: t('mv.arg.after') },
     before: { type: 'string', valueHint: 'ref', description: t('mv.arg.before') },
-  }),
-  async run({ args }) {
+    'to-org': { type: 'string', valueHint: 'org', description: t('mv.arg.toOrg') },
+  }) as const;
+
+export const mvCommand = defineCommand({
+  meta: () => ({ name: 'mv', description: t('cmd.mv') }),
+  args: mvArgs,
+  async run({ args, rawArgs }) {
+    const given = readOptions(rawArgs, stringOptions(mvArgs()));
+    const toOrg = given.values.get('to-org');
+    if (toOrg !== undefined) {
+      // Checked before anything is read or sent: the target org decides where they land.
+      const conflicting = ['after', 'before'].find((name) => given.values.has(name));
+      const flag = conflicting ?? (given.switches.has('bottom') ? 'bottom' : undefined);
+      if (flag !== undefined) {
+        throw new CliError(EXIT.usage, t('mv.org.position', { flag: `--${flag}` }));
+      }
+      const org = toOrg.at(-1)?.trim() ?? '';
+      if (org === '') throw new CliError(EXIT.usage, t('usage.missingValue', { flag: '--to-org' }));
+      await moveToOrg(needs('tasks:write'), positionals(args), org, str(args.group));
+      return;
+    }
     const runtime = needs('tasks:write');
     const tasks = await resolveRefs(runtime, positionals(args));
     const afterRef = str(args.after);
@@ -605,6 +623,93 @@ export const mvCommand = defineCommand({
     await printTasks(runtime, moved);
   },
 });
+
+/**
+ * `--to-org <org>`: a slug, an id or `personal` as `--org` takes them, else an org's name
+ * (case-insensitive) when exactly one of the user's orgs has it.
+ */
+export async function findTargetOrg(runtime: Runtime, ref: string): Promise<Org> {
+  try {
+    return await runtime.findOrg(ref);
+  } catch (error) {
+    if (!(error instanceof CliError && error.exitCode === EXIT.notFound)) throw error;
+  }
+  const wanted = ref.trim().toLocaleLowerCase();
+  const named = (await runtime.me()).orgs.filter(
+    (o) => o.name.trim().toLocaleLowerCase() === wanted,
+  );
+  if (named.length === 1 && named[0] !== undefined) return named[0];
+  if (named.length > 1) {
+    throw new CliError(
+      EXIT.notFound,
+      t('mv.org.ambiguous', { org: ref, slugs: named.map((o) => clean(o.slug)).join(', ') }),
+    );
+  }
+  throw new CliError(EXIT.notFound, t('org.notFound', { org: ref }));
+}
+
+/** "3 comments and 2 files": what a move would show to new people (ADR 0072 §13). */
+export function sharedContent(preview: { comments: unknown; attachments: unknown }): string {
+  const comments = count(preview.comments) ?? 0;
+  const files = count(preview.attachments) ?? 0;
+  if (comments > 0 && files > 0) return t('mv.org.content.both', { comments, files });
+  if (comments > 0) return t('mv.org.content.comments', { comments });
+  if (files > 0) return t('mv.org.content.files', { files });
+  return t('mv.org.content.other');
+}
+
+/**
+ * `rooster mv <ref…> --to-org <org> [--group <name>]` (ADR 0072 §24): the tasks with their
+ * subtrees go to the top of one of my groups in the target org (default: my first normal
+ * group there). The preview decides whether to ask: other people's comments or files that new
+ * people would see need a yes on a terminal, or `--yes`.
+ */
+async function moveToOrg(
+  runtime: Runtime,
+  refs: readonly string[],
+  orgRef: string,
+  groupName: string | undefined,
+): Promise<void> {
+  const tasks = await resolveRefs(runtime, refs);
+  const sourceOrgId = (tasks[0] as Task).orgId;
+  if (tasks.some((task) => task.orgId !== sourceOrgId)) {
+    throw new CliError(EXIT.usage, t('mv.org.severalOrgs'));
+  }
+  const target = await findTargetOrg(runtime, orgRef);
+  const name = clean(target.name);
+  if (target.id === sourceOrgId) {
+    throw new CliError(EXIT.conflict, t('mv.org.sameOrg', { org: name }), 'same_org');
+  }
+  const group =
+    groupName === undefined ? undefined : await findGroup(runtime, target.id, groupName);
+  const ids = [...new Set(tasks.map((task) => task.id))];
+  const api = await runtime.api();
+  const preview = await unwrap(
+    api.GET('/api/v1/tasks/move-to-org/preview', {
+      params: { query: { ids: ids.join(','), orgId: target.id } },
+    }),
+  );
+  if (preview.exposes === true) {
+    const content = sharedContent(preview);
+    await confirmOrAbort(
+      runtime,
+      t('mv.org.confirm', { content, org: name }),
+      t('mv.org.needYes', { content, org: name }),
+    );
+  }
+  const result = await unwrap(
+    api.POST('/api/v1/tasks/move-to-org', {
+      body: { ids, orgId: target.id, ...(group === undefined ? {} : { groupId: group.id }) },
+    }),
+  );
+  // The move may have created tags there.
+  runtime.forgetTags(target.id);
+  const last = result.tasks.at(-1);
+  if (last !== undefined) rememberLast(runtime, last);
+  if (!runtime.out.json)
+    runtime.out.notice(t('mv.org.done', { count: result.tasks.length, org: name }));
+  await printTasks(runtime, result.tasks, { json: result });
+}
 
 export const rmCommand = defineCommand({
   meta: () => ({ name: 'rm', description: t('cmd.rm') }),

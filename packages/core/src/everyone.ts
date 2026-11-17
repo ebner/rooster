@@ -202,7 +202,7 @@ export function applyOpToTaskList(
     case 'task.bulk':
       return bulkRows(tasks, op.payload, ctx);
     case 'task.moveToOrg':
-      return tasks; // ADR 0072: the core agent implements it
+      return moveRows(tasks, op.payload.ids);
     case 'task.duplicate': {
       const original = tasks.find((t) => t.id === op.entityId);
       if (!original || tasks.some((t) => t.id === op.payload.id)) return tasks;
@@ -297,6 +297,10 @@ export function mergeTaskListResponse(
       const next = (response as { next?: unknown } | undefined)?.next;
       return isTask(next) ? { tasks: putRow(tasks, next, true), refetch: false } : keep;
     }
+    case 'task.moveToOrg':
+      // ADR 0072: counts and orphan rows of the org the tasks left (or arrive in) only the
+      // server knows.
+      return { tasks, refetch: true };
     case 'task.bulk': {
       const results = (response as { results?: { ok: boolean }[] } | undefined)?.results ?? [];
       const rows = op.payload.op === 'assign' || op.payload.op === 'restore';
@@ -458,6 +462,31 @@ function deleteRows(tasks: readonly Task[], ids: readonly string[]): readonly Ta
     }
   }
   return tasks.filter((t) => !gone.has(t.id));
+}
+
+/**
+ * ADR 0072: moved tasks leave the org's rows with the rows below them; the parent of a detached
+ * subtask row loses it from its counters.
+ */
+function moveRows(tasks: readonly Task[], ids: readonly string[]): readonly Task[] {
+  const kept = deleteRows(tasks, ids);
+  if (kept === tasks) return tasks;
+  const keptIds = new Set(kept.map((t) => t.id));
+  let next = kept;
+  for (const task of tasks) {
+    const parentId = task.parentId;
+    if (keptIds.has(task.id) || parentId === null || !keptIds.has(parentId)) continue;
+    const done = task.completedAt === null ? 0 : 1;
+    next = mapRows(next, [parentId], (parent) => ({
+      ...parent,
+      counts: {
+        ...parent.counts,
+        subtasks: Math.max(0, parent.counts.subtasks - 1),
+        subtasksDone: Math.max(0, parent.counts.subtasksDone - done),
+      },
+    }));
+  }
+  return next;
 }
 
 /** Restores recalled rows, with the recalled rows below them. */

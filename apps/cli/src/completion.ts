@@ -67,6 +67,7 @@ export const VALUE_SOURCES: readonly { when: string; words: string }[] = [
   { when: 'flag:--tag', words: 'dyn:tags' },
   { when: 'flag:--remind', words: 'list:15m 1h 1d due' },
   { when: 'flag:--org', words: 'dyn:orgs' },
+  { when: 'flag:--to-org', words: 'dyn:orgs' },
   { when: 'flag:--color', words: 'list:gray red orange amber green teal blue indigo purple pink' },
   {
     when: 'flag:--scope',
@@ -101,6 +102,7 @@ const VALUE_FLAGS = [
   '--group',
   '--tag',
   '--move-to',
+  '--to-org',
   '--after',
   '--before',
   '--color',

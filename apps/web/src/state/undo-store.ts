@@ -5,13 +5,27 @@ import { onSessionDataCleared } from '../data/session-events';
 /** 02 §3.7: the last 50 user operations, session-scoped. */
 export const undoLimit = 50;
 
-/** One user operation (04 §5.2 `undoStore`): its inverse and the ops that redo it. */
+/**
+ * One user operation (04 §5.2 `undoStore`): its inverse and the ops that redo it. Ops are queued
+ * under `orgId`, except a move to another org, which is queued under its `entityId` (the org the
+ * tasks are in when it runs; ADR 0072), so undoing a move queues the move back under the target
+ * org and a detached subtask's re-parent under this one.
+ */
 export interface UndoEntry {
   orgId: string;
   /** Translated, e.g. "Task deleted"; shown in the undo toast. */
   label: string;
   inverseOps: ListOpSpec[];
   redoOps: ListOpSpec[];
+}
+
+/**
+ * ADR 0072: an entry whose ops run in two orgs (a move to another org). Its undo and redo replay
+ * the recorded ops: recomputing them against `orgId`'s list, which no longer (or not yet) holds
+ * the moved tasks, would lose them. Redoing the move sends it again from the source org.
+ */
+export function spansOrgs(entry: UndoEntry): boolean {
+  return [...entry.inverseOps, ...entry.redoOps].some((op) => op.kind === 'task.moveToOrg');
 }
 
 interface UndoStore {

@@ -45,6 +45,8 @@ import {
   useKeymapHandlers,
 } from '../../use-keymap';
 import { useViewerDateContext } from '../dates';
+import { ListMoveOrgHost } from '../move-org/list-host';
+import { openMoveOrg, useCanMoveToOrg } from '../move-org/store';
 import { type PaletteCommands, usePaletteCommands } from '../palette/commands';
 import type { PaneControls } from '../pane/pane-controls';
 import { useEveryoneFilters } from '../people/everyone-filters';
@@ -463,6 +465,8 @@ export function MyListView({
   const mode = useListStore((s) => s.mode);
   const dragging = useListStore((s) => s.dragging !== null);
   const mobile = useIsMobile();
+  // ADR 0072: with a second org, tasks can move there (Everyone's tasks: from the pane only).
+  const canMoveOrg = useCanMoveToOrg() && !everyone;
   const root = useRef<HTMLDivElement>(null);
   const layer = useRef<HTMLDivElement>(null);
   /** Written by `ListRows` on every render: the controller always sees the current rows. */
@@ -734,6 +738,19 @@ export function MyListView({
             .getState()
             .set({ popover: { kind: 'moveTo', rowId: useListStore.getState().cursor ?? '' } });
         }),
+      // ADR 0072: the palette's "Move to organisation…" on the selection.
+      ...(canMoveOrg
+        ? {
+            moveToOrg: () =>
+              withTitle(() => {
+                if (controller.selectedTaskIds().length === 0) return false;
+                // A task the server doesn't have yet (a queued create) can't move (ADR 0072 §21).
+                const ids = controller.movableToOrg(controller.selectedTaskIds());
+                if (ids.length === 0) return;
+                openMoveOrg({ orgId, ids, anchor: ids.length > 1 ? 'bulk' : 'cursor' });
+              }),
+          }
+        : {}),
       deleteNavigate: () => controller.deleteTasks(),
       deleteTask: () => {
         const store = useListStore.getState();
@@ -947,6 +964,13 @@ export function MyListView({
         />
       )}
       {ids.length > 1 && <BulkBar ids={ids} />}
+      <ListMoveOrgHost
+        orgId={orgId}
+        controller={controller}
+        pane={pane}
+        mobile={mobile}
+        rootRef={root}
+      />
       {moveAnchor && (
         <Suspense fallback={null}>
           <LazyMoveToPopover anchor={moveAnchor} ids={controller.selectedTaskIds()} />

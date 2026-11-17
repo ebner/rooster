@@ -159,7 +159,7 @@ Scopes can't say "write only in Prio" (RFC 9396 §1), so each grant also stores 
   | Tool | Scope |
   |---|---|
   | `list_*`, `get_task`, `search_tasks` | `tasks:read` |
-  | `create_task`, `update_task`, `complete_task`, `move_task` | `tasks:write` |
+  | `create_task`, `update_task`, `complete_task`, `move_task`, `move_task_to_org` | `tasks:write` |
   | `update_task` with `assignee` other than me | `tasks:assign` |
   | `create_group` | `groups:write` |
   | `add_comment` | `comments:write` |

@@ -4,6 +4,7 @@ import type { Locale } from '@rooster/i18n/core';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useActivity, usePendingComments } from '../../data/collab';
+import { useMe } from '../../data/me';
 import { Button } from '../../ui/button';
 import { SkeletonRows } from '../../ui/skeleton';
 import type { ViewerDateContext } from '../dates';
@@ -38,6 +39,11 @@ export function PaneActivity({
 }: PaneActivityProps) {
   const { t } = useTranslation('collab');
   const feed = useActivity(taskId);
+  const orgs = useMe().data?.orgs;
+  const orgName = useMemo(() => {
+    const names = new Map((orgs ?? []).map((o) => [o.id, o.name]));
+    return (id: string) => names.get(id);
+  }, [orgs]);
   const pending = usePendingComments(orgId, taskId);
   const entries = useMemo(() => {
     if (!feed.items) return [];
@@ -77,6 +83,7 @@ export function PaneActivity({
           viewerId={viewerId}
           person={person}
           pending={pending}
+          orgName={orgName}
           now={dateCtx.nowMs}
           locale={locale}
           dateCtx={dateCtx}

@@ -55,7 +55,9 @@
       "pat": "via en åtkomsttoken",
       "oauth": "via en app",
       "import": "via import"
-    }
+    },
+    "org_moved": "flyttade hit uppgiften från {org}",
+    "org_moved_unknown": "flyttade hit uppgiften från en annan organisation"
   },
   "dev": {
     "section": "Kommentarer, aktivitet och inkorg",

@@ -6,6 +6,7 @@ import type {
   GroupMove,
   GroupPatch,
   SubtaskReorder,
+  Task,
   TaskComplete,
   TaskCreate,
   TaskMove,
@@ -15,6 +16,7 @@ import type {
 } from '../schemas/list.ts';
 import type { ReminderCreate, ReminderSpecInput } from '../schemas/reminders.ts';
 import type { TagCreate } from '../schemas/tags.ts';
+import type { DeletedTask } from './state.ts';
 
 type Empty = Record<string, never>;
 
@@ -31,6 +33,17 @@ export type TagCreateBody = TagCreate & { id: string };
 export type CommentCreateBody = { id: string; body: string };
 /** P10. POST /tasks/:taskId/reminders with the reminder's client id (ADR 0049 §2.7). */
 export type ReminderCreateBody = ReminderCreate & { id: string };
+
+/**
+ * ADR 0072: the moved subtrees as they were in the org a move takes them back to (undo's move
+ * back). Not sent: that org's list shows them again at once, before the server answers.
+ */
+export interface MovedSubtrees {
+  /** The live tasks: the roots and every live descendant. */
+  tasks: readonly Task[];
+  /** Descendants that were in Trash on this client (they travel too). */
+  deleted: readonly DeletedTask[];
+}
 
 /**
  * One list mutation, before the pipeline stamps it (04 §6.2). Each kind is exactly one HTTP
@@ -55,9 +68,10 @@ export type ListOpSpec =
   /**
    * ADR 0072: POST /tasks/move-to-org. `entityId` is the SOURCE org (the op is queued and
    * applied there: the moved subtrees leave its list); the target org's list is refetched on
-   * confirmation. Undo queues the inverse under the target org.
+   * confirmation. Undo queues the inverse under the target org; its `restore` (not sent) puts
+   * the subtrees back into the original org's list optimistically.
    */
-  | { kind: 'task.moveToOrg'; entityId: string; payload: TaskMoveToOrg }
+  | { kind: 'task.moveToOrg'; entityId: string; payload: TaskMoveToOrg; restore?: MovedSubtrees }
   | { kind: 'task.expanded'; entityId: string; payload: { expanded: boolean } }
   | { kind: 'task.addTag'; entityId: string; payload: { tagId: string } }
   | { kind: 'task.removeTag'; entityId: string; payload: { tagId: string } }
@@ -177,11 +191,19 @@ export const listOps = {
     entityId: id,
     payload,
   }),
-  /** ADR 0072: `sourceOrgId` is the org the tasks are in now (the op's `entityId`). */
-  moveTasksToOrg: (sourceOrgId: string, payload: TaskMoveToOrg): ListOpSpec => ({
+  /**
+   * ADR 0072: `sourceOrgId` is the org the tasks are in now (the op's `entityId`); `restore`
+   * (undo's move back) is what the target org's list shows until the server answers.
+   */
+  moveTasksToOrg: (
+    sourceOrgId: string,
+    payload: TaskMoveToOrg,
+    restore?: MovedSubtrees,
+  ): ListOpSpec => ({
     kind: 'task.moveToOrg',
     entityId: sourceOrgId,
     payload,
+    ...(restore === undefined ? {} : { restore }),
   }),
   duplicateTask: (id: string, copyId: string, includeSubtasks = true): ListOpSpec => ({
     kind: 'task.duplicate',

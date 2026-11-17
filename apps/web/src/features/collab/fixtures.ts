@@ -238,3 +238,48 @@ export function fixtureNotifications(now: number): Notification[] {
     },
   ];
 }
+
+/**
+ * ADR 0072 §16: `org_moved` lines, kept apart from `fixtureFeed` (tests count its entries): one
+ * from an org the viewer belongs to (named), one from an org they don't (not named).
+ */
+export function fixtureOrgMoved(now: number): ActivityItem[] {
+  const base = { taskId: fixtureTaskId, via: 'web' as const, type: 'org_moved' as const };
+  return [
+    {
+      kind: 'activity',
+      activity: {
+        ...base,
+        id: id(70),
+        actorId: fixtureIds.anna,
+        data: { fromOrgId: fixtureIds.personalOrg, toOrgId: fixtureIds.companyOrg },
+        createdAt: now - 90 * minute,
+      },
+    },
+    {
+      kind: 'activity',
+      activity: {
+        ...base,
+        id: id(71),
+        actorId: fixtureIds.markus,
+        data: { fromOrgId: id(799), toOrgId: fixtureIds.companyOrg },
+        createdAt: now - 30 * minute,
+      },
+    },
+  ];
+}
+
+/** ADR 0072 §15: a task went to an org the viewer isn't in; no task, the title in the snapshot. */
+export function fixtureMovedAway(now: number): Notification {
+  return {
+    id: id(72),
+    orgId: fixtureIds.companyOrg,
+    orgSlug: 'brightwater',
+    type: 'moved_away',
+    task: null,
+    actor: { id: fixtureIds.anna, name: 'Anna Lindqvist', image: null },
+    data: { taskTitle: 'Call the bank' },
+    readAt: null,
+    createdAt: now - 5 * minute,
+  };
+}

@@ -1,15 +1,20 @@
 import { compareRows, isRow } from '@rooster/core/everyone';
 import { uuidv7 } from '@rooster/core/ids';
 import { DEFAULT_PREFS } from '@rooster/core/limits';
-import { generateNKeysBetween } from '@rooster/core/ordering';
+import { generateKeyBetween, generateNKeysBetween } from '@rooster/core/ordering';
 import { normalizeRule } from '@rooster/core/recurrence';
 import {
   ancestorsOf,
   applyOp,
   childrenOf,
+  type DeletedTask,
   depthOf,
   descendantIds,
+  inboxOf,
+  keysForIntent,
+  type ListOp,
   type ListState,
+  movedSet,
   normalGroups,
   normalizeMyList,
   SUBTASK_DEPTH_MAX,
@@ -27,6 +32,7 @@ import type {
   Tag,
   Task,
   TaskDetail,
+  TaskMoveToOrgResult,
   TaskPage,
 } from '@rooster/core/schemas';
 import { type TagColor, tagColorNames } from '@rooster/tokens';
@@ -303,6 +309,88 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
     return Object.values(state.tasks).filter((t) => included.has(t.id));
   };
 
+  /** ADR 0072 §7: the number a task had in an org, by `orgId:taskId`. */
+  const formerSeq = new Map<string, number>();
+
+  /**
+   * ADR 0072, as the server moves tasks (simplified: one membership, tags matched by name, the
+   * roots become the fixture user's at the top of the group or at the intent).
+   */
+  const moveToOrg = (
+    op: Extract<ListOp, { kind: 'task.moveToOrg' }>,
+    orgId: string,
+  ): TaskMoveToOrgResult => {
+    const target = op.payload.orgId;
+    if (target === orgId) throw new ApiError('same_org', 422);
+    const source = stateOf(orgId);
+    for (const id of op.payload.ids) {
+      if (source.deletedTasks[id]) throw new ApiError('conflict_deleted', 410);
+      if (!source.tasks[id]) throw new ApiError('not_found', 404);
+    }
+    const dest = stateOf(target);
+    const groupId = op.payload.groupId ?? normalGroups(dest)[0]?.id ?? inboxOf(dest)?.id;
+    if (!groupId || !dest.groups[groupId]) throw new ApiError('not_found', 404);
+    const moved = movedSet(source, op.payload.ids);
+    const siblings = tasksInGroup(dest, groupId).map((t) => ({
+      id: t.id,
+      position: t.placement?.position ?? '',
+    }));
+    const n = moved.roots.length;
+    const intent = op.payload.afterId != null || op.payload.beforeId != null;
+    const keys = intent
+      ? keysForIntent(siblings, op.payload, n)
+      : n === 1
+        ? [generateKeyBetween(null, siblings[0]?.position ?? null)]
+        : generateNKeysBetween(null, siblings[0]?.position ?? null, n);
+    const tagNames = new Map(tagsOf(orgId).map((t) => [t.id, t.name]));
+    const rehome = (task: Task): Task => {
+      formerSeq.set(`${orgId}:${task.id}`, task.seq ?? 0);
+      let number = formerSeq.get(`${target}:${task.id}`);
+      if (number === undefined) {
+        seq += 1;
+        number = seq;
+      }
+      return {
+        ...task,
+        orgId: target,
+        seq: number,
+        tagIds: task.tagIds.flatMap((id) => {
+          const name = tagNames.get(id);
+          return name === undefined ? [] : [tagNamed(target, name).id];
+        }),
+      };
+    };
+    const tasks = { ...dest.tasks };
+    const roots: Task[] = [];
+    moved.roots.forEach((root, i) => {
+      const task: Task = {
+        ...rehome(root),
+        parentId: null,
+        subtaskPosition: null,
+        assigneeId: userId,
+        placement: { groupId, position: keys[i] as string },
+        updatedAt: op.editTime,
+      };
+      tasks[task.id] = task;
+      roots.push(task);
+    });
+    for (const id of moved.live) {
+      if (!tasks[id]) tasks[id] = { ...rehome(source.tasks[id] as Task), placement: null };
+    }
+    const deletedTasks = { ...dest.deletedTasks };
+    for (const id of moved.deleted) {
+      const entry = source.deletedTasks[id] as DeletedTask;
+      deletedTasks[id] = { ...entry, task: rehome(entry.task) };
+    }
+    orgs.set(target, { ...dest, tasks, deletedTasks });
+    orgs.set(orgId, applyOp(source, op, { userId, now: op.editTime, timezone: owner.timezone }));
+    return {
+      orgId: target,
+      tasks: structuredClone(roots),
+      movedIds: [...moved.live, ...moved.deleted],
+    };
+  };
+
   const commentOf = (id: string) => {
     const comment = comments.get(id);
     if (!comment) throw new ApiError('not_found', 404);
@@ -441,6 +529,7 @@ export function createFixtureTransport(options: FixtureOptions): ListTransport &
         failure = null;
         throw error;
       }
+      if (op.kind === 'task.moveToOrg') return moveToOrg(op, orgId);
       let before = stateOf(orgId);
       if (op.kind === 'task.create' && op.payload.parentId) {
         checkParent(before, null, op.payload.parentId);

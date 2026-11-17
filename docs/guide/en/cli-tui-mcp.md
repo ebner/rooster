@@ -40,6 +40,7 @@ rooster add "Water the plants every mon"                # a repeating task
 rooster add "Plan the offsite" --due "next week" --repeat "every month"
 rooster done 42 57                # complete tasks 42 and 57
 rooster mv 42 --group Prio --bottom
+rooster mv 42 --to-org acme --group Prio   # to another organisation (asks first if it would share others' comments or files)
 rooster show 42                   # description, subtasks, tags, reminders, attachments, comments
 rooster edit 42 --editor          # write the description in $EDITOR
 rooster tag 42 +urgent -later
@@ -61,7 +62,7 @@ rooster open 42                   # open the task in the browser
 | You type | Means |
 |---|---|
 | `42` | Task 42 in the current organisation (the number in every listing) |
-| `personal#42` | Task 42 in another organisation |
+| `personal#42` | Task 42 in another organisation (a task moved to another organisation still answers to its old reference) |
 | `0192f3a0` | A task ID, or the first 8 or more characters of one |
 | `@last` | The task you last added or showed |
 | `-` | Read the references from standard input, one per line |
@@ -91,7 +92,7 @@ Run `rooster` with no arguments in a terminal to open a full-screen, keyboard-on
 | `n` / `N` | New task below / above |
 | `x` | Complete or reopen |
 | `d` | Date, repeat or reminder: `fri 14:00`, `every mon`, `!1h`, or `none` |
-| `t` · `m` · `s` | Tags · move to a group · add a subtask |
+| `t` · `m` · `s` | Tags · move to a group, or to another organisation (the picker's last entry) · add a subtask |
 | `o` / `e` | Open the details / edit the description in `$EDITOR` |
 | `J` `K` · `]` `[` | Move the task down, up · to the next or previous group |
 | `Delete` | Delete the task (with undo) |

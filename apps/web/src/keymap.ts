@@ -218,6 +218,8 @@ export const keymap = {
 
   // Palette-only commands (no keys; the palette registers their handlers).
   makeSubtaskOf: { keys: [], scope: 'palette', section: 'editing', palette: 'task' },
+  // ADR 0072: the list and the pane open the move-to-organisation picker on the task.
+  moveToOrg: { keys: [], scope: 'palette', section: 'moving', palette: 'task' },
   openTrash: { keys: [], scope: 'palette', section: 'general', palette: 'navigation' },
   exportData: { keys: [], scope: 'palette', section: 'general', palette: 'navigation' },
   openOrgSettings: { keys: [], scope: 'palette', section: 'general', palette: 'navigation' },

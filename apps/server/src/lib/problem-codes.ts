@@ -121,6 +121,7 @@ export const PROBLEM_CODES = {
     detail: 'Type the organisation name exactly to delete it.',
   },
   not_recurring: { status: 422, detail: 'The task does not repeat.' },
+  same_org: { status: 422, detail: 'The tasks are already in that organisation.' },
   reminder_needs_due: {
     status: 422,
     detail: 'A reminder before the due date needs a due date.',

@@ -18,5 +18,5 @@ export {
 export { invitation, inviteLink, member, organization, orgMemberPref } from './org.ts';
 export { attachment, blobGc, icalFeed, taskReminder } from './p10.ts';
 export { tag, taskTag } from './tag.ts';
-export { placement, task, taskExpansion } from './task.ts';
+export { placement, task, taskExpansion, taskFormerSeq } from './task.ts';
 export { taskGroup } from './task-group.ts';

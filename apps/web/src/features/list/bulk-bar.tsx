@@ -1,4 +1,13 @@
-import { Calendar, CheckCircle2, FolderInput, Hash, Trash2, UserRound, X } from 'lucide-react';
+import {
+  Building2,
+  Calendar,
+  CheckCircle2,
+  FolderInput,
+  Hash,
+  Trash2,
+  UserRound,
+  X,
+} from 'lucide-react';
 import { Suspense, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { primaryKeys } from '../../keymap';
@@ -8,13 +17,15 @@ import { Button } from '../../ui/button';
 import { IconButton } from '../../ui/icon-button';
 import { type DueValue, noDue, sameDue } from '../dates';
 import { LazyDatePopover } from '../dates/lazy';
+import { openMoveOrg, useCanMoveToOrg } from '../move-org/store';
 import { LazyMoveToPopover } from './lazy';
 import { useListContext } from './list-context';
 
 /**
  * 03 §3.11 / 02 §3.3: with ≥ 2 tasks selected, a floating bar at the bottom centre:
  * "3 selected · Complete · Date · Move to · Tag · Assign · Delete · ✕". Assign shows in shared
- * orgs only (FR-COL-6); Everyone's tasks has no Move to (no groups of mine there).
+ * orgs only (FR-COL-6); Everyone's tasks has no Move to (no groups of mine there). With a
+ * second org, "Organisation…" moves the tasks there (ADR 0072 §22).
  */
 export function BulkBar({
   ids,
@@ -29,6 +40,7 @@ export function BulkBar({
   const dateRef = useRef<HTMLButtonElement>(null);
   const moveRef = useRef<HTMLButtonElement>(null);
   const [dateOpen, setDateOpen] = useState(false);
+  const canMoveOrg = useCanMoveToOrg() && !everyone;
   const moveOpen = useListUi((s) => s.popover?.kind === 'moveTo' && s.popover.rowId === 'bulk');
 
   const state = controller.state();
@@ -91,6 +103,24 @@ export function BulkBar({
           }}
         >
           <span className="max-tablet:sr-only">{t('bulk.moveTo')}</span>
+        </Button>
+      )}
+      {canMoveOrg && (
+        <Button
+          data-bulk-move-org
+          variant="ghost-inverse"
+          size="sm"
+          icon={Building2}
+          aria-label={t('moveToOrg.action')}
+          onPress={() => {
+            // A task the server doesn't have yet can't move (ADR 0072 §21).
+            const movable = controller.movableToOrg(ids);
+            if (movable.length > 0) {
+              openMoveOrg({ orgId: controller.orgId, ids: movable, anchor: 'bulk' });
+            }
+          }}
+        >
+          <span className="max-tablet:sr-only">{t('bulk.moveToOrg')}</span>
         </Button>
       )}
       <Button

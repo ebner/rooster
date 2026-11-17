@@ -250,6 +250,49 @@ export function subtaskKeyed(tasks: readonly Task[]): Keyed[] {
   return tasks.map((t) => ({ id: t.id, position: t.subtaskPosition ?? '' }));
 }
 
+/** ADR 0072: what moving tasks to another org takes out of a list state. */
+export interface MovedSet {
+  /**
+   * The moved roots, in the order of the listed ids: listed tasks without a listed ancestor (a
+   * listed task below another listed one travels with it).
+   */
+  roots: Task[];
+  /** Every moved live task: each root, then its descendants. */
+  live: Set<string>;
+  /** Locally soft-deleted descendants (`deletedTasks`): they travel too (ADR 0072 §2). */
+  deleted: Set<string>;
+}
+
+/** The subtrees a move of `ids` takes (ids the state does not have are left out). */
+export function movedSet(state: ListState, ids: readonly string[]): MovedSet {
+  const listed = new Set(ids.filter((id) => state.tasks[id]));
+  const roots: Task[] = [];
+  for (const id of listed) {
+    if (ancestorsOf(state, id).some((a) => listed.has(a.id))) continue;
+    roots.push(state.tasks[id] as Task);
+  }
+  const index = childrenIndex(Object.values(state.tasks));
+  const live = new Set<string>();
+  const walk = (id: string) => {
+    if (live.has(id)) return;
+    live.add(id);
+    for (const child of index.get(id) ?? []) walk(child.id);
+  };
+  for (const root of roots) walk(root.id);
+  const deleted = new Set<string>();
+  const goes = (id: string | null | undefined) =>
+    id !== null && id !== undefined && (live.has(id) || deleted.has(id));
+  for (let grew = live.size > 0; grew; ) {
+    grew = false;
+    for (const [id, entry] of Object.entries(state.deletedTasks)) {
+      if (deleted.has(id) || !(goes(entry.task.parentId) || goes(entry.withTaskId))) continue;
+      deleted.add(id);
+      grew = true;
+    }
+  }
+  return { roots, live, deleted };
+}
+
 export function withTask(state: ListState, task: Task): ListState {
   return { ...state, tasks: { ...state.tasks, [task.id]: task } };
 }

@@ -42,7 +42,25 @@ export const SPLIT_MIN_COLUMNS = 120;
 export const MIN_COLUMNS = 30;
 export const MIN_ROWS = 8;
 /** Modes that type into the list (title, draft, pickers); they show over narrow details. */
-const EDITING: ReadonlySet<Mode['kind']> = new Set(['edit', 'draft', 'date', 'tag', 'group']);
+const EDITING: ReadonlySet<Mode['kind']> = new Set([
+  'edit',
+  'draft',
+  'date',
+  'tag',
+  'group',
+  'org',
+  'orgGroup',
+  'orgConfirm',
+]);
+/** Modes shown as rows under the selected task. */
+const PICKERS: ReadonlySet<Mode['kind']> = new Set([
+  'date',
+  'tag',
+  'group',
+  'org',
+  'orgGroup',
+  'orgConfirm',
+]);
 /** Rows of a picker's option list. */
 const PICKER_ROWS = 8;
 
@@ -377,24 +395,41 @@ function pickerRows(ctx: Ctx, width: number, depth: number): string[] {
         seg(when, muted),
       ]);
     });
-  } else if (mode.kind === 'tag' || mode.kind === 'group') {
-    const options = controller.pickerOptions(mode);
+  } else if (mode.kind === 'orgConfirm') {
+    rows.push([seg(t('picker.confirmOrg', { org: clean(mode.org.name) }), styles.heading)]);
+    rows.push([seg(controller.shareNotice(mode), styles.warning)]);
     rows.push([
-      seg(`${t(mode.kind === 'tag' ? 'picker.tag' : 'picker.group')} `, styles.heading),
-      ...caret(mode.input),
+      seg('y ', accent),
+      seg(t('hint.moveAnyway')),
+      seg('   n ', accent),
+      seg(t('hint.cancel')),
     ]);
+  } else if (
+    mode.kind === 'tag' ||
+    mode.kind === 'group' ||
+    mode.kind === 'org' ||
+    mode.kind === 'orgGroup'
+  ) {
+    const options = controller.pickerOptions(mode);
+    const title =
+      mode.kind === 'orgGroup'
+        ? t('picker.orgGroup', { org: clean(mode.org.name) })
+        : t(`picker.${mode.kind}`);
+    rows.push([seg(`${title} `, styles.heading), ...caret(mode.input)]);
     const choice = Math.min(mode.choice, options.length - 1);
     const from = Math.max(0, Math.min(choice - PICKER_ROWS + 1, options.length - PICKER_ROWS));
     options.slice(from, from + PICKER_ROWS).forEach((option: PickerOption, offset) => {
       const i = from + offset;
       const chosen = i === choice;
       const label: Seg[] =
-        option.id === null
-          ? [seg(t('picker.createTag', { name: option.label }), styles.success)]
-          : mode.kind === 'tag'
-            ? [seg(`#${option.label}`, option.color === null ? {} : tagStyle(option.color))]
-            : [seg(option.label)];
-      const number = mode.kind === 'group' && i < 9 && mode.input.value === '' ? `${i + 1} ` : '';
+        option.action === 'otherOrg'
+          ? [seg(option.label, muted)]
+          : option.id === null
+            ? [seg(t('picker.createTag', { name: option.label }), styles.success)]
+            : mode.kind === 'tag'
+              ? [seg(`#${option.label}`, option.color === null ? {} : tagStyle(option.color))]
+              : [seg(option.label)];
+      const number = mode.kind !== 'tag' && i < 9 && mode.input.value === '' ? `${i + 1} ` : '';
       rows.push([
         seg(chosen ? '› ' : '  ', accent),
         seg(number, muted),
@@ -402,7 +437,11 @@ function pickerRows(ctx: Ctx, width: number, depth: number): string[] {
         ...label,
       ]);
     });
-    if (options.length === 0) rows.push([seg(`  ${t('picker.none')}`, muted)]);
+    if (mode.kind === 'orgGroup' && mode.error !== null) {
+      rows.push([seg(`  ${mode.error}`, styles.danger)]);
+    } else if (mode.kind === 'orgGroup' && mode.groups === null) {
+      rows.push([seg(`  ${t('loading')}`, muted)]);
+    } else if (options.length === 0) rows.push([seg(`  ${t('picker.none')}`, muted)]);
   }
   return rows.map((segs) => fit([pad, frame, ...segs], width, level));
 }
@@ -474,7 +513,7 @@ function listBody(ctx: Ctx, width: number, height: number): { lines: string[]; t
         : headerRow(line, selected, ctx, width),
     );
     if (selected) {
-      if (mode.kind === 'date' || mode.kind === 'tag' || mode.kind === 'group') {
+      if (PICKERS.has(mode.kind)) {
         rows.push(...pickerRows(ctx, width, line.kind === 'task' ? line.depth : 0));
       }
       focusEnd = rows.length - 1;
@@ -825,9 +864,16 @@ function footer(ctx: Ctx): string {
         ['Enter', t(mode.kind === 'draft' ? 'hint.addNext' : 'hint.save')],
         ['Esc', t('hint.done')],
       ]);
+    case 'orgConfirm':
+      return hints(ctx, [
+        ['y', t('hint.moveAnyway')],
+        ['n/Esc', t('hint.cancel')],
+      ]);
     case 'date':
     case 'tag':
     case 'group':
+    case 'org':
+    case 'orgGroup':
       return hints(ctx, [
         ['↑↓', t('hint.choose')],
         ['Enter', t(mode.kind === 'tag' ? 'hint.toggle' : 'hint.apply')],

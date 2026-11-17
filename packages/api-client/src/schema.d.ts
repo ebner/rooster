@@ -976,6 +976,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/move-to-org": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move tasks with their subtasks to another organisation I am a member of
+         * @description Moves every listed task with its whole subtree (subtasks in Trash too) from their org (all `ids` must be in one org, else `422 validation_failed`) to `orgId` (`422 same_org` when it is theirs). A listed subtask whose ancestor is not listed detaches and arrives top-level. Each moved task gets the target org’s next number, or the number it had there before; its old number keeps resolving (`GET /tasks/resolve`). The roots become mine and land consecutively, in request order, at the top of `groupId` or at the `afterId`/`beforeId` intent (without `groupId`: the intent’s anchor task’s group in my list there, else my first group after the Inbox); a subtask keeps its assignee when they are a member of the target org, else takes its parent’s. Tags are matched by name in the target org and created when missing. Comments, activity, attachments and my reminders travel; followers, reminders, expansions and notifications of people outside the target org are removed, and the assignee and followers who lose the task get a `moved_away` notification. A grant needs `tasks:write` on every moved task and on the landing group, and org-wide write in the target when a tag must be created (`403`). Clients should call the preview first and confirm when it says `exposes`.
+         */
+        post: operations["moveTasksToOrg"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/move-to-org/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What moving tasks to another organisation would do (no side effects)
+         * @description The same checks as the move (`404`, `410 conflict_deleted`, `422 same_org`, `422 validation_failed`, `403`), then counts: the roots and their descendants, the live comments and attachments on them by people other than me, the tag names the target org lacks, and how many assignees change. `exposes` is true when other people’s comments or files would become visible to a target member who is not in the source org: clients confirm before moving.
+         */
+        get: operations["previewMoveTasksToOrg"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/bulk": {
         parameters: {
             query?: never;
@@ -3592,6 +3632,106 @@ export interface components {
             at: number;
         };
         /**
+         * @example {
+         *       "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *       "tasks": [
+         *         {
+         *           "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *           "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "seq": 58,
+         *           "parentId": null,
+         *           "subtaskPosition": null,
+         *           "title": "Pay invoice",
+         *           "hasDescription": true,
+         *           "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "dueDate": "2026-10-10",
+         *           "dueTime": null,
+         *           "dueTz": null,
+         *           "startDate": null,
+         *           "completedAt": null,
+         *           "tagIds": [
+         *             "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *           ],
+         *           "counts": {
+         *             "subtasks": 1,
+         *             "subtasksDone": 0,
+         *             "comments": 2,
+         *             "attachments": 0
+         *           },
+         *           "placement": {
+         *             "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *             "position": "a1V"
+         *           },
+         *           "createdAt": 1791532800000,
+         *           "updatedAt": 1791532800000
+         *         }
+         *       ],
+         *       "movedIds": [
+         *         "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *         "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c03"
+         *       ]
+         *     }
+         */
+        TaskMoveToOrgResult: {
+            /** @description The target org. */
+            orgId: string;
+            /** @description The moved roots in the target org, in request order, as I see them there. */
+            tasks: components["schemas"]["Task"][];
+            /** @description Every task that moved: the roots and all their descendants (live and in Trash). */
+            movedIds: string[];
+        };
+        /**
+         * @example {
+         *       "ids": [
+         *         "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01"
+         *       ],
+         *       "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *       "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02"
+         *     }
+         */
+        TaskMoveToOrg: {
+            /** @description Ordering intent: the item that will be directly ABOVE (lower position). Null or absent with `beforeId` set means the top; both absent means the end. */
+            afterId?: string | null;
+            /** @description Ordering intent: the item that will be directly BELOW (higher position). */
+            beforeId?: string | null;
+            /** @description Up to 200 tasks, all in one org. A task whose ancestor is also listed travels with the ancestor; every subtree moves whole (subtasks in Trash too). */
+            ids: string[];
+            /** @description The target org (ID). I must be a member; it must not be the tasks’ org (`422 same_org`). */
+            orgId: string;
+            /** @description One of my groups in the target org. Absent or null: with `afterId`/`beforeId`, the group of that task in my list there (`422 validation_failed` when it is not in my list there); without them, my first group after the Inbox. */
+            groupId?: string | null;
+        };
+        /**
+         * @example {
+         *       "tasks": 1,
+         *       "subtasks": 1,
+         *       "comments": 3,
+         *       "attachments": 2,
+         *       "exposes": true,
+         *       "newTags": [
+         *         "finance"
+         *       ],
+         *       "reassigned": 1
+         *     }
+         */
+        TaskMoveToOrgPreview: {
+            /** @description Roots that would move. */
+            tasks: number;
+            /** @description Their descendants, live and in Trash. */
+            subtasks: number;
+            /** @description Live comments on the moved tasks written by someone other than me. */
+            comments: number;
+            /** @description Live attachments on the moved tasks uploaded by someone other than me. */
+            attachments: number;
+            /** @description True when `comments + attachments > 0` and the target org has a member who is not in the source org: confirm before moving. */
+            exposes: boolean;
+            /** @description Tag names missing in the target org; the move creates them. */
+            newTags: string[];
+            /** @description Tasks whose assignee would change. */
+            reassigned: number;
+        };
+        /**
          * @description One result per ID, in request order. A failed task carries the problem `code` it would have got on its own (e.g. `not_found`).
          * @example {
          *       "results": [
@@ -4441,6 +4581,19 @@ export interface components {
                 attachmentId: string;
                 filename: string;
             };
+        } | {
+            id: string;
+            taskId: string;
+            actorId: string | null;
+            /** @enum {string} */
+            via: "web" | "pwa" | "cli" | "tui" | "mcp" | "pat" | "oauth" | "import" | "system";
+            createdAt: number;
+            /** @enum {string} */
+            type: "org_moved";
+            data: {
+                fromOrgId: string;
+                toOrgId: string;
+            };
         };
         /**
          * @example {
@@ -4537,7 +4690,7 @@ export interface components {
             orgId: string;
             orgSlug: string;
             /** @enum {string} */
-            type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted" | "reminder" | "device_connected";
+            type: "assigned" | "comment" | "mention" | "completed" | "due_changed" | "invite_accepted" | "reminder" | "device_connected" | "moved_away";
             task: {
                 id: string;
                 seq: number | null;
@@ -4567,6 +4720,7 @@ export interface components {
                 clientName?: string;
                 clientHost?: string;
                 ip?: string;
+                taskTitle?: string;
             };
             readAt: number | null;
             createdAt: number;
@@ -10339,6 +10493,205 @@ export interface operations {
                 };
             };
             /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    moveTasksToOrg: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a mutation safe to retry: a replay with the same key within 7 days returns the original status and body (with `Idempotent-Replayed: true`) without running it again. The same key on a different request is `422 idempotency_key_reuse`. 1–128 characters of `[A-Za-z0-9_-]`; a UUID is a good choice.
+                 * @example 0199c5a2-7d3e-7b41-9a0c-3f5e8d2b1a60
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description When the user made the edit (ms epoch), for per-field last-write-wins: a field older than the stored edit is skipped and listed in `ignoredFields`. Defaults to the server’s clock; clamped to [now − 30 days, now + 5 s]. Offline clients send the original edit time when they replay.
+                 * @example 1767225600000
+                 */
+                "X-Rooster-Edit-Time"?: components["parameters"]["EditTime"];
+                /**
+                 * @description Identifies one client instance (a browser tab or a process); echoed as `origin` in the `invalidate` events this request causes, so the client can skip refetching its own change. 1–64 characters of `[A-Za-z0-9_-]`.
+                 * @example tab-0199c5a2
+                 */
+                "X-Rooster-Client-Id"?: components["parameters"]["ClientId"];
+                /**
+                 * @description The kind of client and its version, recorded as `via` in activity entries: `web`, `pwa`, `cli`, `tui` or `mcp`, optionally followed by `/<version>`.
+                 * @example cli/1.2.0
+                 */
+                "X-Rooster-Client"?: components["parameters"]["Client"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskMoveToOrg"];
+            };
+        };
+        responses: {
+            /** @description The moved tasks */
+            200: {
+                headers: {
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskMoveToOrgResult"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request body is too large (1 MB). Codes: `payload_too_large`. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not JSON. Codes: `unsupported_media_type`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `same_org`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited; retry after the Retry-After header. Codes: `rate_limited`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    previewMoveTasksToOrg: {
+        parameters: {
+            query: {
+                /** @description Comma-separated task IDs (1–200), all in one org, as for the move. */
+                ids: string;
+                /** @description The target org (ID). */
+                orgId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The preview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskMoveToOrgPreview"];
+                };
+            };
+            /** @description Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found, or not a member (existence is never revealed). Codes: `not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation failed; `errors` lists the fields. Codes: `validation_failed`, `same_org`. */
             422: {
                 headers: {
                     [name: string]: unknown;

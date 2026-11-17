@@ -3,12 +3,13 @@ import {
   pageQuerySchema,
   reminderCreateSchema,
   reminderSchema,
+  taskMoveToOrgPreviewQuerySchema,
   taskQuerySchema,
   taskSkipResultSchema,
   taskSkipSchema,
 } from '@rooster/core/schemas';
 import type { AppEnv } from '../lib/context.ts';
-import { named } from '../lib/openapi.ts';
+import { describe, named } from '../lib/openapi.ts';
 import type { Services } from '../services/index.ts';
 import {
   AUTHED,
@@ -33,6 +34,9 @@ import {
   TaskDuplicateSchema,
   TaskMoveResultSchema,
   TaskMoveSchema,
+  TaskMoveToOrgPreviewSchema,
+  TaskMoveToOrgResultSchema,
+  TaskMoveToOrgSchema,
   TaskPageSchema,
   TaskPatchResultSchema,
   TaskPatchSchema,
@@ -198,6 +202,42 @@ const bulk = createRoute({
     'Each task succeeds or fails on its own, with the result it would get from the single-task route; a task I cannot see is `{ok: false, code: "not_found"}`. The whole request is `200` unless the body is invalid.',
   request: { body: body(BulkOpSchema) },
   responses: { 200: json(BulkResultSchema, 'Per-task results'), ...problems(...AUTHED) },
+});
+
+// ADR 0072: moving tasks (with their subtrees) to another org.
+const moveToOrgPreviewQuery = describe(taskMoveToOrgPreviewQuerySchema, {
+  ids: 'Comma-separated task IDs (1–200), all in one org, as for the move.',
+  orgId: 'The target org (ID).',
+});
+
+const moveToOrg = createRoute({
+  method: 'post',
+  path: '/api/v1/tasks/move-to-org',
+  tags,
+  operationId: 'moveTasksToOrg',
+  summary: 'Move tasks with their subtasks to another organisation I am a member of',
+  description:
+    'Moves every listed task with its whole subtree (subtasks in Trash too) from their org (all `ids` must be in one org, else `422 validation_failed`) to `orgId` (`422 same_org` when it is theirs). A listed subtask whose ancestor is not listed detaches and arrives top-level. Each moved task gets the target org’s next number, or the number it had there before; its old number keeps resolving (`GET /tasks/resolve`). The roots become mine and land consecutively, in request order, at the top of `groupId` or at the `afterId`/`beforeId` intent (without `groupId`: the intent’s anchor task’s group in my list there, else my first group after the Inbox); a subtask keeps its assignee when they are a member of the target org, else takes its parent’s. Tags are matched by name in the target org and created when missing. Comments, activity, attachments and my reminders travel; followers, reminders, expansions and notifications of people outside the target org are removed, and the assignee and followers who lose the task get a `moved_away` notification. A grant needs `tasks:write` on every moved task and on the landing group, and org-wide write in the target when a tag must be created (`403`). Clients should call the preview first and confirm when it says `exposes`.',
+  request: { body: body(TaskMoveToOrgSchema) },
+  responses: {
+    200: json(TaskMoveToOrgResultSchema, 'The moved tasks'),
+    ...problems(...AUTHED, 404, 'conflict_deleted', 'same_org'),
+  },
+});
+
+const moveToOrgPreview = createRoute({
+  method: 'get',
+  path: '/api/v1/tasks/move-to-org/preview',
+  tags,
+  operationId: 'previewMoveTasksToOrg',
+  summary: 'What moving tasks to another organisation would do (no side effects)',
+  description:
+    'The same checks as the move (`404`, `410 conflict_deleted`, `422 same_org`, `422 validation_failed`, `403`), then counts: the roots and their descendants, the live comments and attachments on them by people other than me, the tag names the target org lacks, and how many assignees change. `exposes` is true when other people’s comments or files would become visible to a target member who is not in the source org: clients confirm before moving.',
+  request: { query: moveToOrgPreviewQuery },
+  responses: {
+    200: json(TaskMoveToOrgPreviewSchema, 'The preview'),
+    ...problems(401, 404, 422, 'conflict_deleted', 'same_org'),
+  },
 });
 
 const getTask = createRoute({
@@ -393,6 +433,12 @@ export function registerTaskRoutes(app: OpenAPIHono<AppEnv>, { tasks, reminders 
     tasks.removePermanently(actorOf(c), c.req.valid('param').id, metaOf(c));
     return c.body(null, 204);
   });
+  app.openapi(moveToOrg, (c) =>
+    c.json(tasks.moveToOrg(actorOf(c), c.req.valid('json'), metaOf(c)), 200),
+  );
+  app.openapi(moveToOrgPreview, (c) =>
+    c.json(tasks.previewMoveToOrg(actorOf(c), c.req.valid('query')), 200),
+  );
   app.openapi(bulk, (c) => c.json(tasks.bulk(actorOf(c), c.req.valid('json'), metaOf(c)), 200));
   app.openapi(getTask, (c) => c.json(tasks.detail(actorOf(c), c.req.valid('param').id), 200));
   app.openapi(reorderSubtask, (c) =>

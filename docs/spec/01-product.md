@@ -33,7 +33,8 @@ Requirements are numbered `FR-<AREA>-<n>`. **P** is the phase that delivers each
 | FR-ORG-4 | Owners can change roles, remove members, rename the org and delete it. Deleting requires typing the org name. Removing a member unassigns their tasks, which then appear in *Everyone's tasks → Unassigned*, and deletes that member's groups in the org. | 1 |
 | FR-ORG-5 | The last owner cannot leave or be demoted. | 1 |
 | FR-ORG-6 | Orgs appear in the sidebar in a user-defined order, with drag to reorder. The Personal org is first by default but can be moved. | 1 |
-| FR-ORG-7 | Each org has its own tags. Tasks never move between orgs in v1. A future "move to org" is out of scope. | 3 |
+| FR-ORG-7 | Each org has its own tags. | 3 |
+| FR-ORG-8 | **Move to organisation** (ADR 0072): anyone who can edit a task can move it, with all its subtasks, to another org they are a member of, into one of their groups there. It gets a new number there (old refs still resolve), its tags are matched by name (missing ones are created), and it becomes the mover's. A moved subtask arrives as a top-level task. Comments, activity and attachments travel along; clients confirm first when that shares other people's content with new people. People who lose the task are told. Undo moves it back with its old number. | 1.11 |
 
 ## FR-GRP: Groups (personal sections)
 

@@ -22,6 +22,7 @@ describe('requiredScopes (11 §5.2)', () => {
     ['update_task', 'tasks:write'],
     ['complete_task', 'tasks:write'],
     ['move_task', 'tasks:write'],
+    ['move_task_to_org', 'tasks:write'],
     ['create_group', 'groups:write'],
     ['add_comment', 'comments:write'],
     ['list_notifications', 'notifications:read'],

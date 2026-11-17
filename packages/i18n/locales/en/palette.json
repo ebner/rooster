@@ -73,7 +73,8 @@
     "collapseAllGroups": "Collapse all groups",
     "expandAllGroups": "Expand all groups",
     "printList": "Print list",
-    "addGroupAtEnd": "Add group at the end"
+    "addGroupAtEnd": "Add group at the end",
+    "moveToOrg": "Move to organisation…"
   },
   "dev": {
     "section": "Command palette",

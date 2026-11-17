@@ -9,7 +9,7 @@
     "edit": "Change a task’s title, dates, description, assignee or parent",
     "done": "Complete tasks",
     "undone": "Reopen completed tasks",
-    "mv": "Move tasks to a group or position",
+    "mv": "Move tasks to a group, a position or another organisation",
     "rm": "Delete tasks (they go to Trash)",
     "restore": "Restore deleted tasks from Trash",
     "sub": "Add a subtask: rooster sub 42 \"Call the bank\"",
@@ -142,9 +142,25 @@
       "top": "At the top (default)",
       "bottom": "At the bottom",
       "after": "Directly below this task",
-      "before": "Directly above this task"
+      "before": "Directly above this task",
+      "toOrg": "Move them with their subtasks to another organisation (slug, name or personal)"
     },
-    "groupMissing": "Where to? Pass --group NAME, or --after/--before a task."
+    "groupMissing": "Where to? Pass --group NAME, or --after/--before a task.",
+    "org": {
+      "position": "{flag} can’t be used with --to-org: moved tasks land at the top of the group (--group).",
+      "severalOrgs": "These tasks are in different organisations; move the tasks of one organisation at a time.",
+      "sameOrg": "The tasks are already in {org}.",
+      "ambiguous": "Several of your organisations are called “{org}”; use the slug: {slugs}",
+      "content": {
+        "comments": "{comments, plural, one {# comment} other {# comments}}",
+        "files": "{files, plural, one {# file} other {# files}}",
+        "both": "{comments, plural, one {# comment} other {# comments}} and {files, plural, one {# file} other {# files}}",
+        "other": "Comments and files"
+      },
+      "confirm": "{content} by other people will be visible to members of {org}. Move anyway?",
+      "needYes": "{content} by other people would become visible to members of {org}; pass --yes to move anyway.",
+      "done": "{count, plural, one {Moved # task to {org}.} other {Moved # tasks to {org}.}}"
+    }
   },
   "rm": {
     "confirm": "Delete {count, plural, one {# task} other {# tasks}}?",

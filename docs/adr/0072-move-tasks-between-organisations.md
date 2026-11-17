@@ -50,6 +50,36 @@ A task created in the wrong organisation (Personal instead of the team, or the o
 23. **A pane whose task is in another org than the URL** replaces the URL with the task's org (a moved task, an old link).
 24. **CLI:** `rooster mv <ref…> --to-org <org> [--group <name>] [--yes]`; when the preview says `exposes`, it asks on a terminal and needs `--yes` otherwise (exit 2). **TUI:** the move picker (`m`) gets "Another organisation…", then the org and group steps and the confirmation. **MCP:** `move_task_to_org { ref, org?, toOrg, group?, shareContent? }` (`tasks:write`); when the preview says `exposes` and `shareContent` isn't `true`, the tool answers with what would be shared instead of moving.
 
+## Implementation decisions
+Recorded from the implementation (2026-11-17).
+
+### Server (`services/task-org-move.ts`)
+- **Landing group:** `groupId`, else the group of the `afterId`/`beforeId` anchor in the actor's list in the target org (`422 validation_failed` when the anchor isn't there; undo and chunked moves use this), else the actor's first normal group, else the Inbox.
+- **Assignees:** a descendant without an assignee stays unassigned in a shared target and becomes the owner's in a personal one. Changed assignees get no `assigned` activity or notification; the roots get only `org_moved`.
+- **Followers:** a personal target has none (the owner's are deleted too); in a shared target the mover follows each root and anyone newly assigned follows that task.
+- **`moved_away`** goes once per user per moved root, with the root's title, to the assignees and unmuted followers of the live tasks in the subtree who aren't target members, the mover excepted. Kept notifications get the target `org_id` and the new `data.taskSeq`.
+- **Stored idempotent responses** are forgotten only where they mention a moved task's id, for source members who aren't target members (`forgetResponsesMentioning`), narrower than member removal.
+- **Clocks:** `parent` and `assignee` are stamped with the larger of their value and the edit time; there is no `org` clock key (the move isn't last-write-wins).
+- **The old parent** of a detached subtask gets no activity entry.
+- **Grants:** like duplicate and restore, the check also covers where every moved task lands in the actor's list. The preview applies the same rules (a read-only grant gets `403`).
+- **`visibleKeys`** (grant-access.ts) judges a task's prior group by the event's org rather than the task's current org, so a grant reading one group of the source org still learns that the task left.
+- **Old refs:** `GET /tasks/resolve` falls back to `task_former_seq` only when nothing matches `org#n`, and only for members of the task's current org whose grant reaches it; everyone else gets `404`. The table has an extra index on `(task_id, org_id)`.
+- **Events:** one domain event, `task.org_moved`, with the source audience (reach captured before the move, Trash included) and the target audience; `['tags', target]` when a tag was created; `['notifications']` for everyone whose notifications were deleted or re-pointed.
+
+### Web
+- **Undo is instant:** the inverse op carries an unsent `restore` snapshot of the subtrees, so the tasks reappear in the source list at once (with their original assignees until the refetch). Undo and redo of an entry that spans two orgs replay the recorded ops instead of recomputing them; the pipeline queues a `task.moveToOrg` under its `entityId` and replays it into both the queue org and the arrival org.
+- **The inverse** is one move-back per run of adjacent moved rows, anchored on their unmoved neighbours; roots without a row of the mover's go back to the top of the Inbox. More than 200 roots are sent in chunks anchored on the previous chunk.
+- **Only tasks the server has can move** (`movableToOrg`: live, a server `seq`, no queued create).
+- **The picker:** Enter on an org opens its groups with the default group active (Enter, Enter lands there; click and digits behave the same). Nothing can be picked while the preview can't load. The confirmation's Move button is primary, not danger: sharing is an informed choice, not a warning.
+- **Everyone's tasks** offers the move in the pane only. Phone selection mode has it in a ⋯ menu in the selection header (the bottom bar is full). The bulk bar's visible label is "Organisation…" (accessible name "Move to organisation…").
+- **The pane trusts a move it followed for up to 60 s,** so decision 23 doesn't send it back before the task's detail refetches.
+- A `moved_away` notification only marks itself read when opened.
+
+### CLI, TUI and MCP
+- `--to-org` takes a slug, an id, `personal` or a unique org name (case-insensitive; an ambiguous name exits 4 with the slugs). `same_org` is caught before any request.
+- The TUI's confirmation needs `y` (Enter does nothing there). The TUI offers the org move for tasks with their own row in My tasks, like Move to group; a subtask under its parent moves from the CLI or MCP. Its undo moves the task back to its old place (else the default group) and tries to restore the parent.
+- MCP's "not moved" answer is a normal result marked `moved: false`, not a tool error.
+
 ## Considered
 - **Copy into the target and delete the original** (duplicate already exists): loses comments, activity, attachments and the task's id (links, follows, reminders), and leaves a Trash entry.
 - **Keeping the colleague as assignee** when they are a target member: the mover's group pick would then not apply, and the result would depend on the target's membership.

@@ -127,6 +127,16 @@ CREATE TABLE placement (
 ) STRICT;
 CREATE INDEX placement_list ON placement(user_id, org_id, group_id, position);
 
+-- ADR 0072: the numbers a task had in orgs it moved away from. `GET /tasks/resolve` falls back to
+-- it (old refs keep working), and a task that moves back gets its number back.
+CREATE TABLE task_former_seq (
+  org_id   TEXT NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
+  seq      INTEGER NOT NULL,
+  task_id  TEXT NOT NULL REFERENCES task(id) ON DELETE CASCADE,
+  moved_at INTEGER NOT NULL,
+  PRIMARY KEY (org_id, seq)
+) STRICT;
+
 -- Per-user expanded parents in the list
 CREATE TABLE task_expansion (
   user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
@@ -390,6 +400,7 @@ Completion **keeps** the placement, so that undo and "show completed" restore th
 - `seq` is assigned on insert: `UPDATE organization SET task_seq = task_seq + 1 … RETURNING task_seq`, in the same transaction.
 - **Subtask depth limit:** 5 levels. Cycles are rejected: setting `parent_id` validates that the new parent is not a descendant.
 - A subtask must be in the same org as its parent.
+- **Moving to another org** (ADR 0072) changes `org_id` for a whole subtree in one transaction: new `seq`s from the target counter (or the task's former one there, `task_former_seq`), tags matched by name, roots assigned to the mover and placed in their chosen group, descendants keep assignees who are target members, the `pos:*` clock keys reset; followers, reminders, `task_expansion` rows and notifications of people outside the target org are removed, the others re-pointed; `activity.org_id` and `attachment.org_id` follow.
 - **Soft delete cascades logically:** deleting a parent soft-deletes its descendants with the same `deleted_at`. Restoring a parent restores only the descendants that share that `deleted_at`.
 - **The trash purge** hard-deletes tasks with `deleted_at < now - 30d`, and their blobs.
 

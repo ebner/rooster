@@ -1,11 +1,14 @@
 import { BULK_MAX } from '../limits.ts';
-import type { BulkOp, Task, TaskPatch } from '../schemas/list.ts';
+import type { BulkOp, OrderingIntent, Task, TaskMoveToOrg, TaskPatch } from '../schemas/list.ts';
 import { type ApplyContext, applyOp, touchesDue } from './apply.ts';
-import { type ListOpSpec, listOps } from './ops.ts';
+import { type ListOpSpec, listOps, type MovedSubtrees } from './ops.ts';
 import {
   childrenOf,
+  type DeletedTask,
+  inboxOf,
   intentAt,
   type ListState,
+  movedSet,
   normalGroups,
   orderedGroups,
   tasksInGroup,
@@ -61,7 +64,8 @@ export function inverseOf(op: ListOpSpec, before: ListState, ctx: ApplyContext):
       return [listOps.reorderSubtask(id, siblingSlot(before, id, task.parentId))];
     }
     case 'task.moveToOrg':
-      return []; // ADR 0072: the core agent implements the move back
+      // Seen from the org the tasks arrive in, the move took nothing away.
+      return before.orgId === op.payload.orgId ? [] : inverseMoveToOrg(before, op.payload);
     case 'task.duplicate':
       return applyOp(before, op, ctx) === before ? [] : [listOps.deleteTask(op.payload.id)];
     case 'task.expanded':
@@ -227,6 +231,73 @@ function inverseReparent(before: ListState, after: ListState, id: string): ListO
     );
   }
   return ops;
+}
+
+/**
+ * ADR 0072 §20: the move back, queued under the TARGET org (each op's `entityId`): the roots
+ * return to their groups between the neighbours they had (one op per run of moved rows, so
+ * the intents name tasks that never left), roots without a row of mine to the top of the Inbox,
+ * and a detached subtask then goes back under its parent at its sibling slot (ops of the
+ * source org). Each move back carries its subtrees as they were, for the optimistic return.
+ */
+function inverseMoveToOrg(before: ListState, p: TaskMoveToOrg): ListOpSpec[] {
+  const moved = movedSet(before, p.ids);
+  if (moved.roots.length === 0) return [];
+  const back = (ids: string[], groupId: string | null, intent: OrderingIntent | null) =>
+    chunks(ids).map((part, i, parts) =>
+      listOps.moveTasksToOrg(
+        p.orgId,
+        {
+          ids: part,
+          orgId: before.orgId,
+          groupId,
+          ...(i > 0 ? { afterId: parts[i - 1]?.at(-1) ?? null, beforeId: null } : (intent ?? {})),
+        },
+        subtrees(before, part),
+      ),
+    );
+  const roots = new Set(moved.roots.map((t) => t.id));
+  const placed = new Set<string>();
+  const ops: ListOpSpec[] = [];
+  for (const group of orderedGroups(before)) {
+    let run: string[] = [];
+    let afterId: string | null = null;
+    const flush = (beforeId: string | null) => {
+      if (run.length > 0) ops.push(...back(run, group.id, { afterId, beforeId }));
+      run = [];
+    };
+    for (const task of tasksInGroup(before, group.id)) {
+      if (!moved.live.has(task.id)) {
+        flush(task.id);
+        afterId = task.id;
+      } else if (roots.has(task.id)) {
+        run.push(task.id);
+        placed.add(task.id);
+      }
+    }
+    flush(null);
+  }
+  const unplaced = moved.roots.filter((t) => !placed.has(t.id)).map((t) => t.id);
+  if (unplaced.length > 0) ops.push(...back(unplaced, inboxOf(before)?.id ?? null, null));
+  // §3: a detached subtask arrives top-level; it goes back under its parent, at its old slot.
+  const detached = moved.roots.filter((t) => t.parentId !== null);
+  for (const task of detached) ops.push(listOps.patchTask(task.id, { parentId: task.parentId }));
+  for (const task of detached) {
+    const parentId = task.parentId as string;
+    if (before.tasks[parentId]) {
+      ops.push(listOps.reorderSubtask(task.id, siblingSlot(before, task.id, parentId)));
+    }
+  }
+  return ops;
+}
+
+/** The subtrees of `rootIds` as they are in `state` (for a move back's optimistic return). */
+function subtrees(state: ListState, rootIds: readonly string[]): MovedSubtrees {
+  const moved = movedSet(state, rootIds);
+  return {
+    tasks: [...moved.live].map((id) => state.tasks[id] as Task),
+    deleted: [...moved.deleted].map((id) => state.deletedTasks[id] as DeletedTask),
+  };
 }
 
 type Due = {

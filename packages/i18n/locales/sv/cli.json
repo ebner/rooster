@@ -9,7 +9,7 @@
     "edit": "Ändra en uppgifts titel, datum, beskrivning, ansvarig eller överordnad uppgift",
     "done": "Markera uppgifter som klara",
     "undone": "Öppna klara uppgifter igen",
-    "mv": "Flytta uppgifter till en grupp eller position",
+    "mv": "Flytta uppgifter till en grupp, en position eller en annan organisation",
     "rm": "Ta bort uppgifter (de hamnar i papperskorgen)",
     "restore": "Återställ borttagna uppgifter från papperskorgen",
     "sub": "Lägg till en deluppgift: rooster sub 42 \"Ring banken\"",
@@ -142,9 +142,25 @@
       "top": "Överst (standard)",
       "bottom": "Underst",
       "after": "Direkt under den här uppgiften",
-      "before": "Direkt ovanför den här uppgiften"
+      "before": "Direkt ovanför den här uppgiften",
+      "toOrg": "Flytta dem med deluppgifter till en annan organisation (slug, namn eller personal)"
     },
-    "groupMissing": "Vart? Ange --group NAMN, eller --after/--before en uppgift."
+    "groupMissing": "Vart? Ange --group NAMN, eller --after/--before en uppgift.",
+    "org": {
+      "position": "{flag} går inte att kombinera med --to-org: flyttade uppgifter hamnar överst i gruppen (--group).",
+      "severalOrgs": "Uppgifterna ligger i olika organisationer; flytta en organisations uppgifter åt gången.",
+      "sameOrg": "Uppgifterna ligger redan i {org}.",
+      "ambiguous": "Flera av dina organisationer heter ”{org}”; ange slug: {slugs}",
+      "content": {
+        "comments": "{comments, plural, one {# kommentar} other {# kommentarer}}",
+        "files": "{files, plural, one {# fil} other {# filer}}",
+        "both": "{comments, plural, one {# kommentar} other {# kommentarer}} och {files, plural, one {# fil} other {# filer}}",
+        "other": "Kommentarer och filer"
+      },
+      "confirm": "{content} från andra blir synliga för medlemmarna i {org}. Flytta ändå?",
+      "needYes": "{content} från andra skulle bli synliga för medlemmarna i {org}; ange --yes för att flytta ändå.",
+      "done": "{count, plural, one {Flyttade # uppgift till {org}.} other {Flyttade # uppgifter till {org}.}}"
+    }
   },
   "rm": {
     "confirm": "Ta bort {count, plural, one {# uppgift} other {# uppgifter}}?",

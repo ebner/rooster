@@ -195,6 +195,7 @@ The pane (if open) always shows the **selected** row (D-29). Moving the selectio
 | Ctrl/Cmd+Shift+↑ / ↓ | To the end of the previous group / the start of the next group |
 | Alt+Shift+↑ / ↓ | To the top / bottom of the current group |
 | **M** or Tab+M (Navigate) | "Move to…" popover: a filterable group list with digit shortcuts 1–9 |
+| Palette: "Move to organisation…" | ADR 0072: the same popover in two steps, the orgs (the current one checked), then that org's groups (digits 1–9); a third, inline step confirms when other people's comments or files would become visible to new people. Also in the pane's ⋯ menu, the phone task sheet and the bulk bar. The task leaves the list with a toast "Moved to <org>" and Undo; an open pane follows it. Needs a connection (it shows what the move would share). |
 
 ## 6. Keyboard reference
 
@@ -348,7 +349,7 @@ Colours and icons follow 03 §Due-date semantics. A tooltip on hover shows the f
 
 ### 9.2 Layout (top to bottom)
 
-1. **Toolbar:** [✓ Mark complete] (a button that turns into "✓ Completed" in the success tint), 🔗 copy link, ⧉ duplicate, ⤢ full screen, ⋯ (delete, copy ID, open in new tab, move to group), ✕ close.
+1. **Toolbar:** [✓ Mark complete] (a button that turns into "✓ Completed" in the success tint), 🔗 copy link, ⧉ duplicate, ⤢ full screen, ⋯ (delete, copy ID, open in new tab, move to group, move to organisation), ✕ close.
 2. **Breadcrumb:** the parent chain, as clickable links (subtasks only).
 3. **Title:** a 24/32 semibold textarea that auto-grows. Enter commits; Shift+Enter is ignored, because titles are single-line.
 4. **Property grid** (label column 112 px, muted 13 px labels; values are inline-editable controls that open the same popovers as the row):

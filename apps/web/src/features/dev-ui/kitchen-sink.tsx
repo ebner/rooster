@@ -37,6 +37,7 @@ import { EditorSection } from '../editor/kitchen-sink-section';
 import { HelpKitchenSection } from '../help/kitchen-sink-section';
 import { ListSection } from '../list/kitchen-sink-section';
 import { LanguageSwitch } from '../locale/language-switch';
+import { MoveOrgKitchenSection } from '../move-org/kitchen-sink-section';
 import { PaletteKitchenSection } from '../palette/kitchen-sink-section';
 import { PaneSection } from '../pane/kitchen-sink-section';
 import { PeopleKitchenSection } from '../people/kitchen-sink-section';
@@ -770,6 +771,7 @@ export function KitchenSink() {
         <EditorSection />
         <ListSection />
         <PaneSection />
+        <MoveOrgKitchenSection />
         <TagsKitchenSection />
         <MobileKitchenSection />
         <ViewsKitchenSection />

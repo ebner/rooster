@@ -58,7 +58,8 @@
     "delete": "Delete",
     "clear": "Clear selection",
     "tag": "Tag",
-    "assign": "Assign"
+    "assign": "Assign",
+    "moveToOrg": "Organisation…"
   },
   "header": {
     "showCompleted": "Show completed",
@@ -104,7 +105,8 @@
     "seriesDeleted": "Task deleted · it no longer repeats",
     "dateClearedReminders": "Date cleared · reminders paused",
     "reminderAdded": "Reminder added",
-    "reminderRemoved": "Reminder removed"
+    "reminderRemoved": "Reminder removed",
+    "movedToOrg": "Moved {count, plural, one {# task} other {# tasks}} to {org}"
   },
   "dnd": {
     "handleRole": "Drag handle",
@@ -285,7 +287,15 @@
     "headerMenuSmart": "Smart view",
     "headerMenuEveryone": "Everyone’s tasks",
     "upcomingCollapsed": "Recurring (folded)",
-    "upcomingOpen": "Recurring (open)"
+    "upcomingOpen": "Recurring (open)",
+    "moveOrgOrgs": "Move to organisation: the orgs",
+    "moveOrgGroups": "Move to organisation: the groups",
+    "moveOrgChecking": "Move to organisation: checking",
+    "moveOrgOffline": "Move to organisation: offline",
+    "moveOrgConfirm": "Move to organisation: confirmation",
+    "moveOrgSheetOrgs": "Phone sheet: the orgs",
+    "moveOrgSheetGroups": "Phone sheet: the groups",
+    "moveOrgSheetConfirm": "Phone sheet: confirmation"
   },
   "subtasks": {
     "add": "Add subtask",
@@ -334,5 +344,29 @@
     "movedMany": "{count, plural, one {# task is} other {# tasks are}} in Recurring",
     "cantMove": "Tasks in Recurring can’t be moved. Change the date to bring one back.",
     "noAdd": "New tasks can’t be added to Recurring"
+  },
+  "moveToOrg": {
+    "title": "Move to organisation",
+    "action": "Move to organisation…",
+    "orgs": "Organisations",
+    "groups": "Groups in {org}",
+    "filterOrgs": "Filter organisations",
+    "filterGroups": "Filter groups",
+    "placeholderOrgs": "Move to organisation…",
+    "placeholderGroups": "Group in {org}…",
+    "current": "Current organisation",
+    "back": "Back to organisations",
+    "empty": "No match",
+    "loadingGroups": "Loading groups…",
+    "checking": "Checking what moves along…",
+    "offline": "Moving to another organisation needs a connection.",
+    "failed": "Couldn’t check the move. Try again.",
+    "confirmTitle": "Move to {org}?",
+    "comments": "{count, plural, one {# comment} other {# comments}}",
+    "files": "{count, plural, one {# file} other {# files}}",
+    "exposes": "{items} by other people will be visible to members of {org}.",
+    "confirmBack": "Back",
+    "confirm": "Move",
+    "toast": "Moved to {org}"
   }
 }

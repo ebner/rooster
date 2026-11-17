@@ -14,7 +14,7 @@ rooster is invite-only. If you see **You're not on the list yet**, your email ad
 
 ## Organisations
 
-Every task belongs to exactly one organisation. Use them to keep private and work tasks apart.
+Every task belongs to exactly one organisation. Use them to keep private and work tasks apart. A task that ended up in the wrong one can be moved, see [Move to another organisation](./my-tasks.md#move-to-another-organisation).
 
 - **Personal** is yours alone. It can't be shared, renamed or deleted, and it has no collaboration features.
 - **Shared organisations** have members who can see every task in them, assign tasks to each other and comment. See [Working together](./collaboration.md).

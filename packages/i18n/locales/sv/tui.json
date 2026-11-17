@@ -52,7 +52,11 @@
     "tag": "Tagg",
     "group": "Flytta till",
     "createTag": "Skapa #{name}",
-    "none": "Inga träffar"
+    "none": "Inga träffar",
+    "otherOrg": "En annan organisation…",
+    "org": "Flytta till organisation",
+    "orgGroup": "Grupp i {org}",
+    "confirmOrg": "Flytta till {org}?"
   },
   "date": {
     "today": "idag",
@@ -116,13 +120,15 @@
     "apply": "använd",
     "close": "stäng",
     "scroll": "bläddra",
-    "description": "beskrivning"
+    "description": "beskrivning",
+    "moveAnyway": "flytta ändå",
+    "cancel": "avbryt"
   },
   "help": {
     "title": "Kortkommandon",
     "differences": "Skillnader mot webben",
     "limits": "Begränsningar",
-    "undoLimits": "u ångrar dina egna ändringar från den här sessionen, upp till 50: nya uppgifter, titlar, datum, klarmarkeringar, flyttar, taggar, beskrivningar och borttagningar. Att ångra en ny uppgift flyttar den till papperskorgen. Ångra kontrollerar inte om andra har ändrat något sedan dess, och att ångra en klarmarkering tar inte bort nästa uppgift som en återkommande uppgift skapade.",
+    "undoLimits": "u ångrar dina egna ändringar från den här sessionen, upp till 50: nya uppgifter, titlar, datum, klarmarkeringar, flyttar (även till en annan organisation, så långt det går att ångra), taggar, beskrivningar och borttagningar. Att ångra en ny uppgift flyttar den till papperskorgen. Ångra kontrollerar inte om andra har ändrat något sedan dess, och att ångra en klarmarkering tar inte bort nästa uppgift som en återkommande uppgift skapade.",
     "offline": "Terminalappen fungerar bara uppkopplad: utan anslutning visar statusen offline, och ändringar misslyckas med r för att försöka igen."
   },
   "key": {
@@ -138,7 +144,7 @@
     "complete": "Markera som klar eller inte klar",
     "date": "Datum, upprepning eller påminnelse: ”fre 14:00”, ”varje måndag”, ”!1h” eller ingen",
     "tag": "Lägg till eller ta bort taggar",
-    "move": "Flytta till en grupp",
+    "move": "Flytta till en grupp eller organisation",
     "subtask": "Lägg till en deluppgift",
     "detail": "Öppna eller stäng detaljerna",
     "description": "Redigera beskrivningen i $EDITOR",
@@ -172,5 +178,14 @@
     "org": "På webben: {web}",
     "retry": "Finns inte på webben, som försöker igen av sig själv och fungerar offline",
     "quit": "På webben är q snabbtillägg"
+  },
+  "confirm": {
+    "share": "{content} från andra blir synliga för medlemmarna i {org}.",
+    "content": {
+      "comments": "{comments, plural, one {# kommentar} other {# kommentarer}}",
+      "files": "{files, plural, one {# fil} other {# filer}}",
+      "both": "{comments, plural, one {# kommentar} other {# kommentarer}} och {files, plural, one {# fil} other {# filer}}",
+      "other": "Kommentarer och filer"
+    }
   }
 }

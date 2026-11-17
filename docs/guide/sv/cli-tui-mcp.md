@@ -40,6 +40,7 @@ rooster add "Vattna blommorna varje måndag"            # en återkommande uppgi
 rooster add "Planera konferensen" --due "nästa vecka" --repeat "varje månad"
 rooster done 42 57                # markera uppgift 42 och 57 som klara
 rooster mv 42 --group Prio --bottom
+rooster mv 42 --to-org acme --group Prio   # till en annan organisation (frågar först om andras kommentarer eller filer skulle visas)
 rooster show 42                   # beskrivning, deluppgifter, taggar, påminnelser, bilagor, kommentarer
 rooster edit 42 --editor          # skriv beskrivningen i $EDITOR
 rooster tag 42 +brådskande -senare
@@ -61,7 +62,7 @@ rooster open 42                   # öppna uppgiften i webbläsaren
 | Du skriver | Betyder |
 |---|---|
 | `42` | Uppgift 42 i den aktuella organisationen (numret som står i alla listor) |
-| `personal#42` | Uppgift 42 i en annan organisation |
+| `personal#42` | Uppgift 42 i en annan organisation (en uppgift som flyttats till en annan organisation svarar fortfarande på sin gamla referens) |
 | `0192f3a0` | Ett uppgifts-id, eller minst de 8 första tecknen av det |
 | `@last` | Uppgiften du senast lade till eller visade |
 | `-` | Läs hänvisningarna från standard in, en per rad |
@@ -91,7 +92,7 @@ Kör `rooster` utan argument i en terminal för att öppna en version av rooster
 | `n` / `N` | Ny uppgift nedanför / ovanför |
 | `x` | Markera som klar eller öppna igen |
 | `d` | Datum, upprepning eller påminnelse: `fre 14:00`, `varje måndag`, `!1h` eller `none` |
-| `t` · `m` · `s` | Taggar · flytta till en grupp · lägg till en deluppgift |
+| `t` · `m` · `s` | Taggar · flytta till en grupp, eller till en annan organisation (väljarens sista rad) · lägg till en deluppgift |
 | `o` / `e` | Öppna detaljerna / redigera beskrivningen i `$EDITOR` |
 | `J` `K` · `]` `[` | Flytta uppgiften nedåt, uppåt · till nästa eller föregående grupp |
 | `Delete` | Ta bort uppgiften (går att ångra) |

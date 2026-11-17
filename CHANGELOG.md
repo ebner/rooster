@@ -7,13 +7,14 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 ## [Unreleased]
 
 ### Added
+- **Move tasks to another organisation** (ADR 0072, FR-ORG-8): `POST /api/v1/tasks/move-to-org` and its preview move tasks with their whole subtrees to another org the actor is a member of. The tasks get new numbers there (old refs such as `acme#42` still resolve, and a task that moves back gets its number back), tags are matched by name and created when missing, the roots become the mover's, and followers, reminders and notifications of people outside the target org are removed; they get an in-app `moved_away` notice. In the web app (pane menu, palette, bulk bar, phone selection mode), `rooster mv --to-org`, the TUI move picker and the MCP tool `move_task_to_org` (`tasks:write`).
 - **The project site** at https://ebner.github.io/rooster/ (ADR 0070): a landing page and the user guide, in English and Swedish, with a demo of the date parser running in the browser. It is built from `apps/site` and deployed to GitHub Pages by `.github/workflows/pages.yml` for each release tag. The README is shorter and links to it.
 
 ### Security
 - hono 4.13.16 (GHSA-4m76-xfj5-7975, GHSA-h7mg-cq63-vhpq, GHSA-4h7h-rv7c-7m2v: middleware bypasses in `mount()` and the RegExpRouter, and `validator('form')` skipping multipart requests with extra parameters) and @hono/node-server 2.1.6 (GHSA-jpvv-r467-5p4w: a raw backslash in the request path is now rejected with 400 instead of being read as `/`, which could slip past path rules at a reverse proxy).
 
 ### Migrations
-- None.
+- `0017_task_former_seq`: the numbers tasks had in orgs they moved away from.
 
 ## [1.10.1] - 2026-11-12
 

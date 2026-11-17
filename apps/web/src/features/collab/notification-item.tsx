@@ -56,6 +56,12 @@ export function NotificationSentence({
       </>
     );
   }
+  if (type === 'moved_away') {
+    // ADR 0072 §15: the task went to an org you aren't in; it names neither that org nor links it.
+    return data.taskTitle
+      ? t('type.moved_away', { title: data.taskTitle })
+      : t('movedAway.unknown');
+  }
   if (type === 'invite_accepted') {
     return <>{t('type.invite_accepted', { org: orgName })}</>;
   }

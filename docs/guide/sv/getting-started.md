@@ -14,7 +14,7 @@ rooster kräver inbjudan. Står det **Du är inte inbjuden än** får din e-post
 
 ## Organisationer
 
-Varje uppgift hör till exakt en organisation. Använd dem för att hålla isär privata uppgifter och jobbuppgifter.
+Varje uppgift hör till exakt en organisation. Använd dem för att hålla isär privata uppgifter och jobbuppgifter. En uppgift som hamnat i fel organisation kan du flytta, se [Flytta till en annan organisation](./my-tasks.md#flytta-till-en-annan-organisation).
 
 - **Personligt** är bara din. Den kan inte delas, döpas om eller tas bort, och den saknar allt som har med samarbete att göra.
 - **Delade organisationer** har medlemmar som ser alla uppgifter i organisationen, tilldelar varandra uppgifter och kommenterar. Läs mer i [Samarbete](./collaboration.md).

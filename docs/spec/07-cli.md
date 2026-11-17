@@ -60,6 +60,7 @@ Global flags: `--org <slug>`, `--profile <name>`, `--json`, `--quiet` (IDs only)
 | `rooster edit <ref>` | `--title`, `--due <phrase\|none>`, `--time`, `--start`, `--desc`, `--desc-file`, `--editor` (opens `$EDITOR` with the description; saves on exit), `--assign`, `--parent <ref\|none>`. P10: `--remind <15m\|1h\|1d\|due\|"fri 14:00">` (repeatable) and `--no-remind`. |
 | `rooster done <ref…>` / `rooster undone <ref…>` | Complete or reopen. Shows the next recurrence when one is created. |
 | `rooster mv <ref…> --group <name>` | `--top` (default) / `--bottom` / `--after <ref>` / `--before <ref>`. |
+| `rooster mv <ref…> --to-org <org> [--group <name>] [--yes]` | ADR 0072: moves the tasks with their subtasks to another org, at the top of `--group` there (default: the first normal group). When other people's comments or files would become visible to new people it asks on a terminal, and needs `--yes` otherwise (exit 2). Prints the new refs. |
 | `rooster rm <ref…>` | Soft delete (asks for confirmation when more than 3 tasks, unless `--yes`). `rooster restore <ref>`. |
 | `rooster sub <parent-ref> <title…>` | Add a subtask (shorthand for `add --parent`). |
 | `rooster group ls\|add <name> [--after <name>]\|rename <name> <new>\|mv <name> --after\|--before <name>\|rm <name> [--move-to <name>\|--delete-tasks]` | Group management. |
@@ -127,7 +128,7 @@ Built with **Ink 8**. It is a full-screen, keyboard-only mini rooster.
   | `Enter`, `i` | edit the title | same |
   | `n` / `N` | new task below / above | same |
   | `x` | complete or reopen | web: Ctrl+Enter (on the web `x` toggles selection) |
-  | `d` · `t` · `m` · `s` | date · tag · move to group · add subtask | same |
+  | `d` · `t` · `m` · `s` | date · tag · move to a group, or to another organisation (ADR 0072; the picker's last entry) · add subtask | same |
   | `o` | detail view | same |
   | `J` / `K` | move the task down / up | web: Ctrl+↓/↑ |
   | `]` / `[` | move the task to the next / previous group | web: Ctrl+Shift+↓/↑ |
@@ -159,12 +160,13 @@ Built with **Ink 8**. It is a full-screen, keyboard-only mini rooster.
 | `update_task` | `{ref, title?, due?, description?, assignee?, remind?, clearReminders?}` | `remind`/`clearReminders` (P10). |
 | `complete_task` | `{ref, completed?: boolean}` | |
 | `move_task` | `{ref, group, position?: top\|bottom}` | |
+| `move_task_to_org` | `{ref, org?, toOrg, group?, shareContent?}` | ADR 0072. When the move would share other people's comments or files with new people and `shareContent` isn't `true`, it describes that instead of moving. |
 | `list_groups` / `create_group` | | |
 | `add_comment` | `{ref, body}` | P6. |
 | `list_notifications` | `{unread?}` | P6 inbox. |
 | `delete_task` | `{ref}` | Only when the grant has `tasks:delete`, which needs the consent checkbox (11 §3.1). Moves the task and its subtasks to Trash. |
 
-Each tool needs a capability (11 §5.2): read tools `tasks:read`; `create_task`, `update_task`, `complete_task` and `move_task` `tasks:write`; assigning others `tasks:assign`; `create_group` `groups:write`; `add_comment` `comments:write`; `list_notifications` `notifications:read`. A tool whose target lies outside the grant's org or group constraints returns a tool error that tells the agent to ask the user to widen access, rather than a protocol error.
+Each tool needs a capability (11 §5.2): read tools `tasks:read`; `create_task`, `update_task`, `complete_task`, `move_task` and `move_task_to_org` `tasks:write`; assigning others `tasks:assign`; `create_group` `groups:write`; `add_comment` `comments:write`; `list_notifications` `notifications:read`. A tool whose target lies outside the grant's org or group constraints returns a tool error that tells the agent to ask the user to widen access, rather than a protocol error.
 
 - **Resources:** `rooster://{org}/my` (a Markdown rendering of My tasks), usable as context.
 - **Instructions:** the `initialize` result carries the short form of the rooster skill (11 §6.2). `SKILL.md` has the long form.

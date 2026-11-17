@@ -64,7 +64,7 @@ The pane shows one task in full: assignee, due date, repeat, reminders, group, t
 - **Open it:** click the row (not the title), press **O** (focus moves into the pane), **Space** (peek: the pane opens and focus stays in the list) or **Tab+Enter** (edit the pane's title).
 - While it is open, ↑ and ↓ in the list change which task it shows. A task you add while it is open shows in the pane as soon as you press Enter, so you can go on with its description (click it, or press Tab+R).
 - **Description:** a rich editor that stores Markdown. Markdown shortcuts work as you type (`# `, `- `, `[] `, `**bold**`). Select text for a small formatting toolbar. **Ctrl+click** (⌘+click) opens a link; a plain click lets you edit its text. On a phone or tablet, tap a link to see its address: tap the address to open it, or edit or remove the link. Long descriptions fold after about 12 lines behind **Show more**. Tab+R jumps into the description.
-- **Toolbar:** **Mark complete**, **Copy link**, **Duplicate**, **Full screen** (Tab+X) and **More actions** (Delete task, Copy task ID, Open in new tab, Move to group).
+- **Toolbar:** **Mark complete**, **Copy link**, **Duplicate**, **Full screen** (Tab+X) and **More actions** (Delete task, Copy task ID, Open in new tab, Move to group, Move to organisation…).
 - Esc returns to the list; Esc again closes the pane. Each task has its own link, so you can bookmark or share it.
 
 ## Tags
@@ -99,6 +99,16 @@ The **⋯** button in the list header has the list-wide actions: **Add group**, 
 | M or Tab+M | to a group you pick (type to filter, or press 1–9) |
 
 You can also drag with the keyboard alone: Tab to a row's handle, Space to pick it up, the arrow keys to move, Space to drop.
+
+## Move to another organisation
+
+Created a task in Personal that belongs to your team, or the other way round? Choose **Move to organisation…** in the task's **More actions** menu (on a phone, the ⋯ menu of the task), or press Ctrl+K and run it from the palette. With several tasks selected it's in the bar at the bottom (on a phone, the ⋯ menu in selection mode).
+
+1. Pick the organisation, then one of your groups there (or press Enter again for the first one).
+2. The task moves with all its subtasks and lands at the top of that group. It becomes yours, gets a new number in the new organisation, and its tags come along by name (a tag the organisation doesn't have yet is created there).
+3. Its description, comments, activity and attachments come along too. If that would show other people's comments or files to people who couldn't see them before, rooster asks first.
+
+A subtask moved on its own becomes an ordinary task in the new organisation. People who lose the task because they aren't members there are told it was moved, without where to. **Undo** moves it back, with its old number. Moving needs a connection, and you can only move to organisations you're a member of.
 
 ## Select several tasks
 

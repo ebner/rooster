@@ -73,7 +73,8 @@
     "collapseAllGroups": "Fäll ihop alla grupper",
     "expandAllGroups": "Fäll ut alla grupper",
     "printList": "Skriv ut listan",
-    "addGroupAtEnd": "Lägg till grupp sist"
+    "addGroupAtEnd": "Lägg till grupp sist",
+    "moveToOrg": "Flytta till organisation…"
   },
   "dev": {
     "section": "Kommandopalett",

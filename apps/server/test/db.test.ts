@@ -110,6 +110,7 @@ describe('migrations', () => {
       'tag',
       'task',
       'task_expansion',
+      'task_former_seq',
       'task_group',
       'task_reminder',
       'task_tag',

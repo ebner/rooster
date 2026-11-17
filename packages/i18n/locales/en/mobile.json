@@ -34,7 +34,8 @@
   },
   "selection": {
     "done": "Done selecting",
-    "hint": "Tap to select"
+    "hint": "Tap to select",
+    "more": "More actions for the selection"
   },
   "refresh": {
     "refreshing": "Refreshing…",

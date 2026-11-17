@@ -1,3 +1,4 @@
+import { canRead } from '@rooster/core/grants';
 import { uuidv7 } from '@rooster/core/ids';
 import {
   type Notification,
@@ -28,6 +29,7 @@ import { qk, selfAudience } from './event-audience.ts';
 import {
   BROWSER_ONLY_NOTIFICATION,
   canReadNotification,
+  MOVED_AWAY_NOTIFICATION,
   reachedOrgIds,
   readableTaskCondition,
   requireBrowserSession,
@@ -74,6 +76,8 @@ export interface NotificationDraft {
     clientName?: string;
     clientHost?: string;
     ip?: string;
+    /** ADR 0072 moved_away: the task's title (the notification has no task to snapshot). */
+    taskTitle?: string;
   };
 }
 
@@ -149,6 +153,8 @@ function toNotificationDto(row: NotificationRow, orgSlug: string): Notification 
   if (stored.clientName !== undefined) data.clientName = stored.clientName;
   if (stored.clientHost !== undefined) data.clientHost = stored.clientHost;
   if (stored.ip !== undefined) data.ip = stored.ip;
+  // moved_away has no task (the recipient can no longer open it): the title travels in `data`.
+  if (row.taskId === null && stored.taskTitle !== undefined) data.taskTitle = stored.taskTitle;
   return {
     id: row.id,
     orgId: row.orgId,
@@ -188,6 +194,16 @@ function readableNotificationSql(actor: Actor): SQL | undefined {
   if (orgIds === undefined) return notSecurity;
   if (orgIds.length === 0) return sql`0`;
   const readable = readableTaskCondition(actor, orgIds);
+  // moved_away has no task to check: only grants reading the whole source org see it (ADR 0072).
+  const constraints = actor.grant.constraints;
+  const wholeOrgs = orgIds.filter((orgId) => canRead(constraints, orgId, null));
+  const movedAway =
+    wholeOrgs.length === orgIds.length
+      ? undefined
+      : or(
+          ne(notification.type, MOVED_AWAY_NOTIFICATION),
+          wholeOrgs.length === 0 ? sql`0` : inArray(notification.orgId, wholeOrgs),
+        );
   const taskReadable =
     readable === undefined
       ? undefined
@@ -196,7 +212,7 @@ function readableNotificationSql(actor: Actor): SQL | undefined {
           sql`NOT EXISTS (SELECT 1 FROM ${task} WHERE ${task.id} = ${notification.taskId})`,
           readable(sql`${notification.taskId}`, sql`${notification.orgId}`),
         );
-  return and(inArray(notification.orgId, [...orgIds]), taskReadable, notSecurity);
+  return and(inArray(notification.orgId, [...orgIds]), taskReadable, notSecurity, movedAway);
 }
 
 /** Notifications, their fan-out to every channel, and the preference matrix (FR-NOT-1–4). */
@@ -242,7 +258,7 @@ export class NotificationService {
         stored.actorName = actorName;
         stored.actorImage = actor?.image ?? null;
       }
-      let title: string | null = null;
+      let title: string | null = draft.data?.taskTitle ?? null;
       if (draft.taskId !== null) {
         const target = tx
           .select({ title: task.title, seq: task.seq })

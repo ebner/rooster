@@ -58,7 +58,8 @@
     "delete": "Ta bort",
     "clear": "Avmarkera",
     "tag": "Tagga",
-    "assign": "Tilldela"
+    "assign": "Tilldela",
+    "moveToOrg": "Organisation…"
   },
   "header": {
     "showCompleted": "Visa klara",
@@ -104,7 +105,8 @@
     "seriesDeleted": "Uppgiften togs bort · den upprepas inte längre",
     "dateClearedReminders": "Datumet togs bort · påminnelserna är pausade",
     "reminderAdded": "Påminnelsen lades till",
-    "reminderRemoved": "Påminnelsen togs bort"
+    "reminderRemoved": "Påminnelsen togs bort",
+    "movedToOrg": "{count, plural, one {# uppgift} other {# uppgifter}} flyttades till {org}"
   },
   "dnd": {
     "handleRole": "Draghandtag",
@@ -285,7 +287,15 @@
     "headerMenuSmart": "Smart vy",
     "headerMenuEveryone": "Allas uppgifter",
     "upcomingCollapsed": "Återkommande (hopfälld)",
-    "upcomingOpen": "Återkommande (utfälld)"
+    "upcomingOpen": "Återkommande (utfälld)",
+    "moveOrgOrgs": "Flytta till organisation: organisationerna",
+    "moveOrgGroups": "Flytta till organisation: grupperna",
+    "moveOrgChecking": "Flytta till organisation: kontrollerar",
+    "moveOrgOffline": "Flytta till organisation: offline",
+    "moveOrgConfirm": "Flytta till organisation: bekräftelse",
+    "moveOrgSheetOrgs": "Mobilark: organisationerna",
+    "moveOrgSheetGroups": "Mobilark: grupperna",
+    "moveOrgSheetConfirm": "Mobilark: bekräftelse"
   },
   "subtasks": {
     "add": "Lägg till deluppgift",
@@ -334,5 +344,29 @@
     "movedMany": "{count, plural, one {# uppgift ligger} other {# uppgifter ligger}} under Återkommande",
     "cantMove": "Uppgifter under Återkommande kan inte flyttas. Ändra datumet för att få tillbaka en.",
     "noAdd": "Det går inte att lägga till nya uppgifter under Återkommande"
+  },
+  "moveToOrg": {
+    "title": "Flytta till organisation",
+    "action": "Flytta till organisation…",
+    "orgs": "Organisationer",
+    "groups": "Grupper i {org}",
+    "filterOrgs": "Filtrera organisationer",
+    "filterGroups": "Filtrera grupper",
+    "placeholderOrgs": "Flytta till organisation…",
+    "placeholderGroups": "Grupp i {org}…",
+    "current": "Nuvarande organisation",
+    "back": "Tillbaka till organisationerna",
+    "empty": "Inget matchar",
+    "loadingGroups": "Hämtar grupper…",
+    "checking": "Kontrollerar vad som följer med…",
+    "offline": "Det krävs en anslutning för att flytta till en annan organisation.",
+    "failed": "Det gick inte att kontrollera flytten. Försök igen.",
+    "confirmTitle": "Flytta till {org}?",
+    "comments": "{count, plural, one {# kommentar} other {# kommentarer}}",
+    "files": "{count, plural, one {# fil} other {# filer}}",
+    "exposes": "Medlemmarna i {org} kommer att kunna se {items} från andra personer.",
+    "confirmBack": "Tillbaka",
+    "confirm": "Flytta",
+    "toast": "Flyttades till {org}"
   }
 }

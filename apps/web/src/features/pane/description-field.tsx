@@ -14,6 +14,7 @@ import { lazyWithPreload, preloadWhenIdle } from '../../lib/lazy';
 import { LazyPaneActivity } from '../collab/lazy';
 import { LazyDatePanel, LazyDatePopover } from '../dates/lazy';
 import { LazyGroupDeletePopover, LazyMoveToPopover, LazyTagPicker } from '../list/lazy';
+import { LazyMoveOrgPopover } from '../move-org/lazy';
 
 // 10 §4: Tiptap and ProseMirror stay out of the initial bundle (see `lib/lazy.ts`).
 const MarkdownEditor = lazyWithPreload(() =>
@@ -37,6 +38,7 @@ export function InteractionPrefetch() {
       LazyDatePanel.preload,
       LazyTagPicker.preload,
       LazyMoveToPopover.preload,
+      LazyMoveOrgPopover.preload,
       LazyGroupDeletePopover.preload,
       LazyPaneActivity.preload,
     ]);

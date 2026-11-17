@@ -29,6 +29,7 @@ const pane: PaneControls = {
   taskId: () => null,
   open: () => undefined,
   close: () => undefined,
+  followToOrg: () => undefined,
   toggleFullScreen: () => undefined,
 };
 

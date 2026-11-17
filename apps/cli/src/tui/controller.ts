@@ -19,7 +19,14 @@ import { CliError, EXIT } from '../errors.ts';
 import { describeApiError } from '../grant-info.ts';
 import { type Locale, withLocale } from '../i18n.ts';
 import { clean } from '../output/color.ts';
-import { type DateContext, dateContext, dayLabel, dueLabel, inUpcoming } from '../output/format.ts';
+import {
+  count,
+  type DateContext,
+  dateContext,
+  dayLabel,
+  dueLabel,
+  inUpcoming,
+} from '../output/format.ts';
 import { splitReminderTokens } from '../reminders.ts';
 import { type Runtime, withRuntime } from '../runtime.ts';
 import type { TuiTranslate } from './i18n.ts';
@@ -67,8 +74,43 @@ export type Mode =
   | { kind: 'date'; taskId: string; input: LineInput; choice: number; error: string | null }
   | { kind: 'tag'; taskId: string; input: LineInput; choice: number }
   | { kind: 'group'; taskId: string; input: LineInput; choice: number }
+  /** ADR 0072: "Another organisation…" in the move picker, then the org's groups. */
+  | { kind: 'org'; taskId: string; input: LineInput; choice: number }
+  | {
+      kind: 'orgGroup';
+      taskId: string;
+      org: Org;
+      /** My groups in `org`, Inbox first; null while they load. */
+      groups: Group[] | null;
+      error: string | null;
+      input: LineInput;
+      choice: number;
+    }
+  /** The move would show other people's comments or files to new people (ADR 0072 §13). */
+  | {
+      kind: 'orgConfirm';
+      taskId: string;
+      org: Org;
+      groupId: string;
+      comments: number;
+      files: number;
+    }
   | { kind: 'search'; input: LineInput }
   | { kind: 'help'; scroll: number };
+
+/** The modes that show a list of options to filter and choose from. */
+export type PickerMode = Extract<Mode, { kind: 'tag' | 'group' | 'org' | 'orgGroup' }>;
+
+/** Groups as the pickers list them: the Inbox first, then in my order. */
+function pickerGroups(groups: Iterable<Group>): Group[] {
+  return [...groups].sort((a, b) =>
+    a.kind === b.kind
+      ? compareKeys(a.position, b.position) || compareKeys(a.id, b.id)
+      : a.kind === 'inbox'
+        ? -1
+        : 1,
+  );
+}
 
 export interface Message {
   text: string;
@@ -164,6 +206,12 @@ export function orgsInOrder(me: Me): Org[] {
     (a, b) => compareKeys(a.position, b.position) || compareKeys(a.id, b.id),
   );
 }
+
+/** The server said no (a 4xx other than auth), as opposed to being unreachable. */
+const isRefusal = (error: unknown) =>
+  error instanceof RoosterApiError &&
+  [404, 409, 410, 422].includes(error.status) &&
+  error.code !== 'same_org';
 
 const isNetwork = (error: unknown) => error instanceof CliError && error.exitCode === EXIT.network;
 
@@ -699,18 +747,52 @@ export class TuiController {
   }
 
   private dropTask(taskId: string): void {
+    this.dropTasks(new Set([taskId]));
+  }
+
+  private dropTasks(ids: ReadonlySet<string>): void {
     const s = this.state;
     const patch: Partial<TuiState> = {};
-    if (s.list !== null && s.list.tasks[taskId] !== undefined) {
+    if (s.list !== null && [...ids].some((id) => s.list?.tasks[id] !== undefined)) {
       const tasks = { ...s.list.tasks };
-      delete tasks[taskId];
+      for (const id of ids) delete tasks[id];
       patch.list = { ...s.list, tasks };
     }
-    if (s.everyone !== null) patch.everyone = s.everyone.filter((t) => t.id !== taskId);
+    if (s.everyone !== null) patch.everyone = s.everyone.filter((t) => !ids.has(t.id));
     if (s.search !== null) {
-      patch.search = { ...s.search, hits: s.search.hits.filter((t) => t.id !== taskId) };
+      patch.search = { ...s.search, hits: s.search.hits.filter((t) => !ids.has(t.id)) };
     }
     this.set(patch, true);
+  }
+
+  /** Puts tasks taken out locally back where they were shown (a refused change). */
+  private restoreTasks(tasks: readonly Task[]): void {
+    const s = this.state;
+    if (tasks.length === 0 || s.org.id !== tasks[0]?.orgId) return;
+    const patch: Partial<TuiState> = {};
+    if (s.list !== null) {
+      const list = { ...s.list.tasks };
+      for (const t of tasks) list[t.id] = t;
+      patch.list = { ...s.list, tasks: list };
+    }
+    this.set(patch, true);
+    // Everyone and search rows come back with the refetch that follows every change.
+  }
+
+  /** A task and every descendant the shown list holds. */
+  private subtreeIds(taskId: string): Set<string> {
+    const ids = new Set([taskId]);
+    const tasks = Object.values(this.state.list?.tasks ?? {});
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const t of tasks) {
+        if (t.parentId !== null && ids.has(t.parentId) && !ids.has(t.id)) {
+          ids.add(t.id);
+          grew = true;
+        }
+      }
+    }
+    return ids;
   }
 
   /** A task as currently shown (list, Everyone or search). */
@@ -970,7 +1052,12 @@ export class TuiController {
         return;
       case 'tag':
       case 'group':
+      case 'org':
+      case 'orgGroup':
         this.keyPicker(mode, input, key);
+        return;
+      case 'orgConfirm':
+        this.keyOrgConfirm(mode, input, key);
         return;
       case 'search':
         this.keySearch(mode, input, key);
@@ -1696,7 +1783,7 @@ export class TuiController {
   }
 
   /** The picker's options for the current filter text. */
-  pickerOptions(mode: Extract<Mode, { kind: 'tag' | 'group' }>): PickerOption[] {
+  pickerOptions(mode: PickerMode): PickerOption[] {
     const query = mode.input.value.trim().toLocaleLowerCase();
     const matches = (name: string) => query === '' || name.toLocaleLowerCase().includes(query);
     if (mode.kind === 'tag') {
@@ -1718,17 +1805,21 @@ export class TuiController {
       }
       return options;
     }
+    if (mode.kind === 'org') {
+      const from = this.findTask(mode.taskId)?.orgId ?? this.state.org.id;
+      return orgsInOrder(this.state.me)
+        .filter((org) => org.id !== from && matches(org.name))
+        .map((org) => ({ id: org.id, label: clean(org.name), color: null, checked: false }));
+    }
+    if (mode.kind === 'orgGroup') {
+      return pickerGroups(mode.groups ?? [])
+        .filter((group) => matches(group.name))
+        .map((group) => ({ id: group.id, label: clean(group.name), color: null, checked: false }));
+    }
     const list = this.state.list;
     if (list === null) return [];
-    const groups: Group[] = Object.values(list.groups).sort((a, b) =>
-      a.kind === b.kind
-        ? compareKeys(a.position, b.position) || compareKeys(a.id, b.id)
-        : a.kind === 'inbox'
-          ? -1
-          : 1,
-    );
     const current = this.findTask(mode.taskId)?.placement?.groupId;
-    return groups
+    const options: PickerOption[] = pickerGroups(Object.values(list.groups))
       .filter((group) => matches(group.name))
       .map((group) => ({
         id: group.id,
@@ -1736,13 +1827,15 @@ export class TuiController {
         color: null,
         checked: group.id === current,
       }));
+    // ADR 0072: the way on to the other orgs, last.
+    const other = this.t('picker.otherOrg');
+    if (this.state.me.orgs.length > 1 && matches(other)) {
+      options.push({ id: null, label: other, color: null, checked: false, action: 'otherOrg' });
+    }
+    return options;
   }
 
-  private keyPicker(
-    mode: Extract<Mode, { kind: 'tag' | 'group' }>,
-    input: string,
-    key: KeyInfo,
-  ): void {
+  private keyPicker(mode: PickerMode, input: string, key: KeyInfo): void {
     const options = this.pickerOptions(mode);
     if (key.downArrow || key.upArrow) {
       if (options.length === 0) return;
@@ -1753,7 +1846,7 @@ export class TuiController {
       return;
     }
     // "Move to…" has digit shortcuts while the filter is empty (02 §5).
-    if (mode.kind === 'group' && mode.input.value === '' && /^[1-9]$/.test(input) && !key.ctrl) {
+    if (mode.kind !== 'tag' && mode.input.value === '' && /^[1-9]$/.test(input) && !key.ctrl) {
       const option = options[Number(input) - 1];
       if (option !== undefined) this.pick(mode, option);
       return;
@@ -1773,13 +1866,39 @@ export class TuiController {
     this.pick(mode, option);
   }
 
-  private pick(mode: Extract<Mode, { kind: 'tag' | 'group' }>, option: PickerOption): void {
+  private pick(mode: PickerMode, option: PickerOption): void {
     const task = this.findTask(mode.taskId);
     if (task === undefined) {
       this.set({ mode: { kind: 'navigate' } });
       return;
     }
     const id = task.id;
+    if (option.action === 'otherOrg') {
+      this.set({ mode: { kind: 'org', taskId: id, input: lineInput(), choice: 0 } });
+      return;
+    }
+    if (mode.kind === 'org') {
+      const org = this.state.me.orgs.find((o) => o.id === option.id);
+      if (org === undefined) return;
+      this.set({
+        mode: {
+          kind: 'orgGroup',
+          taskId: id,
+          org,
+          groups: null,
+          error: null,
+          input: lineInput(),
+          choice: 0,
+        },
+      });
+      void this.loadOrgGroups(id, org);
+      return;
+    }
+    if (mode.kind === 'orgGroup') {
+      this.set({ mode: { kind: 'navigate' } });
+      if (option.id !== null) void this.prepareOrgMove(task, mode.org, option.id);
+      return;
+    }
     if (mode.kind === 'group') {
       this.set({ mode: { kind: 'navigate' } });
       const groupId = option.id;
@@ -1846,6 +1965,162 @@ export class TuiController {
           undo: () => this.setTag(id, tagId, !on),
           redo: () => this.setTag(id, tagId, on),
         }),
+    });
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // Moving to another organisation (ADR 0072): org, group, then a confirmation when needed
+
+  /** My groups in the picked org, for the picker's group step. */
+  private async loadOrgGroups(taskId: string, org: Org): Promise<void> {
+    const current = () => {
+      const mode = this.state.mode;
+      return mode.kind === 'orgGroup' && mode.taskId === taskId && mode.org.id === org.id
+        ? mode
+        : null;
+    };
+    try {
+      const list = await this.ctx(() =>
+        unwrap(
+          this.api.GET('/api/v1/orgs/{orgId}/my-list', { params: { path: { orgId: org.id } } }),
+        ),
+      );
+      const mode = current();
+      if (mode === null) return;
+      const groups = pickerGroups(list.groups);
+      // Enter takes the move's default: my first group after the Inbox.
+      const first = groups.findIndex((group) => group.kind !== 'inbox');
+      this.set({ mode: { ...mode, groups, choice: Math.max(0, first) } });
+    } catch (error) {
+      const text = await this.describe(error);
+      const mode = current();
+      if (mode !== null) this.set({ mode: { ...mode, error: text } });
+    }
+  }
+
+  /** Asks the server what the move would share; confirms first when it shows others' content. */
+  private async prepareOrgMove(task: Task, org: Org, groupId: string): Promise<void> {
+    const generation = this.orgGeneration;
+    let preview: { exposes: boolean; comments: number; attachments: number };
+    try {
+      preview = await this.ctx(() =>
+        unwrap(
+          this.api.GET('/api/v1/tasks/move-to-org/preview', {
+            params: { query: { ids: task.id, orgId: org.id } },
+          }),
+        ),
+      );
+    } catch (error) {
+      const text = await this.describe(error);
+      if (generation !== this.orgGeneration || this.closed) return;
+      this.set({
+        message: { text: this.t('error.save', { message: text }), tone: 'error', retry: false },
+      });
+      return;
+    }
+    if (generation !== this.orgGeneration || this.closed) return;
+    if (preview.exposes === true) {
+      // Only when nothing else was started meanwhile.
+      if (this.state.mode.kind !== 'navigate') return;
+      this.set({
+        mode: {
+          kind: 'orgConfirm',
+          taskId: task.id,
+          org,
+          groupId,
+          comments: count(preview.comments) ?? 0,
+          files: count(preview.attachments) ?? 0,
+        },
+      });
+      return;
+    }
+    this.moveToOrg(this.findTask(task.id) ?? task, org, groupId);
+  }
+
+  /** "3 comments and 2 files by other people will be visible to members of …". */
+  shareNotice(mode: Extract<Mode, { kind: 'orgConfirm' }>): string {
+    const { comments, files } = mode;
+    const content =
+      comments > 0 && files > 0
+        ? this.t('confirm.content.both', { comments, files })
+        : comments > 0
+          ? this.t('confirm.content.comments', { comments })
+          : files > 0
+            ? this.t('confirm.content.files', { files })
+            : this.t('confirm.content.other');
+    return this.t('confirm.share', { content, org: clean(mode.org.name) });
+  }
+
+  private keyOrgConfirm(
+    mode: Extract<Mode, { kind: 'orgConfirm' }>,
+    input: string,
+    key: KeyInfo,
+  ): void {
+    // Sharing other people's words is a deliberate yes: only `y`, never a stray Enter.
+    if (input === 'y' && !key.ctrl && !key.meta) {
+      this.set({ mode: { kind: 'navigate' } });
+      const task = this.findTask(mode.taskId);
+      if (task !== undefined) this.moveToOrg(task, mode.org, mode.groupId);
+      return;
+    }
+    if (key.escape || (input === 'n' && !key.ctrl && !key.meta)) {
+      this.set({ mode: { kind: 'navigate' } });
+    }
+  }
+
+  /**
+   * Moves the task (and its subtasks) to `groupId` in `org`; it leaves the list at once. Undo
+   * moves it back to where it was in its group and, for a subtask, under its old parent: best
+   * effort, since others may have changed either meanwhile (ADR 0072 §20).
+   */
+  private moveToOrg(task: Task, org: Org, groupId: string): void {
+    const id = task.id;
+    const sourceOrgId = task.orgId;
+    const parentId = task.parentId;
+    const list = this.state.list;
+    const back = list === null ? null : restorePlan(list, id);
+    const place = back?.kind === 'move' ? back.body : null;
+    const subtree = this.subtreeIds(id);
+    const removed = [...subtree].flatMap((tid) => {
+      const shown = this.findTask(tid);
+      return shown === undefined ? [] : [shown];
+    });
+    const there = async () => {
+      await unwrap(
+        this.api.POST('/api/v1/tasks/move-to-org', {
+          body: { ids: [id], orgId: org.id, groupId },
+        }),
+      );
+      this.dropTasks(subtree);
+    };
+    const home = async () => {
+      const send = (at: typeof place) =>
+        unwrap(
+          this.api.POST('/api/v1/tasks/move-to-org', {
+            body: { ids: [id], orgId: sourceOrgId, ...(at ?? {}) },
+          }),
+        );
+      let result: Awaited<ReturnType<typeof send>>;
+      try {
+        result = await send(place);
+      } catch (error) {
+        // The old group or neighbour is gone: my first group there will do.
+        if (place === null || !isRefusal(error)) throw error;
+        result = await send(null);
+      }
+      if (parentId !== null) {
+        try {
+          await this.patchTask(id, { parentId });
+        } catch (error) {
+          if (!isRefusal(error)) throw error;
+        }
+      }
+      for (const moved of result.tasks) this.touchTask(moved);
+    };
+    void this.mutate(there, {
+      done: this.t('toast.moved', { group: clean(org.name) }),
+      local: { apply: () => this.dropTasks(subtree), revert: () => this.restoreTasks(removed) },
+      onSuccess: () => this.pushUndo({ undo: home, redo: there }),
     });
   }
 
@@ -1977,9 +2252,11 @@ export class TuiController {
 }
 
 export interface PickerOption {
-  /** A tag or group id; null for "create this tag". */
+  /** A tag, group or org id; null for "create this tag" and for an `action`. */
   id: string | null;
   label: string;
   color: string | null;
   checked: boolean;
+  /** "Another organisation…" in the move picker (ADR 0072). */
+  action?: 'otherOrg';
 }

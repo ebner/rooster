@@ -2,6 +2,10 @@
 
 What changed for you in each version of rooster, newest first. After an update, rooster offers this page once. You can open it at any time from Settings or the guide's page list. The notes for whoever runs rooster (upgrades, settings, security) are in the [changelog](../../../CHANGELOG.md).
 
+## Unreleased
+
+- **Move a task to another organisation.** Created a task in the wrong organisation? Choose **Move to organisation…** in the task's menu, in the palette (Ctrl+K) or in the bar for selected tasks, then the organisation and the group. Subtasks, comments and attachments come along, and Undo moves it back. See [Move to another organisation](./my-tasks.md#move-to-another-organisation). The command line has `rooster mv --to-org`.
+
 ## 1.10.1
 
 _2026-11-12_

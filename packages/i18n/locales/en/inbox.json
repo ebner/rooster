@@ -28,7 +28,8 @@
     "due_removed": "removed the due date of your task",
     "invite_accepted": "joined {org}",
     "reminder": "Reminder",
-    "device_connected": "was connected to your account"
+    "device_connected": "was connected to your account",
+    "moved_away": "moved “{title}” to another organisation"
   },
   "reminder": {
     "due": "due",
@@ -38,5 +39,8 @@
     "from": "was connected from {ip}",
     "hint": "Not you? Revoke it in Settings → Connected apps.",
     "account": "Your account"
+  },
+  "movedAway": {
+    "unknown": "moved a task to another organisation"
   }
 }

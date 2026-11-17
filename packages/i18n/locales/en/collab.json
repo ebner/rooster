@@ -55,7 +55,9 @@
       "pat": "via an access token",
       "oauth": "via an app",
       "import": "via import"
-    }
+    },
+    "org_moved": "moved this task here from {org}",
+    "org_moved_unknown": "moved this task here from another organisation"
   },
   "dev": {
     "section": "Comments, activity and inbox",

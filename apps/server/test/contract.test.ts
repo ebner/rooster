@@ -47,6 +47,8 @@ interface Fixture {
   orgSlug: string;
   /** Another org of the owner, whose slug a rename can collide with. */
   otherOrgSlug: string;
+  /** Its ID (ADR 0072: a target for moving tasks). */
+  otherOrgId: string;
   ownerId: string;
   adminId: string;
   otherMemberId: string;
@@ -1124,6 +1126,71 @@ const SPECS: Record<string, Spec> = {
       },
     ],
   },
+  'POST /api/v1/tasks/move-to-org': {
+    ok: (f) => ({
+      path: '/api/v1/tasks/move-to-org',
+      body: { ids: [f.taskId], orgId: f.otherOrgId },
+    }),
+    cases: [
+      {
+        status: 404,
+        code: 'not_found',
+        request: (f) => ({
+          path: '/api/v1/tasks/move-to-org',
+          body: { ids: [fresh()], orgId: f.otherOrgId },
+        }),
+      },
+      {
+        status: 410,
+        code: 'conflict_deleted',
+        request: (f) => ({
+          path: '/api/v1/tasks/move-to-org',
+          body: { ids: [f.trashedTaskId], orgId: f.otherOrgId },
+        }),
+      },
+      {
+        status: 422,
+        code: 'same_org',
+        request: (f) => ({
+          path: '/api/v1/tasks/move-to-org',
+          body: { ids: [f.taskId], orgId: f.orgId },
+        }),
+      },
+    ],
+  },
+  'GET /api/v1/tasks/move-to-org/preview': {
+    ok: (f) => ({
+      path: `/api/v1/tasks/move-to-org/preview?ids=${f.taskId},${f.otherTaskId}&orgId=${f.otherOrgId}`,
+    }),
+    cases: [
+      {
+        status: 404,
+        code: 'not_found',
+        request: (f) => ({
+          path: `/api/v1/tasks/move-to-org/preview?ids=${fresh()}&orgId=${f.otherOrgId}`,
+        }),
+      },
+      {
+        status: 410,
+        code: 'conflict_deleted',
+        request: (f) => ({
+          path: `/api/v1/tasks/move-to-org/preview?ids=${f.trashedTaskId}&orgId=${f.otherOrgId}`,
+        }),
+      },
+      {
+        status: 422,
+        code: 'validation_failed',
+        request: (f) => ({ path: `/api/v1/tasks/move-to-org/preview?ids=${f.taskId}` }),
+      },
+      {
+        status: 422,
+        code: 'same_org',
+        request: (f) => ({
+          path: `/api/v1/tasks/move-to-org/preview?ids=${f.taskId}&orgId=${f.orgId}`,
+        }),
+      },
+    ],
+  },
   'PUT /api/v1/tasks/{id}/expanded': {
     ok: (f) => ({ path: `/api/v1/tasks/${f.taskId}/expanded` }),
     cases: [
@@ -1786,6 +1853,7 @@ function fixture(options: FixtureOptions = {}): Fixture {
     orgId: org.id,
     orgSlug: org.slug,
     otherOrgSlug: otherOrg.slug,
+    otherOrgId: otherOrg.id,
     ownerId: owner.userId,
     adminId: admin.userId,
     otherMemberId: other.userId,

@@ -15,15 +15,16 @@ import type { Tx } from './context.ts';
 /**
  * Whether a cell of the user's matrix is on: their stored row, else the default (ADR 0033).
  * The `device_connected` security notice (11 §9.4) is outside the matrix: always in-app and by
- * email, never pushed.
+ * email, never pushed. So is `moved_away` (ADR 0072 §15): in-app only.
  */
 export function prefEnabled(
   tx: Tx,
   userId: string,
-  type: NotificationPrefType | 'device_connected',
+  type: NotificationPrefType | 'device_connected' | 'moved_away',
   channel: NotificationPrefChannel,
 ): boolean {
   if (type === 'device_connected') return channel !== 'push';
+  if (type === 'moved_away') return channel === 'inapp';
   const row = tx
     .select({ enabled: notificationPref.enabled })
     .from(notificationPref)

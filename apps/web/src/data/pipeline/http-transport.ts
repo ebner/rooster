@@ -91,6 +91,10 @@ function request(op: ListOp, orgId: string, signal?: AbortSignal): Promise<Fetch
         body: wire(op.payload),
         ...init,
       });
+    case 'task.moveToOrg':
+      // ADR 0072: `entityId` is the source org; the body names the tasks and the target. The
+      // op's `restore` (undo's optimistic return) stays on the client.
+      return api.POST('/api/v1/tasks/move-to-org', { body: wire(op.payload), ...init });
     case 'task.expanded':
       return op.payload.expanded
         ? api.PUT('/api/v1/tasks/{id}/expanded', { params: { path: { id } }, ...init })

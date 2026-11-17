@@ -120,6 +120,8 @@ interface Fixture {
   app: App;
   db: AppDb;
   orgId: string;
+  /** The owner's personal org (ADR 0072: the target of moving a task). */
+  personalOrgId: string;
   /** A second plain member, the target of member-management routes. */
   otherMemberId: string;
   inviteId: string;
@@ -458,6 +460,21 @@ const ROWS: Record<string, Row> = {
   'POST /api/v1/tasks/{id}/duplicate': {
     request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/duplicate`, body: {} }),
     expect: { ...orgScoped(201, 201), ...grants(403, 201, 404, 201) },
+  },
+  // ADR 0072: moving the owner's task to the owner's personal org. Write on the task and in
+  // the target org: the member is not in the target (404), a grant must reach both orgs.
+  'POST /api/v1/tasks/move-to-org': {
+    request: (f) => ({
+      path: '/api/v1/tasks/move-to-org',
+      body: { ids: [f.taskId], orgId: f.personalOrgId },
+    }),
+    expect: { ...orgScoped(404, 200), ...grants(403, 404, 404, 200) },
+  },
+  'GET /api/v1/tasks/move-to-org/preview': {
+    request: (f) => ({
+      path: `/api/v1/tasks/move-to-org/preview?ids=${f.taskId}&orgId=${f.personalOrgId}`,
+    }),
+    expect: { ...orgScoped(404, 200), ...grants(403, 404, 404, 200) },
   },
   'PUT /api/v1/tasks/{id}/expanded': {
     request: (f) => ({ path: `/api/v1/tasks/${f.taskId}/expanded` }),
@@ -1076,6 +1093,7 @@ async function fixture(): Promise<Fixture> {
     app,
     db,
     orgId: org.id,
+    personalOrgId: personalOrg,
     otherMemberId: other.userId,
     inviteId: link.id,
     inviteToken: link.url.split('/invite/')[1] ?? '',

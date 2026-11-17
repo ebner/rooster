@@ -3,6 +3,7 @@ import { ancestorsOf, type ListState, listOps, orderedGroups } from '@rooster/co
 import type { Comment, Task } from '@rooster/core/schemas';
 import {
   Bell,
+  Building2,
   Check,
   ChevronDown,
   Copy,
@@ -75,6 +76,9 @@ import {
 } from '../list/lazy';
 import type { ListContextValue } from '../list/list-context';
 import type { Row } from '../list/model/rows';
+import { LazyMoveOrgPopover, LazyMoveOrgSheet } from '../move-org/lazy';
+import type { MoveOrgTarget } from '../move-org/move-org-picker';
+import { forgetFollowed, noteFollowed, paneOrgRedirect, useCanMoveToOrg } from '../move-org/store';
 import { AssigneeField } from '../people/assignee-field';
 import { TagSheet } from '../tags/tag-sheet';
 import { DescriptionField } from './description-field';
@@ -189,6 +193,8 @@ function PaneContent({
   const [dateSection, setDateSection] = useState<'repeat' | 'reminder' | null>(null);
   /** P10 (FR-REC-4): "Delete this task / this and following" is showing. */
   const [askDelete, setAskDelete] = useState(false);
+  /** ADR 0072: the move-to-organisation picker is open. */
+  const [moveOrgOpen, setMoveOrgOpen] = useState(false);
   const repeatButton = useRef<HTMLButtonElement>(null);
   const reminderButton = useRef<HTMLButtonElement>(null);
   const moreButton = useRef<HTMLSpanElement>(null);
@@ -199,6 +205,7 @@ function PaneContent({
   const me = useMe().data;
   // FR-COL-6: personal orgs hide the assignee and the followers (comments stay).
   const shared = me?.orgs.find((o) => o.id === orgId)?.isPersonal === false;
+  const multiOrg = useCanMoveToOrg();
   const mobile = useIsMobile();
   const dateRef = useRef(dateCtx);
   dateRef.current = dateCtx;
@@ -210,6 +217,18 @@ function PaneContent({
   const task: Task | undefined = listTask ?? detail.data;
   const description = detail.data?.description ?? listTask?.description ?? '';
   const chain = slice?.chain ?? detail.data?.parentChain ?? [];
+  // A task outside My tasks (someone else's, opened from Everyone's tasks) is known to the
+  // controller through its detail, so it can still move to another org (ADR 0072 §22).
+  const extra = useRef<{ source: Task | undefined; tasks: Readonly<Record<string, Task>> }>({
+    source: undefined,
+    tasks: {},
+  });
+  if (extra.current.source !== detail.data) {
+    extra.current = {
+      source: detail.data,
+      tasks: detail.data ? { [detail.data.id]: detail.data } : {},
+    };
+  }
 
   const controller = useMemo(
     () =>
@@ -315,6 +334,27 @@ function PaneContent({
       <LazyTaskReminders taskId={taskId} controller={controller} ctx={dateCtx} slot={slot} />
     </Suspense>
   );
+  // ADR 0072: its own controller, which also knows a task outside My tasks (from its detail).
+  const mover = useMemo(
+    () =>
+      new ListController({
+        ...controller.deps,
+        store: createListStore({ showCompleted: true }),
+        extraTasks: () => extra.current.tasks,
+      }),
+    [controller],
+  );
+  /** ADR 0072 §22: the move leaves this org; the pane follows the task to its new one. */
+  const moveToOrg = (target: MoveOrgTarget) => {
+    commitTitle();
+    const moved = mover.moveToOrg(
+      { orgId: target.orgId, orgName: target.orgName, groupId: target.groupId },
+      [taskId],
+    );
+    if (!moved) return;
+    noteFollowed(taskId, target.orgId);
+    pane.followToOrg(target.orgSlug);
+  };
   const copyLink = async () => {
     if (await copyText(taskUrl(orgSlug, taskId))) toast({ message: t('toolbar.linkCopied') });
   };
@@ -438,8 +478,28 @@ function PaneContent({
       paneFullScreen: () => pane.toggleFullScreen(),
       assign: () => applyFocus('assignee'),
       focusComment: () => applyFocus('comment'),
+      // ADR 0072: the palette's "Move to organisation…" with focus in the pane.
+      ...(multiOrg && task && !task.deletedAt && mover.movableToOrg([taskId]).length > 0
+        ? { moveToOrg: () => setMoveOrgOpen(true) }
+        : {}),
     }),
   );
+
+  // ADR 0072 §23: a task that lives in another org than the URL's (an old link, a move made
+  // elsewhere) is shown under its own org, so the pane never edits it in the wrong one.
+  const redirect = paneOrgRedirect({
+    taskId,
+    urlOrgId: orgId,
+    taskOrgId: listTask ? orgId : detail.data?.orgId,
+    orgs: me?.orgs ?? [],
+  });
+  useEffect(() => {
+    if (redirect) pane.followToOrg(redirect);
+  }, [redirect, pane]);
+  const detailOrgId = detail.data?.orgId;
+  useEffect(() => {
+    if (detailOrgId === orgId) forgetFollowed(taskId);
+  }, [detailOrgId, orgId, taskId]);
 
   if (!task) {
     const missing = errorCode(detail.error) === 'not_found' || detail.error;
@@ -468,6 +528,8 @@ function PaneContent({
 
   const done = task.completedAt !== null;
   const groups = slice?.groups ?? [];
+  // A task the server doesn't have yet (a queued create) can't move (ADR 0072 §21).
+  const canMoveOrg = multiOrg && !task.deletedAt && mover.movableToOrg([taskId]).length > 0;
   const creator =
     task.createdBy === userId
       ? t('props.you')
@@ -510,6 +572,11 @@ function PaneContent({
               {task.placement && groups.length > 0 && (
                 <MenuItem icon={FolderInput} onAction={() => setGroupOpen(true)}>
                   {t('toolbar.moveTo')}
+                </MenuItem>
+              )}
+              {canMoveOrg && (
+                <MenuItem icon={Building2} onAction={() => setMoveOrgOpen(true)}>
+                  {tList('moveToOrg.action')}
                 </MenuItem>
               )}
               <MenuItem icon={Hash} onAction={copyId}>
@@ -562,6 +629,21 @@ function PaneContent({
               />
             </Suspense>
           )}
+          {moveOrgOpen && !mobile && moreButton.current && (
+            <Suspense fallback={null}>
+              <LazyMoveOrgPopover
+                anchor={moreButton.current}
+                ids={[taskId]}
+                sourceOrgId={orgId}
+                placement="bottom end"
+                onMove={moveToOrg}
+                onClose={() => {
+                  setMoveOrgOpen(false);
+                  moreButton.current?.querySelector('button')?.focus();
+                }}
+              />
+            </Suspense>
+          )}
           <span ref={moreButton} className="inline-flex">
             <MenuTrigger>
               <IconButton icon={MoreHorizontal} aria-label={t('toolbar.more')} />
@@ -585,6 +667,15 @@ function PaneContent({
                         </Menu>
                       </MenuPopover>
                     </SubmenuTrigger>
+                  )}
+                  {canMoveOrg && (
+                    <MenuItem
+                      icon={Building2}
+                      onAction={() => setMoveOrgOpen(true)}
+                      data-testid="pane-move-org"
+                    >
+                      {tList('moveToOrg.action')}
+                    </MenuItem>
                   )}
                   <MenuItem icon={Hash} onAction={copyId}>
                     {t('toolbar.copyId')}
@@ -1057,6 +1148,18 @@ function PaneContent({
                 title={task.title}
                 onChoose={removeRecurring}
                 onCancel={() => setAskDelete(false)}
+              />
+            </Suspense>
+          )}
+          {moveOrgOpen && (
+            <Suspense fallback={null}>
+              <LazyMoveOrgSheet
+                isOpen
+                onOpenChange={setMoveOrgOpen}
+                ids={[taskId]}
+                sourceOrgId={orgId}
+                subject={task.title}
+                onMove={moveToOrg}
               />
             </Suspense>
           )}

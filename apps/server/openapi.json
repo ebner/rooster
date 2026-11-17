@@ -4418,6 +4418,192 @@
           "offsetMinutes": 60
         }
       },
+      "TaskMoveToOrgResult": {
+        "type": "object",
+        "properties": {
+          "orgId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "The target org."
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            },
+            "description": "The moved roots in the target org, in request order, as I see them there."
+          },
+          "movedIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "description": "Every task that moved: the roots and all their descendants (live and in Trash)."
+          }
+        },
+        "required": [
+          "orgId",
+          "tasks",
+          "movedIds"
+        ],
+        "example": {
+          "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+          "tasks": [
+            {
+              "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+              "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+              "seq": 58,
+              "parentId": null,
+              "subtaskPosition": null,
+              "title": "Pay invoice",
+              "hasDescription": true,
+              "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+              "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+              "dueDate": "2026-10-10",
+              "dueTime": null,
+              "dueTz": null,
+              "startDate": null,
+              "completedAt": null,
+              "tagIds": [
+                "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+              ],
+              "counts": {
+                "subtasks": 1,
+                "subtasksDone": 0,
+                "comments": 2,
+                "attachments": 0
+              },
+              "placement": {
+                "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+                "position": "a1V"
+              },
+              "createdAt": 1791532800000,
+              "updatedAt": 1791532800000
+            }
+          ],
+          "movedIds": [
+            "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+            "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c03"
+          ]
+        }
+      },
+      "TaskMoveToOrg": {
+        "type": "object",
+        "properties": {
+          "afterId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Ordering intent: the item that will be directly ABOVE (lower position). Null or absent with `beforeId` set means the top; both absent means the end."
+          },
+          "beforeId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Ordering intent: the item that will be directly BELOW (higher position)."
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "Up to 200 tasks, all in one org. A task whose ancestor is also listed travels with the ancestor; every subtree moves whole (subtasks in Trash too)."
+          },
+          "orgId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "The target org (ID). I must be a member; it must not be the tasks’ org (`422 same_org`)."
+          },
+          "groupId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "One of my groups in the target org. Absent or null: with `afterId`/`beforeId`, the group of that task in my list there (`422 validation_failed` when it is not in my list there); without them, my first group after the Inbox."
+          }
+        },
+        "required": [
+          "ids",
+          "orgId"
+        ],
+        "example": {
+          "ids": [
+            "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01"
+          ],
+          "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+          "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02"
+        }
+      },
+      "TaskMoveToOrgPreview": {
+        "type": "object",
+        "properties": {
+          "tasks": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Roots that would move."
+          },
+          "subtasks": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Their descendants, live and in Trash."
+          },
+          "comments": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Live comments on the moved tasks written by someone other than me."
+          },
+          "attachments": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Live attachments on the moved tasks uploaded by someone other than me."
+          },
+          "exposes": {
+            "type": "boolean",
+            "description": "True when `comments + attachments > 0` and the target org has a member who is not in the source org: confirm before moving."
+          },
+          "newTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Tag names missing in the target org; the move creates them."
+          },
+          "reassigned": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Tasks whose assignee would change."
+          }
+        },
+        "required": [
+          "tasks",
+          "subtasks",
+          "comments",
+          "attachments",
+          "exposes",
+          "newTags",
+          "reassigned"
+        ],
+        "example": {
+          "tasks": 1,
+          "subtasks": 1,
+          "comments": 3,
+          "attachments": 2,
+          "exposes": true,
+          "newTags": [
+            "finance"
+          ],
+          "reassigned": 1
+        }
+      },
       "BulkResult": {
         "type": "object",
         "properties": {
@@ -6927,6 +7113,76 @@
               "type",
               "data"
             ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "taskId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "actorId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "via": {
+                "type": "string",
+                "enum": [
+                  "web",
+                  "pwa",
+                  "cli",
+                  "tui",
+                  "mcp",
+                  "pat",
+                  "oauth",
+                  "import",
+                  "system"
+                ]
+              },
+              "createdAt": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "org_moved"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "fromOrgId": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                  },
+                  "toOrgId": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                  }
+                },
+                "required": [
+                  "fromOrgId",
+                  "toOrgId"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "taskId",
+              "actorId",
+              "via",
+              "createdAt",
+              "type",
+              "data"
+            ]
           }
         ],
         "example": {
@@ -7081,7 +7337,8 @@
               "due_changed",
               "invite_accepted",
               "reminder",
-              "device_connected"
+              "device_connected",
+              "moved_away"
             ]
           },
           "task": {
@@ -7221,6 +7478,9 @@
                 "type": "string"
               },
               "ip": {
+                "type": "string"
+              },
+              "taskTitle": {
                 "type": "string"
               }
             }
@@ -21103,6 +21363,505 @@
                       "status": 422,
                       "detail": "This Idempotency-Key was already used for a different request.",
                       "code": "idempotency_key_reuse"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/move-to-org": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "operationId": "moveTasksToOrg",
+        "summary": "Move tasks with their subtasks to another organisation I am a member of",
+        "description": "Moves every listed task with its whole subtree (subtasks in Trash too) from their org (all `ids` must be in one org, else `422 validation_failed`) to `orgId` (`422 same_org` when it is theirs). A listed subtask whose ancestor is not listed detaches and arrives top-level. Each moved task gets the target org’s next number, or the number it had there before; its old number keeps resolving (`GET /tasks/resolve`). The roots become mine and land consecutively, in request order, at the top of `groupId` or at the `afterId`/`beforeId` intent (without `groupId`: the intent’s anchor task’s group in my list there, else my first group after the Inbox); a subtask keeps its assignee when they are a member of the target org, else takes its parent’s. Tags are matched by name in the target org and created when missing. Comments, activity, attachments and my reminders travel; followers, reminders, expansions and notifications of people outside the target org are removed, and the assignee and followers who lose the task get a `moved_away` notification. A grant needs `tasks:write` on every moved task and on the landing group, and org-wide write in the target when a tag must be created (`403`). Clients should call the preview first and confirm when it says `exposes`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskMoveToOrg"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The moved tasks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskMoveToOrgResult"
+                }
+              }
+            },
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`, `csrf_origin`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  },
+                  "csrf_origin": {
+                    "summary": "Cross-origin request rejected.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Cross-origin request rejected.",
+                      "code": "csrf_origin"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "conflict_deleted": {
+                    "summary": "The task is deleted; restore it first.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Gone",
+                      "status": 410,
+                      "detail": "The task is deleted; restore it first.",
+                      "code": "conflict_deleted"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body is too large (1 MB). Codes: `payload_too_large`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "payload_too_large": {
+                    "summary": "The request body exceeds the limit of 1024 KB.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Content Too Large",
+                      "status": 413,
+                      "detail": "The request body exceeds the limit of 1024 KB.",
+                      "code": "payload_too_large"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not JSON. Codes: `unsupported_media_type`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unsupported_media_type": {
+                    "summary": "Send JSON (application/json).",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unsupported Media Type",
+                      "status": 415,
+                      "detail": "Send JSON (application/json).",
+                      "code": "unsupported_media_type"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `idempotency_key_reuse`, `same_org`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "idempotency_key_reuse": {
+                    "summary": "This Idempotency-Key was already used for a different request.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "This Idempotency-Key was already used for a different request.",
+                      "code": "idempotency_key_reuse"
+                    }
+                  },
+                  "same_org": {
+                    "summary": "The tasks are already in that organisation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The tasks are already in that organisation.",
+                      "code": "same_org",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; retry after the Retry-After header. Codes: `rate_limited`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Too many requests; slow down.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Too Many Requests",
+                      "status": 429,
+                      "detail": "Too many requests; slow down.",
+                      "code": "rate_limited"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/EditTime"
+          },
+          {
+            "$ref": "#/components/parameters/ClientId"
+          },
+          {
+            "$ref": "#/components/parameters/Client"
+          }
+        ]
+      }
+    },
+    "/api/v1/tasks/move-to-org/preview": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "operationId": "previewMoveTasksToOrg",
+        "summary": "What moving tasks to another organisation would do (no side effects)",
+        "description": "The same checks as the move (`404`, `410 conflict_deleted`, `422 same_org`, `422 validation_failed`, `403`), then counts: the roots and their descendants, the live comments and attachments on them by people other than me, the tag names the target org lacks, and how many assignees change. `exposes` is true when other people’s comments or files would become visible to a target member who is not in the source org: clients confirm before moving.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Comma-separated task IDs (1–200), all in one org, as for the move."
+            },
+            "required": true,
+            "description": "Comma-separated task IDs (1–200), all in one org, as for the move.",
+            "name": "ids",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "description": "The target org (ID)."
+            },
+            "required": true,
+            "description": "The target org (ID).",
+            "name": "orgId",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskMoveToOrgPreview"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in: no valid session cookie or bearer token. Codes: `unauthenticated`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "unauthenticated": {
+                    "summary": "Sign in to continue.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unauthorized",
+                      "status": 401,
+                      "detail": "Sign in to continue.",
+                      "code": "unauthenticated"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed: owner or admin only, a cross-origin cookie request, or outside the token’s grant. Codes: `forbidden_scope`, `outside_grant`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "forbidden_scope": {
+                    "summary": "This token lacks the tasks:write capability.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token lacks the tasks:write capability.",
+                      "code": "forbidden_scope"
+                    }
+                  },
+                  "outside_grant": {
+                    "summary": "This token may only write in the group Prio.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "This token may only write in the group Prio.",
+                      "code": "outside_grant"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not a member (existence is never revealed). Codes: `not_found`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "not_found": {
+                    "summary": "Task not found.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Task not found.",
+                      "code": "not_found"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Gone: deleted, no longer valid, or expired. Codes: `conflict_deleted`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "conflict_deleted": {
+                    "summary": "The task is deleted; restore it first.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Gone",
+                      "status": 410,
+                      "detail": "The task is deleted; restore it first.",
+                      "code": "conflict_deleted"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed; `errors` lists the fields. Codes: `validation_failed`, `same_org`.",
+            "content": {
+              "application/problem+json": {
+                "examples": {
+                  "validation_failed": {
+                    "summary": "The request did not pass validation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The request did not pass validation.",
+                      "code": "validation_failed",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
+                    }
+                  },
+                  "same_org": {
+                    "summary": "The tasks are already in that organisation.",
+                    "value": {
+                      "type": "about:blank",
+                      "title": "Unprocessable Content",
+                      "status": 422,
+                      "detail": "The tasks are already in that organisation.",
+                      "code": "same_org",
+                      "errors": [
+                        {
+                          "path": "title",
+                          "message": "Too small: expected string to have >=1 characters"
+                        }
+                      ]
                     }
                   }
                 },

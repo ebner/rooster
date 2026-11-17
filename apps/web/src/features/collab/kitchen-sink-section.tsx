@@ -8,14 +8,16 @@ import { BottomNav } from '../../ui/bottom-nav';
 import { sampleDateContext } from '../dates/fixtures';
 import { Group, Section, Specimen } from '../dev-ui/layout';
 import { NotificationsPage, notificationTypes } from '../settings/notifications-page';
-import { fixtureIds } from '../shell/fixtures';
+import { fixtureIds, fixtureMe } from '../shell/fixtures';
 import { SidebarItem } from '../shell/sidebar-item';
 import { ActivityFeed } from './activity-feed';
 import { CommentComposer } from './comment-composer';
 import {
   fixtureCandidates,
   fixtureFeed,
+  fixtureMovedAway,
   fixtureNotifications,
+  fixtureOrgMoved,
   fixtureOwnCommentId,
   fixturePendingId,
   fixturePeople,
@@ -31,8 +33,20 @@ export function CollabKitchenSection() {
   const locale = isLocale(i18n.language) ? i18n.language : 'en';
   const dateCtx = useMemo(() => sampleDateContext(locale), [locale]);
   const now = dateCtx.nowMs;
-  const entries = useMemo(() => groupActivity(fixtureFeed(now)), [now]);
-  const notifications = useMemo(() => fixtureNotifications(now), [now]);
+  const entries = useMemo(
+    () =>
+      groupActivity(
+        [...fixtureFeed(now), ...fixtureOrgMoved(now)].sort(
+          (a, b) =>
+            (a.kind === 'comment' ? a.comment.createdAt : a.activity.createdAt) -
+            (b.kind === 'comment' ? b.comment.createdAt : b.activity.createdAt),
+        ),
+      ),
+    [now],
+  );
+  const notifications = useMemo(() => [fixtureMovedAway(now), ...fixtureNotifications(now)], [now]);
+  // ADR 0072 §16: the viewer belongs to the fixture orgs only.
+  const orgName = (orgId: string) => fixtureMe.orgs.find((o) => o.id === orgId)?.name;
   const person = (id: string) => fixturePeople[id];
   const [following, setFollowing] = useState(true);
   const [prefs, setPrefs] = useState<NotificationPref[]>(() =>
@@ -56,6 +70,7 @@ export function CollabKitchenSection() {
             viewerId={fixtureIds.jannik}
             person={person}
             pending={new Set([fixturePendingId])}
+            orgName={orgName}
             now={now}
             locale={locale}
             dateCtx={dateCtx}

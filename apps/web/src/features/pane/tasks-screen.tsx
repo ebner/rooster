@@ -71,6 +71,11 @@ export function createPaneControls(deps: {
       if (!deps.back?.()) deps.go(paths.orgView(deps.orgSlug, deps.view?.() ?? 'my'), true);
       if (hadFocus) deps.focusList();
     },
+    followToOrg: (orgSlug) => {
+      const current = deps.current();
+      if (current === null || orgSlug === deps.orgSlug) return;
+      deps.go(paths.task(orgSlug, current), true);
+    },
     toggleFullScreen: () => {
       const store = usePaneStore.getState();
       store.setFullScreen(!store.fullScreen);

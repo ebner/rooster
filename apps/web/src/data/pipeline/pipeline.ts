@@ -44,6 +44,23 @@ export const activityKey = (taskId: string) => ['activity', taskId] as const;
 /** A queued op is exactly what the outbox stores. */
 type Queued = OutboxRecord;
 
+/**
+ * The orgs whose list an op changes: the org it is queued under and, for a move to another
+ * org (ADR 0072), the org the tasks arrive in (undo's move back shows them there at once).
+ */
+function listOrgs(item: Queued): string[] {
+  const { op } = item;
+  return op.kind === 'task.moveToOrg' && op.payload.orgId !== item.orgId
+    ? [item.orgId, op.payload.orgId]
+    : [item.orgId];
+}
+
+const touchesOrg = (item: Queued, orgId: string) => listOrgs(item).includes(orgId);
+
+/** ADR 0072: a move to another org is queued under its source org, whatever list ran it. */
+const queueOrgOf = (spec: ListOpSpec, orgId: string) =>
+  spec.kind === 'task.moveToOrg' ? spec.entityId : orgId;
+
 export interface PipelineOptions {
   transport: ListTransport;
   queryClient: QueryClient;
@@ -358,7 +375,7 @@ export class ListPipeline {
     const previous = this.view(orgId) ?? this.bases.get(orgId);
     let base = normalizeMyList(orgId, list, previous);
     for (const { seq, item } of this.confirmed) {
-      if (seq > seqAtStart && item.orgId === orgId) base = this.apply(base, item);
+      if (seq > seqAtStart && touchesOrg(item, orgId)) base = this.apply(base, item);
     }
     this.bases.set(orgId, base);
     return this.replay(orgId);
@@ -404,7 +421,7 @@ export class ListPipeline {
       this.stored.add(id);
     }
     if (foreign.length > 0) this.write(() => this.outbox?.remove(foreign));
-    for (const orgId of new Set([...bases.keys(), ...records.map((r) => r.orgId)])) {
+    for (const orgId of new Set([...bases.keys(), ...records.flatMap(listOrgs)])) {
       this.render(orgId);
     }
     this.publish();
@@ -497,7 +514,7 @@ export class ListPipeline {
     for (const id of ids) this.markSettled(id);
     const removed = gone.filter((item) => !stored(item)).map((item) => item.op.opId);
     if (removed.length > 0) this.write(() => this.outbox?.remove(removed));
-    for (const orgId of new Set(gone.map((item) => item.orgId))) this.render(orgId);
+    for (const orgId of new Set(gone.flatMap(listOrgs))) this.render(orgId);
     for (const item of gone) this.refetchSide(item);
     this.publish();
     this.changed();
@@ -524,11 +541,33 @@ export class ListPipeline {
   }
 
   /**
-   * Ops not yet confirmed for an org, oldest first. Caches outside the list (`['task', id]`,
-   * `['tags', orgId]`) render their server state with these replayed on top.
+   * Ops not yet confirmed for an org, oldest first (with moves arriving in it, ADR 0072).
+   * Caches outside the list (`['task', id]`, `['tags', orgId]`) render their server state with
+   * these replayed on top.
    */
   pendingOps(orgId: string): ListOp[] {
-    return this.queue.filter((item) => item.orgId === orgId).map((item) => item.op);
+    return this.queue.filter((item) => touchesOrg(item, orgId)).map((item) => item.op);
+  }
+
+  /**
+   * Whether an op that creates the task (a create, a duplicate's copy, a recurring task's next
+   * instance) is still queued: the server does not know the task yet (ADR 0072: it can't be
+   * previewed or moved to another org until then).
+   */
+  createsPending(taskId: string): boolean {
+    return this.queue.some(({ op }) => {
+      switch (op.kind) {
+        case 'task.create':
+          return op.entityId === taskId;
+        case 'task.duplicate':
+          return op.payload.id === taskId;
+        case 'task.complete':
+        case 'task.skip':
+          return op.payload.nextId === taskId;
+        default:
+          return false;
+      }
+    });
   }
 
   /**
@@ -578,26 +617,39 @@ export class ListPipeline {
 
   /**
    * Stamps, applies and queues ops. The cache update is synchronous, so the UI renders the
-   * change in the same frame (02 §1.3). Returns the stamped ops.
+   * change in the same frame (02 §1.3). Returns the stamped ops. A move to another org is
+   * queued under its source org (its `entityId`), so an undo entry can hold ops of two orgs
+   * (ADR 0072 §20).
    */
   enqueue(orgId: string, specs: readonly ListOpSpec[], ctx: ReducerContext): ListOp[] {
     if (this.closed) return [];
     // Without a loaded list (a comment from a pane opened by link) the ops still queue; the
     // list's first fetch replays them.
-    let view = this.view(orgId) ?? this.bases.get(orgId);
+    const views = new Map<string, ListState | undefined>();
+    const viewOf = (org: string) => {
+      if (!views.has(org)) views.set(org, this.view(org) ?? this.bases.get(org));
+      return views.get(org);
+    };
     const ops: ListOp[] = [];
     const items: Queued[] = [];
     const userId = this.user?.() ?? null;
     for (const spec of specs) {
       const op = { ...spec, opId: uuidv7(), editTime: this.now(), clientId: this.clientId };
-      const item: Queued = userId === null ? { op, orgId, ctx } : { op, orgId, ctx, userId };
-      if (view) view = this.apply(view, item);
+      const queueOrg = queueOrgOf(spec, orgId);
+      const item: Queued =
+        userId === null ? { op, orgId: queueOrg, ctx } : { op, orgId: queueOrg, ctx, userId };
+      for (const org of listOrgs(item)) {
+        const view = viewOf(org);
+        if (view) views.set(org, this.apply(view, item));
+      }
       this.queue.push(item);
       this.applySide(item);
       items.push(item);
       ops.push(op);
     }
-    if (view) this.queryClient.setQueryData(myListKey(orgId), view);
+    for (const [org, view] of views) {
+      if (view) this.queryClient.setQueryData(myListKey(org), view);
+    }
     const generation = this.generation;
     let stored = false;
     this.write(async () => {
@@ -671,7 +723,7 @@ export class ListPipeline {
         this.queue.push(...fresh);
         for (const r of fresh) this.applySide(r);
         if (message.stored !== false) for (const r of fresh) this.stored.add(r.op.opId);
-        for (const orgId of new Set(fresh.map((r) => r.orgId))) this.render(orgId);
+        for (const orgId of new Set(fresh.flatMap(listOrgs))) this.render(orgId);
         this.publish();
         this.changed();
         void this.flush();
@@ -771,7 +823,7 @@ export class ListPipeline {
     );
     for (const item of gone) this.take(item.op.opId);
     // Confirmed or dropped elsewhere: which one, and the server state, a refetch tells.
-    for (const orgId of new Set(gone.map((item) => item.orgId))) void this.refetch(orgId);
+    for (const orgId of new Set(gone.flatMap(listOrgs))) void this.refetch(orgId);
     for (const item of gone) this.refetchSide(item);
     if (gone.length > 0) void this.queryClient.invalidateQueries({ queryKey: ['task'] });
     this.restore(new Map(), records);
@@ -827,7 +879,7 @@ export class ListPipeline {
   private replay(orgId: string): ListState {
     let state = this.bases.get(orgId) as ListState;
     for (const item of this.queue) {
-      if (item.orgId === orgId) state = this.apply(state, item);
+      if (touchesOrg(item, orgId)) state = this.apply(state, item);
     }
     return state;
   }
@@ -880,7 +932,7 @@ export class ListPipeline {
           } catch (error) {
             // The server has the op: a merge bug must not resend it. The refetch shows its state.
             console.error('rooster: could not merge a confirmation', error);
-            void this.refetch(head.orgId);
+            for (const orgId of listOrgs(head)) void this.refetch(orgId);
           }
         }
         this.publish();
@@ -926,27 +978,50 @@ export class ListPipeline {
     if (op.kind === 'tag.create' || newTags) {
       void this.queryClient.invalidateQueries({ queryKey: tagsKey(item.orgId) });
     }
+    if (op.kind === 'task.moveToOrg') this.confirmMove(op.payload.orgId, op.payload.ids, response);
+  }
+
+  /**
+   * ADR 0072: what the server did in the org the tasks arrived in is known only from there
+   * (SSE skips this tab's own `my-list`, `task` and `tags` keys): its Everyone's tasks, its tags
+   * (a move creates missing ones) and the details of every moved task (new org and number).
+   * Its `my-list` is refetched by the merge.
+   */
+  private confirmMove(targetOrgId: string, ids: readonly string[], response: unknown): void {
+    void this.queryClient.invalidateQueries({ queryKey: everyoneRootKey(targetOrgId) });
+    void this.queryClient.invalidateQueries({ queryKey: tagsKey(targetOrgId) });
+    const movedIds = (response as { movedIds?: unknown } | undefined)?.movedIds;
+    const moved = Array.isArray(movedIds)
+      ? movedIds.filter((id): id is string => typeof id === 'string')
+      : ids;
+    for (const id of new Set([...ids, ...moved])) {
+      void this.queryClient.invalidateQueries({ queryKey: taskDetailKey(id) });
+    }
   }
 
   private confirmList(item: Queued, response: unknown): void {
-    const base = this.bases.get(item.orgId);
-    if (!base) return;
-    const merged = mergeResponse(this.apply(base, item), item.op, response);
-    this.bases.set(item.orgId, merged.state);
     this.confirmSeq += 1;
     this.confirmed.push({ seq: this.confirmSeq, item });
     if (this.confirmed.length > 100) this.confirmed.shift();
+    for (const orgId of listOrgs(item)) this.confirmListOf(orgId, item, response);
+  }
+
+  private confirmListOf(orgId: string, item: Queued, response: unknown): void {
+    const base = this.bases.get(orgId);
+    if (!base) return;
+    const merged = mergeResponse(this.apply(base, item), item.op, response);
+    this.bases.set(orgId, merged.state);
     // The server usually agrees with the optimistic guess. Then the rendered state stays, so a
     // confirmation costs no render while the user types (AC-2.12); server-only stamps (a new
     // task's `seq`) reach the cache when the browser is idle.
-    const next = this.replay(item.orgId);
-    const view = this.view(item.orgId);
+    const next = this.replay(orgId);
+    const view = this.view(orgId);
     if (!view || !equivalentStates(view, next, true)) {
-      this.queryClient.setQueryData(myListKey(item.orgId), next);
+      this.queryClient.setQueryData(myListKey(orgId), next);
     } else if (!equivalentStates(view, next)) {
-      this.syncWhenIdle(item.orgId);
+      this.syncWhenIdle(orgId);
     }
-    if (merged.refetch) void this.refetch(item.orgId);
+    if (merged.refetch) void this.refetch(orgId);
   }
 
   /** Confirmed ops move into every cached task detail they touch (their new server state). */
@@ -1039,7 +1114,9 @@ export class ListPipeline {
 
   /** A dropped or discarded op leaves the P6 caches through a refetch (they have no base). */
   private refetchSide(item: Queued): void {
-    void this.queryClient.invalidateQueries({ queryKey: everyoneRootKey(item.orgId) });
+    for (const orgId of listOrgs(item)) {
+      void this.queryClient.invalidateQueries({ queryKey: everyoneRootKey(orgId) });
+    }
     const taskId = commentTaskId(item.op);
     if (taskId !== null) void this.queryClient.invalidateQueries({ queryKey: activityKey(taskId) });
   }
@@ -1116,8 +1193,10 @@ export class ListPipeline {
   private drop(item: Queued, error: unknown): boolean {
     const before = this.view(item.orgId);
     if (!this.take(item.op.opId)) return false;
-    this.render(item.orgId);
-    void this.refetch(item.orgId);
+    for (const orgId of listOrgs(item)) {
+      this.render(orgId);
+      void this.refetch(orgId);
+    }
     this.refetchSide(item);
     void this.queryClient.invalidateQueries({ queryKey: ['task'] });
     void this.queryClient.invalidateQueries({ queryKey: tagsKey(item.orgId) });

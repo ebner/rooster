@@ -112,3 +112,27 @@ export const taskExpansion = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.userId, t.taskId] })],
 );
+
+/**
+ * The numbers a task had in orgs it moved away from (ADR 0072): `GET /tasks/resolve` falls back
+ * to them, and a task that moves back into an org gets its number there back (counters never
+ * reuse numbers, so it is still free).
+ */
+export const taskFormerSeq = sqliteTable(
+  'task_former_seq',
+  {
+    orgId: text('org_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    seq: integer('seq').notNull(),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => task.id, { onDelete: 'cascade' }),
+    movedAt: integer('moved_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.seq] }),
+    // A task's former number in the org it returns to, and the cascade on task deletes.
+    index('task_former_seq_task').on(t.taskId, t.orgId),
+  ],
+);

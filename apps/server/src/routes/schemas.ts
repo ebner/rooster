@@ -66,6 +66,9 @@ import {
   taskDuplicateSchema,
   taskMoveResultSchema,
   taskMoveSchema,
+  taskMoveToOrgPreviewSchema,
+  taskMoveToOrgResultSchema,
+  taskMoveToOrgSchema,
   taskPageSchema,
   taskPatchResultSchema,
   taskPatchSchema,
@@ -296,6 +299,41 @@ export const TaskDuplicateSchema = named(
   }),
   'TaskDuplicate',
 );
+// ADR 0072: moving tasks between organisations.
+export const TaskMoveToOrgSchema = named(
+  describe(taskMoveToOrgSchema, {
+    ids: 'Up to 200 tasks, all in one org. A task whose ancestor is also listed travels with the ancestor; every subtree moves whole (subtasks in Trash too).',
+    orgId:
+      'The target org (ID). I must be a member; it must not be the tasks’ org (`422 same_org`).',
+    groupId:
+      'One of my groups in the target org. Absent or null: with `afterId`/`beforeId`, the group of that task in my list there (`422 validation_failed` when it is not in my list there); without them, my first group after the Inbox.',
+    afterId: AFTER_ID,
+    beforeId: BEFORE_ID,
+  }),
+  'TaskMoveToOrg',
+);
+export const TaskMoveToOrgResultSchema = named(
+  describe(taskMoveToOrgResultSchema.extend({ tasks: z.array(TaskSchema) }), {
+    orgId: 'The target org.',
+    tasks: 'The moved roots in the target org, in request order, as I see them there.',
+    movedIds: 'Every task that moved: the roots and all their descendants (live and in Trash).',
+  }),
+  'TaskMoveToOrgResult',
+);
+export const TaskMoveToOrgPreviewSchema = named(
+  describe(taskMoveToOrgPreviewSchema, {
+    tasks: 'Roots that would move.',
+    subtasks: 'Their descendants, live and in Trash.',
+    comments: 'Live comments on the moved tasks written by someone other than me.',
+    attachments: 'Live attachments on the moved tasks uploaded by someone other than me.',
+    exposes:
+      'True when `comments + attachments > 0` and the target org has a member who is not in the source org: confirm before moving.',
+    newTags: 'Tag names missing in the target org; the move creates them.',
+    reassigned: 'Tasks whose assignee would change.',
+  }),
+  'TaskMoveToOrgPreview',
+);
+
 export const TagSchema = named(tagSchema, 'Tag');
 export const TagCreateSchema = named(
   describe(tagCreateSchema, {

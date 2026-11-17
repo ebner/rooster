@@ -25,6 +25,8 @@ export type DomainEventType =
   | 'task.purged'
   | 'task.expanded'
   | 'task.followed'
+  /** ADR 0072: tasks moved to another org; audiences in both orgs. */
+  | 'task.org_moved'
   | 'comment.created'
   | 'comment.updated'
   | 'comment.deleted'

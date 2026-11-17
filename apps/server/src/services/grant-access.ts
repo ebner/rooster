@@ -178,6 +178,10 @@ export function canReadNotification(
   // newly connected one included, may neither see nor acknowledge it.
   if (item.type === BROWSER_ONLY_NOTIFICATION) return false;
   if (!grantsOrg(actor.grant.constraints, item.orgId)) return false;
+  // A moved_away notice names a task that has left the org (ADR 0072 §15): only a grant that
+  // reads the whole source org could have seen it, so a group-limited one doesn't get its title.
+  if (item.type === MOVED_AWAY_NOTIFICATION)
+    return canRead(actor.grant.constraints, item.orgId, null);
   if (item.taskId === null || canRead(actor.grant.constraints, item.orgId, null)) return true;
   const row = tx
     .select({ id: task.id, parentId: task.parentId, orgId: task.orgId, title: task.title })
@@ -189,6 +193,8 @@ export function canReadNotification(
 
 /** A notification type no grant may read or mark (`canReadNotification`). */
 export const BROWSER_ONLY_NOTIFICATION = 'device_connected';
+/** ADR 0072: no task to check, so a grant needs read access to the whole source org. */
+export const MOVED_AWAY_NOTIFICATION = 'moved_away';
 
 /**
  * The SSE query keys a grant's stream may receive (11 §2.3): nothing of an org it does not
@@ -272,7 +278,9 @@ export function visibleKeys(
         // groups) is invalidated by the bare prefix, so a cached copy goes stale without
         // naming it. One it never could read is not news to it at all.
         const before = prior?.get(id);
-        const orgId = orgOf.get(id) ?? org;
+        // The prior group belongs to the org the keys are for: a task moved to another org
+        // (ADR 0072) is judged where it was, not where it is now.
+        const orgId = org ?? orgOf.get(id) ?? null;
         if (
           before !== undefined &&
           orgId !== null &&

@@ -13,5 +13,10 @@ export interface PaneControls {
    */
   open: (taskId: string, focus?: PaneFocusTarget | null) => void;
   close: () => void;
+  /**
+   * ADR 0072 §22/§23: the pane's task now lives in another org; the pane moves to
+   * `/o/<orgSlug>/t/<id>`, replacing the history entry.
+   */
+  followToOrg: (orgSlug: string) => void;
   toggleFullScreen: () => void;
 }

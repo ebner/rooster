@@ -6,6 +6,7 @@ import type {
   Task,
   TaskCompleteResult,
   TaskMoveResult,
+  TaskMoveToOrgResult,
   TaskPatchResult,
   TaskSkipResult,
 } from '../schemas/list.ts';
@@ -101,8 +102,18 @@ export function mergeResponse(state: ListState, op: ListOpSpec, response: unknow
       if (typeof position !== 'string' || !task) return keep;
       return { state: putTask(state, { ...task, subtaskPosition: position }), refetch: false };
     }
-    case 'task.moveToOrg':
-      return { state, refetch: true }; // ADR 0072: the core agent implements it
+    case 'task.moveToOrg': {
+      // ADR 0072: the org the tasks left asks the server how its list looks now (a refetch is
+      // cheap next to a move); the org they arrive in takes the roots' new numbers and keys
+      // where undo's move back already shows them, and the rest from the refetch.
+      if (state.orgId !== op.payload.orgId) return { state, refetch: true };
+      const tasks = (response as Partial<TaskMoveToOrgResult> | undefined)?.tasks;
+      let next = state;
+      for (const task of Array.isArray(tasks) ? tasks : []) {
+        if (isTask(task) && task.orgId === state.orgId) next = putTask(next, task);
+      }
+      return { state: next, refetch: true };
+    }
     case 'task.duplicate':
       // The copied subtasks get server ids: only a refetch replaces the optimistic copies.
       return {

@@ -73,12 +73,17 @@ export function needs(scope: GrantScope): Runtime {
 
 /**
  * Asks before something destructive. `--yes` skips it; without a terminal to ask on, the
- * command refuses (exit 2) rather than guessing.
+ * command refuses (exit 2) rather than guessing, with `needYes` when it says more than the
+ * generic refusal.
  */
-export async function confirmOrAbort(runtime: Runtime, message: string): Promise<void> {
+export async function confirmOrAbort(
+  runtime: Runtime,
+  message: string,
+  needYes: string = t('confirm.needYes'),
+): Promise<void> {
   if (runtime.globals.yes) return;
   if (!runtime.io.stdinIsTTY || runtime.io.stdout.isTTY !== true) {
-    throw new CliError(EXIT.usage, t('confirm.needYes'));
+    throw new CliError(EXIT.usage, needYes);
   }
   const answer = await confirm({ message });
   if (isCancel(answer) || answer !== true)

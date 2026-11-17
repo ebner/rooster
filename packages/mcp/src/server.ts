@@ -701,6 +701,104 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
   );
 
   register(
+    'move_task_to_org',
+    {
+      title: 'Move a task to another organisation',
+      description:
+        "Moves a task with all its subtasks to another of the user's organisations, to the top of one of the user's groups there (default: their first group after the Inbox). The task gets a new number there (its old ref keeps working) and becomes the user's; comments, files and activity travel with it. When other people's comments or files would become visible to people who couldn't see them before, it does not move the task and says what would be shared: ask the user, and only with their agreement call it again with shareContent: true. Ask the user before moving tasks between organisations.",
+      inputSchema: z.object({
+        ref: refArg,
+        org: orgArg,
+        toOrg: z
+          .string()
+          .min(1)
+          .max(64)
+          .describe(
+            'The organisation to move it to: its slug (or "personal"). list_orgs shows them.',
+          ),
+        group: z
+          .string()
+          .min(1)
+          .max(GROUP_NAME_MAX)
+          .optional()
+          .describe(
+            "One of the user's groups in the target organisation, by name. Default: their first group after the Inbox.",
+          ),
+        shareContent: z
+          .boolean()
+          .optional()
+          .describe(
+            "true: move even though other people's comments or files become visible to new people. Only after the user agreed to that.",
+          ),
+      }),
+      annotations: WRITE,
+    },
+    async (args, ctx) => {
+      const found = await ctx.resolveTask(args.ref, args.org);
+      const source = await ctx.orgById(found.orgId);
+      const target = await ctx.org(args.toOrg);
+      if (target.id === found.orgId) {
+        throw new ToolError(
+          `same_org: ${taskRef(found, source)} is already in ${orgText(target)}; nothing to move.`,
+        );
+      }
+      const group =
+        args.group === undefined ? undefined : await ctx.findGroup(target.id, args.group);
+      const preview = await unwrap(
+        ctx.client.GET('/api/v1/tasks/move-to-org/preview', {
+          params: { query: { ids: found.id, orgId: target.id } },
+        }),
+      );
+      const comments = canonical.count(preview.comments) ?? 0;
+      const files = canonical.count(preview.attachments) ?? 0;
+      const subtasks = canonical.count(preview.subtasks) ?? 0;
+      const newTags = Array.isArray(preview.newTags)
+        ? preview.newTags.filter((t): t is string => typeof t === 'string')
+        : [];
+      if (preview.exposes === true && args.shareContent !== true) {
+        // ADR 0072 §13: the user decides whether other people's words go to new readers.
+        return toolResult(
+          `Not moved: ${taskRef(found, source)} carries ${comments} comment(s) and ${files} file(s) by other people, and members of ${orgText(target)} who are not in ${orgText(source)} would be able to read them. Tell the user what would be shared and ask; only if they agree, call move_task_to_org again with shareContent: true.`,
+          {
+            moved: false,
+            task: { ref: taskRef(found, source), title: found.title },
+            toOrg: target.slug,
+            wouldShare: { comments, files },
+            subtasks,
+            ...(newTags.length === 0 ? {} : { newTags }),
+          },
+        );
+      }
+      const result = await unwrap(
+        ctx.client.POST('/api/v1/tasks/move-to-org', {
+          body: {
+            ids: [found.id],
+            orgId: target.id,
+            ...(group === undefined ? {} : { groupId: group.id }),
+          },
+        }),
+      );
+      const moved = result.tasks.find((t) => t.id === found.id) ?? result.tasks[0];
+      if (moved === undefined) {
+        return toolResult(`Moved ${taskRef(found, source)} to ${orgText(target)}.`);
+      }
+      const rows = await rowContext(ctx, target, false);
+      const withSubtasks =
+        subtasks === 0 ? '' : ` with ${subtasks} subtask${subtasks === 1 ? '' : 's'}`;
+      const tags = newTags.length === 0 ? '' : ` Created ${newTags.length} tag(s) there.`;
+      return toolResult(
+        `Moved ${taskRef(found, source)}${withSubtasks} to ${orgText(target)}; it is now ${taskRef(moved, target)}.${tags}`,
+        {
+          moved: true,
+          task: taskRow(moved, rows),
+          formerRef: taskRef(found, source),
+          ...(newTags.length === 0 ? {} : { newTags }),
+        },
+      );
+    },
+  );
+
+  register(
     'create_group',
     {
       title: 'Create a group',

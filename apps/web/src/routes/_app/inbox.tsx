@@ -33,6 +33,8 @@ function InboxRoute() {
 
   const open = (notification: Notification) => {
     if (notification.readAt === null) void setRead(notification, true);
+    // ADR 0072 §15: the task is in an org the user can't open; there is nothing to go to.
+    if (notification.type === 'moved_away') return;
     const org = orgs.find((o) => o.id === notification.orgId);
     const slug = org ? orgUrlSlug(org) : notification.orgSlug;
     const href =

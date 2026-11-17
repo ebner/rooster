@@ -52,7 +52,11 @@
     "tag": "Tag",
     "group": "Move to",
     "createTag": "Create #{name}",
-    "none": "No matches"
+    "none": "No matches",
+    "otherOrg": "Another organisation…",
+    "org": "Move to organisation",
+    "orgGroup": "Group in {org}",
+    "confirmOrg": "Move to {org}?"
   },
   "date": {
     "today": "today",
@@ -116,13 +120,15 @@
     "apply": "apply",
     "close": "close",
     "scroll": "scroll",
-    "description": "description"
+    "description": "description",
+    "moveAnyway": "move anyway",
+    "cancel": "cancel"
   },
   "help": {
     "title": "Keyboard shortcuts",
     "differences": "Differences from the web",
     "limits": "Limits",
-    "undoLimits": "u undoes your own changes from this session, up to 50: adding, titles, dates, completing, moving, tags, descriptions and deleting. Undoing an add moves the task to the Trash. Undo doesn’t check for newer changes by others, and undoing a completion doesn’t remove the next task a repeating task created.",
+    "undoLimits": "u undoes your own changes from this session, up to 50: adding, titles, dates, completing, moving (to another organisation too, as far as it can be undone), tags, descriptions and deleting. Undoing an add moves the task to the Trash. Undo doesn’t check for newer changes by others, and undoing a completion doesn’t remove the next task a repeating task created.",
     "offline": "The terminal app works online only: without a connection the status says offline, and changes fail with r to retry."
   },
   "key": {
@@ -138,7 +144,7 @@
     "complete": "Complete or reopen",
     "date": "Date, repeat or reminder: “fri 14:00”, “every mon”, “!1h”, or none",
     "tag": "Add or remove tags",
-    "move": "Move to a group",
+    "move": "Move to a group or organisation",
     "subtask": "Add a subtask",
     "detail": "Open or close the details",
     "description": "Edit the description in $EDITOR",
@@ -172,5 +178,14 @@
     "org": "On the web: {web}",
     "retry": "Not on the web, which retries by itself and works offline",
     "quit": "On the web, q is quick add"
+  },
+  "confirm": {
+    "share": "{content} by other people will be visible to members of {org}.",
+    "content": {
+      "comments": "{comments, plural, one {# comment} other {# comments}}",
+      "files": "{files, plural, one {# file} other {# files}}",
+      "both": "{comments, plural, one {# comment} other {# comments}} and {files, plural, one {# file} other {# files}}",
+      "other": "Comments and files"
+    }
   }
 }

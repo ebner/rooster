@@ -28,7 +28,8 @@
     "due_removed": "tog bort förfallodatumet för din uppgift",
     "invite_accepted": "gick med i {org}",
     "reminder": "Påminnelse",
-    "device_connected": "anslöts till ditt konto"
+    "device_connected": "anslöts till ditt konto",
+    "moved_away": "flyttade ”{title}” till en annan organisation"
   },
   "reminder": {
     "due": "förfaller",
@@ -38,5 +39,8 @@
     "from": "anslöts från {ip}",
     "hint": "Inte du? Återkalla den under Inställningar → Anslutna appar.",
     "account": "Ditt konto"
+  },
+  "movedAway": {
+    "unknown": "flyttade en uppgift till en annan organisation"
   }
 }

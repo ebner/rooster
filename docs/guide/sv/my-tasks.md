@@ -64,7 +64,7 @@ Panelen visar en uppgift i sin helhet: ansvarig, förfallodatum, upprepning, på
 - **Öppna den:** klicka på raden (inte på namnet), tryck på **O** (fokus flyttas till panelen), **blanksteg** (titta: panelen öppnas men fokus stannar i listan) eller **Tab+Enter** (redigera namnet i panelen).
 - När panelen är öppen byter ↑ och ↓ i listan vilken uppgift den visar. En uppgift som du lägger till medan panelen är öppen visas i panelen så fort du trycker på Enter, så att du kan fortsätta med beskrivningen (klicka i den eller tryck på Tab+R).
 - **Beskrivning:** en redigerare som sparar Markdown. Markdown-genvägar fungerar medan du skriver (`# `, `- `, `[] `, `**fetstil**`). Markera text för att få fram formateringsverktygen. **Ctrl+klick** (⌘+klick) öppnar en länk; ett vanligt klick låter dig redigera länktexten. På en telefon eller surfplatta trycker du på en länk för att se adressen: tryck på adressen för att öppna den, eller redigera eller ta bort länken. Långa beskrivningar fälls ihop efter ungefär 12 rader bakom **Visa mer**. Tab+R hoppar till beskrivningen.
-- **Verktygsfältet:** **Markera som klar**, **Kopiera länk**, **Duplicera**, **Helskärm** (Tab+X) och **Fler åtgärder** (Ta bort uppgift, Kopiera uppgifts-ID, Öppna i ny flik, Flytta till grupp).
+- **Verktygsfältet:** **Markera som klar**, **Kopiera länk**, **Duplicera**, **Helskärm** (Tab+X) och **Fler åtgärder** (Ta bort uppgift, Kopiera uppgifts-ID, Öppna i ny flik, Flytta till grupp, Flytta till organisation…).
 - Esc går tillbaka till listan, och Esc en gång till stänger panelen. Varje uppgift har en egen länk som du kan spara eller dela.
 
 ## Taggar
@@ -99,6 +99,16 @@ Knappen **⋯** i listans rubrik har åtgärderna för hela listan: **Lägg till
 | M eller Tab+M | till en grupp du väljer (skriv för att filtrera, eller tryck på 1–9) |
 
 Du kan också dra med bara tangentbordet: tabba till radens handtag, lyft med blanksteg, flytta med piltangenterna och släpp med blanksteg.
+
+## Flytta till en annan organisation
+
+Skapade du en uppgift i Personligt som hör till teamet, eller tvärtom? Välj **Flytta till organisation…** i uppgiftens meny **Fler åtgärder** (på mobilen uppgiftens ⋯-meny), eller tryck Ctrl+K och kör kommandot från paletten. När flera uppgifter är markerade finns det i raden längst ned (på mobilen i ⋯-menyn i markeringsläget).
+
+1. Välj organisation och sedan en av dina grupper där (eller tryck Enter en gång till för den första).
+2. Uppgiften flyttas med alla sina deluppgifter och hamnar överst i gruppen. Den blir din, får ett nytt nummer i den nya organisationen, och taggarna följer med efter namn (en tagg som organisationen inte har skapas där).
+3. Beskrivningen, kommentarerna, aktiviteten och bilagorna följer också med. Om det skulle visa andras kommentarer eller filer för personer som inte kunde se dem förut frågar rooster först.
+
+En deluppgift som flyttas för sig blir en vanlig uppgift i den nya organisationen. De som förlorar uppgiften för att de inte är medlemmar där får veta att den flyttats, men inte vart. **Ångra** flyttar tillbaka den, med sitt gamla nummer. Det krävs en anslutning för att flytta, och du kan bara flytta till organisationer där du är medlem.
 
 ## Markera flera uppgifter
 

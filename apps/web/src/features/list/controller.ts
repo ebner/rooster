@@ -5,6 +5,7 @@ import {
   ancestorsOf,
   childrenOf,
   depthOf,
+  descendantIds,
   inboxOf,
   inverseOfSequence,
   type ListOpSpec,
@@ -34,7 +35,7 @@ import {
   upcomingRowId,
   useListStore,
 } from '../../state/list-store';
-import { type UndoEntry, useUndoStore } from '../../state/undo-store';
+import { spansOrgs, type UndoEntry, useUndoStore } from '../../state/undo-store';
 import { toast } from '../../ui/toast';
 import type { ViewerDateContext } from '../dates';
 import { resolveAssigneeToken } from '../people/assignee-token';
@@ -475,8 +476,10 @@ export class ListController {
     const entry = useUndoStore.getState().popRedo();
     if (!entry) return false;
     const before = this.deps.pipeline.view(entry.orgId);
-    if (!before) return false;
-    const inverseOps = inverseOfSequence(entry.redoOps, before, this.ctx());
+    const fixed = spansOrgs(entry);
+    if (!before && !fixed) return false;
+    const inverseOps =
+      fixed || !before ? entry.inverseOps : inverseOfSequence(entry.redoOps, before, this.ctx());
     this.deps.pipeline.enqueue(entry.orgId, entry.redoOps, this.reducerContext());
     useUndoStore.getState().pushUndoKeepRedo({ ...entry, inverseOps });
     announce(this.t('undo.redone', { label: entry.label }));
@@ -493,9 +496,11 @@ export class ListController {
 
   private applyUndo(entry: UndoEntry): void {
     const before = this.deps.pipeline.view(entry.orgId);
-    if (!before) return;
+    const fixed = spansOrgs(entry);
+    if (!before && !fixed) return;
     // Redoing a create must restore, not re-create: recompute redo from the inverse.
-    const redoOps = inverseOfSequence(entry.inverseOps, before, this.ctx());
+    const redoOps =
+      fixed || !before ? entry.redoOps : inverseOfSequence(entry.inverseOps, before, this.ctx());
     this.deps.pipeline.enqueue(entry.orgId, entry.inverseOps, this.reducerContext());
     // Stop the running hide timers. Rows held until reload (FR-SET-2) stay while completed.
     for (const id of Object.keys(this.store().hiding)) {
@@ -507,7 +512,9 @@ export class ListController {
 
   /** The revert toast for a dropped op (02 §14). */
   describeDropped({ op, error, before }: DroppedOp): string {
-    const title = before?.tasks[op.entityId]?.title ?? before?.groups[op.entityId]?.name;
+    // A move to another org names its first task (its `entityId` is the source org).
+    const id = op.kind === 'task.moveToOrg' ? (op.payload.ids[0] ?? '') : op.entityId;
+    const title = before?.tasks[id]?.title ?? before?.groups[id]?.name;
     const reason = this.t(`error.code.${error.code}`, { defaultValue: '' });
     if (title) return this.t('error.couldNotSaveTitle', { title, reason: reason || error.code });
     return this.t('error.couldNotSave', { reason: reason || error.code });
@@ -1835,14 +1842,59 @@ export class ListController {
 
   /**
    * ADR 0072: moves the tasks (with their subtrees) to another org, at the top of `groupId` (null:
-   * the actor's first normal group there). One undo entry, queued under the target org. Returns
-   * false when nothing could move. CONTRACT STUB: the data-layer agent implements it.
+   * the actor's first normal group there). A selected task whose ancestor is selected travels
+   * with it. One undo entry; its move back is queued under the target org. The cursor goes to
+   * the next row, as after a delete. Returns false when nothing could move.
    */
   moveToOrg(
-    _target: { orgId: string; orgName: string; groupId: string | null },
-    _ids: readonly string[] = this.selectedTaskIds(),
+    target: { orgId: string; orgName: string; groupId: string | null },
+    ids: readonly string[] = this.selectedTaskIds(),
   ): boolean {
-    return false;
+    const state = this.state();
+    if (!state || target.orgId === this.orgId) return false;
+    const live = this.movableToOrg(ids);
+    const chosen = new Set(live);
+    const roots = live.filter((id) => !ancestorsOf(state, id).some((a) => chosen.has(a.id)));
+    if (roots.length === 0) return false;
+    const gone = roots.flatMap((id) => [id, ...descendantIds(state, id)]);
+    const shown = new Set(this.navigable().map((r) => r.id));
+    // The cursor moves on only when rows leave (the palette may move the pane's task).
+    const next = gone.some((id) => shown.has(id)) ? this.nextNavigableAfter(gone) : undefined;
+    // Over the bulk limit, each chunk lands below the previous one (in request order).
+    const specs = chunk(roots).map((part, i, parts) =>
+      listOps.moveTasksToOrg(this.orgId, {
+        ids: part,
+        orgId: target.orgId,
+        groupId: target.groupId,
+        ...(i > 0 ? { afterId: parts[i - 1]?.at(-1) ?? null, beforeId: null } : {}),
+      }),
+    );
+    const org = target.orgName;
+    const entry = this.run(this.t('undo.movedToOrg', { count: roots.length, org }), specs);
+    toast({
+      message: this.t('moveToOrg.toast', { org }),
+      ...(entry
+        ? { action: { label: this.t('undo.action'), onAction: () => this.undoEntry(entry) } }
+        : {}),
+    });
+    if (next !== undefined) this.store().select(next);
+    return true;
+  }
+
+  /**
+   * The tasks among `ids` that can move to another org now: live ones the server already has.
+   * A task whose create (or copy, or next instance) is still queued waits: the picker's preview
+   * asks the server about it, and a duplicate's optimistic subtasks only get their real ids
+   * with the refetch (ADR 0072 §21).
+   */
+  movableToOrg(ids: readonly string[]): string[] {
+    const pipeline = this.deps.pipeline;
+    const base = pipeline.baseOf(this.orgId);
+    return [...new Set(ids)].filter((id) => {
+      const task = this.task(id);
+      if (!task || pipeline.createsPending(id)) return false;
+      return (base?.tasks[id] ?? task).seq !== null;
+    });
   }
 
   /** Ctrl+D: copies go directly after their originals; the selection moves to the copy. */

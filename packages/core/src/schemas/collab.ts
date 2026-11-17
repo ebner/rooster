@@ -233,6 +233,8 @@ export const notificationSchema = z.object({
     clientName: z.string().optional(),
     clientHost: z.string().optional(),
     ip: z.string().optional(),
+    /** ADR 0072 moved_away: the moved task's title (the task itself is null: not readable). */
+    taskTitle: z.string().optional(),
   }),
   readAt: timestampSchema.nullable(),
   createdAt: timestampSchema,

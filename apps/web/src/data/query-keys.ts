@@ -17,6 +17,8 @@ export const queryKeys = {
   trash: (orgId: string) => ['trash', orgId] as const,
   /** P6. SSE invalidates `['everyone', orgId]`; the filter variants hang below it. */
   everyone: (orgId: string, filters: string) => ['everyone', orgId, filters] as const,
+  /** ADR 0072. The move picker's preview: the target org and the sorted, comma-joined ids. */
+  moveToOrgPreview: (orgId: string, ids: string) => ['move-to-org-preview', orgId, ids] as const,
   /** P6. The task's comment and activity feed (SSE `['activity', taskId]`). */
   activity: (taskId: string) => ['activity', taskId] as const,
   /** P6. The notification inbox (SSE `['notifications']`); the filter hangs below it. */

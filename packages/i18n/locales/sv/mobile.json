@@ -34,7 +34,8 @@
   },
   "selection": {
     "done": "Avsluta markering",
-    "hint": "Tryck för att markera"
+    "hint": "Tryck för att markera",
+    "more": "Fler åtgärder för markeringen"
   },
   "refresh": {
     "refreshing": "Uppdaterar…",

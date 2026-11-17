@@ -17,6 +17,7 @@ import type { ReminderSpecInput } from '../schemas/reminders.ts';
 import type {
   GroupCreateBody,
   ListOpSpec,
+  MovedSubtrees,
   ReducerContext,
   TaskCreateBody,
   TaskDuplicateBody,
@@ -30,6 +31,7 @@ import {
   inboxOf,
   keysForIntent,
   type ListState,
+  movedSet,
   normalGroups,
   omit,
   placedKeyed,
@@ -89,7 +91,10 @@ export function applyOp(state: ListState, op: ListOpSpec, ctx: ApplyContext): Li
     case 'task.reorder':
       return reorderSubtask(state, op.entityId, op.payload);
     case 'task.moveToOrg':
-      return state; // ADR 0072: the core agent implements the subtree leaving this org
+      // ADR 0072 §20: the subtrees leave the org they are in; the org they go to learns of them
+      // from the server, except when undo's move back carries what they were there.
+      if (state.orgId !== op.payload.orgId) return moveOut(state, op.payload.ids);
+      return op.restore ? moveBack(state, op.restore) : state;
     case 'task.duplicate':
       return duplicateTask(state, op.entityId, op.payload, ctx);
     case 'task.expanded':
@@ -722,6 +727,49 @@ function deleteTasks(state: ListState, ids: readonly string[], withGroupId?: str
   let next: ListState = { ...state, tasks: omit(state.tasks, gone), deletedTasks };
   for (const task of roots) {
     next = adjustCounts(next, task.parentId, -1, task.completedAt === null ? 0 : -1);
+  }
+  return next;
+}
+
+/**
+ * ADR 0072: the moved subtrees leave this org's state, with their soft-deleted descendants. A
+ * detached subtask's parent loses it from its counters (§3).
+ */
+function moveOut(state: ListState, ids: readonly string[]): ListState {
+  const moved = movedSet(state, ids);
+  if (moved.roots.length === 0) return state;
+  let next: ListState = {
+    ...state,
+    tasks: omit(state.tasks, moved.live),
+    deletedTasks:
+      moved.deleted.size > 0 ? omit(state.deletedTasks, moved.deleted) : state.deletedTasks,
+  };
+  for (const root of moved.roots) {
+    next = adjustCounts(next, root.parentId, -1, root.completedAt === null ? 0 : -1);
+  }
+  return next;
+}
+
+/**
+ * ADR 0072 §20: undo's move back puts the subtrees back as they were (the server's answer and
+ * the refetch settle the numbers, keys and assignees). Tasks the state has again are left
+ * alone, so a replay over a refetched list changes nothing.
+ */
+function moveBack(state: ListState, restore: MovedSubtrees): ListState {
+  const known = (id: string) =>
+    state.tasks[id] !== undefined || state.deletedTasks[id] !== undefined;
+  const fresh = restore.tasks.filter((t) => t.orgId === state.orgId && !known(t.id));
+  const deleted = restore.deleted.filter((e) => e.task.orgId === state.orgId && !known(e.task.id));
+  if (fresh.length === 0 && deleted.length === 0) return state;
+  const tasks = { ...state.tasks };
+  for (const task of fresh) tasks[task.id] = task;
+  const deletedTasks = { ...state.deletedTasks };
+  for (const entry of deleted) deletedTasks[entry.task.id] = entry;
+  let next: ListState = { ...state, tasks, deletedTasks };
+  const inRestore = new Set(restore.tasks.map((t) => t.id));
+  for (const task of fresh) {
+    if (task.parentId === null || inRestore.has(task.parentId)) continue;
+    next = adjustCounts(next, task.parentId, 1, task.completedAt === null ? 0 : 1);
   }
   return next;
 }

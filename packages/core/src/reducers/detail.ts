@@ -212,6 +212,12 @@ function touches(state: ListState, op: ListOpSpec): boolean {
       return op.payload.ids.some((id) => id in state.tasks);
     case 'task.create':
       return op.payload.parentId !== undefined && op.payload.parentId in state.tasks;
+    case 'task.moveToOrg':
+      // ADR 0072: a subtask that moves away, or comes back under the task (undo).
+      return (
+        op.payload.ids.some((id) => id in state.tasks) ||
+        (op.restore?.tasks.some((t) => t.parentId !== null && t.parentId in state.tasks) ?? false)
+      );
     case 'comment.patch':
       return false;
     case 'comment.delete':

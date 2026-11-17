@@ -86,6 +86,8 @@
 | POST `/tasks/:id/restore` | Undo a delete, or restore from Trash. | 2 |
 | DELETE `/tasks/:id/permanent` | Only from Trash (requires `deleted_at`). | 2 |
 | POST `/tasks/:id/duplicate` | `{includeSubtasks: true}` → TaskDTO (placed after the original). | 3 |
+| POST `/tasks/move-to-org. | ADR 0072 (FR-ORG-8): `{ids: string[] (≤ 200, one source org), orgId, groupId?, beforeId?, afterId?}` → `{orgId, tasks: TaskDTO[] (the moved roots in the target), movedIds}`. Whole subtrees move; the roots become the actor's, at the top of `groupId` (default: the actor's first normal group there). `422 same_org`, `410 conflict_deleted`; grants need write on the subtree and the landing group, and org-wide write in the target when a tag must be created. | 1.11 |
+| GET `/tasks/move-to-org/preview?ids=&orgId=` | ADR 0072 §19: `{tasks, subtasks, comments, attachments, exposes, newTags, reassigned}`; `exposes` is true when other people's comments or files would become visible to someone new. No side effects. | 1.11 |
 | POST `/tasks/bulk` | `{ids: string[] (≤ 200), op: 'complete'\|'uncomplete'\|'delete'\|'restore'\|'move'\|'setDue'\|'addTag'\|'removeTag'\|'assign', args}` → `{results: [{id, ok, code?}]}`. Atomic per task, not across tasks. | 2 |
 | PUT `/tasks/:id/tags/:tagId` · DELETE `/tasks/:id/tags/:tagId` | Add or remove a tag (set semantics, idempotent). | 3 |
 | GET `/orgs/:orgId/trash` | Deleted tasks (TaskDTO with `deletedAt` and `deletedBy`), paged. | 2 |

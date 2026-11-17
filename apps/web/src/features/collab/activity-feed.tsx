@@ -29,6 +29,11 @@ export interface ActivityFeedProps {
   person: (userId: string) => FeedPerson | undefined;
   /** Comments with an op still in the outbox ("Sending…"). */
   pending: ReadonlySet<string>;
+  /**
+   * The viewer's orgs by ID (ADR 0072 §16): "moved this task here from <org>" names the source
+   * org only when the viewer is a member of it.
+   */
+  orgName?: ((orgId: string) => string | undefined) | undefined;
   now: number;
   locale: Locale;
   dateCtx: ViewerDateContext;
@@ -54,6 +59,7 @@ export const ActivityFeed = memo(function ActivityFeed({
   viewerId,
   person,
   pending,
+  orgName,
   now,
   locale,
   dateCtx,
@@ -87,6 +93,7 @@ export const ActivityFeed = memo(function ActivityFeed({
             entry={entry}
             viewerId={viewerId}
             person={person}
+            orgName={orgName}
             now={now}
             locale={locale}
             dateCtx={dateCtx}
@@ -285,13 +292,22 @@ interface ActivityLineProps {
   entry: Extract<FeedEntry, { kind: 'activity' }>;
   viewerId: string;
   person: (userId: string) => FeedPerson | undefined;
+  orgName?: ((orgId: string) => string | undefined) | undefined;
   now: number;
   locale: Locale;
   dateCtx: ViewerDateContext;
 }
 
 /** One (grouped) activity entry: "Anna renamed this task to “Q4 plan” · 5 minutes ago". */
-function ActivityLine({ entry, viewerId, person, now, locale, dateCtx }: ActivityLineProps) {
+function ActivityLine({
+  entry,
+  viewerId,
+  person,
+  orgName,
+  now,
+  locale,
+  dateCtx,
+}: ActivityLineProps) {
   const { t } = useTranslation('collab');
   const last = entry.entries.at(-1) as Activity;
   const actor =
@@ -314,6 +330,7 @@ function ActivityLine({ entry, viewerId, person, now, locale, dateCtx }: Activit
           last={last}
           viewerId={viewerId}
           person={person}
+          orgName={orgName}
           dateCtx={dateCtx}
           locale={locale}
         />
@@ -333,6 +350,7 @@ function ActivityText({
   last,
   viewerId,
   person,
+  orgName,
   dateCtx,
   locale,
 }: Omit<ActivityLineProps, 'now'> & { last: Activity }): ReactNode {
@@ -385,6 +403,11 @@ function ActivityText({
       return <>{last.data.to === null ? t('activity.moved_top') : t('activity.moved_under')}</>;
     case 'description_edited':
       return <>{t('activity.description_edited')}</>;
+    case 'org_moved': {
+      // ADR 0072 §16: the source org is named only to its members.
+      const from = orgName?.(last.data.fromOrgId);
+      return <>{from ? t('activity.org_moved', { org: from }) : t('activity.org_moved_unknown')}</>;
+    }
     case 'created':
     case 'completed':
     case 'reopened':

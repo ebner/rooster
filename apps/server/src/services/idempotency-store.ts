@@ -68,6 +68,40 @@ export function forgetStoredResponses(tx: Tx, userIds: readonly string[]): void 
     .run();
 }
 
+const UUID_IN_TEXT = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
+
+/**
+ * Drops the stored responses of `userIds` that name any of `entityIds` (ADR 0072 §14: tasks
+ * moved to an org they are not in). Narrower than `forgetStoredResponses`: the users keep
+ * their org, so only replays that would hand back the moved tasks go.
+ */
+export function forgetResponsesMentioning(
+  tx: Tx,
+  userIds: readonly string[],
+  entityIds: readonly string[],
+): void {
+  if (userIds.length === 0 || entityIds.length === 0) return;
+  const wanted = new Set(entityIds.map((id) => id.toLowerCase()));
+  for (let i = 0; i < userIds.length; i += 500) {
+    const rows = tx
+      .select({
+        opId: idempotency.opId,
+        userId: idempotency.userId,
+        response: idempotency.response,
+      })
+      .from(idempotency)
+      .where(inArray(idempotency.userId, userIds.slice(i, i + 500)))
+      .all();
+    for (const row of rows) {
+      const named = row.response.toLowerCase().match(UUID_IN_TEXT) ?? [];
+      if (!named.some((id) => wanted.has(id))) continue;
+      tx.delete(idempotency)
+        .where(and(eq(idempotency.opId, row.opId), eq(idempotency.userId, row.userId)))
+        .run();
+    }
+  }
+}
+
 /**
  * The `(opId, userId) → response` store behind the idempotency middleware. Keys are scoped
  * per user, so one user can never replay another's response.

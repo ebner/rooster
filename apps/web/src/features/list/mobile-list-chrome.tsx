@@ -1,6 +1,16 @@
 import { orderedGroups } from '@rooster/core/reducers';
 import type { Task } from '@rooster/core/schemas';
-import { Calendar, CheckCircle2, FolderInput, Hash, Trash2, UserRound, X } from 'lucide-react';
+import {
+  Building2,
+  Calendar,
+  CheckCircle2,
+  FolderInput,
+  Hash,
+  MoreHorizontal,
+  Trash2,
+  UserRound,
+  X,
+} from 'lucide-react';
 import { type RefObject, Suspense, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMyList } from '../../data/list';
@@ -12,10 +22,12 @@ import { AccessoryBar } from '../../ui/accessory-bar';
 import { BottomNav } from '../../ui/bottom-nav';
 import { Fab } from '../../ui/fab';
 import { IconButton } from '../../ui/icon-button';
+import { Menu, MenuItem, MenuPopover, MenuTrigger } from '../../ui/menu';
 import type { SwipeRevealAction } from '../../ui/swipe-reveal';
 import { useEditingFocus, useKeyboardInset } from '../../ui/use-media';
 import { type DueValue, noDue, sameDue, useDateLabel } from '../dates';
 import { QuickDateSheet } from '../dates/quick-date-sheet';
+import { openMoveOrg, useCanMoveToOrg } from '../move-org/store';
 import { AssigneeSheet } from '../people/assignee-sheet';
 import { TagSheet } from '../tags/tag-sheet';
 import { announce } from './announcer';
@@ -93,6 +105,7 @@ export function MobileListChrome({
   const room = useRef(false);
   room.current = draft !== undefined || (dragging && room.current);
   const tags = useTagsStore((s) => s.byId);
+  const canMoveOrg = useCanMoveToOrg() && !controller.isEveryone();
   // Re-render on list changes so sheet checks and labels follow.
   useMyList(orgId);
 
@@ -225,6 +238,7 @@ export function MobileListChrome({
           count={selectedCount}
           controller={controller}
           canAssign={members !== null}
+          canMoveOrg={canMoveOrg}
           onDone={() => controller.exitSelectionMode()}
         />
       )}
@@ -307,12 +321,15 @@ function SelectionBars({
   count,
   controller,
   canAssign,
+  canMoveOrg,
   onDone,
 }: {
   count: number;
   controller: ListController;
   /** A shared org: Assign replaces Move to (five actions fit the bar). */
   canAssign: boolean;
+  /** ADR 0072: a second org; the bar is full, so it sits in the header's ⋯. */
+  canMoveOrg: boolean;
   onDone: () => void;
 }) {
   const { t } = useTranslation('mobile');
@@ -374,6 +391,32 @@ function SelectionBars({
             {tList('bulk.selected', { count })}
           </span>
           <span className="pe-2 text-sm text-text-muted">{t('selection.hint')}</span>
+          {canMoveOrg && (
+            <MenuTrigger>
+              <IconButton
+                icon={MoreHorizontal}
+                aria-label={t('selection.more')}
+                size="lg"
+                isDisabled={disabled}
+                data-testid="selection-more"
+              />
+              <MenuPopover placement="bottom end" className="min-w-48">
+                <Menu aria-label={t('selection.more')}>
+                  <MenuItem
+                    icon={Building2}
+                    onAction={() => {
+                      // A task the server doesn't have yet can't move (ADR 0072 §21).
+                      const ids = controller.movableToOrg(controller.selectedTaskIds());
+                      if (ids.length > 0)
+                        openMoveOrg({ orgId: controller.orgId, ids, anchor: 'bulk' });
+                    }}
+                  >
+                    {tList('moveToOrg.action')}
+                  </MenuItem>
+                </Menu>
+              </MenuPopover>
+            </MenuTrigger>
+          )}
         </div>
       </div>
       <BottomNav

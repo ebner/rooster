@@ -21,6 +21,7 @@ import {
   type OrderingIntent,
   PAGE_LIMIT_DEFAULT,
   type PageQuery,
+  parseIdList,
   SUBTASK_DEPTH_MAX,
   type SubtaskReorder,
   type Task,
@@ -30,6 +31,10 @@ import {
   type TaskDuplicate,
   type TaskMove,
   type TaskMoveResult,
+  type TaskMoveToOrg,
+  type TaskMoveToOrgPreview,
+  type TaskMoveToOrgPreviewQuery,
+  type TaskMoveToOrgResult,
   type TaskPage,
   type TaskPatch,
   type TaskPatchResult,
@@ -61,6 +66,7 @@ import {
   tag as tagTable,
   task,
   taskExpansion,
+  taskFormerSeq,
   taskGroup,
   taskTag,
   user,
@@ -156,6 +162,7 @@ import type { ReminderService } from './reminder-service.ts';
 import { indexTasks } from './search-index.ts';
 import type { SearchService } from './search-service.ts';
 import { attachTags, emitTaskTagged, resolveTagsForCreate, setTaskTag } from './tag-service.ts';
+import { executeOrgMove, planOrgMove, previewOrgMove } from './task-org-move.ts';
 
 const DAY_MS = 86_400_000;
 /** my-list includes tasks completed within the last 14 days by default (06 §2.3). */
@@ -1500,6 +1507,40 @@ export class TaskService {
     });
   }
 
+  // --- move to another org (ADR 0072) -------------------------------------------------------
+
+  /**
+   * Moves tasks with their whole subtrees to another org the actor is a member of (ADR 0072):
+   * new numbers (or former ones), the roots the actor's at the top of their group (or at the
+   * intent), tags by name, membership-bound rows cleaned up, both orgs told. One transaction.
+   */
+  moveToOrg(actor: Actor, input: TaskMoveToOrg, meta: OpMeta): TaskMoveToOrgResult {
+    return immediate(this.deps.db, (tx) => {
+      const plan = planOrgMove(tx, actor, input);
+      const movedIds = executeOrgMove(
+        { deps: this.deps, placements: this.placements, collab: this.collab },
+        tx,
+        actor,
+        plan,
+        input,
+        meta,
+      );
+      const roots = plan.roots.map((r) => this.reload(tx, r.id));
+      return { orgId: plan.target.id, tasks: taskDtos(tx, actor, roots), movedIds };
+    });
+  }
+
+  /** What `moveToOrg` would do (ADR 0072 §19), with the same checks; no side effects. */
+  previewMoveToOrg(actor: Actor, query: TaskMoveToOrgPreviewQuery): TaskMoveToOrgPreview {
+    return readOnly(this.deps.db, (tx) =>
+      previewOrgMove(
+        tx,
+        actor,
+        planOrgMove(tx, actor, { ids: parseIdList(query.ids), orgId: query.orgId }),
+      ),
+    );
+  }
+
   // --- subtasks, duplicate, expansion (P3) -------------------------------------------------
 
   /**
@@ -1749,11 +1790,24 @@ export class TaskService {
         }
         const { org } = requireMembership(tx, actor.userId, orgRef);
         authorizeOrg(actor, org.id, 'tasks:read');
+        const seq = Number(seqRef[2] ?? seqRef[3]);
         rows = tx
           .select()
           .from(task)
-          .where(and(eq(task.orgId, org.id), eq(task.seq, Number(seqRef[2] ?? seqRef[3])), live))
+          .where(and(eq(task.orgId, org.id), eq(task.seq, seq), live))
           .all();
+        // ADR 0072: a number the task had before it moved to another org still finds it, when
+        // the actor can see it where it is now.
+        if (rows.length === 0) {
+          rows = tx
+            .select({ task })
+            .from(taskFormerSeq)
+            .innerJoin(task, eq(task.id, taskFormerSeq.taskId))
+            .where(and(eq(taskFormerSeq.orgId, org.id), eq(taskFormerSeq.seq, seq), live))
+            .all()
+            .map((r) => r.task)
+            .filter((r) => isMember(tx, actor.userId, r.orgId) && grantReachesOrg(actor, r.orgId));
+        }
       } else {
         const prefix = ref.replace(/-/g, '').toLowerCase();
         if (!/^[0-9a-f]{8,32}$/.test(prefix)) {

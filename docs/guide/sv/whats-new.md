@@ -2,6 +2,10 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
+## Unreleased
+
+- **Flytta en uppgift till en annan organisation.** Skapade du en uppgift i fel organisation? Välj **Flytta till organisation…** i uppgiftens meny, i paletten (Ctrl+K) eller i raden för markerade uppgifter, och sedan organisation och grupp. Deluppgifter, kommentarer och bilagor följer med, och Ångra flyttar tillbaka den. Se [Flytta till en annan organisation](./my-tasks.md#flytta-till-en-annan-organisation). På kommandoraden finns `rooster mv --to-org`.
+
 ## 1.10.1
 
 _2026-11-12_
