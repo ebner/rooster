@@ -10,6 +10,7 @@ import {
 } from '@rooster/core/schemas';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { tag, task, taskTag } from '../db/schema/index.ts';
+import type { Audience } from '../events/bus.ts';
 import { AppError } from '../lib/errors.ts';
 import {
   type Actor,
@@ -23,6 +24,7 @@ import { isSharedOrg, memberIds, qk, taskAudiences, taskReach } from './event-au
 import { authorizeOrg, authorizeOrgWide, authorizeTaskWrite } from './grant-access.ts';
 import { isMember, requireTask, type TaskRow, taskDeleted, taskDtoFor } from './list-access.ts';
 import { requireMembership } from './org-access.ts';
+import { remapViewsForTags } from './view-service.ts';
 
 export type TagRow = typeof tag.$inferSelect;
 
@@ -221,7 +223,8 @@ export class TagService {
   /**
    * Tag changes go to every member (04 §4.5): `['tags', org]`, `['my-list', org]` (chips), and
    * `['task', id]` for each task whose tag set changed (plus `['everyone', org]` in a shared
-   * org when there are any).
+   * org when there are any). Views whose query changed with a delete or merge add
+   * `['views', org]` (`views`).
    */
   private emit(
     tx: Tx,
@@ -230,6 +233,7 @@ export class TagService {
     orgId: string,
     tagIds: string[],
     taskIds: readonly string[] = [],
+    views: Audience | null = null,
   ): void {
     emitAfterCommit(this.deps, tx, {
       type,
@@ -247,6 +251,7 @@ export class TagService {
             ...(taskIds.length > 0 && isSharedOrg(tx, orgId) ? [qk.everyone(orgId)] : []),
           ],
         },
+        ...(views === null ? [] : [views]),
       ],
     });
   }
@@ -315,21 +320,22 @@ export class TagService {
     });
   }
 
-  /** Deletes the tag and removes it from every task (FR-TAG-3). */
+  /** Deletes the tag and removes it from every task (FR-TAG-3) and every view (B11). */
   remove(actor: Actor, tagId: string, _meta?: OpMeta): void {
     immediate(this.deps.db, (tx) => {
       const row = requireTag(tx, actor.userId, tagId);
       authorizeOrgWide(tx, actor, row.orgId, 'tasks:write');
       const tasks = touchTasksWithTag(tx, row.id, this.now());
+      const views = remapViewsForTags(tx, row.orgId, { deleted: [row.id] }, this.now());
       tx.delete(tag).where(eq(tag.id, row.id)).run();
-      this.emit(tx, actor, 'tag.deleted', row.orgId, [row.id], tasks);
+      this.emit(tx, actor, 'tag.deleted', row.orgId, [row.id], tasks, views);
     });
   }
 
   /**
    * Every task tagged with `tagId` gets `intoId` (keeping the merged tag's slot in its chip
    * order unless it already had `intoId`), then `tagId` is deleted. Both tags must be in the
-   * same org; merging a tag into itself is `422`.
+   * same org; merging a tag into itself is `422`. Views follow the merge (B11).
    */
   merge(actor: Actor, tagId: string, intoId: string, _meta?: OpMeta): Tag {
     return immediate(this.deps.db, (tx) => {
@@ -355,8 +361,14 @@ export class TagService {
           .onConflictDoNothing()
           .run();
       }
+      const views = remapViewsForTags(
+        tx,
+        into.orgId,
+        { merged: { [from.id]: into.id } },
+        this.now(),
+      );
       tx.delete(tag).where(eq(tag.id, from.id)).run();
-      this.emit(tx, actor, 'tag.merged', into.orgId, [from.id, into.id], tasks);
+      this.emit(tx, actor, 'tag.merged', into.orgId, [from.id, into.id], tasks, views);
       return toTagDto(into);
     });
   }

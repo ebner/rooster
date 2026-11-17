@@ -1247,7 +1247,7 @@ export interface paths {
         put?: never;
         /**
          * Create a view (private unless `shared`; always private in a personal org)
-         * @description Tags in the query must be the org’s and a named assignee one of its members (`422`). The view goes to the end of my order (and of every member’s, when shared). A repeated create with the same `id` and content returns the view. Needs `groups:write`.
+         * @description Tags in the query must be the org’s and a named assignee one of its members (`422`). The view goes to the end of my order (and of every member’s, when shared). A repeated create with the same `id` and content returns the view; other content under that `id` is `409`. Needs `groups:write` with write access to the whole org.
          */
         post: operations["createView"];
         delete?: never;
@@ -1268,14 +1268,14 @@ export interface paths {
         post?: never;
         /**
          * Delete a view (the tasks and tags stay)
-         * @description As for changes: any member for a shared view, the creator for a private one.
+         * @description As for changes: any member for a shared view, the creator for a private one. Needs `groups:write` with write access to the whole org.
          */
         delete: operations["deleteView"];
         options?: never;
         head?: never;
         /**
          * Rename a view, change its query, or share or unshare it
-         * @description Any member may change a shared view; a private one only its creator (anyone else gets `404`). Unsharing makes it private to its creator. Needs `groups:write`.
+         * @description Any member may change a shared view; a private one only its creator (anyone else gets `404`). Unsharing makes it private to its creator, whoever does it, and drops it from the other members’ orders (shared again, it goes to the end of theirs). A view whose creator has left the org cannot be unshared (`422`). In a personal org `shared` stays false. Only new tags and a new assignee are validated (`422`). Needs `groups:write` with write access to the whole org.
          */
         patch: operations["updateView"];
         trace?: never;
@@ -1291,7 +1291,7 @@ export interface paths {
         put?: never;
         /**
          * Move a view in my own sidebar order
-         * @description `afterId`/`beforeId` name other views I see; each member orders views themselves.
+         * @description `afterId`/`beforeId` name other live views I see (any other ID counts as unknown: the end); each member orders views themselves. Moving an archived view changes nothing. Needs `groups:write`.
          */
         post: operations["moveView"];
         delete?: never;
@@ -1311,7 +1311,7 @@ export interface paths {
         put?: never;
         /**
          * Archive a view: it leaves every sidebar (Org settings → Views restores it)
-         * @description Idempotent. The tag is untouched.
+         * @description Idempotent. Every member’s place for it is dropped; the tag and the tasks are untouched. Needs `groups:write`.
          */
         post: operations["archiveView"];
         delete?: never;
@@ -1331,7 +1331,7 @@ export interface paths {
         put?: never;
         /**
          * Restore an archived view
-         * @description Idempotent. It returns to the end of my order.
+         * @description Idempotent. It returns to the end of my order, and of every other member’s. Needs `groups:write`.
          */
         post: operations["restoreView"];
         delete?: never;
@@ -1349,7 +1349,7 @@ export interface paths {
         };
         /**
          * A view’s tasks and its open/done counts
-         * @description Every task of the org matching the query (subtasks included, each a row of its own; group them with `@rooster/core/saved-views`), filtered by my grant as every read; `completed=true` also lists completed matches. `counts` are the matches by completion, ignoring the status filter. Needs `tasks:read`.
+         * @description Every task of the org matching the query (subtasks included, each a row of its own; group them with `@rooster/core/saved-views`), filtered by my grant as every read; `completed=true` also lists completed matches. `counts` are the matches by completion, ignoring the status filter. `items` also carries, after the rows, the parent chain of every matching subtask (for its breadcrumb), readable parents only: they are not rows and not counted, and `selectSavedView` leaves them out. Needs `tasks:read`.
          */
         get: operations["listViewTasks"];
         put?: never;
@@ -4381,6 +4381,29 @@ export interface components {
         TagMerge: {
             intoId: string;
         };
+        /**
+         * @example {
+         *       "id": "0199c5a2-f90a-781b-8c2d-9d0e1f2a3b01",
+         *       "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *       "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *       "shared": true,
+         *       "name": "Juniper",
+         *       "query": {
+         *         "tags": [
+         *           "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *         ],
+         *         "tagMode": "any",
+         *         "assignee": "anyone",
+         *         "due": "any",
+         *         "status": "open"
+         *       },
+         *       "archivedAt": null,
+         *       "position": "a1",
+         *       "openCount": 7,
+         *       "createdAt": 1791360000000,
+         *       "updatedAt": 1791446400000
+         *     }
+         */
         SavedView: {
             id: string;
             orgId: string;
@@ -4394,7 +4417,18 @@ export interface components {
             createdAt: number;
             updatedAt: number;
         };
-        /** @description A view’s query: `tags` (IDs) with `tagMode` any/all, `assignee` (`anyone`, `me`, `unassigned` or a member’s ID), `due` (`any`, `today` incl. overdue, `week`, `overdue`, `none`), `status` (`open`, `done`, `any`). Omitted fields take their defaults. */
+        /**
+         * @description A view’s query: `tags` (IDs) with `tagMode` any/all, `assignee` (`anyone`, `me`, `unassigned` or a member’s ID), `due` (`any`, `today` incl. overdue, `week`, `overdue`, `none`), `status` (`open`, `done`, `any`). Omitted fields take their defaults.
+         * @example {
+         *       "tags": [
+         *         "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *       ],
+         *       "tagMode": "any",
+         *       "assignee": "anyone",
+         *       "due": "any",
+         *       "status": "open"
+         *     }
+         */
         SavedViewQuery: {
             /** @default [] */
             tags: string[];
@@ -4416,12 +4450,42 @@ export interface components {
              */
             status: "open" | "done" | "any";
         };
+        /**
+         * @example {
+         *       "id": "0199c5a2-f90a-781b-8c2d-9d0e1f2a3b01",
+         *       "name": "Juniper",
+         *       "query": {
+         *         "tags": [
+         *           "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *         ],
+         *         "tagMode": "any",
+         *         "assignee": "anyone",
+         *         "due": "any",
+         *         "status": "open"
+         *       },
+         *       "shared": true
+         *     }
+         */
         SavedViewCreate: {
             id?: string;
             name: string;
             query: components["schemas"]["SavedViewQuery"];
             shared?: boolean;
         };
+        /**
+         * @example {
+         *       "name": "Juniper launch",
+         *       "query": {
+         *         "tags": [
+         *           "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *         ],
+         *         "tagMode": "any",
+         *         "assignee": "anyone",
+         *         "due": "any",
+         *         "status": "any"
+         *       }
+         *     }
+         */
         SavedViewPatch: {
             name?: string;
             query?: {
@@ -4447,10 +4511,57 @@ export interface components {
             };
             shared?: boolean;
         };
+        /**
+         * @example {
+         *       "afterId": "0199c5a2-f90a-781b-8c2d-9d0e1f2a3b02",
+         *       "beforeId": null
+         *     }
+         */
         SavedViewMove: {
             afterId?: string | null;
             beforeId?: string | null;
         };
+        /**
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "0199c5a1-4e5f-7d60-b172-8d9e0a1b2c01",
+         *           "orgId": "0199c5a0-2c3d-7b4e-9f50-6b7c8d9e0a01",
+         *           "seq": 42,
+         *           "parentId": null,
+         *           "subtaskPosition": null,
+         *           "title": "Pay invoice",
+         *           "hasDescription": true,
+         *           "assigneeId": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "createdBy": "0199c5a0-1b2c-7a3d-8e4f-5a6b7c8d9e01",
+         *           "dueDate": "2026-10-10",
+         *           "dueTime": null,
+         *           "dueTz": null,
+         *           "startDate": null,
+         *           "completedAt": null,
+         *           "tagIds": [
+         *             "0199c5a1-5f60-7e71-8283-9e0a1b2c3d01"
+         *           ],
+         *           "counts": {
+         *             "subtasks": 1,
+         *             "subtasksDone": 0,
+         *             "comments": 2,
+         *             "attachments": 0
+         *           },
+         *           "placement": {
+         *             "groupId": "0199c5a0-3d4e-7c5f-a061-7c8d9e0a1b02",
+         *             "position": "a1V"
+         *           },
+         *           "createdAt": 1791532800000,
+         *           "updatedAt": 1791532800000
+         *         }
+         *       ],
+         *       "counts": {
+         *         "open": 7,
+         *         "done": 12
+         *       }
+         *     }
+         */
         SavedViewTasks: {
             items: components["schemas"]["Task"][];
             counts: {

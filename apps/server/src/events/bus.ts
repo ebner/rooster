@@ -42,6 +42,13 @@ export type DomainEventType =
   | 'tag.updated'
   | 'tag.deleted'
   | 'tag.merged'
+  /** Phase 13 (ADR 0073 B): views; `subjects` holds the view ID. */
+  | 'view.created'
+  | 'view.updated'
+  | 'view.moved'
+  | 'view.archived'
+  | 'view.restored'
+  | 'view.deleted'
   | 'org.created'
   | 'org.updated'
   | 'org.deleted'

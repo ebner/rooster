@@ -37,7 +37,7 @@ import { SystemService } from './system-service.ts';
 import { TagService } from './tag-service.ts';
 import { expansionRemovalStep, TaskService } from './task-service.ts';
 import { UserService } from './user-service.ts';
-import { ViewService } from './view-service.ts';
+import { ViewService, viewRemovalStep } from './view-service.ts';
 
 export interface Services {
   orgs: OrgService;
@@ -148,6 +148,7 @@ export function createServices(
       expansionRemovalStep,
       followers.memberRemovalStep,
       notifications.memberRemovalStep,
+      viewRemovalStep,
       ...(options.memberRemovalSteps ?? []),
     ],
     onMemberJoined: (tx, joined) => {
@@ -195,7 +196,7 @@ export function createServices(
       reminders,
     }),
     tags: new TagService(deps),
-    views: new ViewService(deps),
+    views: new ViewService(deps, ordering),
     search,
     exports: new ExportService(deps),
     idempotency,

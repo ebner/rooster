@@ -20,3 +20,4 @@ export { attachment, blobGc, icalFeed, taskReminder } from './p10.ts';
 export { tag, taskTag } from './tag.ts';
 export { placement, task, taskExpansion, taskFormerSeq } from './task.ts';
 export { taskGroup } from './task-group.ts';
+export { savedView, savedViewPref } from './view.ts';

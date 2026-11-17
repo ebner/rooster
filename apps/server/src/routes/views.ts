@@ -35,7 +35,7 @@ const createView = createRoute({
   operationId: 'createView',
   summary: 'Create a view (private unless `shared`; always private in a personal org)',
   description:
-    'Tags in the query must be the org’s and a named assignee one of its members (`422`). The view goes to the end of my order (and of every member’s, when shared). A repeated create with the same `id` and content returns the view. Needs `groups:write`.',
+    'Tags in the query must be the org’s and a named assignee one of its members (`422`). The view goes to the end of my order (and of every member’s, when shared). A repeated create with the same `id` and content returns the view; other content under that `id` is `409`. Needs `groups:write` with write access to the whole org.',
   request: { params: orgParams, body: body(SavedViewCreateSchema) },
   responses: {
     201: json(SavedViewSchema, 'The view'),
@@ -50,7 +50,7 @@ const patchView = createRoute({
   operationId: 'updateView',
   summary: 'Rename a view, change its query, or share or unshare it',
   description:
-    'Any member may change a shared view; a private one only its creator (anyone else gets `404`). Unsharing makes it private to its creator. Needs `groups:write`.',
+    'Any member may change a shared view; a private one only its creator (anyone else gets `404`). Unsharing makes it private to its creator, whoever does it, and drops it from the other members’ orders (shared again, it goes to the end of theirs). A view whose creator has left the org cannot be unshared (`422`). In a personal org `shared` stays false. Only new tags and a new assignee are validated (`422`). Needs `groups:write` with write access to the whole org.',
   request: { params: viewParams, body: body(SavedViewPatchSchema) },
   responses: { 200: json(SavedViewSchema, 'The view'), ...problems(...AUTHED, 404) },
 });
@@ -61,7 +61,8 @@ const deleteView = createRoute({
   tags,
   operationId: 'deleteView',
   summary: 'Delete a view (the tasks and tags stay)',
-  description: 'As for changes: any member for a shared view, the creator for a private one.',
+  description:
+    'As for changes: any member for a shared view, the creator for a private one. Needs `groups:write` with write access to the whole org.',
   request: { params: viewParams },
   responses: { 204: { description: 'Deleted' }, ...problems(...AUTHED, 404) },
 });
@@ -72,7 +73,8 @@ const moveView = createRoute({
   tags,
   operationId: 'moveView',
   summary: 'Move a view in my own sidebar order',
-  description: '`afterId`/`beforeId` name other views I see; each member orders views themselves.',
+  description:
+    '`afterId`/`beforeId` name other live views I see (any other ID counts as unknown: the end); each member orders views themselves. Moving an archived view changes nothing. Needs `groups:write`.',
   request: { params: viewParams, body: body(SavedViewMoveSchema) },
   responses: { 200: json(SavedViewSchema, 'The view'), ...problems(...AUTHED, 404) },
 });
@@ -83,7 +85,8 @@ const archiveView = createRoute({
   tags,
   operationId: 'archiveView',
   summary: 'Archive a view: it leaves every sidebar (Org settings → Views restores it)',
-  description: 'Idempotent. The tag is untouched.',
+  description:
+    'Idempotent. Every member’s place for it is dropped; the tag and the tasks are untouched. Needs `groups:write`.',
   request: { params: viewParams },
   responses: { 200: json(SavedViewSchema, 'The view'), ...problems(...AUTHED, 404) },
 });
@@ -94,7 +97,8 @@ const restoreView = createRoute({
   tags,
   operationId: 'restoreView',
   summary: 'Restore an archived view',
-  description: 'Idempotent. It returns to the end of my order.',
+  description:
+    'Idempotent. It returns to the end of my order, and of every other member’s. Needs `groups:write`.',
   request: { params: viewParams },
   responses: { 200: json(SavedViewSchema, 'The view'), ...problems(...AUTHED, 404) },
 });
@@ -106,7 +110,7 @@ const viewTasks = createRoute({
   operationId: 'listViewTasks',
   summary: 'A view’s tasks and its open/done counts',
   description:
-    'Every task of the org matching the query (subtasks included, each a row of its own; group them with `@rooster/core/saved-views`), filtered by my grant as every read; `completed=true` also lists completed matches. `counts` are the matches by completion, ignoring the status filter. Needs `tasks:read`.',
+    'Every task of the org matching the query (subtasks included, each a row of its own; group them with `@rooster/core/saved-views`), filtered by my grant as every read; `completed=true` also lists completed matches. `counts` are the matches by completion, ignoring the status filter. `items` also carries, after the rows, the parent chain of every matching subtask (for its breadcrumb), readable parents only: they are not rows and not counted, and `selectSavedView` leaves them out. Needs `tasks:read`.',
   request: { params: viewParams, query: savedViewTasksQuerySchema },
   responses: { 200: json(SavedViewTasksSchema, 'The tasks'), ...problems(401, 404) },
 });

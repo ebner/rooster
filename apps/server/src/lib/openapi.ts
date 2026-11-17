@@ -80,6 +80,11 @@ export const OPENAPI_TAGS: { name: string; description: string }[] = [
   },
   { name: 'tags', description: 'Org-wide tags and the tags on a task.' },
   {
+    name: 'views',
+    description:
+      'Views (Phase 13): saved queries over an org’s tasks, private to their creator or shared with every member, each member ordering them in their own sidebar. A view gathers tasks; it never grants access to them.',
+  },
+  {
     name: 'collaboration',
     description: 'Comments, the activity feed and followers of tasks in shared orgs.',
   },

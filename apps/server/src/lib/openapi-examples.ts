@@ -28,6 +28,8 @@ export const EX = {
   attachment: '0199c5a2-d7e8-76f9-8a0b-7b8c9d0e1f01',
   icalFeed: '0199c5a2-e8f9-770a-9b1c-8c9d0e1f2a01',
   nextTask: '0199c5a1-4e5f-7d60-b172-8d9e0a1b2c04',
+  view: '0199c5a2-f90a-781b-8c2d-9d0e1f2a3b01',
+  otherView: '0199c5a2-f90a-781b-8c2d-9d0e1f2a3b02',
 } as const;
 
 /** 2026-10-09T08:00:00Z. */
@@ -157,6 +159,14 @@ export const inboxExample = {
 };
 
 export const placementExample = { groupId: EX.prio, position: 'a1V' };
+
+const viewQueryExample = {
+  tags: [EX.tag],
+  tagMode: 'any',
+  assignee: 'anyone',
+  due: 'any',
+  status: 'open',
+};
 
 export const taskExample = {
   id: EX.task,
@@ -414,6 +424,28 @@ export const COMPONENT_EXAMPLES: Record<string, unknown> = {
         ],
       },
     ],
+  },
+  // Phase 13 (ADR 0073 B): a shared project view (one tag).
+  SavedViewQuery: viewQueryExample,
+  SavedView: {
+    id: EX.view,
+    orgId: EX.org,
+    createdBy: EX.user,
+    shared: true,
+    name: 'Juniper',
+    query: viewQueryExample,
+    archivedAt: null,
+    position: 'a1',
+    openCount: 7,
+    createdAt: T - 2 * DAY,
+    updatedAt: T - DAY,
+  },
+  SavedViewCreate: { id: EX.view, name: 'Juniper', query: viewQueryExample, shared: true },
+  SavedViewPatch: { name: 'Juniper launch', query: { ...viewQueryExample, status: 'any' } },
+  SavedViewMove: { afterId: EX.otherView, beforeId: null },
+  SavedViewTasks: {
+    items: [{ ...taskExample, tagIds: [EX.tag] }],
+    counts: { open: 7, done: 12 },
   },
   Backup: backupExample,
   AdminSystem: {

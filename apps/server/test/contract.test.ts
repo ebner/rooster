@@ -295,6 +295,22 @@ function p10Of(f: Fixture) {
 /** Distinct future instants for absolute reminders. */
 const laterAt = (n: number) => Date.now() + (2 + n) * 3_600_000;
 
+// --- Phase 13: a shared view of the owner over the tag `tagId` -----------------------------
+const viewIds = new WeakMap<Fixture, string>();
+function viewSetup(f: Fixture): void {
+  const view = f.app.services.views.create(f.actors.owner, f.orgId, {
+    name: 'Tagged',
+    query: { tags: [f.tagId], tagMode: 'any', assignee: 'anyone', due: 'any', status: 'open' },
+    shared: true,
+  });
+  viewIds.set(f, view.id);
+}
+function viewOf(f: Fixture): string {
+  const id = viewIds.get(f);
+  if (id === undefined) throw new Error('viewSetup did not run');
+  return id;
+}
+
 // --- Phase 10 (files): an image attachment, a member's avatar, a calendar feed ---------------
 const files = new WeakMap<
   Fixture,
@@ -1277,6 +1293,78 @@ const SPECS: Record<string, Spec> = {
   'DELETE /api/v1/tags/{id}': { ok: (f) => ({ path: `/api/v1/tags/${f.tagId}` }) },
   'POST /api/v1/tags/{id}/merge': {
     ok: (f) => ({ path: `/api/v1/tags/${f.tagId}/merge`, body: { intoId: f.otherTagId } }),
+  },
+  // Phase 13 (ADR 0073 B): views.
+  'GET /api/v1/orgs/{orgId}/views': {
+    setup: viewSetup,
+    ok: (f) => ({ path: `/api/v1/orgs/${f.orgId}/views` }),
+    cases: [
+      {
+        status: 200,
+        name: 'archived',
+        request: (f) => ({ path: `/api/v1/orgs/${f.orgId}/views?archived=true` }),
+      },
+    ],
+  },
+  'POST /api/v1/orgs/{orgId}/views': {
+    setup: viewSetup,
+    ok: (f) => ({
+      path: `/api/v1/orgs/${f.orgId}/views`,
+      body: { name: 'Juniper', query: { tags: [f.tagId] }, shared: true },
+    }),
+    cases: [
+      {
+        status: 409,
+        code: 'id_conflict',
+        request: (f) => ({
+          path: `/api/v1/orgs/${f.orgId}/views`,
+          body: { id: viewOf(f), name: 'Something else', query: {} },
+        }),
+      },
+      {
+        status: 422,
+        name: 'a tag of another org',
+        code: 'validation_failed',
+        request: (f) => ({
+          path: `/api/v1/orgs/${f.orgId}/views`,
+          body: { name: 'X', query: { tags: [fresh()] } },
+        }),
+      },
+    ],
+  },
+  'PATCH /api/v1/views/{id}': {
+    setup: viewSetup,
+    ok: (f) => ({ path: `/api/v1/views/${viewOf(f)}`, body: { name: 'Renamed', shared: false } }),
+  },
+  'DELETE /api/v1/views/{id}': {
+    setup: viewSetup,
+    ok: (f) => ({ path: `/api/v1/views/${viewOf(f)}` }),
+  },
+  'POST /api/v1/views/{id}/move': {
+    setup: viewSetup,
+    ok: (f) => ({ path: `/api/v1/views/${viewOf(f)}/move`, body: { afterId: null } }),
+  },
+  'POST /api/v1/views/{id}/archive': {
+    setup: viewSetup,
+    ok: (f) => ({ path: `/api/v1/views/${viewOf(f)}/archive` }),
+  },
+  'POST /api/v1/views/{id}/restore': {
+    setup: (f) => {
+      viewSetup(f);
+      f.app.services.views.setArchived(f.actors.owner, viewOf(f), true);
+    },
+    ok: (f) => ({ path: `/api/v1/views/${viewOf(f)}/restore` }),
+  },
+  'GET /api/v1/views/{id}/tasks': {
+    setup: viewSetup,
+    ok: (f) => ({ path: `/api/v1/views/${viewOf(f)}/tasks` }),
+    cases: [
+      {
+        status: 200,
+        name: 'with completed',
+        request: (f) => ({ path: `/api/v1/views/${viewOf(f)}/tasks?completed=true` }),
+      },
+    ],
   },
   'GET /api/v1/search': {
     ok: (f) => ({ path: `/api/v1/search?q=task&orgId=${f.orgId}` }),

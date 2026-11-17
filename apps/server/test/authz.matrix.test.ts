@@ -138,6 +138,8 @@ interface Fixture {
   subtaskId: string;
   tagId: string;
   otherTagId: string;
+  /** Phase 13: the owner's shared view in the shared org. */
+  viewId: string;
   /** The owner's comment on `taskId`, and a deleted one. */
   commentId: string;
   deletedCommentId: string;
@@ -517,6 +519,43 @@ const ROWS: Record<string, Row> = {
     request: (f) => ({ path: `/api/v1/tags/${f.tagId}/merge`, body: { intoId: f.otherTagId } }),
     expect: { ...orgScoped(200, 200), ...grants(403, 403, 404, 200) },
   },
+  // Phase 13 (ADR 0073 B): views. A shared view is every member's; reading needs `tasks:read`,
+  // managing `groups:write` with write access to the whole org (the group-limited PAT: 403).
+  'GET /api/v1/orgs/{orgId}/views': {
+    request: (f) => ({ path: `/api/v1/orgs/${f.orgId}/views` }),
+    expect: { ...orgScoped(200, 200), ...grants(200, 200, 404, 200) },
+  },
+  'POST /api/v1/orgs/{orgId}/views': {
+    request: (f) => ({
+      path: `/api/v1/orgs/${f.orgId}/views`,
+      body: { name: 'New view', query: { tags: [f.tagId] }, shared: true },
+    }),
+    expect: { ...orgScoped(201, 201), ...grants(403, 403, 404, 201) },
+  },
+  'PATCH /api/v1/views/{id}': {
+    request: (f) => ({ path: `/api/v1/views/${f.viewId}`, body: { name: 'Renamed' } }),
+    expect: { ...orgScoped(200, 200), ...grants(403, 403, 404, 200) },
+  },
+  'DELETE /api/v1/views/{id}': {
+    request: (f) => ({ path: `/api/v1/views/${f.viewId}` }),
+    expect: { ...orgScoped(204, 204), ...grants(403, 403, 404, 204) },
+  },
+  'POST /api/v1/views/{id}/move': {
+    request: (f) => ({ path: `/api/v1/views/${f.viewId}/move`, body: { afterId: null } }),
+    expect: { ...orgScoped(200, 200), ...grants(403, 403, 404, 200) },
+  },
+  'POST /api/v1/views/{id}/archive': {
+    request: (f) => ({ path: `/api/v1/views/${f.viewId}/archive` }),
+    expect: { ...orgScoped(200, 200), ...grants(403, 403, 404, 200) },
+  },
+  'POST /api/v1/views/{id}/restore': {
+    request: (f) => ({ path: `/api/v1/views/${f.viewId}/restore` }),
+    expect: { ...orgScoped(200, 200), ...grants(403, 403, 404, 200) },
+  },
+  'GET /api/v1/views/{id}/tasks': {
+    request: (f) => ({ path: `/api/v1/views/${f.viewId}/tasks?completed=true` }),
+    expect: { ...orgScoped(200, 200), ...grants(200, 200, 404, 200) },
+  },
   // Phase 5: search, export and reindex (06 §2.8, ADR 0012).
   'GET /api/v1/search': {
     request: (f) => ({ path: `/api/v1/search?q=task&orgId=${f.orgId}` }),
@@ -858,6 +897,11 @@ async function fixture(): Promise<Fixture> {
   app.services.tags.setOnTask(ownerActor, task.id, tag.id, true);
   const subtask = tasks.create(ownerActor, org.id, { title: 'Subtask', parentId: task.id });
   tasks.create(ownerActor, org.id, { title: 'Sibling', parentId: task.id });
+  const view = app.services.views.create(ownerActor, org.id, {
+    name: 'Tagged',
+    query: { tags: [tag.id], tagMode: 'any', assignee: 'anyone', due: 'any', status: 'open' },
+    shared: true,
+  });
   const { comments } = app.services;
   const comment = comments.create(ownerActor, task.id, { body: 'Comment' });
   const deletedComment = comments.create(ownerActor, task.id, { body: 'Deleted' });
@@ -1111,6 +1155,7 @@ async function fixture(): Promise<Fixture> {
     subtaskId: subtask.id,
     tagId: tag.id,
     otherTagId: otherTag.id,
+    viewId: view.id,
     commentId: comment.id,
     deletedCommentId: deletedComment.id,
     backupName: backup.name,

@@ -13,6 +13,8 @@ export const qk = {
   orgMembers: (orgId: string): QueryKey => ['org-members', orgId],
   orgInvites: (orgId: string): QueryKey => ['org-invites', orgId],
   everyone: (orgId: string): QueryKey => ['everyone', orgId],
+  /** Phase 13 (ADR 0073 B): an org's views (shared: every member; private: the owner). */
+  views: (orgId: string): QueryKey => ['views', orgId],
   activity: (taskId: string): QueryKey => ['activity', taskId],
   notifications: ['notifications'] as QueryKey,
   me: ['me'] as QueryKey,

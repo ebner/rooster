@@ -107,6 +107,8 @@ describe('migrations', () => {
       'organization',
       'placement',
       'push_subscription',
+      'saved_view',
+      'saved_view_pref',
       'tag',
       'task',
       'task_expansion',

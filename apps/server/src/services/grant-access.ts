@@ -211,6 +211,8 @@ const TASK_LEVEL_KEYS: ReadonlySet<string> = new Set([
   'tags',
   'trash',
   'org-members',
+  // Phase 13: views are read with `tasks:read` (11 §2).
+  'views',
 ]);
 
 export function visibleKeys(
@@ -295,6 +297,7 @@ export function visibleKeys(
       case 'tags':
       case 'trash':
       case 'org-members':
+      case 'views':
         if (reads) push(key);
         break;
       case 'notifications':
