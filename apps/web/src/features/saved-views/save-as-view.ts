@@ -3,6 +3,7 @@ import type { SavedView, SavedViewQuery } from '@rooster/core/schemas';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
+import { errorCode } from '../../data/errors';
 import { useOrgMembers } from '../../data/orgs';
 import { queryKeys } from '../../data/query-keys';
 import { useTags } from '../../data/tags';
@@ -55,7 +56,11 @@ export function useSaveAsView(org: Org | null | undefined): (query: SavedViewQue
         requestViewNameFocus();
         toast({ message: t('saved.savedAs', { name: created.name }) });
       },
-      () => toast({ message: t('saved.saveFailed'), tone: 'danger' }),
+      (error: unknown) =>
+        toast({
+          message: t(errorCode(error) === 'view_limit' ? 'saved.limit' : 'saved.saveFailed'),
+          tone: 'danger',
+        }),
     );
   };
 }

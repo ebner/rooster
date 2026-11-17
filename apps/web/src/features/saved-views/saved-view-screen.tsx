@@ -138,7 +138,9 @@ function LoadedView({
       ? {
           archiveView: () => editor.archive(),
           deleteView: () => setConfirmingDelete(true),
-          ...(org.isPersonal ? {} : { toggleViewShared: () => editor.setShared(!draft.shared) }),
+          ...(org.isPersonal || (draft.shared && !editor.canUnshare)
+            ? {}
+            : { toggleViewShared: () => editor.setShared(!draft.shared) }),
         }
       : {}),
   });

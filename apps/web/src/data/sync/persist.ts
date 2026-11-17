@@ -53,6 +53,8 @@ export const cacheSaveDebounceMs = 2_000;
 export const cacheSaveMaxWaitMs = 15_000;
 /** 04 §6.1: only the most recently used task details are kept. */
 export const maxPersistedTaskDetails = 200;
+/** Phase 13: and the rows of the views fetched most recently (each is a list of its own). */
+export const maxPersistedViewTasks = 20;
 
 /** 04 §5.1 / §6.1: the query roots readable offline. */
 export const persistedRoots: ReadonlySet<string> = new Set([
@@ -81,7 +83,7 @@ export const persistDehydrateOptions: DehydrateOptions = {
  * Shapes a dehydrated cache for storage:
  * - `['my-list', org]` stores the last server-confirmed state, not the optimistic view: the
  *   outbox replays the pending ops on top after a reload, exactly once.
- * - only the 200 task details fetched or updated most recently are kept;
+ * - only the 200 task details and the 20 views' rows fetched or updated most recently are kept;
  * - an infinite list (`['notifications']`) keeps its first page.
  */
 export function prepareForPersist(
@@ -92,10 +94,14 @@ export function prepareForPersist(
     .filter((q) => q.queryKey[0] === 'task')
     .sort((a, b) => b.state.dataUpdatedAt - a.state.dataUpdatedAt)
     .slice(0, maxPersistedTaskDetails);
-  const keep = new Set(tasks);
+  const views = client.clientState.queries
+    .filter((q) => q.queryKey[0] === 'view-tasks')
+    .sort((a, b) => b.state.dataUpdatedAt - a.state.dataUpdatedAt)
+    .slice(0, maxPersistedViewTasks);
+  const keep = new Set([...tasks, ...views]);
   const queries = client.clientState.queries.flatMap((query) => {
     const [root, id] = query.queryKey;
-    if (root === 'task' && !keep.has(query)) return [];
+    if ((root === 'task' || root === 'view-tasks') && !keep.has(query)) return [];
     if (root === 'my-list' && typeof id === 'string') {
       const base = baseOf(id);
       return [base ? { ...query, state: { ...query.state, data: base } } : query];

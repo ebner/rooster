@@ -37,7 +37,7 @@ export async function fetchEveryone(
     items.push(...page.items);
     cursor = page.nextCursor ?? undefined;
   } while (cursor);
-  return pipeline.withPendingTasks(orgId, items);
+  return pipeline.withPendingTasks(orgId, items, everyoneKey(orgId));
 }
 
 function everyoneQuery(pipeline: ListPipeline, orgId: string) {

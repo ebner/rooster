@@ -30,3 +30,26 @@ export function invalidateViewsFor(queryClient: QueryClient, key: readonly strin
     });
   }
 }
+
+/**
+ * A view gone from its org's live list (deleted, archived, unshared, by anyone) takes its rows'
+ * caches with it, so they neither linger in memory nor in the persisted cache. Returns the
+ * unsubscribe.
+ */
+export function dropGoneViewCaches(queryClient: QueryClient): () => void {
+  return queryClient.getQueryCache().subscribe((event) => {
+    if (event.type !== 'updated' || event.action.type !== 'success') return;
+    const [root, orgId, which] = event.query.queryKey;
+    if (root !== 'views' || which !== 'live' || typeof orgId !== 'string') return;
+    const live = event.query.state.data;
+    if (!Array.isArray(live)) return;
+    const ids = new Set(live.map((view: { id?: unknown }) => view.id));
+    queryClient.removeQueries({
+      queryKey: ['view-tasks'],
+      predicate: (query) => {
+        const data = query.state.data;
+        return isViewTasksData(data) && data.orgId === orgId && !ids.has(query.queryKey[1]);
+      },
+    });
+  });
+}

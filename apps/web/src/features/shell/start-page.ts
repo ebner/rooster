@@ -64,8 +64,8 @@ export function forgetListPath(
 }
 
 /**
- * An org's live views when they are cached (`['views', orgId, 'live']`), else undefined. They
- * are not persisted, so on a cold start nothing is known and a remembered view is opened as is.
+ * An org's live views when they are cached (`['views', orgId, 'live']`, persisted with the
+ * offline cache), else undefined: then nothing is known, and a remembered view is opened as is.
  */
 export type CachedViews = (orgId: string) => readonly { id: string }[] | undefined;
 
@@ -77,7 +77,7 @@ export type CachedViews = (orgId: string) => readonly { id: string }[] | undefin
  *
  * A remembered view (`/o/<slug>/v/<id>`) opens when its org is still the user's, unless the
  * cached views of that org (`views`) show it is gone: then that org's My tasks, the nearest
- * list that surely exists. Unknown (a cold start), it opens, and the view screen's own
+ * list that surely exists. Unknown (never cached), it opens, and the view screen's own
  * not-found state answers (which also forgets it, `forgetListPath`).
  *
  * `me` is the cached `/me` (restored from the persisted cache before the first render): the

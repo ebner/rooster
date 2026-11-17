@@ -21,7 +21,7 @@ import {
   type ReducerContext,
 } from '@rooster/core/reducers';
 import type { ActivityPage, Comment, Task, TaskDetail } from '@rooster/core/schemas';
-import type { QueryClient, QueryKey } from '@tanstack/react-query';
+import { hashKey, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { type SyncState, useSyncStore } from '../../state/sync-store';
 import { ApiError } from '../errors';
 import type { SyncChannel, SyncMessage, WireError } from '../sync/channel';
@@ -59,13 +59,35 @@ const joiningKinds: ReadonlySet<string> = new Set([
   'task.duplicate',
 ]);
 
-/** Task ops that never change which tasks a view counts. */
+/** Task ops that never change a view's rows. */
 const orderOnlyKinds: ReadonlySet<string> = new Set([
   'task.move',
   'task.reorder',
   'task.expanded',
   'task.follow',
 ]);
+
+/** Whether `op` changes a task a view may hold (rows, counts, breadcrumbs). */
+function touchesTasks(op: ListOpSpec): boolean {
+  return (
+    (op.kind.startsWith('task.') && !orderOnlyKinds.has(op.kind)) ||
+    op.kind === 'comment.create' ||
+    op.kind === 'comment.delete' ||
+    op.kind === 'comment.restore'
+  );
+}
+
+/** Whether `op` can change which tasks a view counts as open or done (the sidebar counts). */
+function changesCounts(op: ListOpSpec): boolean {
+  if (!op.kind.startsWith('task.') || orderOnlyKinds.has(op.kind)) return false;
+  if (op.kind === 'task.patch') return 'assigneeId' in op.payload || 'dueDate' in op.payload;
+  return true;
+}
+
+/** The key of a deleted row in one cache (`deletedRows`). */
+function recallKey(cache: string, id: string): string {
+  return `${cache}\u0000${id}`;
+}
 
 /** Phase 13 (ADR 0073 B): whether `op` may add a row the view's cache doesn't have. */
 function mayJoinView(op: ListOpSpec, items: readonly Task[]): boolean {
@@ -367,6 +389,10 @@ export class ListPipeline {
   /** Recently confirmed, dropped or discarded ops: never queued again. */
   private readonly settled = new Set<string>();
   /** Rows the Everyone caches lost to a queued delete, by deleted task (for an undo). */
+  /**
+   * Rows a delete took out of one cache (`recallKey(cache, id)`), so an undo shows them again
+   * before the server answers. Per cache: Everyone's and each view's hold different rows.
+   */
   private readonly deletedRows = new Map<string, readonly Task[]>();
   /** Comments the activity feeds lost to a queued delete (for an undo). */
   private readonly deletedComments = new Map<string, Comment>();
@@ -619,10 +645,13 @@ export class ListPipeline {
    * For the query function of an Everyone's tasks cache: the fetched rows with the org's
    * queued ops applied, so a refetch never hides an op the server has not confirmed yet.
    */
-  withPendingTasks(orgId: string, tasks: readonly Task[]): Task[] {
+  withPendingTasks(orgId: string, tasks: readonly Task[], cacheKey?: QueryKey): Task[] {
     let rows = tasks;
+    const cache = cacheKey ? hashKey(cacheKey) : '';
     for (const item of this.queue) {
-      if (item.orgId === orgId) rows = applyOpToTaskList(rows, item.op, this.rowContext(item));
+      if (item.orgId === orgId) {
+        rows = applyOpToTaskList(rows, item.op, this.rowContext(item, cache));
+      }
     }
     return rows as Task[];
   }
@@ -631,25 +660,39 @@ export class ListPipeline {
    * Phase 13 (ADR 0073 B): for the query function of a view's rows (`['view-tasks', …]`), as
    * `withPendingTasks`, with the views' own row rule (every match is a row).
    */
-  withPendingViewTasks(orgId: string, tasks: readonly Task[]): Task[] {
+  withPendingViewTasks(orgId: string, tasks: readonly Task[], cacheKey?: QueryKey): Task[] {
     let rows = tasks;
+    const cache = cacheKey ? hashKey(cacheKey) : '';
     for (const item of this.queue) {
       if (item.orgId === orgId) {
-        rows = applyOpToViewTasks(rows, item.op, this.rowContext(item), orgId);
+        rows = applyOpToViewTasks(rows, item.op, this.rowContext(item, cache), orgId);
       }
     }
     return rows as Task[];
   }
 
-  /** The cached rows of every view of `orgId` (`['view-tasks', viewId, …]`, ADR 0073 B). */
-  private viewTaskCaches(orgId: string): [QueryKey, ViewTasksData][] {
+  /**
+   * The cached rows of every view of `orgId` (`['view-tasks', viewId, …]`, ADR 0073 B), and
+   * whether a screen shows them. Only shown ones take ops: the others are marked stale (their
+   * next mount refetches and replays the queue), so caches nobody looks at don't grow, and the
+   * persisted copies are never replayed onto twice after a reload.
+   */
+  private viewTaskCaches(orgId: string): [QueryKey, ViewTasksData, boolean][] {
     return this.queryClient
-      .getQueriesData<ViewTasksData>({ queryKey: viewTasksRootKey })
-      .flatMap(([key, data]) =>
-        isViewTasksData(data) && data.orgId === orgId
-          ? [[key, data] as [QueryKey, ViewTasksData]]
-          : [],
-      );
+      .getQueryCache()
+      .findAll({ queryKey: viewTasksRootKey })
+      .flatMap((query) => {
+        const data = query.state.data;
+        return isViewTasksData(data) && data.orgId === orgId
+          ? [
+              [query.queryKey, data, query.getObserversCount() > 0] as [
+                QueryKey,
+                ViewTasksData,
+                boolean,
+              ],
+            ]
+          : [];
+      });
   }
 
   /** Refetches the rows of the views of these orgs (they have no confirmed base here). */
@@ -1114,8 +1157,18 @@ export class ListPipeline {
     return { ...ctx, now: op.editTime };
   }
 
-  private rowContext(item: Queued) {
-    return { ...this.applyContext(item), recall: (id: string) => this.deletedRows.get(id) };
+  /** `cache`: the hashed key of the cache the op applies to (its own deleted rows). */
+  private rowContext(item: Queued, cache: string) {
+    return {
+      ...this.applyContext(item),
+      recall: (id: string) => this.deletedRows.get(recallKey(cache, id)),
+    };
+  }
+
+  private rememberDeleted(cache: string, rows: readonly Task[], ids: readonly string[]): void {
+    for (const [id, gone] of rowsDeletedWith(rows, ids)) {
+      this.deletedRows.set(recallKey(cache, id), gone);
+    }
   }
 
   private commentContext(item: Queued) {
@@ -1135,13 +1188,25 @@ export class ListPipeline {
       queryKey: everyoneRootKey(item.orgId),
     })) {
       if (!Array.isArray(rows)) continue;
-      for (const [id, gone] of rowsDeletedWith(rows, deletes)) this.deletedRows.set(id, gone);
-      const next = applyOpToTaskList(rows, op, this.rowContext(item));
+      const cache = hashKey(key);
+      this.rememberDeleted(cache, rows, deletes);
+      const next = applyOpToTaskList(rows, op, this.rowContext(item, cache));
       if (next !== rows) this.queryClient.setQueryData(key, next);
     }
-    for (const [key, data] of this.viewTaskCaches(item.orgId)) {
-      for (const [id, gone] of rowsDeletedWith(data.items, deletes)) this.deletedRows.set(id, gone);
-      const next = applyOpToViewTasks(data.items, op, this.rowContext(item), data.orgId);
+    for (const [key, data, shown] of this.viewTaskCaches(item.orgId)) {
+      if (!shown) {
+        if (touchesTasks(op)) {
+          void this.queryClient.invalidateQueries({
+            queryKey: key,
+            exact: true,
+            refetchType: 'none',
+          });
+        }
+        continue;
+      }
+      const cache = hashKey(key);
+      this.rememberDeleted(cache, data.items, deletes);
+      const next = applyOpToViewTasks(data.items, op, this.rowContext(item, cache), data.orgId);
       if (next !== data.items) this.queryClient.setQueryData(key, { ...data, items: next });
     }
     const taskId = commentTaskId(op);
@@ -1178,7 +1243,8 @@ export class ListPipeline {
       void this.queryClient.invalidateQueries({ queryKey: everyoneRootKey(item.orgId) });
     }
     let refetchViews = op.kind === 'task.moveToOrg';
-    for (const [key, data] of this.viewTaskCaches(item.orgId)) {
+    for (const [key, data, shown] of this.viewTaskCaches(item.orgId)) {
+      if (!shown) continue;
       const merged = mergeViewTasksResponse(data.items, op, response);
       // A task the view lacks may match now (tagged, reassigned, restored): only the server
       // knows its row.
@@ -1190,7 +1256,7 @@ export class ListPipeline {
     if (refetchViews) this.refetchViewTasks(listOrgs(item));
     // The sidebar's open counts of the org's views (ADR 0073 B9): this tab's own changes reach
     // no SSE key in a personal org.
-    if (op.kind.startsWith('task.') && !orderOnlyKinds.has(op.kind)) {
+    if (changesCounts(op)) {
       for (const org of listOrgs(item)) {
         void this.queryClient.invalidateQueries({ queryKey: ['views', org] });
       }

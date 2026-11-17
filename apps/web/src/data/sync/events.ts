@@ -103,7 +103,8 @@ export const notificationsKey = ['notifications'] as const;
 
 export interface EventStreamOptions {
   clientId: string;
-  invalidate: (key: readonly string[]) => void;
+  /** `own`: the event came from this tab's own request (its pipeline merged the change). */
+  invalidate: (key: readonly string[], own: boolean) => void;
   /** Every (re)connect: refetch active queries and flush the outbox (04 §4.5, §6.2). */
   onConnect: () => void;
   onHello: (hello: SseHello) => void;
@@ -237,7 +238,8 @@ export class EventStream {
     const event = parse(data, parseSseInvalidate);
     if (!event) return;
     const keys = invalidationKeys(event, this.options.clientId);
-    for (const key of keys) this.options.invalidate(key);
+    const own = event.origin === this.options.clientId;
+    for (const key of keys) this.options.invalidate(key, own);
   }
 
   /**
@@ -248,7 +250,7 @@ export class EventStream {
     const event = parse(data, parseSseNotification);
     if (!event) return;
     (this.options.onNotification ?? publishNotification)(event);
-    this.options.invalidate(notificationsKey);
+    this.options.invalidate(notificationsKey, false);
   }
 
   private scheduleRetry(): void {

@@ -36,9 +36,9 @@ export async function fetchViewTasks(
     orgId,
     // The ancestors of matching subtasks come along for breadcrumbs (they are no rows:
     // `selectSavedView` re-applies the query).
-    items: pipeline.withPendingViewTasks(orgId, page.items),
+    items: pipeline.withPendingViewTasks(orgId, page.items, viewTasksKey(viewId, completed)),
     counts: page.counts,
-    doneAtFetch: page.items.filter((t) => t.completedAt !== null).map((t) => t.id),
+    baseline: page.items,
   };
 }
 
@@ -97,24 +97,32 @@ export function seedViewTasks(
 }
 
 /**
- * "7 open · 12 done" (B3): the server's counts, plus what changed here since the fetch: matches
- * created, deleted, completed or reopened (optimistic ops, the pipeline keeps them in the
- * cache). The extra parents sent for breadcrumbs don't match, or were counted already.
+ * "7 open · 12 done" (B3): the server's counts when fetched, plus what changed here since
+ * (optimistic ops the pipeline keeps in the cache): the rows as they are now against the rows
+ * as fetched (`baseline`), both counted against the current query. A task created, deleted,
+ * completed, reopened, tagged or untagged moves the counts; the breadcrumb parents count on
+ * both sides alike. The open-only rows don't hold the done matches, nor the `done` view the
+ * open ones: only their changes are counted, never the rows themselves.
  */
 export function viewCounts(
   data: ViewTasksData,
   query: SavedViewQuery,
   ctx: SavedViewContext,
 ): { open: number; done: number } {
-  const wasDone = new Set(data.doneAtFetch ?? []);
-  let open = 0;
-  let doneDelta = 0;
-  for (const task of data.items as readonly Task[]) {
-    if (!matchesViewFilters(task, query, ctx)) continue;
-    const done = task.completedAt !== null;
-    if (!done) open++;
-    if (done && !wasDone.has(task.id)) doneDelta++;
-    else if (!done && wasDone.has(task.id)) doneDelta--;
-  }
-  return { open, done: Math.max(0, data.counts.done + doneDelta) };
+  const count = (tasks: readonly Task[]) => {
+    let open = 0;
+    let done = 0;
+    for (const task of tasks) {
+      if (!matchesViewFilters(task, query, ctx)) continue;
+      if (task.completedAt === null) open++;
+      else done++;
+    }
+    return { open, done };
+  };
+  const now = count(data.items);
+  const then = count(data.baseline ?? data.items);
+  return {
+    open: Math.max(0, data.counts.open + now.open - then.open),
+    done: Math.max(0, data.counts.done + now.done - then.done),
+  };
 }

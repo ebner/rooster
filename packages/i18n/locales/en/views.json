@@ -100,7 +100,8 @@
     },
     "sharing": {
       "private": "Private",
-      "shared": "Shared"
+      "shared": "Shared",
+      "creatorOnly": "Only its creator can make it private"
     },
     "chips": {
       "label": "What the view gathers",
@@ -147,6 +148,7 @@
         "juniper": "Juniper",
         "launch": "Spring launch"
       }
-    }
+    },
+    "limit": "This organisation already has as many views of this kind as it can (100, archived ones included). Delete some first."
   }
 }

@@ -24,6 +24,8 @@ export interface ViewNameInputProps {
   /** Commits a non-empty, changed name. */
   onCommit: (name: string) => void;
   autoFocus?: boolean;
+  /** A new view: Enter on the same name tries the create again (it failed, or was offline). */
+  retry?: boolean;
   className?: string;
 }
 
@@ -35,6 +37,7 @@ export function ViewNameInput({
   name,
   onCommit,
   autoFocus = false,
+  retry = false,
   className,
 }: ViewNameInputProps) {
   const { t } = useTranslation('views');
@@ -56,7 +59,7 @@ export function ViewNameInput({
   const commit = () => {
     editing.current = false;
     const next = value.trim();
-    if (next === '' || next === name) setValue(name);
+    if (next === '' || (next === name && !retry)) setValue(name);
     else onCommit(next);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -263,6 +266,7 @@ export function SavedViewHeader({
               name={draft.name}
               onCommit={editor.setName}
               autoFocus={editor.isNew}
+              retry={editor.isNew}
               className="max-w-fit field-sizing-content"
             />
             <span className="shrink-0 truncate text-sm font-normal tracking-normal text-text-muted">
@@ -297,6 +301,7 @@ export function SavedViewHeader({
           meId={userId}
           onQuery={editor.setQuery}
           onShared={editor.setShared}
+          canUnshare={editor.canUnshare}
           onCreateTag={editor.createTag}
         />
         {draft.shared && !org.isPersonal && (

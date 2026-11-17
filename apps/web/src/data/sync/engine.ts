@@ -41,7 +41,7 @@ import {
   restoredBases,
   writeCacheOwner as writeOwner,
 } from './persist';
-import { invalidateViewsFor } from './view-invalidation';
+import { dropGoneViewCaches, invalidateViewsFor } from './view-invalidation';
 
 /** 04 §6.2: the outbox is retried at least this often while ops are queued. */
 export const flushIntervalMs = 30_000;
@@ -492,6 +492,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   };
 
   const unsubscribeWatch = pipeline.subscribe(() => watchLeader(stallMs));
+  const unwatchViews = dropGoneViewCaches(queryClient);
 
   let updateCheck: () => void = () => {};
   // A `hello` may arrive before the PWA module has set the check: it runs once that happens.
@@ -500,9 +501,10 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
   const events = new EventStream({
     clientId,
     ...(options.eventSource ? { factory: options.eventSource } : {}),
-    invalidate: (key) => {
+    invalidate: (key, own) => {
       void queryClient.invalidateQueries({ queryKey: [...key] });
-      invalidateViewsFor(queryClient, key);
+      // This tab's own task changes are in its view caches already (the pipeline merges them).
+      if (!own) invalidateViewsFor(queryClient, key);
     },
     onConnect: () => {
       // The very first open right after start follows fresh fetches; later ones may have
@@ -855,6 +857,7 @@ export async function startSync(options: SyncEngineOptions): Promise<SyncEngine>
       unsubscribeCache();
       unsubscribePipeline();
       unsubscribeWatch();
+      unwatchViews();
       unlistenChannel();
       leadership?.release();
       if (listen) {

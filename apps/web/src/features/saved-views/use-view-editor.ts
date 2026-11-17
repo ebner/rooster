@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { errorCode } from '../../data/errors';
 import { useListPipeline } from '../../data/list';
 import { queryKeys } from '../../data/query-keys';
 import type { Org } from '../../data/types';
@@ -33,6 +34,8 @@ export interface ViewEditor {
   setName: (name: string) => void;
   setQuery: (next: SavedViewQuery) => void;
   setShared: (shared: boolean) => void;
+  /** Whether "Private" is offered: a shared view only its creator may make private (B8). */
+  canUnshare: boolean;
   archive: () => void;
   remove: () => void;
   /** A tag made from the tag chip ("Create …"), queued like any other, then added. */
@@ -79,7 +82,13 @@ export function useViewEditor(
     toast({ message: t('saved.offline'), tone: 'danger' });
     return true;
   };
-  const failed = () => toast({ message: t('saved.saveFailed'), tone: 'danger' });
+  const failed = (error?: unknown) =>
+    toast({
+      message: t(errorCode(error) === 'view_limit' ? 'saved.limit' : 'saved.saveFailed'),
+      tone: 'danger',
+    });
+  /** A view deleted or archived here: its rows' caches go too (no screen shows them). */
+  const forget = (id: string) => queryClient.removeQueries({ queryKey: ['view-tasks', id] });
 
   const liveKey = queryKeys.views(org.id, false);
   const patchView = (patch: SavedViewPatch) => {
@@ -101,9 +110,9 @@ export function useViewEditor(
       () => {
         if (patch.query) void queryClient.invalidateQueries({ queryKey: ['view-tasks', view.id] });
       },
-      () => {
+      (error: unknown) => {
         if (before) queryClient.setQueryData(liveKey, before);
-        failed();
+        failed(error);
       },
     );
   };
@@ -127,23 +136,27 @@ export function useViewEditor(
           announce(t('saved.created', { name: created.name }));
           void navigate({ href: paths.savedView(slug, created.id), replace: true });
         },
-        () => {
+        (error: unknown) => {
           creating.current = false;
-          failed();
+          failed(error);
         },
       );
   };
 
   const setName = (raw: string) => {
     const name = cleanName(raw);
-    if (name === '' || name === draft.name) return;
-    if (view) patchView({ name });
-    else {
-      const next = { ...local, name };
-      setLocal(next);
-      createNow(next);
+    if (name === '') return;
+    if (view) {
+      if (name !== view.name) patchView({ name });
+      return;
     }
+    // A new view: also the same name again, after a create that failed (or was offline).
+    const next = { ...local, name };
+    setLocal(next);
+    createNow(next);
   };
+  // Making a shared view private makes it its creator's alone: only they may (B8).
+  const canUnshare = !view || view.createdBy === userId;
 
   return {
     draft,
@@ -153,8 +166,9 @@ export function useViewEditor(
       if (view) patchView({ query });
       else setLocal((d) => ({ ...d, query }));
     },
+    canUnshare,
     setShared: (shared) => {
-      if (org.isPersonal || shared === draft.shared) return;
+      if (org.isPersonal || shared === draft.shared || (!shared && !canUnshare)) return;
       if (view) patchView({ shared });
       else setLocal((d) => ({ ...d, shared }));
     },
@@ -162,14 +176,16 @@ export function useViewEditor(
       if (!view || offline()) return;
       archiveView.mutateAsync({ id: view.id, archived: true }).then(() => {
         void navigate({ href: paths.orgView(slug, 'my') });
+        forget(view.id);
         toast({
           message: t('saved.archived', { name: view.name }),
           action: {
             label: t('saved.restore'),
             onAction: () => {
-              archiveView
-                .mutateAsync({ id: view.id, archived: false })
-                .then(() => void navigate({ href: paths.savedView(slug, view.id) }), failed);
+              archiveView.mutateAsync({ id: view.id, archived: false }).then(
+                () => void navigate({ href: paths.savedView(slug, view.id) }),
+                (error: unknown) => failed(error),
+              );
             },
           },
         });
@@ -179,6 +195,7 @@ export function useViewEditor(
       if (!view || offline()) return;
       deleteView.mutateAsync(view.id).then(() => {
         void navigate({ href: paths.orgView(slug, 'my') });
+        forget(view.id);
         toast({ message: t('saved.deleted', { name: view.name }) });
       }, failed);
     },

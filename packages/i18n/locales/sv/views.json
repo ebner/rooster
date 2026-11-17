@@ -100,7 +100,8 @@
     },
     "sharing": {
       "private": "Privat",
-      "shared": "Delad"
+      "shared": "Delad",
+      "creatorOnly": "Bara den som skapade vyn kan göra den privat"
     },
     "chips": {
       "label": "Vad vyn samlar",
@@ -147,6 +148,7 @@
         "juniper": "Juniper",
         "launch": "Vårlanseringen"
       }
-    }
+    },
+    "limit": "Organisationen har redan så många vyer av det här slaget som den kan ha (100, arkiverade inräknade). Ta bort några först."
   }
 }

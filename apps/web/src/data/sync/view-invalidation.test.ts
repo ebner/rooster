@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, test } from 'vitest';
-import { invalidateViewsFor } from './view-invalidation';
+import { dropGoneViewCaches, invalidateViewsFor } from './view-invalidation';
 
 /** ADR 0073 B: the task keys the server sends refetch the org's views and their rows. */
 
@@ -41,5 +41,17 @@ describe('invalidateViewsFor', () => {
     expect(stale(['view-tasks', 'v1', 'open'])).toBe(true);
     expect(stale(['view-tasks', 'v2', 'open'])).toBe(false);
     expect(stale(['views', org, 'live'])).toBe(false);
+  });
+});
+
+describe('dropGoneViewCaches', () => {
+  test('a view gone from its org’s live list loses its rows’ caches', () => {
+    const { queryClient } = setup();
+    const stop = dropGoneViewCaches(queryClient);
+    queryClient.setQueryData(['views', org, 'live'], [{ id: 'v9' }]);
+    expect(queryClient.getQueryData(['view-tasks', 'v1', 'open'])).toBeUndefined();
+    // Another org's views are not touched.
+    expect(queryClient.getQueryData(['view-tasks', 'v2', 'open'])).toBeDefined();
+    stop();
   });
 });

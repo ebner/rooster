@@ -68,6 +68,7 @@ function useSampleEditor(initial: ViewDraft, isNew = false): ViewEditor {
     setName: (name) => setDraft((d) => ({ ...d, name })),
     setQuery: (query) => setDraft((d) => ({ ...d, query })),
     setShared: (shared) => setDraft((d) => ({ ...d, shared })),
+    canUnshare: true,
     archive: () => undefined,
     remove: () => undefined,
     createTag: () => undefined,

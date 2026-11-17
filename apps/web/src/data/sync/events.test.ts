@@ -115,7 +115,7 @@ describe('EventStream', () => {
     latest().emit('invalidate', { org, keys: [['my-list', org]], origin: 'other' });
     latest().emit('invalidate', { org, keys: [['tags', org]], origin: 'me' });
     latest().emit('invalidate', { nonsense: true });
-    expect(handlers.invalidate.mock.calls).toEqual([[['my-list', org]]]);
+    expect(handlers.invalidate.mock.calls).toEqual([[['my-list', org], false]]);
     vi.useRealTimers();
   });
 
@@ -171,6 +171,13 @@ describe('EventStream', () => {
     events.stop();
     expect(latest().closed).toBe(true);
     vi.useRealTimers();
+  });
+
+  test('Phase 13: an own event says so (the views skip what the pipeline merged)', () => {
+    const { handlers, latest } = stream();
+    latest().open();
+    latest().emit('invalidate', { org, keys: [['everyone', org]], origin: 'me' });
+    expect(handlers.invalidate.mock.calls).toEqual([[['everyone', org], true]]);
   });
 
   test('a notification updates the unread count, then invalidates the inbox', () => {

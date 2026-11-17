@@ -19,11 +19,8 @@ export interface ViewTasksData {
   items: readonly Task[];
   /** The server's "7 open · 12 done" when fetched (the screen adds what changed since). */
   counts: { open: number; done: number };
-  /**
-   * The items completed when fetched: the completed matches with "Show completed", and
-   * completed parents sent only for breadcrumbs. Completions since then change the counts.
-   */
-  doneAtFetch?: readonly string[];
+  /** The rows as the server sent them (before the queued ops): what `counts` describe. */
+  baseline?: readonly Task[];
 }
 
 export function isViewTasksData(data: unknown): data is ViewTasksData {
@@ -50,10 +47,22 @@ export function applyOpToViewTasks(
   const next = applyOpToTaskList(items, op, ctx);
   if (next === items) return items;
   let rows = next;
-  if (op.kind === 'task.patch' && op.payload.assigneeId !== undefined) {
-    // Everyone's rows drop children that now share their parent's assignee; a view keeps them.
+  const assigned =
+    op.kind === 'task.patch' && op.payload.assigneeId !== undefined
+      ? { ids: [op.entityId], assigneeId: op.payload.assigneeId }
+      : op.kind === 'task.bulk' && op.payload.op === 'assign'
+        ? { ids: op.payload.ids, assigneeId: op.payload.args.assigneeId }
+        : null;
+  if (assigned) {
+    // Everyone's rows drop children that now share their parent's assignee; a view keeps them
+    // (reassigned too when they were among the tasks assigned).
     const kept = new Set(rows.map((t) => t.id));
-    const dropped = items.filter((t) => !kept.has(t.id));
+    const ids = new Set(assigned.ids);
+    const dropped = items
+      .filter((t) => !kept.has(t.id))
+      .map((t) =>
+        ids.has(t.id) ? { ...t, assigneeId: assigned.assigneeId, updatedAt: ctx.now } : t,
+      );
     if (dropped.length > 0) rows = [...rows, ...dropped];
   }
   if (op.kind === 'task.create' || op.kind === 'task.duplicate') {

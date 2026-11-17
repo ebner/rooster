@@ -29,6 +29,8 @@ export interface QueryChipsProps {
   meId: string;
   onQuery: (next: SavedViewQuery) => void;
   onShared: (shared: boolean) => void;
+  /** False: the view is shared and someone else's, so "Private" isn't offered (B8). */
+  canUnshare?: boolean;
   onCreateTag: (name: string) => void;
   /** Kitchen sink: a static state. */
   'data-force'?: string;
@@ -80,6 +82,7 @@ export function QueryChips({
   meId,
   onQuery,
   onShared,
+  canUnshare = true,
   onCreateTag,
   'data-force': force,
 }: QueryChipsProps) {
@@ -225,7 +228,14 @@ export function QueryChips({
               announce(t(id === 'shared' ? 'saved.sharing.shared' : 'saved.sharing.private'));
             }}
             items={[
-              { id: 'private', label: t('saved.sharing.private'), icon: Lock },
+              {
+                id: 'private',
+                label: t('saved.sharing.private'),
+                icon: Lock,
+                ...(shared && !canUnshare
+                  ? { disabled: true, detail: t('saved.sharing.creatorOnly') }
+                  : {}),
+              },
               { id: 'shared', label: t('saved.sharing.shared'), icon: Users },
             ]}
           />
@@ -235,7 +245,9 @@ export function QueryChips({
   );
 }
 
-type ChipItem = { id: string; label: string; detail?: string; icon?: typeof Lock } | 'separator';
+type ChipItem =
+  | { id: string; label: string; detail?: string; icon?: typeof Lock; disabled?: boolean }
+  | 'separator';
 
 function ChipMenu({
   testId,
@@ -292,6 +304,7 @@ function ChipMenu({
       <MenuPopover placement="bottom start" className="min-w-date-cell">
         <Menu
           aria-label={menuLabel}
+          disabledKeys={groups.flat().flatMap((item) => (item.disabled ? [item.id] : []))}
           selectionMode="single"
           disallowEmptySelection
           selectedKeys={[selected]}

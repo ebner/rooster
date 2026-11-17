@@ -79,6 +79,7 @@ export function QuerySheet({
           <ViewNameInput
             name={draft.name}
             onCommit={editor.setName}
+            retry={editor.isNew}
             className="h-control-lg flex-1 bg-bg-subtle px-3"
           />
         </div>
@@ -167,6 +168,10 @@ export function QuerySheet({
                 label={t(`saved.sharing.${id}`)}
                 checked={draft.shared === (id === 'shared')}
                 aria-pressed={draft.shared === (id === 'shared')}
+                isDisabled={id === 'private' && draft.shared && !editor.canUnshare}
+                {...(id === 'private' && draft.shared && !editor.canUnshare
+                  ? { detail: t('saved.sharing.creatorOnly') }
+                  : {})}
                 onPress={() => {
                   editor.setShared(id === 'shared');
                   announce(t(`saved.sharing.${id}`));

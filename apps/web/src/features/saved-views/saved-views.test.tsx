@@ -4,6 +4,7 @@ import type { SavedView, SavedViewQuery } from '@rooster/core/schemas';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { ApiError } from '../../data/errors';
 import { getListPipeline, ListTransportContext } from '../../data/list';
 import { createFixtureTransport, type FixtureTask } from '../../data/pipeline/fixture-transport';
 import { queryKeys } from '../../data/query-keys';
@@ -86,6 +87,7 @@ async function setup(
     org?: Org;
     query?: Partial<SavedViewQuery>;
     tasks?: Record<number, FixtureTask[]>;
+    view?: Partial<SavedView>;
   } = {},
 ) {
   const org = options.org ?? sharedOrg;
@@ -118,6 +120,7 @@ async function setup(
     openCount: 0,
     createdAt: 1,
     updatedAt: 1,
+    ...options.view,
   };
   transport.views.set(viewId, view);
   const sent: ListOp[] = [];
@@ -309,5 +312,61 @@ describe('a view (ADR 0073 B)', () => {
     fireEvent.click(within(confirm).getByRole('button', { name: 'Delete view' }));
     await waitFor(() => expect(env.remove).toHaveBeenCalledWith(viewId));
     await waitFor(() => expect(env.navigate).toHaveBeenCalledWith({ href: '/o/kestrel/my' }));
+  });
+
+  test('B8: a shared view of someone else’s can’t be made private here (it would vanish)', async () => {
+    await setup({ view: { createdBy: anna } });
+    fireEvent.click(screen.getByTestId('view-chip-shared'));
+    const item = await screen.findByRole('menuitemradio', { name: /Private/ });
+    expect(item.getAttribute('aria-disabled')).toBe('true');
+    expect(item.textContent).toContain('Only its creator can make it private');
+    fireEvent.click(item);
+    expect(env.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('a new view (/v/new)', () => {
+  function renderNew() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
+    });
+    queryClient.setQueryData(queryKeys.me, fixtureMe);
+    queryClient.setQueryData(queryKeys.orgMembers(orgId), members);
+    queryClient.setQueryData(queryKeys.views(orgId, false), []);
+    const transport = createFixtureTransport({ userId, members: [] });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ListTransportContext.Provider value={transport}>
+          <SavedViewContent org={sharedOrg} userId={userId} viewId="new" tabs={[]} />
+          <ToastRegion />
+        </ListTransportContext.Provider>
+      </QueryClientProvider>,
+    );
+    return screen.getByTestId('view-name') as HTMLInputElement;
+  }
+
+  test('a create that failed is tried again by Enter on the same name', async () => {
+    env.create.mockRejectedValueOnce(new ApiError('network', 0));
+    const name = renderNew();
+    fireEvent.change(name, { target: { value: 'Launch' } });
+    fireEvent.keyDown(name, { key: 'Enter' });
+    expect(await screen.findByText("Couldn't save the view. Try again.")).toBeTruthy();
+    expect(env.create).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(name, { key: 'Enter' });
+    await waitFor(() => expect(env.create).toHaveBeenCalledTimes(2));
+    expect(env.create.mock.calls[1]?.[0]).toMatchObject({ name: 'Launch' });
+    await waitFor(() =>
+      expect(env.navigate).toHaveBeenCalledWith(
+        expect.objectContaining({ href: expect.stringMatching(/^\/o\/kestrel\/v\//) }),
+      ),
+    );
+  });
+
+  test('the view limit (409 view_limit) says so', async () => {
+    env.create.mockRejectedValueOnce(new ApiError('view_limit', 409));
+    const name = renderNew();
+    fireEvent.change(name, { target: { value: 'One too many' } });
+    fireEvent.keyDown(name, { key: 'Enter' });
+    expect(await screen.findByText(/as many views of this kind as it can \(100/)).toBeTruthy();
   });
 });

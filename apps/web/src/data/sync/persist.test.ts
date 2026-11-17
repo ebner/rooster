@@ -8,6 +8,7 @@ import {
   type KeyValueStorage,
   legacyCacheStorageKey,
   maxPersistedTaskDetails,
+  maxPersistedViewTasks,
   prepareForPersist,
 } from './persist';
 
@@ -60,6 +61,16 @@ describe('persisted query cache (04 §6.1)', () => {
     expect(kept).toHaveLength(maxPersistedTaskDetails);
     expect(byKey.has('["task","t0"]')).toBe(false);
     expect(byKey.has(`["task","t${maxPersistedTaskDetails + 4}"]`)).toBe(true);
+  });
+
+  test('Phase 13: only the 20 views’ rows used most recently are stored', () => {
+    const rows = Array.from({ length: maxPersistedViewTasks + 3 }, (_, i) =>
+      query(['view-tasks', `v${i}`, 'open'], { orgId: 'o1', items: [], counts: {} }, i),
+    );
+    const prepared = prepareForPersist(client(rows), () => undefined);
+    const kept = prepared.clientState.queries.filter((q) => q.queryKey[0] === 'view-tasks');
+    expect(kept).toHaveLength(maxPersistedViewTasks);
+    expect(kept.some((q) => q.queryKey[1] === 'v0')).toBe(false);
   });
 
   test('round-trips through storage; a suspended persister writes nothing more', async () => {
