@@ -29,11 +29,20 @@ import {
 } from '../output/format.ts';
 import { splitReminderTokens } from '../reminders.ts';
 import { type Runtime, withRuntime } from '../runtime.ts';
+import { fetchViews, fetchViewTasks, type SavedView, viewQuery } from '../saved-views.ts';
 import type { TuiTranslate } from './i18n.ts';
 import { type MutationIdentity, mutationIdentity, withMutationIdentity } from './idempotency.ts';
 import { editLine, type LineInput, lineInput } from './input.ts';
-import { type CommandId, commandFor, GO_KEYS, GO_TIMEOUT_MS, type KeyInfo } from './keymap.ts';
 import {
+  type CommandId,
+  commandFor,
+  GO_KEYS,
+  GO_TIMEOUT_MS,
+  goViewIndex,
+  type KeyInfo,
+} from './keymap.ts';
+import {
+  type BuiltinView,
   buildLines,
   type CreateTarget,
   counts,
@@ -141,6 +150,12 @@ export interface TuiState {
   tags: Tag[];
   members: Member[] | null;
   everyone: Task[] | null;
+  /** The org's views in my order (ADR 0073 B12): the view bar's tabs after the built-in ones. */
+  views: SavedView[];
+  /** The open view when `view` is `saved`. */
+  savedViewId: string | null;
+  /** Its rows (`GET /views/:id/tasks`). */
+  viewTasks: Task[] | null;
   search: { query: string; hits: Task[] } | null;
   dates: DateContext;
   lines: Line[];
@@ -299,6 +314,9 @@ export class TuiController {
       tags: [],
       members: null,
       everyone: null,
+      views: [],
+      savedViewId: null,
+      viewTasks: null,
       search: null,
       dates: dateContext(deps.me, deps.locale, deps.now()),
       lines: [],
@@ -362,6 +380,8 @@ export class TuiController {
       upcomingOpen: this.upcomingOpen.has(s.org.id),
       members: s.members,
       everyone: s.everyone,
+      saved: this.savedRows(s),
+      isPersonal: s.org.isPersonal,
       search: s.search,
       t: this.deps.t,
     });
@@ -397,6 +417,13 @@ export class TuiController {
       detail: { taskId, task: null, activity: null, error: null, scroll: 0 },
     };
     queueMicrotask(() => void this.loadDetail(taskId));
+  }
+
+  /** The open view and its rows, when one is shown. */
+  private savedRows(s: TuiState): { view: SavedView; tasks: Task[] } | null {
+    if (s.view !== 'saved' || s.viewTasks === null) return null;
+    const view = s.views.find((v) => v.id === s.savedViewId);
+    return view === undefined ? null : { view, tasks: s.viewTasks };
   }
 
   private expandedIds(list: ListState): string[] {
@@ -516,10 +543,25 @@ export class TuiController {
     return hits.map((hit) => hit.task);
   }
 
+  /**
+   * The open view's rows; `gone` when it no longer exists for me (deleted, archived, made
+   * private by someone else: `404`).
+   */
+  private async fetchSaved(viewId: string | null): Promise<Task[] | 'gone' | null> {
+    if (viewId === null) return null;
+    try {
+      return (await fetchViewTasks(this.api, viewId, this.state.showCompleted)).items as Task[];
+    } catch (error) {
+      if (error instanceof RoosterApiError && error.status === 404) return 'gone';
+      throw error;
+    }
+  }
+
   /** Everything the current org and view show, fetched together. */
   private async fetchAll(org: Org, view: ViewId, search: string | null) {
     const shared = !org.isPersonal;
-    const [list, tags, members, everyone, hits] = await this.ctx(() =>
+    const savedViewId = view === 'saved' ? this.state.savedViewId : null;
+    const [list, tags, members, everyone, hits, views, viewTasks] = await this.ctx(() =>
       Promise.all([
         this.fetchMyList(org.id),
         unwrap(this.api.GET('/api/v1/orgs/{orgId}/tags', { params: { path: { orgId: org.id } } })),
@@ -534,9 +576,32 @@ export class TuiController {
         view === 'search' && search !== null && search.trim() !== ''
           ? this.fetchSearch(org.id, search)
           : Promise.resolve(null),
+        fetchViews(this.api, org.id, { missingIsEmpty: true }),
+        this.fetchSaved(savedViewId),
       ]),
     );
-    return { list, tags, members, everyone, hits };
+    return { list, tags, members, everyone, hits, views, viewTasks, savedViewId };
+  }
+
+  /**
+   * The views and the open view's rows from a fetch. A view that is gone (or no longer in the
+   * bar) closes: back to My tasks, with a notice.
+   */
+  private viewsPatch(data: Awaited<ReturnType<TuiController['fetchAll']>>): Partial<TuiState> {
+    const { views, viewTasks, savedViewId } = data;
+    if (savedViewId === null || savedViewId !== this.state.savedViewId) return { views };
+    if (viewTasks === 'gone' || !views.some((v) => v.id === savedViewId)) {
+      this.preferFirst = true;
+      return {
+        views,
+        view: 'my',
+        listView: 'my',
+        savedViewId: null,
+        viewTasks: null,
+        message: { text: this.t('msg.viewGone'), tone: 'info', retry: false },
+      };
+    }
+    return { views, viewTasks };
   }
 
   private async loadOrg(org: Org): Promise<void> {
@@ -550,6 +615,7 @@ export class TuiController {
           tags: data.tags,
           members: data.members,
           everyone: data.everyone,
+          ...this.viewsPatch(data),
           ...(data.hits === null
             ? {}
             : { search: { query: this.state.search?.query ?? '', hits: data.hits } }),
@@ -597,6 +663,7 @@ export class TuiController {
             tags: data.tags,
             members: data.members,
             everyone: data.everyone,
+            ...this.viewsPatch(data),
             ...(data.hits === null || this.state.search?.query !== query
               ? {}
               : { search: { ...this.state.search, hits: data.hits } }),
@@ -740,6 +807,13 @@ export class TuiController {
         ? s.everyone.map((t) => (t.id === task.id ? task : t))
         : [...s.everyone, task];
     }
+    if (s.viewTasks !== null) {
+      // A task created in the view is a row at once; one that stops matching leaves with the
+      // refetch that follows every change.
+      patch.viewTasks = s.viewTasks.some((t) => t.id === task.id)
+        ? s.viewTasks.map((t) => (t.id === task.id ? task : t))
+        : [...s.viewTasks, task];
+    }
     if (s.search !== null) {
       patch.search = { ...s.search, hits: s.search.hits.map((t) => (t.id === task.id ? task : t)) };
     }
@@ -759,6 +833,7 @@ export class TuiController {
       patch.list = { ...s.list, tasks };
     }
     if (s.everyone !== null) patch.everyone = s.everyone.filter((t) => !ids.has(t.id));
+    if (s.viewTasks !== null) patch.viewTasks = s.viewTasks.filter((t) => !ids.has(t.id));
     if (s.search !== null) {
       patch.search = { ...s.search, hits: s.search.hits.filter((t) => !ids.has(t.id)) };
     }
@@ -801,6 +876,7 @@ export class TuiController {
     return (
       s.list?.tasks[taskId] ??
       s.everyone?.find((t) => t.id === taskId) ??
+      s.viewTasks?.find((t) => t.id === taskId) ??
       s.search?.hits.find((t) => t.id === taskId)
     );
   }
@@ -1076,6 +1152,12 @@ export class TuiController {
       this.set({ goPending: false });
       const view = GO_KEYS[input];
       if (view !== undefined && !key.ctrl && !key.meta) void this.setView(view);
+      const index = goViewIndex(input, key);
+      if (index !== null) {
+        const saved = this.state.views[index];
+        if (saved === undefined) this.info('msg.noView', { n: index + 1 });
+        else void this.openView(saved.id);
+      }
       return;
     }
     const command = commandFor(input, key);
@@ -1177,7 +1259,7 @@ export class TuiController {
       }
       case 'showCompleted':
         this.set({ showCompleted: !this.state.showCompleted }, true);
-        if (this.state.view === 'everyone') void this.refresh();
+        if (this.state.view === 'everyone' || this.state.view === 'saved') void this.refresh();
         return;
       case 'retry':
         this.retry();
@@ -1225,6 +1307,11 @@ export class TuiController {
   // Views and orgs
 
   async setView(view: ListView): Promise<void> {
+    if (view === 'saved') {
+      // Back from search to the view it came from.
+      if (this.state.savedViewId !== null) await this.openView(this.state.savedViewId);
+      return;
+    }
     if (view === 'everyone' && this.state.org.isPersonal) {
       this.info('msg.everyonePersonal');
       return;
@@ -1232,8 +1319,37 @@ export class TuiController {
     const needsFetch = view === 'everyone' && this.state.everyone === null;
     this.searchGeneration += 1;
     this.preferFirst = true;
-    this.set({ view, listView: view, search: null, mode: { kind: 'navigate' } }, true);
+    this.set(
+      {
+        view,
+        listView: view,
+        savedViewId: null,
+        viewTasks: null,
+        search: null,
+        mode: { kind: 'navigate' },
+      },
+      true,
+    );
     if (needsFetch || view === 'everyone') await this.refresh();
+  }
+
+  /** Opens one of the org's views (ADR 0073 B12); its rows load with the refresh. */
+  async openView(viewId: string): Promise<void> {
+    this.searchGeneration += 1;
+    this.preferFirst = true;
+    const same = this.state.savedViewId === viewId;
+    this.set(
+      {
+        view: 'saved',
+        listView: 'saved',
+        savedViewId: viewId,
+        ...(same ? {} : { viewTasks: null }),
+        search: null,
+        mode: { kind: 'navigate' },
+      },
+      true,
+    );
+    await this.refresh();
   }
 
   async switchOrg(org: Org): Promise<void> {
@@ -1244,7 +1360,11 @@ export class TuiController {
     this.failed = null;
     this.typeahead = null;
     this.typeaheadOwner += 1;
-    const view = this.state.view === 'everyone' && org.isPersonal ? 'my' : this.state.listView;
+    // Views are per org: a view stays only when it's a built-in one the new org has.
+    const view: BuiltinView =
+      (this.state.listView === 'everyone' && org.isPersonal) || this.state.listView === 'saved'
+        ? 'my'
+        : this.state.listView;
     this.collapsed.clear();
     this.expanded.clear();
     this.keep.clear();
@@ -1257,6 +1377,9 @@ export class TuiController {
         tags: [],
         members: null,
         everyone: null,
+        views: [],
+        savedViewId: null,
+        viewTasks: null,
         search: null,
         selected: null,
         detail: null,
@@ -1369,7 +1492,7 @@ export class TuiController {
       this.info('msg.noAddInSearch');
       return;
     }
-    const target = createTarget(s.view, s.lines, s.list, s.selected, where);
+    const target = this.withViewTags(createTarget(s.view, s.lines, s.list, s.selected, where));
     if (target === null) return;
     const group = target.expandGroup === undefined ? undefined : s.list.groups[target.expandGroup];
     if (group !== undefined && (this.collapsed.get(group.id) ?? group.collapsed)) {
@@ -1381,6 +1504,14 @@ export class TuiController {
       this.setExpanded(target.expandTask, true);
     }
     this.set({ mode: { kind: 'draft', target, input: lineInput() } });
+  }
+
+  /** A task typed in a view gets the view's tags (ADR 0073 B6), so it shows there. */
+  private withViewTags(target: CreateTarget | null): CreateTarget | null {
+    const view = this.savedRows(this.state)?.view;
+    if (target === null || view === undefined) return target;
+    const tags = viewQuery(view).tags;
+    return tags.length === 0 ? target : { ...target, body: { ...target.body, tagIds: [...tags] } };
   }
 
   private keyTitle(
@@ -1485,7 +1616,7 @@ export class TuiController {
             depth: target.depth,
             body: { groupId: placement.groupId, afterId: created.id },
           }
-        : createTarget(s.view, s.lines, s.list, created.id, 'below');
+        : this.withViewTags(createTarget(s.view, s.lines, s.list, created.id, 'below'));
     if (next !== null) this.set({ mode: { kind: 'draft', target: next, input: lineInput() } });
     return true;
   }

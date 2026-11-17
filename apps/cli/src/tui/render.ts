@@ -15,6 +15,7 @@ import {
 import { renderMarkdown } from '../output/markdown.ts';
 import { listOf, offsetText, reminderText, ruleText, sizeText } from '../output/schedule.ts';
 import { dueStyle, styles, tagStyle, token } from '../output/theme.ts';
+import { viewIcon } from '../saved-views.ts';
 import type {
   ActivityItem,
   DatePreview,
@@ -26,7 +27,7 @@ import type {
 } from './controller.ts';
 import type { TuiTranslate } from './i18n.ts';
 import type { LineInput } from './input.ts';
-import { bindingOf, FOOTER, GO_KEYS, KEYMAP } from './keymap.ts';
+import { bindingOf, FOOTER, GO_KEYS, GO_VIEW_KEYS, KEYMAP } from './keymap.ts';
 import { indexOfKey, LIST_VIEWS, type Line, type TaskLine } from './model.ts';
 import { ellipsize, fit, padAnsi, type Seg, seg, segsWidth, wrapAnsi } from './text.ts';
 
@@ -188,6 +189,9 @@ function topBorder(ctx: Ctx): string {
   );
 }
 
+/** A view's tab is cut to this width, so long names leave room for the others. */
+const VIEW_TAB_MAX = 24;
+
 function tabs(ctx: Ctx): string {
   const { state, t, inner, level } = ctx;
   const items: { view: string; segs: Seg[] }[] = LIST_VIEWS.filter(
@@ -203,6 +207,20 @@ function tabs(ctx: Ctx): string {
     }
     return { view, segs };
   });
+  // The org's views follow the built-in ones, in my order (ADR 0073 B12): `#` a project view,
+  // `⌕` any other, and the open count.
+  const current = state.view === 'saved' ? `saved:${state.savedViewId}` : state.view;
+  for (const saved of state.views) {
+    const view = `saved:${saved.id}`;
+    const name = ellipsize(
+      `${viewIcon(saved)} ${clean(saved.name).replace(/\s+/g, ' ')}`,
+      VIEW_TAB_MAX,
+    );
+    const segs: Seg[] = [seg(name, view === current ? { ...accent, underline: true } : {})];
+    const open = count(saved.openCount);
+    if (open !== null && open > 0) segs.push(seg(` ${open}`, muted));
+    items.push({ view, segs });
+  }
   if (state.view === 'search') {
     items.push({
       view: 'search',
@@ -217,7 +235,7 @@ function tabs(ctx: Ctx): string {
     // Keep the current tab and as many neighbours as fit.
     const at = Math.max(
       0,
-      items.findIndex((item) => item.view === state.view),
+      items.findIndex((item) => item.view === current),
     );
     let from = at;
     let to = at + 1;
@@ -772,6 +790,7 @@ export function helpLines(t: TuiTranslate): { keys: string; text: string; headin
   for (const [key, view] of Object.entries(GO_KEYS)) {
     out.push({ keys: `g ${key}`, text: t('key.go', { view: t(`view.${view}`) }) });
   }
+  out.push({ keys: `g ${GO_VIEW_KEYS}`, text: t('key.goView') });
   out.push({ keys: '', text: '' }, { keys: '', text: t('help.differences'), heading: true });
   for (const binding of KEYMAP) {
     if (binding.web === undefined) continue;
@@ -852,10 +871,12 @@ function footer(ctx: Ctx): string {
     return fit([text], inner - keysW, level) + fit([seg(keys, muted)], keysW, level);
   }
   if (state.goPending) {
-    return hints(
-      ctx,
-      Object.entries(GO_KEYS).map(([key, view]) => [`g ${key}`, t(`view.${view}`)]),
-    );
+    const items: [string, string][] = Object.entries(GO_KEYS).map(([key, view]) => [
+      `g ${key}`,
+      t(`view.${view}`),
+    ]);
+    if (state.views.length > 0) items.push([`g ${GO_VIEW_KEYS}`, t('hint.views')]);
+    return hints(ctx, items);
   }
   switch (mode.kind) {
     case 'edit':

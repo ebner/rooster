@@ -1,0 +1,332 @@
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
+import { createRoosterClient } from '@rooster/api-client';
+import { addDays, todayIn } from '@rooster/core/dates';
+import { selectSavedView } from '@rooster/core/saved-views';
+import type { SavedViewQuery, Task } from '@rooster/core/schemas';
+import { createRoosterMcpServer } from '@rooster/mcp';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { stripAnsi } from '../src/output/color.ts';
+import { type CliHarness, cliHarness } from './support/fake-io.ts';
+import { type RoosterServer, startServer, type TestUser } from './support/rooster-server.ts';
+import { openTui, type TuiHarness } from './support/tui.ts';
+
+/**
+ * Phase 13 (ADR 0073 B12, AC-13.5): `rooster view ls`, `rooster ls --view Juniper`, MCP
+ * `list_views` / `list_tasks {view: "Juniper"}` and the TUI's view bar, against a real server:
+ * the same rows in the same order as the web, which groups `GET /views/:id/tasks` with core
+ * `selectSavedView`.
+ */
+
+interface TaskJson {
+  id: string;
+  orgId: string;
+  seq: number;
+  title: string;
+  assigneeId: string | null;
+  tagIds: string[];
+  completedAt: number | null;
+}
+interface ViewJson {
+  id: string;
+  name: string;
+  shared: boolean;
+  query: SavedViewQuery;
+  openCount: number;
+}
+interface MeJson {
+  id: string;
+  locale: string;
+  timezone: string;
+  orgs: { id: string; slug: string; isPersonal: boolean }[];
+}
+
+let server: RoosterServer;
+let seq = 0;
+let tuis: TuiHarness[] = [];
+
+beforeAll(async () => {
+  server = await startServer();
+});
+afterEach(() => {
+  for (const tui of tuis) tui.close();
+  tuis = [];
+});
+afterAll(async () => {
+  await server?.close();
+});
+
+interface Seeded {
+  ada: TestUser;
+  bo: TestUser;
+  token: string;
+  cli: CliHarness;
+  orgId: string;
+  slug: string;
+  juniper: ViewJson;
+  tasks: Record<string, TaskJson>;
+}
+
+/**
+ * Kestrel with Ada, Bo and Cy: a shared project view "Juniper" (#juniper) with tasks for each
+ * of them, an unassigned one, a subtask, a completed one and one without the tag; Ada's own
+ * private view "Mine".
+ */
+async function seed(): Promise<Seeded> {
+  seq += 1;
+  const ada = await server.user(`views-ada-${seq}@example.com`, 'Ada');
+  const bo = await server.user(`views-bo-${seq}@example.com`, 'Bo');
+  const cy = await server.user(`views-cy-${seq}@example.com`, 'Cy');
+  const { token } = await ada.token({
+    scopes: ['tasks:read', 'tasks:write', 'tasks:assign'] as never,
+  });
+  const cli = cliHarness();
+  const login = await cli.run(['login', '--with-token', '--server', server.url], { stdin: token });
+  expect(login.code, login.stderr).toBe(0);
+  const slug = `kestrel-${seq}`;
+  const created = await ada.api<{ id: string }>('POST', '/api/v1/orgs', { name: 'Kestrel', slug });
+  expect(created.status).toBe(201);
+  const orgId = created.data.id;
+  for (const member of [bo, cy]) {
+    const invite = await ada.api<{ url: string }>('POST', `/api/v1/orgs/${orgId}/invites`, {
+      role: 'member',
+    });
+    const accepted = await member.api(
+      'POST',
+      `/api/v1/invites/${invite.data.url.split('/invite/')[1]}/accept`,
+    );
+    expect(accepted.status).toBe(200);
+  }
+  const me = (await ada.api<MeJson>('GET', '/api/v1/me')).data;
+  const day = todayIn(me.timezone, Date.now());
+  const add = async (body: Record<string, unknown>) => {
+    const { status, data } = await ada.api<TaskJson>('POST', `/api/v1/orgs/${orgId}/tasks`, body);
+    expect(status, JSON.stringify(data)).toBe(201);
+    return data;
+  };
+  const tasks: Record<string, TaskJson> = {};
+  tasks.cyLater = await add({
+    title: 'Cy later',
+    tagNames: ['juniper'],
+    assigneeId: cy.userId,
+    dueDate: addDays(day, 5),
+  });
+  tasks.adaUndated = await add({ title: 'Ada undated', tagNames: ['juniper'] });
+  tasks.boSoon = await add({
+    title: 'Bo soon',
+    tagNames: ['juniper'],
+    assigneeId: bo.userId,
+    dueDate: addDays(day, 1),
+  });
+  tasks.adaToday = await add({ title: 'Ada today', tagNames: ['juniper'], dueDate: day });
+  tasks.nobody = await add({ title: 'Nobody’s', tagNames: ['juniper'], assigneeId: null });
+  tasks.untagged = await add({ title: 'Not Juniper', assigneeId: bo.userId });
+  tasks.sub = await add({
+    title: 'Juniper subtask',
+    tagNames: ['juniper'],
+    parentId: tasks.untagged.id,
+    assigneeId: cy.userId,
+  });
+  tasks.done = await add({ title: 'Done Juniper', tagNames: ['juniper'], dueDate: day });
+  expect(
+    (await ada.api('POST', `/api/v1/tasks/${tasks.done.id}/complete`, { completed: true })).status,
+  ).toBe(200);
+  const tagId = tasks.adaToday.tagIds[0] as string;
+  const view = async (body: Record<string, unknown>) => {
+    const { status, data } = await ada.api<ViewJson>('POST', `/api/v1/orgs/${orgId}/views`, body);
+    expect(status, JSON.stringify(data)).toBe(201);
+    return data;
+  };
+  const juniper = await view({ name: 'Juniper', shared: true, query: { tags: [tagId] } });
+  await view({ name: 'Mine', query: { assignee: 'me' } });
+  return { ada, bo, token, cli, orgId, slug, juniper, tasks };
+}
+
+/** What the web shows: core `selectSavedView` over the server's rows, flattened. */
+async function webRows(user: TestUser, orgId: string, view: ViewJson, completed = false) {
+  const me = (await user.api<MeJson>('GET', '/api/v1/me')).data;
+  const { data } = await user.api<{ items: Task[]; counts: { open: number; done: number } }>(
+    'GET',
+    `/api/v1/views/${view.id}/tasks${completed ? '?completed=true' : ''}`,
+  );
+  const members = (
+    await user.api<{ userId: string; name: string }[]>('GET', `/api/v1/orgs/${orgId}/members`)
+  ).data;
+  const sections = selectSavedView(data.items, view.query, {
+    viewerId: me.id,
+    due: { today: todayIn(me.timezone, Date.now()), nowMs: Date.now(), viewerTz: me.timezone },
+    members: members.map((m) => ({ userId: m.userId, name: m.name })),
+    locale: me.locale,
+    isPersonal: false,
+    showCompleted: completed,
+  });
+  return { ids: sections.flatMap((s) => s.taskIds), counts: data.counts };
+}
+
+async function json<T>(cli: CliHarness, args: string[]): Promise<T> {
+  const res = await cli.run([...args, '--json']);
+  expect(res.code, res.stderr).toBe(0);
+  return JSON.parse(res.stdout) as T;
+}
+
+describe('views from the command line (ADR 0073 B12)', () => {
+  it('AC-13.5 rooster ls --view Juniper lists the web view’s rows in its order', async () => {
+    const { ada, cli, orgId, slug, juniper, tasks } = await seed();
+    const web = await webRows(ada, orgId, juniper);
+    const listed = await json<TaskJson[]>(cli, ['ls', '--view', 'Juniper', '--org', slug]);
+    expect(listed.map((t) => t.id)).toEqual(web.ids);
+    expect(listed.map((t) => t.title)).toEqual([
+      'Ada today',
+      'Ada undated',
+      'Bo soon',
+      'Cy later',
+      'Juniper subtask',
+      'Nobody’s',
+    ]);
+    // --completed, as the header's "Show completed".
+    const all = await json<TaskJson[]>(cli, [
+      'ls',
+      '--view',
+      'juniper',
+      '--org',
+      slug,
+      '--completed',
+    ]);
+    expect(all.map((t) => t.id)).toEqual((await webRows(ada, orgId, juniper, true)).ids);
+    expect(all.map((t) => t.id)).toContain(tasks.done?.id);
+    // By ID too.
+    const byId = await json<TaskJson[]>(cli, ['ls', '--view', juniper.id, '--org', slug]);
+    expect(byId.map((t) => t.id)).toEqual(web.ids);
+  });
+
+  it('prints the person sections and the project header; view ls lists my views', async () => {
+    const { cli, slug } = await seed();
+    const res = await cli.run(['ls', '--view', 'Juniper', '--org', slug]);
+    expect(res.code, res.stderr).toBe(0);
+    const lines = stripAnsi(res.stdout).trimEnd().split('\n');
+    expect(lines[0]).toBe('Kestrel · Juniper  6 open · 1 done');
+    expect(lines.filter((l) => /^\S.* \(\d+\)$/.test(l))).toEqual([
+      'Ada (you) (2)',
+      'Bo (1)',
+      'Cy (2)',
+      'Unassigned (1)',
+    ]);
+    // Its parent isn't in the view, and the rows carry no parent titles: no breadcrumb.
+    expect(lines.find((l) => l.includes('Juniper subtask'))).not.toContain('Not Juniper');
+    expect(res.stdout).not.toContain('@example.com');
+
+    const views = stripAnsi((await cli.run(['view', 'ls', '--org', slug])).stdout)
+      .trimEnd()
+      .split('\n');
+    expect(views[0]).toBe('Kestrel · Views');
+    expect(views.slice(1)).toEqual([
+      expect.stringMatching(/^# {2}Juniper {2}shared {3}6 open$/),
+      expect.stringMatching(/^⌕ {2}Mine {5}private {2}\d+ open$/),
+    ]);
+    const unknown = await cli.run(['ls', '--view', 'Nope', '--org', slug]);
+    expect(unknown.code).toBe(4);
+    expect(unknown.stderr).toContain('Juniper, Mine');
+  });
+
+  it('another member sees the shared view but not my private one', async () => {
+    const { bo, slug, orgId, juniper } = await seed();
+    const { token } = await bo.token({ scopes: ['tasks:read'] as never });
+    const cli = cliHarness();
+    try {
+      expect(
+        (await cli.run(['login', '--with-token', '--server', server.url], { stdin: token })).code,
+      ).toBe(0);
+      const views = await json<ViewJson[]>(cli, ['view', 'ls', '--org', slug]);
+      expect(views.map((v) => v.name)).toEqual(['Juniper']);
+      const listed = await json<TaskJson[]>(cli, ['ls', '--view', 'Juniper', '--org', slug]);
+      expect(listed.map((t) => t.id)).toEqual((await webRows(bo, orgId, juniper)).ids);
+      // Bo's own section comes first for Bo.
+      expect(listed[0]?.title).toBe('Bo soon');
+      expect((await cli.run(['ls', '--view', 'Mine', '--org', slug])).code).toBe(4);
+    } finally {
+      cli.cleanup();
+    }
+  });
+
+  it('AC-13.5 MCP list_views and list_tasks {view: "Juniper"} return the same rows', async () => {
+    const { ada, token, orgId, slug, juniper } = await seed();
+    const mcpServer = createRoosterMcpServer({
+      client: createRoosterClient({ baseUrl: server.url, token }),
+      listing: { mode: 'granted', scopes: ['tasks:read'] },
+      defaultOrg: slug,
+      instanceUrl: server.url,
+      version: '1.11.0',
+    });
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    await mcpServer.connect(b);
+    const mcp = new Client({ name: 'views', version: '1.0.0' });
+    await mcp.connect(a);
+    try {
+      const views = (await mcp.callTool({ name: 'list_views', arguments: {} })) as {
+        structuredContent: { views: { id: string; name: string; project?: boolean }[] };
+      };
+      expect(views.structuredContent.views).toEqual([
+        expect.objectContaining({ id: juniper.id, name: 'Juniper', project: true, shared: true }),
+        expect.objectContaining({ name: 'Mine', shared: false }),
+      ]);
+      const result = (await mcp.callTool({
+        name: 'list_tasks',
+        arguments: { view: 'Juniper' },
+      })) as { structuredContent: { tasks: { ref: string }[] } };
+      const web = await webRows(ada, orgId, juniper);
+      const all = (await ada.api<{ items: TaskJson[] }>('GET', `/api/v1/views/${juniper.id}/tasks`))
+        .data.items;
+      const byId = new Map(all.map((t) => [t.id, t]));
+      expect(result.structuredContent.tasks.map((t) => t.ref)).toEqual(
+        web.ids.map((id) => `${slug}#${byId.get(id)?.seq}`),
+      );
+    } finally {
+      await mcp.close();
+      await mcpServer.close();
+    }
+  });
+
+  it('the TUI lists the views after the built-in tabs; g 1 opens one, n adds with its tags', async () => {
+    const { ada, cli, slug, orgId, juniper } = await seed();
+    // The TUI opens on the profile's org.
+    expect((await cli.run(['org', 'use', slug])).code).toBe(0);
+    const t = await openTui(cli, { columns: 140, rows: 40 });
+    tuis.push(t);
+    let frame = await t.waitFor((f) => f.includes('# Juniper 6'));
+    expect(frame.split('\n')[1]).toMatch(/Everyone’s tasks │ # Juniper 6 │ ⌕ Mine/);
+    await t.press('g', '1');
+    frame = await t.waitFor((f) => f.includes('Ada (you) (2)') && f.includes('Bo soon'));
+    const order = ['Ada today', 'Ada undated', 'Bo (1)', 'Bo soon', 'Cy (2)', 'Cy later'];
+    const at = order.map((text) => frame.indexOf(text));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((x, y) => x - y)).toEqual(at);
+    expect(frame).toContain('Unassigned (1)');
+    expect(frame).not.toContain('Done Juniper');
+    // A task typed in the view gets its tag and lands in my section.
+    await t.press('n');
+    await t.type('Book the venue');
+    await t.press('\r', '\u001b');
+    frame = await t.waitFor((f) => f.includes('Book the venue') && f.includes('Ada (you) (3)'));
+    const created = (
+      await ada.api<{ items: TaskJson[] }>('GET', `/api/v1/views/${juniper.id}/tasks`)
+    ).data.items.find((task) => task.title === 'Book the venue');
+    expect(created?.tagIds).toEqual(juniper.query.tags);
+    expect(created?.assigneeId).toBe(ada.userId);
+    // Live: a change made elsewhere (the web) shows up.
+    await ada.api('POST', `/api/v1/orgs/${orgId}/tasks`, {
+      title: 'From the web',
+      tagIds: juniper.query.tags,
+      assigneeId: null,
+    });
+    await t.waitFor((f) => f.includes('From the web') && f.includes('Unassigned (2)'));
+    // Renamed and then archived elsewhere: the tab follows, and the view closes.
+    await ada.api('PATCH', `/api/v1/views/${juniper.id}`, { name: 'Juniper launch' });
+    await t.waitFor((f) => f.includes('# Juniper launch'));
+    await ada.api('POST', `/api/v1/views/${juniper.id}/archive`);
+    frame = await t.waitFor((f) => f.includes('no longer available'));
+    expect(frame).not.toContain('# Juniper');
+    // g then a digit with no such view says so.
+    await t.press('g', '5');
+    await t.waitFor((f) => f.includes('No view 5'));
+  });
+});

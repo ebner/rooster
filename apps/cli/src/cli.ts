@@ -24,6 +24,7 @@ import {
   subCommand,
   undoneCommand,
 } from './commands/tasks.ts';
+import { viewCommand } from './commands/views.ts';
 import { t } from './i18n.ts';
 import { stripAnsi } from './output/color.ts';
 import { rt } from './runtime.ts';
@@ -47,6 +48,7 @@ export const rootCommand: CommandDef<ArgsDef> = defineCommand({
     sub: subCommand,
     group: groupCommand,
     tag: tagCommand,
+    view: viewCommand,
     comment: commentCommand,
     search: searchCommand,
     open: openCommand,

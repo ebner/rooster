@@ -93,6 +93,7 @@ describe('initialize', () => {
       'get_task',
       'search_tasks',
       'list_groups',
+      'list_views',
       'list_notifications',
     ]);
   });

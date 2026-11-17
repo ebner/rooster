@@ -1,4 +1,4 @@
-import type { ListView } from './model.ts';
+import type { BuiltinView } from './model.ts';
 
 /**
  * The TUI keymap (07 §5): the single table that both dispatches keys in Navigate mode and
@@ -119,7 +119,7 @@ export const KEYMAP: readonly Binding[] = [
 ];
 
 /** `g` then one of these switches the view (02 §6 "G then M / T / W / O / N / E"). */
-export const GO_KEYS: Readonly<Record<string, ListView>> = {
+export const GO_KEYS: Readonly<Record<string, BuiltinView>> = {
   m: 'my',
   t: 'today',
   w: 'week',
@@ -127,6 +127,18 @@ export const GO_KEYS: Readonly<Record<string, ListView>> = {
   n: 'nodate',
   e: 'everyone',
 };
+
+/**
+ * `g` then a digit opens the org's views (ADR 0073 B12), in the order of the view bar: the
+ * terminal's way to the views that follow the built-in tabs.
+ */
+export const GO_VIEW_KEYS = '1–9';
+
+/** The view `g` then `input` opens: its index in the view bar's views, or null. */
+export function goViewIndex(input: string, key: Pick<KeyInfo, 'ctrl' | 'meta'>): number | null {
+  if (key.ctrl || key.meta || !/^[1-9]$/.test(input)) return null;
+  return Number(input) - 1;
+}
 
 /** The web's `g` sequence waits this long for the second key (02 §6). */
 export const GO_TIMEOUT_MS = 1_000;

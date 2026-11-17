@@ -175,6 +175,7 @@ describe('AC-9.2 rooster mcp over stdio', () => {
             'list_notifications',
             'list_orgs',
             'list_tasks',
+            'list_views',
             'search_tasks',
           ].sort(),
         );

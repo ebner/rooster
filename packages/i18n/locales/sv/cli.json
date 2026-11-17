@@ -15,6 +15,7 @@
     "sub": "Lägg till en deluppgift: rooster sub 42 \"Ring banken\"",
     "group": "Hantera dina grupper: ls, add, rename, mv, rm",
     "tag": "Hantera taggar (ls, add, rm) eller tagga en uppgift: rooster tag 42 +brådskande -senare",
+    "view": "Organisationens vyer: ls (rooster ls --view NAMN listar en)",
     "comment": "Kommentera en uppgift",
     "search": "Sök bland uppgifter",
     "open": "Öppna en uppgift eller Mina uppgifter i webbläsaren",
@@ -51,6 +52,7 @@
   "ls": {
     "arg": {
       "view": "my (standard), today, week, overdue, nodate eller everyone",
+      "savedView": "En av organisationens vyer, med namn eller id",
       "group": "Bara den här gruppen",
       "tag": "Bara uppgifter med den här taggen (kan upprepas)",
       "completed": "Ta med klara uppgifter",
@@ -88,6 +90,29 @@
     "overdue": "Försenade",
     "nodate": "Utan datum",
     "everyone": "Allas uppgifter"
+  },
+  "views": {
+    "cmd": {
+      "ls": "Lista organisationens vyer i din ordning"
+    },
+    "arg": {
+      "archived": "Lista de arkiverade vyerna i stället"
+    },
+    "title": "Vyer",
+    "archivedTitle": "Arkiverade vyer",
+    "none": "Inga vyer än. Skapa en i webbappen.",
+    "noneArchived": "Inga arkiverade vyer",
+    "shared": "delad",
+    "private": "privat",
+    "open": "{count, plural, one {# öppen} other {# öppna}}",
+    "counts": "{open, plural, one {# öppen} other {# öppna}} · {done, plural, one {# klar} other {# klara}}",
+    "you": "{name} (du)",
+    "formerMember": "Tidigare medlem",
+    "notFound": "Det finns ingen vy som heter ”{name}” i {org}. Vyerna där: {views}",
+    "notFoundNone": "Det finns ingen vy som heter ”{name}”: {org} har inga vyer än.",
+    "ambiguous": "Flera vyer heter ”{name}”; ange en med dess id: {candidates}",
+    "notWithView": "Ange antingen en lista (my, today, …) eller --view, inte båda.",
+    "flagNotWithView": "--view listar vyns egna uppgifter; utelämna {flag}."
   },
   "add": {
     "arg": {

@@ -18,6 +18,7 @@ describe('requiredScopes (11 §5.2)', () => {
     ['get_task', 'tasks:read'],
     ['search_tasks', 'tasks:read'],
     ['list_groups', 'tasks:read'],
+    ['list_views', 'tasks:read'],
     ['create_task', 'tasks:write'],
     ['update_task', 'tasks:write'],
     ['complete_task', 'tasks:write'],
@@ -30,6 +31,11 @@ describe('requiredScopes (11 §5.2)', () => {
   ];
   it.each(base)('%s needs %s', (tool, scope) => {
     expect(requiredScopes(tool, {}, ctx)).toEqual([scope]);
+  });
+
+  it('list_views needs tasks:read whatever its arguments (ADR 0073)', () => {
+    expect(requiredScopes('list_views', { org: 'acme' }, ctx)).toEqual(['tasks:read']);
+    expect(requiredScopes('list_tasks', { view: 'Juniper' }, ctx)).toEqual(['tasks:read']);
   });
 
   it('covers every tool', () => {
@@ -98,6 +104,7 @@ describe('tool listing (ADR 0042 §6)', () => {
       'get_task',
       'search_tasks',
       'list_groups',
+      'list_views',
     ]);
     const assign = listedTools({ listing: { mode: 'granted', scopes: ['tasks:assign'] } });
     expect(assign).toContain('create_task');

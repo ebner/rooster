@@ -9,7 +9,7 @@ export interface CompletionEntry {
 }
 
 /** Dynamic value sources, served by `rooster __complete <kind>` (cached 60 s). */
-export const DYNAMIC_KINDS = ['groups', 'tags', 'orgs'] as const;
+export const DYNAMIC_KINDS = ['groups', 'tags', 'orgs', 'views'] as const;
 export type DynamicKind = (typeof DYNAMIC_KINDS)[number];
 
 export const SHELLS = ['bash', 'zsh', 'fish', 'powershell'] as const;
@@ -65,6 +65,7 @@ export const VALUE_SOURCES: readonly { when: string; words: string }[] = [
   { when: 'flag:--move-to', words: 'dyn:groups' },
   { when: 'flag:--write-group', words: 'none' },
   { when: 'flag:--tag', words: 'dyn:tags' },
+  { when: 'flag:--view', words: 'dyn:views' },
   { when: 'flag:--remind', words: 'list:15m 1h 1d due' },
   { when: 'flag:--org', words: 'dyn:orgs' },
   { when: 'flag:--to-org', words: 'dyn:orgs' },
@@ -101,6 +102,7 @@ const VALUE_FLAGS = [
   '--profile',
   '--group',
   '--tag',
+  '--view',
   '--move-to',
   '--to-org',
   '--after',

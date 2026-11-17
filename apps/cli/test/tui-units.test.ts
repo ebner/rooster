@@ -7,7 +7,7 @@ import { NO_GLOBALS, Runtime } from '../src/runtime.ts';
 import { tuiTranslator } from '../src/tui/i18n.ts';
 import { canRunTui, runTui, type TuiStreams } from '../src/tui/index.ts';
 import { editLine, lineInput } from '../src/tui/input.ts';
-import { commandFor, GO_KEYS, KEYMAP, type KeyInfo } from '../src/tui/keymap.ts';
+import { commandFor, GO_KEYS, goViewIndex, KEYMAP, type KeyInfo } from '../src/tui/keymap.ts';
 import {
   buildLines,
   createTarget,
@@ -133,6 +133,18 @@ describe('tui keymap', () => {
     const en = helpLines(tuiTranslator('en')).map((l) => l.text);
     expect(en).toContain('On the web: Ctrl+Enter (x selects rows there)');
     expect(en).toContain('Go to Everyone’s tasks');
+    // ADR 0073 B12: g then a digit opens a view, documented from the same registry.
+    expect(helpLines(tuiTranslator('en')).find((l) => l.keys === 'g 1–9')?.text).toMatch(
+      /^Open one of the organisation’s views/,
+    );
+  });
+
+  it('g then 1–9 opens the nth view of the bar (ADR 0073 B12)', () => {
+    expect(goViewIndex('1', NO_KEY)).toBe(0);
+    expect(goViewIndex('9', NO_KEY)).toBe(8);
+    expect(goViewIndex('0', NO_KEY)).toBeNull();
+    expect(goViewIndex('m', NO_KEY)).toBeNull();
+    expect(goViewIndex('1', key({ ctrl: true }))).toBeNull();
   });
 });
 
@@ -392,6 +404,101 @@ describe('tui model', () => {
       body: { dueDate: '2026-10-11' },
     });
     expect(createTarget('search', lines, LIST, 'a1', 'below')).toBeNull();
+  });
+});
+
+describe('ADR 0073 B4: a view in the TUI model', () => {
+  const J = '01a00000-0000-7000-8000-0000000000f1';
+  const VIEW = {
+    id: 'v1',
+    orgId: 'o',
+    createdBy: 'me',
+    shared: true,
+    name: 'Juniper',
+    query: { tags: [J], tagMode: 'any', assignee: 'anyone', due: 'any', status: 'open' },
+    archivedAt: null,
+    position: 'a0',
+    openCount: 3,
+    createdAt: 0,
+    updatedAt: 0,
+  } as const;
+  const members = [
+    { userId: 'me', name: 'Ada', image: null, role: 'owner', joinedAt: 0 },
+    { userId: 'cy', name: 'Cy', image: null, role: 'member', joinedAt: 0 },
+    { userId: 'bo', name: 'Bo', image: null, role: 'member', joinedAt: 0 },
+  ] as LinesInput['members'];
+  const rows = [
+    task('cy1', { assigneeId: 'cy', tagIds: [J], dueDate: '2026-10-12' }),
+    task('none', { assigneeId: null, tagIds: [J] }),
+    task('me2', { tagIds: [J] }),
+    task('me1', { tagIds: [J], dueDate: '2026-10-10' }),
+    task('sub', { assigneeId: 'bo', tagIds: [J], parentId: 'cy1' }),
+    task('done', { tagIds: [J], completedAt: 5 }),
+    task('gone', { assigneeId: 'zz', tagIds: [J] }),
+  ];
+  const saved = (patch: Partial<LinesInput> = {}) =>
+    buildLines(
+      input({
+        view: 'saved',
+        members,
+        saved: { view: VIEW as never, tasks: rows },
+        ...patch,
+      }),
+    );
+
+  it('sections by person as selectSavedView: me, members alphabetically, others, Unassigned', () => {
+    const lines = saved();
+    expect(lines.map((l) => (l.kind === 'section' ? `[${l.title}] ${l.count}` : l.key))).toEqual([
+      '[Ada (you)] 2',
+      'me1',
+      'me2',
+      '[Bo] 1',
+      'sub',
+      '[Cy] 1',
+      'cy1',
+      '[Former member] 1',
+      'gone',
+      '[Unassigned] 1',
+      'none',
+    ]);
+    const sub = lines.find((l) => l.key === 'sub');
+    expect(sub?.kind === 'task' && sub.breadcrumb).toBe('cy1');
+  });
+
+  it('completed rows: shown with H, held in place after x, hidden otherwise', () => {
+    expect(saved().some((l) => l.key === 'done')).toBe(false);
+    expect(saved({ showCompleted: true }).some((l) => l.key === 'done')).toBe(true);
+    expect(saved({ keep: new Set(['done']) }).some((l) => l.key === 'done')).toBe(true);
+  });
+
+  it('a personal org: one section without a header; nothing to show says so', () => {
+    const lines = saved({ isPersonal: true });
+    expect(lines.some((l) => l.kind === 'section')).toBe(false);
+    expect(lines.filter((l) => l.kind === 'task').map((l) => l.key)).toEqual([
+      'me1',
+      'cy1',
+      'gone',
+      'me2',
+      'none',
+      'sub',
+    ]);
+    const empty = buildLines(
+      input({ view: 'saved', isPersonal: true, saved: { view: VIEW as never, tasks: [] } }),
+    );
+    expect(empty.at(-1)).toMatchObject({ kind: 'empty', text: expect.stringContaining('view') });
+  });
+
+  it('n in a person section creates for that person (B6); Unassigned stays unassigned', () => {
+    const lines = saved();
+    expect(createTarget('saved', lines, LIST, 'cy1', 'below')).toMatchObject({
+      anchorKey: 'cy1',
+      body: { assigneeId: 'cy' },
+    });
+    expect(createTarget('saved', lines, LIST, 'section:none', 'below')).toMatchObject({
+      body: { assigneeId: null },
+    });
+    const personal = saved({ isPersonal: true });
+    expect(createTarget('saved', personal, LIST, 'me1', 'below')?.body).toEqual({});
   });
 });
 

@@ -20,7 +20,8 @@
     "overdue": "Försenade",
     "unassigned": "Ingen ansvarig",
     "me": "{name} (du)",
-    "upcoming": "Återkommande"
+    "upcoming": "Återkommande",
+    "formerMember": "Tidigare medlem"
   },
   "empty": {
     "my": "Inga uppgifter än. Tryck n för att lägga till en.",
@@ -30,7 +31,8 @@
     "overdue": "Inget är försenat",
     "nodate": "Alla uppgifter har ett datum",
     "everyone": "Inga uppgifter i organisationen än",
-    "search": "Inga uppgifter matchar ”{query}”"
+    "search": "Inga uppgifter matchar ”{query}”",
+    "saved": "Inga uppgifter i den här vyn. Tryck n för att lägga till en: den får vyns taggar."
   },
   "detail": {
     "group": "Grupp",
@@ -81,7 +83,9 @@
     "subtaskGroup": "Deluppgifter flyttas med sin överordnade uppgift",
     "taskGone": "Uppgiften finns inte längre här",
     "upcomingNoMove": "Uppgifter under Återkommande kan inte flyttas; ge uppgiften ett tidigare datum för att få tillbaka den",
-    "toUpcoming": "”{title}” ligger under Återkommande; tillbaka i sin grupp: {day}"
+    "toUpcoming": "”{title}” ligger under Återkommande; tillbaka i sin grupp: {day}",
+    "viewGone": "Vyn finns inte längre; tillbaka till Mina uppgifter",
+    "noView": "Ingen vy {n}: g och en siffra öppnar organisationens vyer i ordningen i fältet"
   },
   "toast": {
     "completed": "”{title}” är klar",
@@ -122,7 +126,8 @@
     "scroll": "bläddra",
     "description": "beskrivning",
     "moveAnyway": "flytta ändå",
-    "cancel": "avbryt"
+    "cancel": "avbryt",
+    "views": "vyer"
   },
   "help": {
     "title": "Kortkommandon",
@@ -164,7 +169,8 @@
     "scrollUp": "En sida upp",
     "help": "Den här hjälpen",
     "close": "Stäng detaljerna, sökningen eller ett meddelande",
-    "quit": "Avsluta"
+    "quit": "Avsluta",
+    "goView": "Öppna en av organisationens vyer, i ordningen i vyfältet (en uppgift som läggs till där får vyns taggar)"
   },
   "web": {
     "complete": "På webben: {web} (där markerar x rader)",

@@ -20,7 +20,8 @@
     "overdue": "Overdue",
     "unassigned": "Unassigned",
     "me": "{name} (you)",
-    "upcoming": "Recurring"
+    "upcoming": "Recurring",
+    "formerMember": "Former member"
   },
   "empty": {
     "my": "No tasks yet. Press n to add one.",
@@ -30,7 +31,8 @@
     "overdue": "Nothing overdue",
     "nodate": "Every task has a date",
     "everyone": "No tasks in this organisation yet",
-    "search": "No tasks match “{query}”"
+    "search": "No tasks match “{query}”",
+    "saved": "No tasks in this view. Press n to add one: it gets the view’s tags."
   },
   "detail": {
     "group": "Group",
@@ -81,7 +83,9 @@
     "subtaskGroup": "Subtasks move with their parent",
     "taskGone": "That task is no longer here",
     "upcomingNoMove": "Tasks in Recurring can’t be moved; give one an earlier date to bring it back",
-    "toUpcoming": "“{title}” is in Recurring; back in its group: {day}"
+    "toUpcoming": "“{title}” is in Recurring; back in its group: {day}",
+    "viewGone": "That view is no longer available; back to My tasks",
+    "noView": "No view {n}: g then a digit opens the organisation’s views in the order of the bar"
   },
   "toast": {
     "completed": "Completed “{title}”",
@@ -122,7 +126,8 @@
     "scroll": "scroll",
     "description": "description",
     "moveAnyway": "move anyway",
-    "cancel": "cancel"
+    "cancel": "cancel",
+    "views": "views"
   },
   "help": {
     "title": "Keyboard shortcuts",
@@ -164,7 +169,8 @@
     "scrollUp": "Page up",
     "help": "This help",
     "close": "Close the details, the search or a notice",
-    "quit": "Quit"
+    "quit": "Quit",
+    "goView": "Open one of the organisation’s views, in the order of the view bar (a task added there gets the view’s tags)"
   },
   "web": {
     "complete": "On the web: {web} (x selects rows there)",

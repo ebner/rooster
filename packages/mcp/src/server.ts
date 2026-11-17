@@ -33,6 +33,7 @@ import {
   toolError,
   toolResult,
 } from './format.ts';
+import { listViews, resolveView, savedViewRows, viewEntry } from './saved-views.ts';
 import { skillInstructions } from './skill.ts';
 import { baseScope, READ_ONLY_TOOLS, TOOL_NAMES, type ToolName } from './tools.ts';
 
@@ -74,6 +75,11 @@ export interface RoosterMcpOptions {
 const MAX_ROWS = 200;
 const PAGE = 200;
 const VIEWS = ['my', 'today', 'week', 'overdue', 'nodate', 'everyone'] as const;
+type BuiltinView = (typeof VIEWS)[number];
+/** A saved view's id, or its name (60 characters) with a `#`, with room to spare. */
+const VIEW_REF_MAX = 80;
+const isBuiltinView = (view: string): view is BuiltinView =>
+  (VIEWS as readonly string[]).includes(view);
 /** Trash keeps deleted tasks this long (05 §6). */
 const TRASH_DAYS = 30;
 
@@ -212,10 +218,18 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
     {
       title: 'List tasks',
       description:
-        'Tasks in a view, as compact rows (ref, title, due, group, tags). "my" is My tasks in group order; "today" includes overdue; "week" is the next 7 days; "everyone" lists every open task in a shared org. With allOrgs, "today", "week" and "overdue" span every organisation in one list (by due date, then the user\'s org order), and each row names its org. Rows marked upcoming are repeating tasks the user\'s list holds in its Recurring section until their day (listed last in "my"); they return to their group by themselves, so never move them to bring them back.',
+        'Tasks in a view, as compact rows (ref, title, due, group, tags). "my" is My tasks in group order; "today" includes overdue; "week" is the next 7 days; "everyone" lists every open task in a shared org. Any other value names one of the org\'s saved views (list_views) by name or id: its matching tasks, by person (the user first, then members alphabetically, then unassigned) and then by due date, exactly as the user sees the view; the built-in names win when a saved view has the same name, so use its id then. With allOrgs, "today", "week" and "overdue" span every organisation in one list (by due date, then the user\'s org order), and each row names its org. Rows marked upcoming are repeating tasks the user\'s list holds in its Recurring section until their day (listed last in "my"); they return to their group by themselves, so never move them to bring them back.',
       inputSchema: z.object({
         org: orgArg,
-        view: z.enum(VIEWS).default('my').describe('Which view. Default "my".'),
+        view: z
+          .string()
+          .trim()
+          .min(1)
+          .max(VIEW_REF_MAX)
+          .default('my')
+          .describe(
+            'my, today, week, overdue, nodate or everyone; or a saved view\'s name or id (list_views). Default "my".',
+          ),
         group: z.string().max(GROUP_NAME_MAX).optional().describe('Only this group of My tasks.'),
         tag: z.string().max(TAG_NAME_MAX).optional().describe('Only tasks with this tag.'),
         includeCompleted: z
@@ -232,30 +246,39 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
       annotations: READ,
     },
     async (args, ctx) => {
+      if (!isBuiltinView(args.view)) {
+        if (args.allOrgs || args.group !== undefined || args.tag !== undefined) {
+          throw new ToolError(
+            'A saved view lists its own tasks in one org; leave out allOrgs, group and tag.',
+          );
+        }
+        return savedViewTasks(ctx, await ctx.org(args.org), args.view, args.includeCompleted);
+      }
+      const view = args.view;
       if (args.allOrgs) {
-        if (!isAllView(args.view)) {
+        if (!isAllView(view)) {
           throw new ToolError('allOrgs works with the views today, week and overdue.');
         }
         if (args.org !== undefined || args.group !== undefined) {
           throw new ToolError('allOrgs lists every organisation; leave out org and group.');
         }
-        return allOrgsView(ctx, args.view, {
+        return allOrgsView(ctx, view, {
           tag: args.tag?.replace(/^#/, ''),
           includeCompleted: args.includeCompleted,
         });
       }
       const org = await ctx.org(args.org);
-      if (args.view === 'everyone' && org.isPersonal) {
+      if (view === 'everyone' && org.isPersonal) {
         throw new ToolError(
           "The personal org has no Everyone's tasks; use a shared org (list_orgs).",
         );
       }
       const group = args.group === undefined ? undefined : await ctx.findGroup(org.id, args.group);
       const tagName = args.tag?.replace(/^#/, '');
-      const rows = await rowContext(ctx, org, args.view === 'everyone');
+      const rows = await rowContext(ctx, org, view === 'everyone');
       let tasks: Task[];
       let truncated = false;
-      if (args.view === 'my') {
+      if (view === 'my') {
         tasks = await myTasks(ctx, org, {
           groupId: group?.id,
           tag: tagName,
@@ -263,7 +286,7 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
         });
       } else {
         const page = await queryView(ctx.client, org.id, {
-          view: args.view,
+          view,
           groupId: group?.id,
           tag: tagName,
           includeCompleted: args.includeCompleted,
@@ -276,13 +299,12 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
         truncated = true;
       }
       const { today, timezone } = await ctx.today();
-      const upcoming =
-        args.view === 'my' ? tasks.filter((task) => heldUpcoming(task, today)).length : 0;
+      const upcoming = view === 'my' ? tasks.filter((task) => heldUpcoming(task, today)).length : 0;
       return toolResult(
-        `${tasks.length} task(s) in ${orgText(org)}, view ${args.view}${upcoming > 0 ? ` (the last ${upcoming} in Recurring until their day)` : ''}${truncated ? ' (truncated; narrow with group or tag)' : ''}. Today is ${canonical.date(today) ?? 'unknown'} (${canonical.zone(timezone) ?? 'unknown zone'}).`,
+        `${tasks.length} task(s) in ${orgText(org)}, view ${view}${upcoming > 0 ? ` (the last ${upcoming} in Recurring until their day)` : ''}${truncated ? ' (truncated; narrow with group or tag)' : ''}. Today is ${canonical.date(today) ?? 'unknown'} (${canonical.zone(timezone) ?? 'unknown zone'}).`,
         {
           org: org.slug,
-          view: args.view,
+          view,
           today,
           tasks: tasks.map((task) => taskRow(task, rows)),
           ...(truncated ? { truncated: true } : {}),
@@ -402,6 +424,25 @@ export function createRoosterMcpServer(options: RoosterMcpOptions): McpServer {
           ...(g.kind === 'inbox' ? { inbox: true } : {}),
           open: open.get(g.id) ?? 0,
         })),
+      });
+    },
+  );
+
+  register(
+    'list_views',
+    {
+      title: 'List views',
+      description:
+        "The organisation's views in the user's order: saved queries (tags, assignee, due, status) that gather tasks across people. A project view has exactly one tag. Shared views are seen by every member, private ones only by the user; either way they only gather tasks every member can already see. Read one with list_tasks and its name or id as view.",
+      inputSchema: z.object({ org: orgArg }),
+      annotations: READ,
+    },
+    async (args, ctx) => {
+      const org = await ctx.org(args.org);
+      const views = await listViews(ctx.client, org.id);
+      return toolResult(`${views.length} view(s) in ${orgText(org)}.`, {
+        org: org.slug,
+        views: views.map(viewEntry),
       });
     },
   );
@@ -1042,6 +1083,40 @@ async function queryView(
     cursor = page.nextCursor ?? undefined;
   } while (cursor !== undefined && tasks.length < MAX_ROWS);
   return { tasks, truncated: cursor !== undefined };
+}
+
+/**
+ * `list_tasks` with a saved view (ADR 0073 B12): its rows by person, then due date, as the web
+ * shows the view. The summary holds no user content: the view's name goes in the data.
+ */
+async function savedViewTasks(
+  ctx: CallContext,
+  org: Org,
+  ref: string,
+  includeCompleted: boolean,
+): Promise<CallToolResult> {
+  const view = await resolveView(ctx, org, ref);
+  const listed = await savedViewRows(ctx, org, view, includeCompleted);
+  const rows = await rowContext(ctx, org, true);
+  let tasks = listed.tasks;
+  const truncated = tasks.length > MAX_ROWS;
+  if (truncated) tasks = tasks.slice(0, MAX_ROWS);
+  const { today, timezone } = await ctx.today();
+  const counts =
+    listed.counts === null
+      ? ''
+      : ` (${listed.counts.open} open, ${listed.counts.done} done in all)`;
+  return toolResult(
+    `${tasks.length} task(s) in ${orgText(org)}, a saved view${counts}${truncated ? ' (truncated)' : ''}. Today is ${canonical.date(today) ?? 'unknown'} (${canonical.zone(timezone) ?? 'unknown zone'}).`,
+    {
+      org: org.slug,
+      view: viewEntry(view),
+      today,
+      ...(listed.counts === null ? {} : { counts: listed.counts }),
+      tasks: tasks.map((task) => taskRow(task, rows)),
+      ...(truncated ? { truncated: true } : {}),
+    },
+  );
 }
 
 const ALL_VIEWS = ['today', 'week', 'overdue'] as const;

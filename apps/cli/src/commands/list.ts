@@ -36,6 +36,7 @@ import {
 import { styles } from '../output/theme.ts';
 import { type Runtime, rt } from '../runtime.ts';
 import { dates, needs, positionals, readOptions, stringOptions, tagMap } from './util.ts';
+import { runViewList } from './views.ts';
 
 export const VIEWS = ['my', 'today', 'week', 'overdue', 'nodate', 'everyone'] as const;
 export type View = (typeof VIEWS)[number];
@@ -54,6 +55,8 @@ export interface ListFlags {
   subtasks: boolean;
   /** My tasks: also list Upcoming, the recurring tasks whose day hasn't come (ADR 0068). */
   upcoming: boolean;
+  /** `--view <name|id>`: one of the org's views (ADR 0073 B12) instead of a list. */
+  savedView?: string | undefined;
 }
 
 interface Section {
@@ -442,8 +445,27 @@ async function printAllView(
   }
 }
 
+/** `--view` lists a view's own rows; the list flags that narrow a listing don't apply. */
+function checkSavedViewFlags(flags: ListFlags, positional: string | undefined): void {
+  if (positional !== undefined) throw new CliError(EXIT.usage, t('views.notWithView'));
+  if (flags.savedView?.trim() === '') {
+    throw new CliError(EXIT.usage, t('usage.missingValue', { flag: '--view' }));
+  }
+  const given: [boolean, string][] = [
+    [flags.group !== undefined, '--group'],
+    [flags.tags.length > 0, '--tag'],
+    [flags.allOrgs, '--all-orgs'],
+    [flags.upcoming, '--upcoming'],
+  ];
+  const flag = given.find(([on]) => on)?.[1];
+  if (flag !== undefined) throw new CliError(EXIT.usage, t('views.flagNotWithView', { flag }));
+}
+
 export async function runList(runtime: Runtime, view: View, flags: ListFlags): Promise<void> {
   needs('tasks:read');
+  if (flags.savedView !== undefined) {
+    return runViewList(runtime, flags.savedView, { completed: flags.completed });
+  }
   if (flags.upcoming && view !== 'my') throw new CliError(EXIT.usage, t('ls.upcomingMyOnly'));
   const { out } = runtime;
   const ctx = await dates(runtime);
@@ -545,7 +567,10 @@ export async function runList(runtime: Runtime, view: View, flags: ListFlags): P
 
 function describeListArgs() {
   return {
-    view: { type: 'positional', required: false, description: t('ls.arg.view') },
+    // Keyed `View` so that it doesn't collide with the `--view` option: citty prints a
+    // positional by its upper-cased key (`[VIEW]`), and reads positionals from `args._` here.
+    View: { type: 'positional', required: false, description: t('ls.arg.view') },
+    view: { type: 'string', valueHint: 'name', description: t('ls.arg.savedView') },
     group: { type: 'string', valueHint: 'name', description: t('ls.arg.group') },
     tag: { type: 'string', valueHint: 'tag', description: t('ls.arg.tag') },
     completed: { type: 'boolean', description: t('ls.arg.completed') },
@@ -565,6 +590,7 @@ function flagsOf(args: Record<string, unknown>, rawArgs: readonly string[]): Lis
     subtasks: args.subtasks === true,
     // Read from the command line with real option boundaries, so it is never a value's text.
     upcoming: given.switches.has('upcoming') && !given.switches.has('no-upcoming'),
+    savedView: given.values.get('view')?.at(-1),
   };
 }
 
@@ -581,7 +607,9 @@ export const lsCommand = defineCommand({
   async run({ args, rawArgs }) {
     const [view, ...extra] = positionals(args);
     if (extra.length > 0) throw new CliError(EXIT.usage, t('usage.unexpected', { arg: extra[0] }));
-    await runList(rt(), parseView(view), flagsOf(args, rawArgs));
+    const flags = flagsOf(args, rawArgs);
+    if (flags.savedView !== undefined) checkSavedViewFlags(flags, view);
+    await runList(rt(), parseView(view), flags);
   },
 });
 
@@ -590,7 +618,12 @@ function viewAlias(view: 'today' | 'week') {
     meta: () => ({ name: view, description: t(`cmd.${view}`) }),
     args: () => {
       // Upcoming is part of My tasks only; the smart views go by date (ADR 0068).
-      const { view: _positional, upcoming: _upcoming, ...others } = describeListArgs();
+      const {
+        View: _positional,
+        view: _savedView,
+        upcoming: _upcoming,
+        ...others
+      } = describeListArgs();
       return others;
     },
     async run({ args, rawArgs }) {

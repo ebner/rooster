@@ -55,7 +55,7 @@ function complete(words: string[]): string[] {
   writeFileSync(script, completionScript('bash', entries));
   const program = `
     source ${JSON.stringify(script)}
-    rooster() { [ "$1" = __complete ] && [ "$2" = groups ] && printf 'Prio\\nSome group\\n'; [ "$2" = tags ] && printf 'finance\\n'; true; }
+    rooster() { [ "$1" = __complete ] && [ "$2" = groups ] && printf 'Prio\\nSome group\\n'; [ "$2" = tags ] && printf 'finance\\n'; [ "$2" = views ] && printf 'Juniper\\nJuniper launch\\n'; true; }
     COMP_WORDS=(${words.map((w) => JSON.stringify(w)).join(' ')})
     COMP_CWORD=${words.length - 1}
     _rooster
@@ -88,6 +88,9 @@ describe('bash', () => {
     expect(complete(['rooster', 'mv', '42', '--group', 'So'])).toEqual(['Some\\ group']);
     expect(complete(['rooster', 'group', 'rm', ''])).toEqual(['Prio', 'Some\\ group']);
     expect(complete(['rooster', 'ls', '--tag', 'fi'])).toEqual(['finance']);
+    // ADR 0073 B12: view names for `ls --view`; `view ls` is a command.
+    expect(complete(['rooster', 'ls', '--view', 'Jun'])).toEqual(['Juniper', 'Juniper\\ launch']);
+    expect(complete(['rooster', 'view', ''])).toContain('ls');
   });
 });
 

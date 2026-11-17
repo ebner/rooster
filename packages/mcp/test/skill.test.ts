@@ -62,6 +62,17 @@ describe('skillMarkdown (11 §6.2)', () => {
     expect(skillInstructions(ctx)).toContain('never move them to bring them back');
   });
 
+  it('ADR 0073: explains views and project views, and that built-in names win', () => {
+    expect(text).toContain('- **Views** are saved queries');
+    expect(text).toContain('**project view**');
+    expect(text).toContain('| `list_views` |');
+    expect(text).toContain("<a view's name or id>");
+    expect(text).toContain('win over a view of the same name');
+    expect(text).toContain('rooster ls --view Juniper --json');
+    expect(skillInstructions(ctx)).toContain('list_views');
+    expect(skillInstructions(ctx)).toContain('the built-in names win on a clash');
+  });
+
   it('ends with a newline', () => {
     expect(text.endsWith('\n')).toBe(true);
   });

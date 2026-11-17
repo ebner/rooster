@@ -15,6 +15,7 @@
     "sub": "Add a subtask: rooster sub 42 \"Call the bank\"",
     "group": "Manage your groups: ls, add, rename, mv, rm",
     "tag": "Manage tags (ls, add, rm) or tag a task: rooster tag 42 +urgent -later",
+    "view": "The organisation’s views: ls (rooster ls --view NAME lists one)",
     "comment": "Comment on a task",
     "search": "Search tasks",
     "open": "Open a task or My tasks in the browser",
@@ -51,6 +52,7 @@
   "ls": {
     "arg": {
       "view": "my (default), today, week, overdue, nodate or everyone",
+      "savedView": "One of the organisation’s views, by name or ID",
       "group": "Only this group",
       "tag": "Only tasks with this tag (repeatable)",
       "completed": "Include completed tasks",
@@ -88,6 +90,29 @@
     "overdue": "Overdue",
     "nodate": "No date",
     "everyone": "Everyone’s tasks"
+  },
+  "views": {
+    "cmd": {
+      "ls": "List the organisation’s views in your order"
+    },
+    "arg": {
+      "archived": "List the archived views instead"
+    },
+    "title": "Views",
+    "archivedTitle": "Archived views",
+    "none": "No views yet. Create one in the web app.",
+    "noneArchived": "No archived views",
+    "shared": "shared",
+    "private": "private",
+    "open": "{count} open",
+    "counts": "{open} open · {done} done",
+    "you": "{name} (you)",
+    "formerMember": "Former member",
+    "notFound": "No view called “{name}” in {org}. Its views: {views}",
+    "notFoundNone": "No view called “{name}”: {org} has no views yet.",
+    "ambiguous": "Several views are called “{name}”; give one by its ID: {candidates}",
+    "notWithView": "Give either a list (my, today, …) or --view, not both.",
+    "flagNotWithView": "--view lists the view’s own tasks; leave out {flag}."
   },
   "add": {
     "arg": {

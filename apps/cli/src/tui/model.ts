@@ -11,6 +11,7 @@ import { type SmartView, selectView, type ViewCounts, viewCounts } from '@rooste
 import type { Member } from '../api.ts';
 import { clean } from '../output/color.ts';
 import { type DateContext, dayLabel, inUpcoming } from '../output/format.ts';
+import { type SavedView, viewQuery, viewSections } from '../saved-views.ts';
 import type { TuiTranslate } from './i18n.ts';
 
 /**
@@ -20,8 +21,11 @@ import type { TuiTranslate } from './i18n.ts';
  * `{beforeId, afterId}` intents the server resolves (AGENTS hard rule 2).
  */
 
+/** The built-in views, the view bar's first tabs. */
 export const LIST_VIEWS = ['my', 'today', 'week', 'overdue', 'nodate', 'everyone'] as const;
-export type ListView = (typeof LIST_VIEWS)[number];
+export type BuiltinView = (typeof LIST_VIEWS)[number];
+/** `saved`: one of the org's views (ADR 0073 B12), named by the state's `savedViewId`. */
+export type ListView = BuiltinView | 'saved';
 export type ViewId = ListView | 'search';
 
 export interface TaskLine {
@@ -98,6 +102,10 @@ export interface LinesInput {
   upcomingOpen?: boolean;
   members: readonly Member[] | null;
   everyone: readonly Task[] | null;
+  /** The open view's definition and rows (`GET /views/:id/tasks`). */
+  saved?: { view: SavedView; tasks: readonly Task[] } | null;
+  /** A personal org: a view there has no person sections (B4). */
+  isPersonal?: boolean;
   search: { query: string; hits: readonly Task[] } | null;
   t: TuiTranslate;
 }
@@ -339,6 +347,74 @@ function everyoneLines(input: LinesInput): Line[] {
   return lines;
 }
 
+/**
+ * One of the org's views (ADR 0073 B4): its rows by person (me, the members alphabetically,
+ * other assignees, then Unassigned), each by due date, with core `selectSavedView` as on the
+ * web. A personal org has one section and no header. A view of open tasks keeps a row
+ * completed here in place for a while, as the other views do (`keep`).
+ */
+function savedLines(input: LinesInput): Line[] {
+  const { t } = input;
+  const saved = input.saved;
+  if (saved === undefined || saved === null) return [];
+  const members = input.members ?? [];
+  const byId = new Map(saved.tasks.map((task) => [task.id, task]));
+  const visible = viewQuery(saved.view).status === 'open' ? visibleIn(input) : () => true;
+  const sections = viewSections({
+    view: saved.view,
+    tasks: saved.tasks,
+    viewerId: input.viewerId,
+    due: { today: input.dates.today, nowMs: input.dates.nowMs, viewerTz: input.dates.timezone },
+    members,
+    locale: input.dates.locale,
+    isPersonal: input.isPersonal === true,
+    // Completed rows are filtered here, so the ones held in place stay.
+    showCompleted: true,
+  });
+  const lines: Line[] = [];
+  for (const section of sections) {
+    const key = `section:${section.assigneeId ?? 'none'}`;
+    const rows = section.taskIds
+      .map((id) => byId.get(id))
+      .filter((task): task is Task => task !== undefined && visible(task));
+    if (input.isPersonal !== true) {
+      const member = members.find((m) => m.userId === section.assigneeId);
+      const title =
+        section.assigneeId === null
+          ? t('section.unassigned')
+          : member === undefined
+            ? t('section.formerMember')
+            : section.assigneeId === input.viewerId
+              ? t('section.me', { name: clean(member.name) })
+              : clean(member.name);
+      lines.push({
+        kind: 'section',
+        key,
+        title,
+        count: rows.filter((task) => task.completedAt === null).length,
+        tone: null,
+        date: null,
+        assigneeId: section.assigneeId,
+      });
+    }
+    for (const task of rows) {
+      const parent = task.parentId === null ? undefined : byId.get(task.parentId);
+      lines.push({
+        kind: 'task',
+        key: task.id,
+        task,
+        depth: 0,
+        breadcrumb: parent === undefined ? null : clean(parent.title),
+        chip: null,
+        section: key,
+        hasChildren: task.counts.subtasks > 0,
+        expanded: false,
+      });
+    }
+  }
+  return lines;
+}
+
 function searchLines(input: LinesInput): Line[] {
   const hits = input.search?.hits ?? [];
   return hits.map((task) => {
@@ -369,6 +445,9 @@ export function buildLines(input: LinesInput): Line[] {
       break;
     case 'search':
       lines = searchLines(input);
+      break;
+    case 'saved':
+      lines = savedLines(input);
       break;
     default:
       lines = smartLines(input, input.view);
@@ -578,6 +657,8 @@ export interface CreateTarget {
     beforeId?: string | null;
     dueDate?: string;
     assigneeId?: string | null;
+    /** A view's tags (ADR 0073 B6), added by the controller. */
+    tagIds?: string[];
   };
   /** A group to expand (My tasks) or a parent to expand so the new row is visible. */
   expandGroup?: string;
@@ -677,8 +758,11 @@ export function createTarget(
     line?.kind === 'task' ? line.section : line?.kind === 'section' ? line.key : null;
   const section = lines.find((l): l is SectionLine => l.kind === 'section' && l.key === sectionKey);
   const body: CreateTarget['body'] = {};
-  if (view === 'everyone') {
-    if (section !== undefined) body.assigneeId = section.assigneeId ?? null;
+  if (view === 'everyone' || view === 'saved') {
+    // A view's person sections (B6): the task goes to that person's Inbox (Unassigned: none).
+    if (section !== undefined && section.assigneeId !== undefined) {
+      body.assigneeId = section.assigneeId;
+    }
   } else if (section?.date) body.dueDate = section.date;
   if (line === undefined || line.kind === 'empty') {
     return { anchorKey: null, placement: 'after', depth: 0, body };

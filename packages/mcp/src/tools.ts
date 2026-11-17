@@ -15,6 +15,7 @@ export const TOOL_NAMES = [
   'move_task',
   'move_task_to_org',
   'list_groups',
+  'list_views',
   'create_group',
   'add_comment',
   'list_notifications',
@@ -33,6 +34,7 @@ const BASE_SCOPE: Readonly<Record<ToolName, GrantScope>> = {
   get_task: 'tasks:read',
   search_tasks: 'tasks:read',
   list_groups: 'tasks:read',
+  list_views: 'tasks:read',
   create_task: 'tasks:write',
   update_task: 'tasks:write',
   complete_task: 'tasks:write',
@@ -51,6 +53,7 @@ export const READ_ONLY_TOOLS: readonly ToolName[] = [
   'get_task',
   'search_tasks',
   'list_groups',
+  'list_views',
   'list_notifications',
 ];
 

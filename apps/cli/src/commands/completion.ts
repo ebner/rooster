@@ -12,6 +12,7 @@ import { readIfExists, writeFileAtomic } from '../config.ts';
 import { CliError, EXIT } from '../errors.ts';
 import { t } from '../i18n.ts';
 import { type Runtime, rt } from '../runtime.ts';
+import { fetchViews } from '../saved-views.ts';
 import { positionals } from './util.ts';
 
 /** Dynamic names are cached this long, so completion stays instant (07 §4). */
@@ -21,10 +22,11 @@ async function namesOf(runtime: Runtime, kind: DynamicKind): Promise<string[]> {
   if (kind === 'orgs') return (await runtime.me()).orgs.map((o) => o.slug);
   const org = await runtime.org();
   if (kind === 'tags') return (await runtime.tags(org.id)).map((tag) => tag.name);
+  if (kind === 'views') return (await fetchViews(await runtime.api(), org.id)).map((v) => v.name);
   return (await runtime.groups(org.id)).map((group) => group.name);
 }
 
-/** Group, tag or org names for the shell, from a 60 s cache per profile and org. */
+/** Group, tag, view or org names for the shell, from a 60 s cache per profile and org. */
 export async function dynamicNames(runtime: Runtime, kind: DynamicKind): Promise<string[]> {
   const key =
     `${runtime.profileName}-${kind === 'orgs' ? 'all' : runtime.orgRef()}-${kind}`.replace(
@@ -66,7 +68,7 @@ export function completionCommand(root: () => CommandDef<ArgsDef>) {
   });
 }
 
-/** `rooster __complete groups|tags|orgs`: used by the completion scripts; silent on errors. */
+/** `rooster __complete groups|tags|orgs|views`: used by the completion scripts; silent on errors. */
 export const completeCommand = defineCommand({
   meta: () => ({ name: '__complete', hidden: true }),
   async run({ args }) {

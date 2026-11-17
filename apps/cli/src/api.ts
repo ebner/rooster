@@ -20,6 +20,8 @@ export type { RoosterClient };
 export { RoosterApiError, unwrap };
 export type Task = Schemas['Task'];
 export type AllView = Schemas['AllView'];
+export type SavedView = Schemas['SavedView'];
+export type SavedViewTasks = Schemas['SavedViewTasks'];
 export type TaskDetail = Schemas['TaskDetail'];
 export type Group = Schemas['Group'];
 export type Tag = Schemas['Tag'];
