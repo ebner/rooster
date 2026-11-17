@@ -1,4 +1,3 @@
-import { findOrgToken } from '@rooster/core/dates';
 import { uuidv7 } from '@rooster/core/ids';
 import {
   inboxOf,
@@ -18,6 +17,7 @@ import {
   type TitleScope,
 } from '../list/controller';
 import { blankSpan, type Span } from '../list/title-tokens';
+import { resolveOrgToken } from './org-token';
 
 /** One org of All organisations, with the list controller of its own tasks. */
 export interface AllOrgScope {
@@ -193,7 +193,7 @@ export class AllListController extends ListController {
   /** The `^org` token in a new task's title, if it names one of the viewer's orgs. */
   private orgToken(text: string, ignored: readonly Span[]): (Span & { org: Org }) | null {
     const orgs = this.all.scopes().map((s) => s.org);
-    const token = findOrgToken(text, orgs);
+    const token = resolveOrgToken(text, orgs);
     if (!token?.orgId || ignored.some((s) => s.start < token.end && token.start < s.end)) {
       return null;
     }

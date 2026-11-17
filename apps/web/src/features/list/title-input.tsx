@@ -347,11 +347,10 @@ export function TitleInput({
       setSuggest(null);
       return;
     }
-    // All organisations: the tags of the org the new task goes to.
+    // The tags of the org the task is (or goes) in: the store holds every org's while All
+    // organisations is on screen (ADR 0073 A3).
     const scope = scopeOf(el.value).controller;
-    const tags = Object.values(tagsById).filter(
-      (tag) => scope === controller || tag.orgId === scope.orgId,
-    );
+    const tags = Object.values(tagsById).filter((tag) => tag.orgId === scope.orgId);
     const options = tagOptions(tags, token.name, token.name !== '').slice(0, 8);
     setSuggest((current) =>
       options.length === 0

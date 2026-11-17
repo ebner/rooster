@@ -1129,11 +1129,12 @@ export function RowTagPicker({
 }) {
   const { t } = useTranslation('tags');
   const byId = useTagsStore((s) => s.byId);
-  // All organisations: the tags of the tasks' own org (ADR 0073 A3).
+  // The tags of the tasks' own org: the store holds every org's while All organisations is
+  // behind the pane (ADR 0073 A3).
   const scope = controller.scoped(ids) ?? controller;
   const tags = useMemo(
-    () => Object.values(byId).filter((tag) => scope === controller || tag.orgId === scope.orgId),
-    [byId, scope, controller],
+    () => Object.values(byId).filter((tag) => tag.orgId === scope.orgId),
+    [byId, scope],
   );
   // Re-render on list changes so the checks follow the toggles.
   useOrgLists(controller.orgIds());

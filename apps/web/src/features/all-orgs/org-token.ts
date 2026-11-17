@@ -1,16 +1,35 @@
-import { matchOrgs, type OrgCandidate } from '@rooster/core/dates';
+import {
+  findOrgToken,
+  matchOrgs,
+  type OrgCandidate,
+  type OrgTokenMatch,
+} from '@rooster/core/dates';
 
 /**
- * The `^org` token that names `org` (ADR 0073 A4): `^Kestrel` when the first word of its name
- * names only that org, else `^"Kestrel Lane"`.
+ * The org a title's `^org` token names (core `findOrgToken`: among several exact matches, such
+ * as two orgs called "Work", the one whose slug it is). Slugs are unique, so every org has a
+ * token that names it alone (`orgHandle`).
+ */
+export function resolveOrgToken(text: string, orgs: readonly OrgCandidate[]): OrgTokenMatch | null {
+  return findOrgToken(text, orgs);
+}
+
+/**
+ * The `^org` token that names `org` (ADR 0073 A4), the first that resolves back to it alone
+ * (`resolveOrgToken`): `^Kestrel` (the first word of its name), else `^"Kestrel Lane"`, else its
+ * slug, which is unique (two orgs can share a name).
  */
 export function orgHandle(org: OrgCandidate, orgs: readonly OrgCandidate[]): string {
-  const first = org.name.trim().split(/\s+/)[0] ?? '';
-  const matches = matchOrgs(first, orgs);
-  if (/^[^\s"^]\S*$/u.test(first) && matches.length === 1 && matches[0]?.orgId === org.id) {
-    return `^${first}`;
-  }
-  return `^"${org.name.replace(/["\n]/g, '').trim()}"`;
+  const name = org.name.replace(/["\n]/g, '').trim();
+  const first = name.split(/\s+/)[0] ?? '';
+  const candidates = [
+    ...(/^[^\s"^]\S*$/u.test(first) ? [`^${first}`] : []),
+    `^"${name}"`,
+    `^${org.slug}`,
+  ];
+  return (
+    candidates.find((handle) => resolveOrgToken(handle, orgs)?.orgId === org.id) ?? `^${org.slug}`
+  );
 }
 
 /** The `^query` autocomplete (ADR 0073 A4): the orgs it can mean, best first. */

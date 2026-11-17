@@ -154,8 +154,8 @@ export function MobileListChrome({
   // All organisations: tags, groups and people of the tasks' own org (ADR 0073 A3).
   const scope = controller.scoped(sheetIds) ?? controller;
   const allTags = useMemo(
-    () => Object.values(tags).filter((tag) => scope === controller || tag.orgId === scope.orgId),
-    [tags, scope, controller],
+    () => Object.values(tags).filter((tag) => tag.orgId === scope.orgId),
+    [tags, scope],
   );
   const members = membersFor ? membersFor(sheetIds) : null;
   const applied = allTags

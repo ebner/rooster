@@ -251,7 +251,8 @@ const ORG_TOKEN_RE = /(?<=^|\s)\^(?:"([^"\n]+)"|([^\s"]\S*))/gu;
 /**
  * `^org` (`^` + non-space) or `^"Org name"`, anywhere in the title like `#tag`, outside backtick
  * escapes; the last one that names exactly one org wins (else the last one, unresolved). An org
- * is named by its name or slug, see `matchOrgs`. A token that resolves is removed from the
+ * is named by its name or slug, see `matchOrgs`; when several orgs match exactly, the one whose
+ * slug it is. A token that resolves is removed from the
  * title on create; one that doesn't stays text.
  */
 export function findOrgToken(title: string, orgs: readonly OrgCandidate[]): OrgTokenMatch | null {
@@ -263,7 +264,17 @@ export function findOrgToken(title: string, orgs: readonly OrgCandidate[]): OrgT
     const query = (m[1] ?? m[2]) as string;
     const matches = matchOrgs(query, orgs);
     const exact = matches.filter((c) => c.exact);
-    const pick = exact.length === 1 ? exact[0] : matches.length === 1 ? matches[0] : undefined;
+    // Names may repeat (two orgs called "Work", or a name that is another org's slug); slugs
+    // don't, so among several exact matches the org whose slug the token is wins.
+    const bySlug = exact.length > 1 ? exact.filter((c) => c.slug) : [];
+    const pick =
+      exact.length === 1
+        ? exact[0]
+        : bySlug.length === 1
+          ? bySlug[0]
+          : matches.length === 1
+            ? matches[0]
+            : undefined;
     const match = { ...span, query, orgId: pick?.orgId ?? null };
     if (match.orgId !== null || found === null || found.orgId === null) found = match;
   }
@@ -274,6 +285,8 @@ export interface OrgMatch {
   orgId: string;
   /** The query is the whole name or the slug, ignoring case and accents. */
   exact: boolean;
+  /** The query is the slug (unique among orgs). */
+  slug: boolean;
 }
 
 /**
@@ -283,7 +296,7 @@ export interface OrgMatch {
  */
 export function matchOrgs(query: string, orgs: readonly OrgCandidate[]): OrgMatch[] {
   const q = fold(query);
-  const ranked: { orgId: string; rank: number; exact: boolean }[] = [];
+  const ranked: (OrgMatch & { rank: number })[] = [];
   for (const org of orgs) {
     const name = fold(org.name);
     const slug = fold(org.slug);
@@ -292,9 +305,11 @@ export function matchOrgs(query: string, orgs: readonly OrgCandidate[]): OrgMatc
     else if (name.startsWith(q)) rank = 1;
     else if (name.split(/\s+/).some((word) => word.startsWith(q))) rank = 2;
     else if (slug.startsWith(q)) rank = 3;
-    if (rank >= 0) ranked.push({ orgId: org.id, rank, exact: rank === 0 });
+    if (rank >= 0) ranked.push({ orgId: org.id, rank, exact: rank === 0, slug: slug === q });
   }
-  return ranked.sort((a, b) => a.rank - b.rank).map(({ orgId, exact }) => ({ orgId, exact }));
+  return ranked
+    .sort((a, b) => a.rank - b.rank)
+    .map(({ orgId, exact, slug }) => ({ orgId, exact, slug }));
 }
 
 /**

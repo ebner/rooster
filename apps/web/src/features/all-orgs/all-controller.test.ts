@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { allViewSources, mergeOrgLists } from '../../data/all-views';
 import { createFixtureTransport } from '../../data/pipeline/fixture-transport';
 import { ListPipeline, myListKey } from '../../data/pipeline/pipeline';
+import type { Me } from '../../data/types';
 import { createListStore } from '../../state/list-store';
 import { useUndoStore } from '../../state/undo-store';
 import type { ToastOptions } from '../../ui/toast';
@@ -15,6 +16,7 @@ import { buildViewRows } from '../list/model/view-rows';
 import { draftPlaceholder } from '../list/my-list-view';
 import { fixtureIds, fixtureMe } from '../shell/fixtures';
 import { AllListController } from './all-controller';
+import { orgHandle } from './org-token';
 
 /** ADR 0073 A3–A4: All organisations queues each op under its task's org. */
 
@@ -33,7 +35,7 @@ const club = fixtureIds.clubOrg;
 const orgIds = [personal, north, club];
 const t: Translate = (key, options) => (options ? `${key} ${JSON.stringify(options)}` : key);
 
-async function setup(defaultOrgId: string = personal) {
+async function setup(defaultOrgId: string = personal, orgs: Me['orgs'] = fixtureMe.orgs) {
   const transport = createFixtureTransport({
     userId,
     tasks: {
@@ -91,7 +93,7 @@ async function setup(defaultOrgId: string = personal) {
     dateContext: () => dateCtx,
     view: viewModel,
   };
-  const scopes = fixtureMe.orgs.map((org) => ({
+  const scopes = orgs.map((org) => ({
     org,
     controller: new ListController({ ...common, orgId: org.id, tags: () => [] }),
   }));
@@ -274,5 +276,29 @@ describe('AllListController.createMany', () => {
     expect(byTitle(club, 'Read the book')).toBeDefined();
     expect(byTitle(personal, 'Buy milk ^North')).toBeUndefined();
     expect(byTitle(personal, 'Buy milk')).toBeUndefined();
+  });
+});
+
+describe('two orgs with the same name', () => {
+  test('the `^` handle of either one sends the task there, not to the default org', async () => {
+    const orgs = fixtureMe.orgs.map((org) =>
+      org.id === north
+        ? { ...org, name: 'Work', slug: 'work' }
+        : org.id === club
+          ? { ...org, name: 'Work', slug: 'work-2' }
+          : org,
+    );
+    const { all, byTitle } = await setup(personal, orgs);
+    for (const [orgId, title] of [
+      [north, 'First'],
+      [club, 'Second'],
+    ] as const) {
+      const picked = all.orgChoices(all.newSectionDraft('today', null) as string);
+      const draftId = all.ui().drafts.at(-1)?.id as string;
+      const org = picked.find((o) => o.id === orgId) as Me['orgs'][number];
+      all.commitTitle(draftId, `${title} ${orgHandle(org, picked)}`);
+      expect(byTitle(orgId, title)).toBeDefined();
+      expect(byTitle(personal, title)).toBeUndefined();
+    }
   });
 });

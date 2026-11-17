@@ -43,12 +43,25 @@ describe('^org token (ADR 0073 A4)', () => {
     const more = [...orgs, { id: 'x', name: 'Kayak Juniors', slug: 'juniors' }];
     expect(findOrgToken('x ^kayak', more)?.orgId).toBe(KAYAK);
     expect(matchOrgs('kayak', more)).toEqual([
-      { orgId: KAYAK, exact: true },
-      { orgId: 'x', exact: false },
+      { orgId: KAYAK, exact: true, slug: true },
+      { orgId: 'x', exact: false, slug: false },
     ]);
-    // Two exact matches stay ambiguous.
+    // Among exact matches the slug wins: a name may repeat, a slug can't.
     const twin = [...orgs, { id: 'y', name: 'Kayak', slug: 'kayak-2' }];
-    expect(findOrgToken('x ^kayak', twin)?.orgId).toBeNull();
+    expect(findOrgToken('x ^kayak', twin)?.orgId).toBe(KAYAK);
+    expect(findOrgToken('x ^kayak-2', twin)?.orgId).toBe('y');
+    const work = [
+      { id: 'w1', name: 'Work', slug: 'work' },
+      { id: 'w2', name: 'Work', slug: 'work-2' },
+    ];
+    expect(findOrgToken('x ^"Work"', work)?.orgId).toBe('w1');
+    expect(findOrgToken('x ^work-2', work)?.orgId).toBe('w2');
+    // Two exact name matches without a slug match stay ambiguous.
+    const names = [
+      { id: 'a', name: 'Team', slug: 'team-a' },
+      { id: 'b', name: 'Team', slug: 'team-b' },
+    ];
+    expect(findOrgToken('x ^team', names)?.orgId).toBeNull();
   });
 
   it('works anywhere, needs whitespace before, skips escapes; a resolved one wins', () => {
@@ -60,10 +73,10 @@ describe('^org token (ADR 0073 A4)', () => {
   });
 
   it('ignores case and accents', () => {
-    expect(matchOrgs('PERSÖNAL', orgs)).toEqual([{ orgId: PERSONAL, exact: true }]);
+    expect(matchOrgs('PERSÖNAL', orgs)).toEqual([{ orgId: PERSONAL, exact: true, slug: true }]);
     expect(matchOrgs('', orgs).map((m) => m.orgId)).toEqual([PERSONAL, KESTREL, KAYAK]);
-    expect(matchOrgs('club', orgs)).toEqual([{ orgId: KAYAK, exact: false }]);
-    expect(matchOrgs('kestrel-l', orgs)).toEqual([{ orgId: KESTREL, exact: false }]);
+    expect(matchOrgs('club', orgs)).toEqual([{ orgId: KAYAK, exact: false, slug: false }]);
+    expect(matchOrgs('kestrel-l', orgs)).toEqual([{ orgId: KESTREL, exact: false, slug: false }]);
   });
 
   it('may sit before a date phrase and reminder tokens, or after them', () => {

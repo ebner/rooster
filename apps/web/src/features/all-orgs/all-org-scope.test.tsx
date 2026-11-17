@@ -7,11 +7,14 @@ import { createFixtureTransport } from '../../data/pipeline/fixture-transport';
 import { ListPipeline, myListKey } from '../../data/pipeline/pipeline';
 import { queryKeys } from '../../data/query-keys';
 import { createListStore } from '../../state/list-store';
+import { useTagsStore } from '../../state/tags-store';
 import { sampleDateContext, sampleToday } from '../dates/fixtures';
 import { BulkBar } from '../list/bulk-bar';
 import { ListController, type Translate } from '../list/controller';
 import { ListContext } from '../list/list-context';
+import { RowTagPicker } from '../list/my-list-view';
 import { TaskReminders } from '../list/task-reminders';
+import { TitleInput } from '../list/title-input';
 import { fixtureIds, fixtureMe } from '../shell/fixtures';
 import { AllListController } from './all-controller';
 
@@ -64,7 +67,7 @@ async function setup() {
       </ListTransportContext.Provider>
     </QueryClientProvider>
   );
-  return { transport, all, scopes, task, dateCtx, wrap };
+  return { transport, all, scopes, store, task, dateCtx, wrap };
 }
 
 describe('All organisations: per-row UI', () => {
@@ -107,5 +110,64 @@ describe('All organisations: per-row UI', () => {
     expect(
       within(screen.getByRole('toolbar')).queryByRole('button', { name: 'Move to organisation…' }),
     ).toBeNull();
+  });
+});
+
+/** The tags store while All organisations is behind the pane: every org's tags. */
+function everyOrgsTags() {
+  const tag = (id: string, orgId: string, name: string) => ({
+    id,
+    orgId,
+    name,
+    color: 'blue' as const,
+    createdAt: 0,
+  });
+  useTagsStore.setState({
+    byId: {
+      t1: tag('t1', north, 'northwind-tag'),
+      t2: tag('t2', fixtureIds.personalOrg, 'personal-tag'),
+    },
+  });
+}
+
+describe('tags of one org, with every org’s in the store', () => {
+  test('an org’s tag picker (the pane’s subtasks) offers only that org’s tags', async () => {
+    const { scopes, task, wrap } = await setup();
+    everyOrgsTags();
+    const own = scopes[1]?.controller as ListController;
+    const anchor = document.createElement('button');
+    document.body.append(anchor);
+    render(wrap(<RowTagPicker anchor={anchor} ids={[task(north).id]} controller={own} />, own));
+    const list = await screen.findByRole('listbox');
+    expect(
+      within(list)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['northwind-tag']);
+  });
+
+  test('`#` in a subtask’s new row suggests only its org’s tags', async () => {
+    const { scopes, store, task, wrap } = await setup();
+    everyOrgsTags();
+    const own = scopes[1]?.controller as ListController;
+    store
+      .getState()
+      .addDraft({ id: 'draft', groupId: '', afterId: null, parentId: task(north).id });
+    render(
+      wrap(
+        <TitleInput rowId="draft" initialValue="" caret="end" caretSeq={0} label="Title" />,
+        own,
+      ),
+    );
+    const input = screen.getByRole('combobox') as HTMLInputElement;
+    input.value = 'Ask #';
+    input.setSelectionRange(5, 5);
+    fireEvent.input(input);
+    const list = await screen.findByRole('listbox');
+    expect(
+      within(list)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['northwind-tag']);
   });
 });
