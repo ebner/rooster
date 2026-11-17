@@ -590,7 +590,7 @@ export class TuiController {
   private viewsPatch(data: Awaited<ReturnType<TuiController['fetchAll']>>): Partial<TuiState> {
     const { views, viewTasks, savedViewId } = data;
     if (savedViewId === null || savedViewId !== this.state.savedViewId) return { views };
-    if (viewTasks === 'gone' || !views.some((v) => v.id === savedViewId)) {
+    if (viewTasks === 'gone' || viewTasks === null || !views.some((v) => v.id === savedViewId)) {
       this.preferFirst = true;
       return {
         views,
@@ -601,7 +601,13 @@ export class TuiController {
         message: { text: this.t('msg.viewGone'), tone: 'info', retry: false },
       };
     }
-    return { views, viewTasks };
+    // A row completed here stays in place for `completeHideMs` (`keep`), though the refetch
+    // without completed tasks no longer has it.
+    const fetched = new Set(viewTasks.map((t) => t.id));
+    const held = (this.state.viewTasks ?? []).filter(
+      (t) => this.keep.has(t.id) && !fetched.has(t.id),
+    );
+    return { views, viewTasks: held.length === 0 ? viewTasks : [...viewTasks, ...held] };
   }
 
   private async loadOrg(org: Org): Promise<void> {
@@ -1608,8 +1614,12 @@ export class TuiController {
     const s = this.state;
     if (s.list === null) return true;
     const placement = created.placement;
-    const next =
-      placement !== null && this.leftForUpcoming(created)
+    // A view whose filters the new task doesn't match (an undated one in a view of today's
+    // tasks) no longer shows it: the next draft stays where this one was, for the same person.
+    const filteredOut = s.view === 'saved' && !s.lines.some((line) => line.key === created?.id);
+    const next = filteredOut
+      ? target
+      : placement !== null && this.leftForUpcoming(created)
         ? {
             anchorKey: target.anchorKey,
             placement: target.placement,

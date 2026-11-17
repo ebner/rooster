@@ -163,6 +163,21 @@ async function webRows(user: TestUser, orgId: string, view: ViewJson, completed 
   return { ids: sections.flatMap((s) => s.taskIds), counts: data.counts };
 }
 
+/** The org's tasks with these titles, once they all exist. */
+async function eventuallyTasks(user: TestUser, orgId: string, titles: string[]) {
+  const started = Date.now();
+  for (;;) {
+    const { data } = await user.api<{ items: TaskJson[] }>(
+      'GET',
+      `/api/v1/orgs/${orgId}/tasks?view=everyone&limit=200`,
+    );
+    const found = titles.map((title) => data.items.find((task) => task.title === title));
+    if (found.every((task) => task !== undefined)) return found as TaskJson[];
+    if (Date.now() - started > 3_000) throw new Error(`missing: ${titles.join(', ')}`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
 async function json<T>(cli: CliHarness, args: string[]): Promise<T> {
   const res = await cli.run([...args, '--json']);
   expect(res.code, res.stderr).toBe(0);
@@ -211,8 +226,11 @@ describe('views from the command line (ADR 0073 B12)', () => {
       'Cy (2)',
       'Unassigned (1)',
     ]);
-    // Its parent isn't in the view, and the rows carry no parent titles: no breadcrumb.
-    expect(lines.find((l) => l.includes('Juniper subtask'))).not.toContain('Not Juniper');
+    // Its parent isn't in the view; the server sends it for the breadcrumb only.
+    expect(lines.find((l) => l.includes('Juniper subtask'))).toMatch(
+      /Not Juniper › Juniper subtask/,
+    );
+    expect(lines.filter((l) => l.includes('Not Juniper'))).toHaveLength(1);
     expect(res.stdout).not.toContain('@example.com');
 
     const views = stripAnsi((await cli.run(['view', 'ls', '--org', slug])).stdout)
@@ -328,5 +346,63 @@ describe('views from the command line (ADR 0073 B12)', () => {
     // g then a digit with no such view says so.
     await t.press('g', '5');
     await t.waitFor((f) => f.includes('No view 5'));
+  });
+
+  it('TUI: rapid entry under another person keeps that person when the rows leave the view', async () => {
+    const { ada, cli, slug, orgId, tasks } = await seed();
+    const tagId = tasks.adaToday?.tagIds[0] as string;
+    const due = await ada.api<ViewJson>('POST', `/api/v1/orgs/${orgId}/views`, {
+      name: 'Juniper today',
+      shared: true,
+      query: { tags: [tagId], due: 'today' },
+    });
+    expect(due.status).toBe(201);
+    expect((await cli.run(['org', 'use', slug])).code).toBe(0);
+    const t = await openTui(cli, { columns: 140, rows: 40 });
+    tuis.push(t);
+    await t.waitFor((f) => f.includes('# Juniper today'));
+    await t.press('g', '3');
+    await t.waitFor((f) => f.includes('Unassigned (0)') && f.includes('Ada today'));
+    // The last line is Unassigned's header; undated tasks typed there don't match the view.
+    await t.press('\u001b[F');
+    await t.waitFor((f) =>
+      f.split('\n').some((l) => l.includes('› ▾ Unassigned') || /› .*Unassigned/.test(l)),
+    );
+    await t.press('n');
+    await t.type('First loose end');
+    await t.press('\r');
+    await t.type('Second loose end');
+    await t.press('\r', '\u001b');
+    const created = await eventuallyTasks(ada, orgId, ['First loose end', 'Second loose end']);
+    for (const task of created) {
+      expect(task.assigneeId, task.title).toBeNull();
+      expect(task.tagIds, task.title).toEqual([tagId]);
+    }
+  });
+
+  it('TUI: a row completed in a view stays in place for completeHideMs', async () => {
+    const { ada, cli, slug } = await seed();
+    // 0 keeps completed rows for the session (D-09), so the check can't race a timer.
+    const prefs = await ada.api('PATCH', '/api/v1/me', { prefs: { completeHideMs: 0 } });
+    expect(prefs.status).toBe(200);
+    expect((await cli.run(['org', 'use', slug])).code).toBe(0);
+    const t = await openTui(cli, { columns: 140, rows: 40 });
+    tuis.push(t);
+    await t.waitFor((f) => f.includes('# Juniper'));
+    await t.press('g', '1');
+    await t.waitFor((f) => f.includes('Ada (you) (2)'));
+    // The first row is Ada's task due today.
+    await t.waitFor((f) => f.split('\n').some((l) => l.includes('› ') && l.includes('Ada today')));
+    await t.press('x');
+    await t.waitFor((f) => f.includes('Completed “Ada today”') && f.includes('● synced'));
+    // The refresh after the change (without completed tasks) has landed; the row is still there.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    // (The footer's "Completed “Ada today”" doesn't count: the row itself is still listed.)
+    const rows = t
+      .frame()
+      .split('\n')
+      .filter((l) => l.includes('Ada today'));
+    expect(rows.filter((l) => !l.includes('Completed'))).toHaveLength(1);
+    expect(t.frame()).toContain('Ada (you) (1)');
   });
 });
