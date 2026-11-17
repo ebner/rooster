@@ -372,6 +372,7 @@
   },
   "all": {
     "orgSuggestions": "Organisations",
-    "oneOrg": "This works on tasks from one organisation at a time."
+    "oneOrg": "This works on tasks from one organisation at a time.",
+    "pasteUnavailable": "{org} isn't available offline yet, so nothing was added. Try again when you're online, or press Esc to keep the text as one line."
   }
 }

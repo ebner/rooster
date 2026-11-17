@@ -515,8 +515,12 @@ export function TitleInput({
       if (event.key === 'Enter') {
         event.preventDefault();
         committed.current = true;
+        // Not taken (an org's list isn't available yet): the paste and its chip stay.
+        if (!controller.createMany(rowId, pasteLines)) {
+          committed.current = false;
+          return;
+        }
         setPasteLines(null);
-        controller.createMany(rowId, pasteLines);
         return;
       }
       if (event.key === 'Escape') {

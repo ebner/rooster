@@ -372,6 +372,7 @@
   },
   "all": {
     "orgSuggestions": "Organisationer",
-    "oneOrg": "Det här går bara för uppgifter från en organisation i taget."
+    "oneOrg": "Det här går bara för uppgifter från en organisation i taget.",
+    "pasteUnavailable": "{org} är inte tillgänglig offline än, så inget lades till. Försök igen när du är online, eller tryck Esc för att behålla texten som en rad."
   }
 }

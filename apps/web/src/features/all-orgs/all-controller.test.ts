@@ -277,6 +277,30 @@ describe('AllListController.createMany', () => {
     expect(byTitle(personal, 'Buy milk ^North')).toBeUndefined();
     expect(byTitle(personal, 'Buy milk')).toBeUndefined();
   });
+
+  test('an org whose list isn’t available (offline, never loaded): nothing is lost', async () => {
+    const { all, pipeline, store, ops } = await setup();
+    const view = pipeline.view.bind(pipeline);
+    vi.spyOn(pipeline, 'view').mockImplementation((org) => (org === north ? undefined : view(org)));
+    const draftId = all.newSectionDraft('today', null) as string;
+    expect(all.createMany(draftId, ['First task', 'Second task ^North'])).toBe(false);
+    // Nothing created anywhere; the new row (and so the paste) stays; the toast says why.
+    expect(ops(personal)).toHaveLength(0);
+    expect(store.getState().drafts.map((d) => d.id)).toEqual([draftId]);
+    expect(toasts.at(-1)?.message).toBe('all.pasteUnavailable {"org":"Northwind"}');
+  });
+
+  test('lines staying in the row’s org keep its chosen group; the others go to their Inbox', async () => {
+    const { all, store, byTitle, view } = await setup();
+    const draftId = all.newSectionDraft('today', null) as string;
+    const prio = normalGroups(view(personal)).find((g) => g.name === 'Prio')?.id as string;
+    // The phone's group picker (02 §13.3).
+    all.moveDraftToGroup(draftId, prio);
+    expect(store.getState().drafts[0]?.groupId).toBe(prio);
+    expect(all.createMany(draftId, ['Stay here', 'Go north ^North'])).toBe(true);
+    expect(byTitle(personal, 'Stay here')?.placement?.groupId).toBe(prio);
+    expect(byTitle(north, 'Go north')?.placement?.groupId).toBe(inboxOf(view(north))?.id);
+  });
 });
 
 describe('two orgs with the same name', () => {

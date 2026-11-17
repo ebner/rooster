@@ -1309,8 +1309,12 @@ export class ListController {
     return true;
   }
 
-  /** "Create 5 tasks? ↵" (02 §3.4): one task per non-empty line, from the draft's slot. */
-  createMany(rowId: string, lines: readonly string[]): void {
+  /**
+   * "Create 5 tasks? ↵" (02 §3.4): one task per non-empty line, from the draft's slot. Returns
+   * false when it took none of them and the paste stays as it is (All organisations: an org's
+   * list isn't available offline yet).
+   */
+  createMany(rowId: string, lines: readonly string[]): boolean {
     let draft = this.store().drafts.find((d) => d.id === rowId);
     const row = this.rows().find((r) => r.id === rowId);
     const inView = Boolean(draft?.sectionId ?? (row?.kind === 'task' && row.sectionId));
@@ -1319,14 +1323,14 @@ export class ListController {
         this.parseLine(line, [], inView && !draft?.parentId && !this.isEveryone(), true),
       )
       .filter((p) => p.title !== '');
-    if (parsed.length === 0) return;
+    if (parsed.length === 0) return true;
     if (!draft && row?.kind === 'task' && row.sectionId) {
       const id = this.newSectionDraft(row.sectionId, row.id);
       draft = this.store().drafts.find((d) => d.id === id);
-      if (!draft) return;
+      if (!draft) return true;
     }
     if (!draft) {
-      if (row?.kind !== 'task') return;
+      if (row?.kind !== 'task') return true;
       draft = {
         id: uuidv7(),
         groupId: row.groupId,
@@ -1337,6 +1341,7 @@ export class ListController {
     }
     this.createFromDraft(draft, parsed);
     this.store().navigate(draft.id);
+    return true;
   }
 
   // -------------------------------------------------------------------------------------

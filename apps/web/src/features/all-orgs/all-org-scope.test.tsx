@@ -67,7 +67,7 @@ async function setup() {
       </ListTransportContext.Provider>
     </QueryClientProvider>
   );
-  return { transport, all, scopes, store, task, dateCtx, wrap };
+  return { transport, pipeline, all, scopes, store, task, dateCtx, wrap };
 }
 
 describe('All organisations: per-row UI', () => {
@@ -169,5 +169,27 @@ describe('tags of one org, with every org’s in the store', () => {
         .getAllByRole('option')
         .map((o) => o.textContent),
     ).toEqual(['northwind-tag']);
+  });
+});
+
+describe('pasting into a new row of All organisations', () => {
+  test('with an org’s list unavailable, Enter keeps the paste and its chip', async () => {
+    const { pipeline, store, wrap } = await setup();
+    const view = pipeline.view.bind(pipeline);
+    vi.spyOn(pipeline, 'view').mockImplementation((org) => (org === north ? undefined : view(org)));
+    store.getState().addDraft({ id: 'draft', groupId: '', afterId: null, sectionId: 'today' });
+    store.getState().edit('draft', 'end');
+    render(
+      wrap(<TitleInput rowId="draft" initialValue="" caret="end" caretSeq={0} label="Title" />),
+    );
+    const input = screen.getByRole('combobox') as HTMLInputElement;
+    fireEvent.paste(input, {
+      clipboardData: { getData: () => 'First task\nSecond task ^North' },
+    });
+    expect(screen.getByText('Create 2 tasks? ↵')).toBeTruthy();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(screen.getByText('Create 2 tasks? ↵')).toBeTruthy();
+    expect(store.getState().drafts.map((d) => d.id)).toEqual(['draft']);
+    expect(pipeline.pendingOps(fixtureIds.personalOrg)).toHaveLength(0);
   });
 });

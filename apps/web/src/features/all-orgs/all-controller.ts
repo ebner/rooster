@@ -288,36 +288,50 @@ export class AllListController extends ListController {
 
   /**
    * Pasted lines (02 §3.4): each goes to the org its own `^org` token names (the token is
-   * removed), else the default org; one create per org, in the lines' order.
+   * removed), else the default org; one create per org, in the lines' order. Lines staying in
+   * the org of the row's group (the phone's group picker) go there, the others to their org's
+   * Inbox (or `>Group`). When an org's list isn't available (offline, never loaded), nothing
+   * is created and the paste stays as it is, so no line is lost.
    */
-  override createMany(rowId: string, lines: readonly string[]): void {
+  override createMany(rowId: string, lines: readonly string[]): boolean {
     const draft = this.draft(rowId);
     if (!draft) {
-      this.controllerOf(this.orgOfTask(rowId))?.createMany(rowId, lines);
-      return;
+      return this.controllerOf(this.orgOfTask(rowId))?.createMany(rowId, lines) ?? true;
     }
     if (draft.parentId) {
-      this.prepareDraft(rowId, '', [])?.controller.createMany(rowId, lines);
-      return;
+      return this.prepareDraft(rowId, '', [])?.controller.createMany(rowId, lines) ?? true;
     }
     const byOrg = new Map<string, string[]>();
+    const missing = new Set<string>();
     for (const line of lines) {
       const target = this.draftTarget(rowId, line, []);
-      if (!target.org) continue;
+      const state = target.org && this.controllerOf(target.org.id)?.state();
+      if (!target.org || !state || !inboxOf(state)) {
+        missing.add(target.org?.name ?? '');
+        continue;
+      }
       byOrg.set(target.org.id, [...(byOrg.get(target.org.id) ?? []), target.text]);
+    }
+    if (missing.size > 0) {
+      toast({
+        message: this.deps.t('all.pasteUnavailable', { org: [...missing].join(', ') }),
+        tone: 'danger',
+      });
+      return false;
     }
     let first = true;
     for (const [orgId, orgLines] of byOrg) {
-      const controller = this.controllerOf(orgId);
-      const inbox = controller?.state() && inboxOf(controller.state() as ListState)?.id;
-      if (!controller || !inbox) continue;
+      const controller = this.controllerOf(orgId) as ListController;
+      const state = controller.state() as ListState;
+      const groupId = state.groups[draft.groupId] ? draft.groupId : (inboxOf(state)?.id ?? '');
       // The first org takes the new row; each further org gets one in the same place.
       const id = first ? rowId : uuidv7();
-      if (first) this.ui().updateDraft(rowId, { groupId: inbox });
-      else this.ui().addDraft({ ...draft, id, groupId: inbox });
+      if (first) this.ui().updateDraft(rowId, { groupId });
+      else this.ui().addDraft({ ...draft, id, groupId });
       first = false;
       controller.createMany(id, orgLines);
     }
+    return true;
   }
 
   // -------------------------------------------------------------------------------------
