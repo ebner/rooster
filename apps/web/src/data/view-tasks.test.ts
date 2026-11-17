@@ -6,7 +6,13 @@ import { getListPipeline } from './list';
 import { createFixtureTransport } from './pipeline/fixture-transport';
 import { applyOpToViewTasks, type ViewTasksData } from './pipeline/view-tasks-ops';
 import { orgOfQuery } from './sync/engine';
-import { fetchViewTasks, viewCounts, viewTasksKey, viewTasksQuery } from './view-tasks';
+import {
+  fetchViewTasks,
+  viewCounts,
+  viewScreenRefetch,
+  viewTasksKey,
+  viewTasksQuery,
+} from './view-tasks';
 
 /** ADR 0073 B: a view's rows cache, kept optimistic by the pipeline. */
 
@@ -406,8 +412,15 @@ describe('a hidden view’s confirmed base', () => {
     const options = viewTasksQuery(pipeline, org, 'v1', false);
     await queryClient.fetchQuery(options);
     expect(fetches).toBe(1);
-    const stop = new QueryObserver(queryClient, options).subscribe(() => {});
+    const stop = new QueryObserver(queryClient, { ...options, ...viewScreenRefetch }).subscribe(
+      () => {},
+    );
     await waitForFetches(() => fetches, 2);
+    // The rows that mount after that answer read the fresh cache: no second request.
+    const rows = new QueryObserver(queryClient, options).subscribe(() => {});
+    await new Promise((r) => setTimeout(r, 30));
+    expect(fetches).toBe(2);
+    rows();
     stop();
   });
 });

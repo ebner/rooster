@@ -57,9 +57,6 @@ export function viewTasksQuery(
     queryFn: ({ signal }: { signal: AbortSignal }) =>
       fetchViewTasks(pipeline, orgId, viewId, completed, signal),
     staleTime: 30_000,
-    // Shown while online, a view always asks the server again: whatever a hidden cache missed
-    // heals there; the confirmed base only serves offline.
-    refetchOnMount: 'always',
     refetchOnWindowFocus: true,
     // "Show completed" switches to the other cache of the same view: its rows stay meanwhile.
     placeholderData: <T>(previous: T | undefined, query?: { queryKey: readonly unknown[] }) =>
@@ -81,6 +78,13 @@ export function useViewTasks(
 }
 
 /**
+ * Shown while online, a view always asks the server again: whatever a hidden cache missed heals
+ * there; the confirmed base only serves offline. Only the screen-level observer (the status)
+ * forces it, so the rows that mount after the first answer don't fetch a second time.
+ */
+export const viewScreenRefetch = { refetchOnMount: 'always' } as const;
+
+/**
  * The rows' status without subscribing to them (the frame re-renders on status changes only,
  * as `useMyListStatus`).
  */
@@ -93,6 +97,7 @@ export function useViewTasksStatus(
   const query = useQuery({
     ...viewTasksQuery(pipeline, orgId, viewId ?? '', completed),
     enabled: Boolean(viewId),
+    ...viewScreenRefetch,
     select: () => true,
   });
   return { ready: query.data === true, error: query.error };
