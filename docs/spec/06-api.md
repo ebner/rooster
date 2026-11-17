@@ -68,10 +68,10 @@
 | DELETE `/groups/:id` | `{moveTasksTo: groupId}` or `{deleteTasks: true}`. An empty group needs neither. → 204. | 2 |
 | POST `/groups/:id/restore` | Undo a delete (restores the tasks deleted alongside it). | 2 |
 | PUT `/tasks/:id/expanded` · DELETE `/tasks/:id/expanded` | Persist the per-user expansion of a parent row. | 3 |
-| GET `/orgs/:orgId/views` · POST `/orgs/:orgId/views` | Phase 13 (ADR 0073 B): the views the actor sees (shared + own private, not archived; `?archived=true` lists archived ones) in their order, each with `openCount`; create `{id?, name, query, shared}`. | 13 |
+| GET `/orgs/:orgId/views` · POST `/orgs/:orgId/views` | Phase 13 (ADR 0073 B): the views the actor sees (shared + own private, not archived; `?archived=true` lists archived ones) in their order, each with `openCount`; create `{id?, name, query, shared}`. At most 100 shared views per org and 100 private ones per member there, archived included (`409 view_limit`). | 13 |
 | PATCH `/views/:id` · DELETE `/views/:id` | `{name?, query?, shared?}`; private views only by their creator; shared ones by any member. | 13 |
 | POST `/views/:id/move` · POST `/views/:id/archive` · POST `/views/:id/restore` | The actor's own sidebar order `{beforeId?, afterId?}`; archive and restore. | 13 |
-| GET `/views/:id/tasks?completed=false\|true` | The view's rows (TaskDTO, grouped by the client) and `{open, done}` counts. | 13 |
+| GET `/views/:id/tasks?completed=false\|true` | The view's rows (TaskDTO, grouped by the client with core `selectSavedView`) plus the readable ancestor chain of matching subtasks (for breadcrumbs, not rows), and `{open, done}` counts. | 13 |
 | GET `/me/views/today\|week\|overdue` | Phase 13 (ADR 0073 A): the smart view across every org the actor is a member of, in sidebar order; orgs a grant doesn't reach are left out and rows outside a group constraint dropped. `?completed=false\|true\|any` (default `false`). Not paged: `{view, today, sections: [{id, kind: overdue\|today\|day, date, items: Task[]}]}`, the sections of core `selectAllView`. `PATCH /me` accepts `prefs.defaultOrgId` only for a member org (`422`); `GET /me` reads one the user left as null. | 13 |
 | GET `/orgs/:orgId/tasks` | **General query** for CLI, MCP and Everyone. Query params: `view=my\|today\|week\|overdue\|nodate\|everyone`, `assignee=me\|<userId>\|none\|any` (repeatable, OR-combined), `hasDue=true\|false`, `groupId`, `tag` (repeatable), `dueFrom`, `dueTo`, `completed=false\|true\|any`, `parentId`, `q`, `limit`, `cursor`, `include=description,subtasks`. | 2/6 |
 
