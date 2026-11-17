@@ -263,3 +263,16 @@ describe('AllListController', () => {
     expect(all.orgChoices(byTitle(north, 'Late').id)).toEqual([]);
   });
 });
+
+describe('AllListController.createMany', () => {
+  test('pasted lines go to the org each one’s `^org` names, the token removed', async () => {
+    const { all, byTitle } = await setup();
+    const draftId = all.newSectionDraft('today', null) as string;
+    all.createMany(draftId, ['Buy milk ^North', 'Call mum', 'Read the book ^"Book club"']);
+    expect(byTitle(north, 'Buy milk')?.dueDate).toBe(sampleToday);
+    expect(byTitle(personal, 'Call mum')).toBeDefined();
+    expect(byTitle(club, 'Read the book')).toBeDefined();
+    expect(byTitle(personal, 'Buy milk ^North')).toBeUndefined();
+    expect(byTitle(personal, 'Buy milk')).toBeUndefined();
+  });
+});

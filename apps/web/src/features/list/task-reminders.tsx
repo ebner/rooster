@@ -20,7 +20,9 @@ export interface TaskRemindersProps {
  * through the controller and so the outbox (ADR 0049 §2.7).
  */
 export function TaskReminders({ taskId, controller, ctx, slot }: TaskRemindersProps) {
-  const detail = useTaskDetail(taskId, controller.orgId, controller.deps.userId);
+  // The task's own org: its queued reminder ops are there (All organisations, ADR 0073 A3).
+  const orgId = controller.orgOfTask(taskId) ?? controller.orgId;
+  const detail = useTaskDetail(taskId, orgId, controller.deps.userId);
   const allDayReminderTime =
     useMe().data?.prefs?.allDayReminderTime ?? DEFAULT_PREFS.allDayReminderTime;
   const owner = useMemo(

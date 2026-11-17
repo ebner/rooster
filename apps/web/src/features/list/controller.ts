@@ -272,6 +272,14 @@ export class ListController {
     return this;
   }
 
+  /**
+   * Whether the list offers "Move to organisation…" (ADR 0072) at all; All organisations
+   * leaves it to the pane.
+   */
+  movesToOrg(): boolean {
+    return true;
+  }
+
   /** Says so and returns true when `ids` span orgs (for one org's commands); never here. */
   refuseAcrossOrgs(_ids: readonly string[]): boolean {
     return false;

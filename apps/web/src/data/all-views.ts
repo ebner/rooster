@@ -42,10 +42,18 @@ export interface OrgLists {
   error: Error | null;
 }
 
-function combineLists(results: QueryObserverResult<ListState>[]) {
+/**
+ * A list that has loaded or failed, or that can't load now: a query paused offline without a
+ * cached list counts as an empty org, so one never-cached org doesn't hold up the rest.
+ */
+export function listSettled(result: Pick<QueryObserverResult, 'data' | 'isError' | 'fetchStatus'>) {
+  return result.data !== undefined || result.isError || result.fetchStatus === 'paused';
+}
+
+export function combineLists(results: QueryObserverResult<ListState>[]) {
   return {
     states: results.map((r) => r.data),
-    settled: results.every((r) => r.data !== undefined || r.isError),
+    settled: results.every(listSettled),
     error: results.length > 0 && results.every((r) => r.isError) ? results[0]?.error : null,
   };
 }
@@ -217,10 +225,10 @@ export function useOrgsMembers(orgIds: readonly string[]): ReadonlyMap<string, O
   );
 }
 
-function combineStatus(results: QueryObserverResult<unknown>[]) {
+export function combineStatus(results: QueryObserverResult<unknown>[]) {
   const loaded = results.some((r) => r.data !== undefined);
   return {
-    ready: loaded && results.every((r) => r.data !== undefined || r.isError),
+    ready: loaded && results.every(listSettled),
     error:
       !loaded && results.length > 0 && results.every((r) => r.isError)
         ? (results[0]?.error ?? null)
@@ -270,7 +278,7 @@ export function useTaskOrg(
     })),
     combine: (results) => ({
       index: results.findIndex((r) => r.data === true),
-      settled: results.every((r) => r.data !== undefined || r.isError),
+      settled: results.every(listSettled),
     }),
   });
   if (!taskId) return null;

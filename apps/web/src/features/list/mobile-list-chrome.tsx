@@ -112,7 +112,7 @@ export function MobileListChrome({
   const room = useRef(false);
   room.current = draft !== undefined || (dragging && room.current);
   const tags = useTagsStore((s) => s.byId);
-  const canMoveOrg = useCanMoveToOrg() && !controller.isEveryone();
+  const canMoveOrg = useCanMoveToOrg() && !controller.isEveryone() && controller.movesToOrg();
   // Re-render on list changes so sheet checks and labels follow.
   useOrgLists(controller.orgIds());
 

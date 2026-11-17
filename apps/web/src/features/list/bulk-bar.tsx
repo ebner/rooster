@@ -40,7 +40,7 @@ export function BulkBar({
   const dateRef = useRef<HTMLButtonElement>(null);
   const moveRef = useRef<HTMLButtonElement>(null);
   const [dateOpen, setDateOpen] = useState(false);
-  const canMoveOrg = useCanMoveToOrg() && !everyone;
+  const canMoveOrg = useCanMoveToOrg() && !everyone && controller.movesToOrg();
   const moveOpen = useListUi((s) => s.popover?.kind === 'moveTo' && s.popover.rowId === 'bulk');
   // All organisations (ADR 0073 A3): tags, groups and people belong to one org, so those
   // actions show only while the selection is in one.

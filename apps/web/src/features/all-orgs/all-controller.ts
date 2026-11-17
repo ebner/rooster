@@ -1,4 +1,5 @@
 import { findOrgToken } from '@rooster/core/dates';
+import { uuidv7 } from '@rooster/core/ids';
 import {
   inboxOf,
   inverseOfSequence,
@@ -285,13 +286,38 @@ export class AllListController extends ListController {
     return controller ? controller.draftCreates(rowId, target.text, ignored) : false;
   }
 
-  /** Pasted lines (02 §3.4) all go to the org the new row shows. */
+  /**
+   * Pasted lines (02 §3.4): each goes to the org its own `^org` token names (the token is
+   * removed), else the default org; one create per org, in the lines' order.
+   */
   override createMany(rowId: string, lines: readonly string[]): void {
-    if (this.draft(rowId)) {
+    const draft = this.draft(rowId);
+    if (!draft) {
+      this.controllerOf(this.orgOfTask(rowId))?.createMany(rowId, lines);
+      return;
+    }
+    if (draft.parentId) {
       this.prepareDraft(rowId, '', [])?.controller.createMany(rowId, lines);
       return;
     }
-    this.controllerOf(this.orgOfTask(rowId))?.createMany(rowId, lines);
+    const byOrg = new Map<string, string[]>();
+    for (const line of lines) {
+      const target = this.draftTarget(rowId, line, []);
+      if (!target.org) continue;
+      byOrg.set(target.org.id, [...(byOrg.get(target.org.id) ?? []), target.text]);
+    }
+    let first = true;
+    for (const [orgId, orgLines] of byOrg) {
+      const controller = this.controllerOf(orgId);
+      const inbox = controller?.state() && inboxOf(controller.state() as ListState)?.id;
+      if (!controller || !inbox) continue;
+      // The first org takes the new row; each further org gets one in the same place.
+      const id = first ? rowId : uuidv7();
+      if (first) this.ui().updateDraft(rowId, { groupId: inbox });
+      else this.ui().addDraft({ ...draft, id, groupId: inbox });
+      first = false;
+      controller.createMany(id, orgLines);
+    }
   }
 
   // -------------------------------------------------------------------------------------
@@ -334,6 +360,10 @@ export class AllListController extends ListController {
   }
 
   /** Moving to another organisation is the pane's in All organisations (ADR 0072). */
+  override movesToOrg(): boolean {
+    return false;
+  }
+
   override movableToOrg(): string[] {
     return [];
   }

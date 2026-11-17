@@ -199,7 +199,8 @@ test('Next 7 days and Overdue; the keyboard works as in a smart view; the pane o
   // The palette's entries are the keyboard path to All organisations.
   await page.keyboard.press('Control+k');
   await expect(page.getByTestId('palette-input')).toBeFocused();
-  await page.keyboard.type('All organisations: Today');
+  // `>`: actions only (the guide has an All organisations section too).
+  await page.keyboard.type('>All organisations: Today');
   await expect(
     page.getByTestId('palette-action').filter({ hasText: 'All organisations: Today' }),
   ).toBeVisible();
