@@ -101,8 +101,28 @@ export function SavedViewContent(props: SavedViewContentProps) {
   const views = useViews(org.id);
   if (viewId === newViewId) return <LoadedView {...props} view={null} key="new" />;
   const view = views.data?.find((v) => v.id === viewId);
-  if (!view) return views.isPending ? null : <ViewNotFound org={org} userId={props.userId} />;
-  return <LoadedView {...props} view={view} key={view.id} />;
+  if (view) return <LoadedView {...props} view={view} key={view.id} />;
+  if (views.isPending) return null;
+  // Only a loaded list that lacks the view means it's gone; a failed load (offline, rate
+  // limited) is a load error, and must not forget the start page's "last view".
+  if (!views.data) return <ViewLoadFailed org={org} />;
+  return <ViewNotFound org={org} userId={props.userId} />;
+}
+
+/** The views list couldn't be loaded (and none is cached): say so, without guessing why. */
+function ViewLoadFailed({ org }: { org: Org }) {
+  const { t } = useTranslation('views');
+  const { t: tList } = useTranslation('list');
+  return (
+    <>
+      <ViewHeader title={t('saved.title')} context={org.name} />
+      <ViewBody>
+        <p role="alert" data-testid="view-load-failed" className="pt-8 text-sm text-text-secondary">
+          {tList('state.loadFailed')}
+        </p>
+      </ViewBody>
+    </>
+  );
 }
 
 function LoadedView({

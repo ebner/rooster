@@ -574,3 +574,34 @@ describe('a failed edit (online only, optimistic)', () => {
     expect(screen.queryByText("Couldn't save the view. Try again.")).toBeNull();
   });
 });
+
+describe('a view that cannot be shown', () => {
+  function renderMissing(seed: (client: QueryClient) => void) {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, retryOnMount: false, staleTime: Infinity } },
+    });
+    queryClient.setQueryData(queryKeys.me, fixtureMe);
+    seed(queryClient);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SavedViewContent org={sharedOrg} userId={userId} viewId={viewId} tabs={[]} />
+      </QueryClientProvider>,
+    );
+  }
+
+  test('a views list that failed to load says so, rather than calling the view gone', async () => {
+    renderMissing((client) => {
+      const query = client
+        .getQueryCache()
+        .build(client, { queryKey: queryKeys.views(orgId, false) });
+      query.setState({ status: 'error', error: new Error('429'), data: undefined });
+    });
+    expect(await screen.findByTestId('view-load-failed')).toBeTruthy();
+    expect(screen.queryByTestId('view-not-found')).toBeNull();
+  });
+
+  test('a loaded list without the view is "not available"', async () => {
+    renderMissing((client) => client.setQueryData(queryKeys.views(orgId, false), []));
+    expect(await screen.findByTestId('view-not-found')).toBeTruthy();
+  });
+});
