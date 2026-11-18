@@ -14,6 +14,7 @@ A self-hosted, keyboard-first task manager: a calm "My tasks" list for you and a
 - **The list is a text editor.** Type a task, press Enter, type the next. Everything works from the keyboard, with undo and no dialogs.
 - **Dates in plain words**, in English and Swedish (`fri at 14`, `om 3 dagar`, `every mon`), with reminders, recurring tasks and smart views.
 - **Together:** shared organisations next to your personal one, assignees, comments with @mentions, an inbox, push and email.
+- **Views and projects:** Today, Next 7 days and Overdue across all your organisations, and saved views per organisation, private or shared, with one-tag project views that count open and done tasks.
 - **On your phone:** an installable app that reads offline and queues your edits.
 - **In the terminal and for AI agents:** the `rooster` CLI and TUI, and MCP with OAuth, where you choose what an agent may do.
 - **Self-hosted and private:** one Docker container, one SQLite file, OIDC sign-in, nightly backups, no telemetry.

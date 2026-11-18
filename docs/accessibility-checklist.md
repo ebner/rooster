@@ -68,7 +68,14 @@ This checklist is the part a machine can't judge: what a screen reader actually 
 6. Due date sheet: each choice reads its label and date ("Tomorrow, Sat 11 Oct").
 7. Settings → Behaviour: the swipe action pickers read their current value.
 
-## 7. Zoom, contrast and motion (any browser)
+## 7. Sidebar sections, All organisations and views (VoiceOver macOS, NVDA; 1.11)
+
+1. With three organisations, Tab through the sidebar. → Each section header is a button named after the section ("All organisations", "Personal", …) and says "expanded" or "collapsed"; `Enter` or `Space` toggles it. A collapsed section's items are skipped.
+2. Open All organisations → Today and arrow through the rows. → Each row's name includes its organisation ("… in Kestrel Lane"), then the due date as in §2.3. On the new-task row, the organisation chip reads "Goes to <organisation>"; type `^Kes` → the suggestions are announced as you arrow, and `Enter` picks one.
+3. Open a view. → Its name field ("View name"), then the chips by their names ("Tags: juniper", "Assignee: Anyone", "Due: Any date", "Status: Open", "Visibility: Shared"); each opens its picker and `Esc` returns to the chip. A project view's counts read like "7 open tasks, 12 done". The person sections read like Everyone's tasks.
+4. In the sidebar, the views list is named "Views in <organisation>". Tab to a view's grip ("Reorder <name>"), `Space`, `↓`, `Space`. → Picked up, the new position, then dropped, as for groups in §3.7; while it is lifted, the list's own keys do nothing.
+
+## 8. Zoom, contrast and motion (any browser)
 
 1. Zoom to 200 % at 1280 px. → No horizontal scrolling in the list, the pane or settings, and nothing is cut off.
 2. Set "Reduce motion" in the OS. → Completing, collapsing and opening the pane happen without animation.
