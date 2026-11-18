@@ -9,6 +9,8 @@
 #
 #   1. Preflight (seconds): main, up to date with origin, the tag is free, the notes are written,
 #      the migration fixture is from the latest release that changed the schema, Docker is up.
+#      It warns (without stopping) when the web app changed since the last release but the
+#      screenshots, the guide or the site copy did not.
 #   2. Bump every package.json, the Dockerfile's ROOSTER_VERSION, the CHANGELOG heading (with
 #      the release's migrations) and the What's new headings, then regenerate the API document
 #      and THIRD-PARTY-NOTICES.txt (CI only warns when it lags the dependencies; ADR 0071).
@@ -68,6 +70,21 @@ new_migrations="$(git diff --name-only --diff-filter=A "$previous" HEAD -- "$mig
 if [[ -n "$new_migrations" ]]; then
   awk '/^## \[Unreleased\]/{on=1; next} /^## \[/{on=0} on' CHANGELOG.md | grep -q '^### Migrations' ||
     fail "CHANGELOG.md: [Unreleased] needs a ### Migrations section for: $(tr "\n" " " <<<"$new_migrations")"
+fi
+
+# A warning, not a refusal: the web app changed since the last release, but a place that shows
+# it did not (AGENTS.md, Conventions: "A user-visible change updates every place that shows it").
+warn() { printf '\033[1;33mrelease: warning: %s\033[0m\n' "$*" >&2; }
+changed() { ! git diff --quiet "$previous" HEAD -- "$@"; }
+if changed apps/web/src ':(exclude)*.test.ts' ':(exclude)*.test.tsx' ':(exclude)apps/web/src/routeTree.gen.ts'; then
+  stale=()
+  changed docs/screenshots || stale+=("the screenshots (pnpm docs:screenshots)")
+  changed docs/guide ':(exclude)docs/guide/*/whats-new.md' ':(exclude)docs/guide/*/keyboard.md' ||
+    stale+=("the user guide (docs/guide/{en,sv})")
+  changed apps/site/src/copy || stale+=("the site copy (apps/site/src/copy)")
+  for item in "${stale[@]}"; do
+    warn "the web app changed since $previous, but not $item; check the list in AGENTS.md"
+  done
 fi
 
 docker info >/dev/null 2>&1 || fail "Docker is not running (the image build, smoke test and backup drill need it)"
