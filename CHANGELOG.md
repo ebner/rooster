@@ -6,11 +6,16 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.11.4] - 2026-11-18
+
 ### Fixed
 - **Toasts hide themselves again.** After a toast was closed with its button (Undo, ×) or under the pointer, every later toast stayed until closed: the pause for hover and focus never ended, because a removed element fires neither `mouseleave` nor `blur`. The stack now re-reads hover and focus whenever it changes. The "New version available" toast stays until closed, as before (now explicit instead of 24 h).
 
 ### Changed
 - **The project site's start page is English only** (ADR 0070 amendment). `/sv/` redirects to `/`; the user guide stays in English and Swedish (`/sv/guide/`).
+
+### Migrations
+- None.
 
 ## [1.11.3] - 2026-11-18
 

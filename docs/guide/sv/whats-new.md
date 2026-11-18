@@ -2,7 +2,9 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
-## Unreleased
+## 1.11.4
+
+_2026-11-18_
 
 - **Meddelandena längst ner försvinner igen.** ”… är klar · Ångra” och de andra meddelandena försvinner nu efter några sekunder, som de ska; efter att du hade klickat på ett stannade de tills du stängde dem. ”Ny version tillgänglig” stannar fortfarande tills du stänger det.
 
