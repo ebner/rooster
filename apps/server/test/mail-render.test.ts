@@ -42,6 +42,9 @@ describe('email rendering without prettier', () => {
       }),
     );
     expect(html).toMatch(/<img[^>]+src="cid:logo@rooster"[^>]+alt="rooster"/);
+    // Its size is reserved and its place tinted while Gmail's proxy loads it.
+    expect(html).toMatch(/<img[^>]+width="134"[^>]+height="36"/);
+    expect(html).toMatch(/<img[^>]+style="[^"]*background-color:#EEF0F3/i);
     expect(text).not.toContain('cid:');
   });
 

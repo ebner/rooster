@@ -17,6 +17,8 @@ function color(token: SemanticColorToken): string {
 export const mailTheme = {
   color: {
     page: color('bg-subtle'),
+    /** Behind the header logo while a mail app loads it (Gmail fetches every image late). */
+    placeholder: color('bg-muted'),
     card: color('bg-elevated'),
     text: color('text'),
     secondary: color('text-secondary'),

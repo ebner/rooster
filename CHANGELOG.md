@@ -6,6 +6,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Changed
+- **Email header logo:** its place is tinted (`bg-muted`, rounded) until the mail app shows it. Gmail loads even inline (`cid:`) images through its image proxy after the text, so the header looked empty for a moment; the logo itself is unchanged and still sent inline.
+
 ## [1.11.1] - 2026-11-18
 
 ### Changed

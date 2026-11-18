@@ -2,6 +2,10 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
+## Unreleased
+
+- **E-postmeddelandena visar var logotypen hamnar.** Gmail visar logotypen överst i roosters e-post en stund efter texten; tills dess är dess plats lätt skuggad i stället för tom.
+
 ## 1.11.1
 
 _2026-11-18_

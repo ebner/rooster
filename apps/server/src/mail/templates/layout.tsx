@@ -95,6 +95,10 @@ export function Layout(props: LayoutProps) {
                             display: 'block',
                             border: 0,
                             outline: 'none',
+                            // Gmail loads even inline images through its proxy, after the text:
+                            // a tint in the logo's place until then, covered by the opaque PNG.
+                            backgroundColor: theme.color.placeholder,
+                            borderRadius: `${theme.radius.sm}px`,
                             fontFamily: theme.font.wordmark,
                             fontSize: `${theme.size.xl.size}px`,
                             lineHeight: `${mailLogo.height}px`,
