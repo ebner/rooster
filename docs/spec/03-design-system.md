@@ -312,7 +312,7 @@ Height 20 px, `--radius-xs`, 6 px horizontal padding, `--text-xs`, weight 500, t
 - Height 32, `--radius-sm`, 8 px horizontal padding, icon 20 plus a `--text-sm` label, with the count right-aligned and muted.
 - Active: `--color-bg-muted`, with the label in `--color-text` weight 500.
 - Section header (each org and All organisations; ADR 0076): 32 px (the items' height), an always-visible 16 px chevron at the start in `--color-icon-subtle` (rotated −90° when collapsed), avatar 24, the name in `--text-sm` weight 600 `--color-text`; grip and "⋯" on hover. About 24 px above a header and 4 px below it, with a 1 px `--color-border` hairline between sections (and above "New organisation").
-- Section items are indented 12 px past a 1 px guide in the org's colour (its tag colour's `fg` at 40 % opacity; `--color-border` without a colour), so the item icons line up under the avatar.
+- Section items are indented 12 px past a 1 px guide in `--color-border` (the same neutral line for every section), so the item icons line up under the avatar.
 - The Overdue count uses rose-700 text, shown only when > 0.
 
 ### 3.11 Detail pane, sheets, palette, bulk bar

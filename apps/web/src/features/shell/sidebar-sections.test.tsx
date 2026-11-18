@@ -229,15 +229,16 @@ describe('Sidebar sections', () => {
     expect(expanded(company.name)).toBe('false');
   });
 
-  test('the guide takes the org’s colour, or the border colour without one', () => {
+  test('every guide is the neutral border colour, coloured org or not', () => {
     renderSidebar({
       orgs: [company, { ...club, color: null }],
     });
     const items = (name: string) =>
       document.getElementById(header(name).getAttribute('aria-controls') ?? '');
-    expect(items(company.name)?.className).toContain('border-tag-blue-fg/40');
-    expect(items(club.name)?.className).toContain('border-border');
-    expect(items('All organisations')?.className).toContain('border-border');
+    for (const name of [company.name, club.name, 'All organisations']) {
+      expect(items(name)?.className).toContain('border-border');
+      expect(items(name)?.className).not.toContain('border-tag-');
+    }
   });
 
   test('hairlines between the sections: every one but the first', () => {

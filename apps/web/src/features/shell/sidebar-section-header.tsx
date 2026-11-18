@@ -1,4 +1,3 @@
-import type { TagColor } from '@rooster/tokens';
 import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '../../lib/cn';
@@ -42,45 +41,24 @@ export function SectionChevron({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-/**
- * The guide's colour per org colour: the tag palette's text colour, faint, so it reads as the
- * org's without competing with the items. Static strings, for Tailwind to find.
- */
-const guideClasses: Record<TagColor, string> = {
-  gray: 'border-tag-gray-fg/40',
-  red: 'border-tag-red-fg/40',
-  orange: 'border-tag-orange-fg/40',
-  amber: 'border-tag-amber-fg/40',
-  green: 'border-tag-green-fg/40',
-  teal: 'border-tag-teal-fg/40',
-  blue: 'border-tag-blue-fg/40',
-  indigo: 'border-tag-indigo-fg/40',
-  purple: 'border-tag-purple-fg/40',
-  pink: 'border-tag-pink-fg/40',
-};
-
-export function sectionGuideClass(color: TagColor | null | undefined): string {
-  return color ? guideClasses[color] : 'border-border';
-}
-
 export interface SectionItemsProps {
   id?: string | undefined;
   hidden?: boolean | undefined;
-  color?: TagColor | null | undefined;
   children: ReactNode;
 }
 
 /**
  * The section's items under its header: the guide runs under the chevron's middle, and the
- * items' icons line up under the avatar.
+ * items' icons line up under the avatar. The guide is the neutral border colour for every
+ * section: there, but hardly visible (the avatar carries the org's colour).
  */
-export function SectionItems({ id, hidden, color, children }: SectionItemsProps) {
+export function SectionItems({ id, hidden, children }: SectionItemsProps) {
   return (
     <div
       id={id}
       hidden={hidden}
       data-section-items
-      className={cn('ms-3 flex flex-col gap-0.5 border-s ps-1.5', sectionGuideClass(color))}
+      className="ms-3 flex flex-col gap-0.5 border-s border-border ps-1.5"
     >
       {children}
     </div>

@@ -258,7 +258,7 @@ export function SidebarOrgSection({
           </MenuPopover>
         </MenuTrigger>
       </div>
-      <SectionItems id={listId} hidden={collapsed} color={org.color}>
+      <SectionItems id={listId} hidden={collapsed}>
         <ul className="flex flex-col gap-0.5">
           {views.map((view) => (
             <li key={view.id}>

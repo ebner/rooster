@@ -6,6 +6,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Fixed
+- The sidebar's guide lines are the same faint neutral line for every section; an organisation with a colour had a coloured line, one without (usually Personal) a grey one, and the two looked uneven.
+
 ## [1.11.2] - 2026-11-18
 
 ### Fixed
