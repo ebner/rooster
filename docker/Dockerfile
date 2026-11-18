@@ -2,7 +2,7 @@
 # rooster: single-container image (see docs/spec/08-operations.md §1)
 
 # Base images are pinned by digest (Dependabot bumps them; ADR 0017).
-FROM node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS base
+FROM node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS base
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0
