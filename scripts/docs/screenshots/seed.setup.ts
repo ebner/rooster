@@ -100,6 +100,8 @@ test('seed the Kestrel Lane demo team', async ({ browser }) => {
   // --- Orgs: the studio (everyone) and a garden club (Maja and Jonas). -----------------------
   const meMaja = await api<{ orgs: { id: string; isPersonal: boolean }[] }>(maja, 'GET', '/me');
   const personal = meMaja.orgs.find((o) => o.isPersonal)?.id ?? '';
+  // A fixed colour: without one the avatar's colour follows the (random) org ID, run to run.
+  await api(maja, 'PATCH', `/orgs/${personal}`, { color: 'amber' });
   const studio = await api<{ id: string; slug: string }>(maja, 'POST', '/orgs', {
     name: 'Kestrel Lane',
     slug: 'kestrel-lane',
@@ -107,7 +109,8 @@ test('seed the Kestrel Lane demo team', async ({ browser }) => {
     color: 'teal',
   });
   const garden = await api<{ id: string; slug: string }>(maja, 'POST', '/orgs', {
-    name: 'Riverside Garden Club',
+    // Short enough for the sidebar and the org chips of All organisations.
+    name: 'Garden Club',
     slug: 'garden-club',
     avatarEmoji: '🌱',
     color: 'green',
@@ -157,6 +160,9 @@ test('seed the Kestrel Lane demo team', async ({ browser }) => {
     web: 'teal',
     admin: 'gray',
     hiring: 'pink',
+    // Project tags: the Juniper & Finch project's view, and Moss Pebble's, archived when done.
+    juniper: 'indigo',
+    'moss-pebble': 'amber',
   };
   for (const [name, color] of Object.entries(tagColors)) {
     await api(maja, 'POST', `/orgs/${studio.id}/tags`, { name, color });
@@ -245,7 +251,7 @@ test('seed the Kestrel Lane demo team', async ({ browser }) => {
     group: 'Prio',
     due: d(4),
     start: d(2),
-    tags: ['design', 'client'],
+    tags: ['design', 'juniper'],
     reminders: [{ offsetMinutes: 1440 }],
     description: [
       'Three directions for the Juniper & Finch homepage, **warmer and more tactile** than today.',
@@ -324,7 +330,13 @@ test('seed the Kestrel Lane demo team', async ({ browser }) => {
     ['Pick typefaces with Priya', 'priya'],
     ['Present to Amara', 'maja'],
   ] as const) {
-    await create('maja', studio.id, studioGroups, { title, parent: hero, assignee });
+    // Two subtasks carry the project tag: the project view lists each under its assignee,
+    // with the parent's name.
+    const tags =
+      title === 'Pick typefaces with Priya' || title === 'Sketch three directions'
+        ? ['juniper']
+        : undefined;
+    await create('maja', studio.id, studioGroups, { title, parent: hero, assignee, tags });
   }
   await api(maja, 'POST', `/tasks/${tasks['Collect reference imagery']}/complete`, {
     completed: true,
@@ -338,7 +350,7 @@ test('seed the Kestrel Lane demo team', async ({ browser }) => {
   await team('amara', {
     title: 'Finalise Juniper & Finch packaging dielines',
     due: d(1),
-    tags: ['print', 'client'],
+    tags: ['print', 'juniper'],
   });
   await team('amara', {
     title: 'Client call with Moss Pebble Bakery',
@@ -346,7 +358,11 @@ test('seed the Kestrel Lane demo team', async ({ browser }) => {
     time: '14:00',
     tags: ['client'],
   });
-  await team('amara', { title: 'Colour-proof the tea tin labels', due: d(4), tags: ['print'] });
+  await team('amara', {
+    title: 'Colour-proof the tea tin labels',
+    due: d(4),
+    tags: ['print', 'juniper'],
+  });
   await team('jonas', {
     title: 'Set up staging site for Larkspur Books',
     due: d(-2),
@@ -361,9 +377,13 @@ test('seed the Kestrel Lane demo team', async ({ browser }) => {
   await team('priya', {
     title: 'Typeface shortlist for Juniper & Finch',
     due: d(1),
-    tags: ['design'],
+    tags: ['design', 'juniper'],
   });
-  await team('priya', { title: 'Illustration style frames', due: d(5), tags: ['design'] });
+  await team('priya', {
+    title: 'Illustration style frames',
+    due: d(5),
+    tags: ['design', 'juniper'],
+  });
   await team('kenji', { title: 'Order new Pantone swatch books', due: d(3), tags: ['admin'] });
   await team('kenji', { title: 'Photograph product samples', due: d(6) });
   await team('kenji', {
@@ -376,7 +396,7 @@ test('seed the Kestrel Lane demo team', async ({ browser }) => {
   await team('amara', {
     title: 'Review moodboard for the tea tin refresh',
     due: d(1),
-    tags: ['design'],
+    tags: ['design', 'juniper'],
     assignee: 'maja',
   });
   await team('jonas', {
@@ -391,6 +411,7 @@ test('seed the Kestrel Lane demo team', async ({ browser }) => {
     group: 'Today',
     assignee: 'jonas',
     due: d(0),
+    tags: ['moss-pebble'],
   });
   await api(
     as('jonas'),
@@ -402,6 +423,33 @@ test('seed the Kestrel Lane demo team', async ({ browser }) => {
   await api(as('amara'), 'PATCH', `/tasks/${tasks['Review moodboard for the tea tin refresh']}`, {
     dueDate: d(2),
   });
+
+  // The rest of the Juniper & Finch project: Kenji's photos, a task nobody has taken yet, and
+  // the work already done (the project view's "open · done").
+  await team('kenji', {
+    title: 'Photograph the tea tins on the clay backdrop',
+    due: d(5),
+    tags: ['juniper'],
+  });
+  await team('jonas', {
+    title: 'Build the Juniper & Finch homepage templates',
+    due: d(7),
+    tags: ['web', 'juniper'],
+  });
+  await team('amara', {
+    title: 'Write alt texts for the new homepage',
+    assignee: null,
+    tags: ['web', 'juniper'],
+  });
+  for (const [who, title, tags] of [
+    ['amara', 'Kick-off workshop with Juniper & Finch', ['juniper', 'client']],
+    ['priya', 'Audit the current Juniper & Finch site', ['juniper', 'web']],
+    ['kenji', 'Collect the product photos from the client', ['juniper']],
+    ['priya', 'Menu boards for Moss Pebble Bakery', ['moss-pebble', 'print']],
+  ] as const) {
+    const id = await team(who, { title, tags: [...tags] });
+    await api(as(who), 'POST', `/tasks/${id}/complete`, { completed: true });
+  }
 
   // --- Attachments, comments and followers on the hero task. ---------------------------------
   const heroId = tasks[hero] ?? '';
@@ -501,6 +549,35 @@ test('seed the Kestrel Lane demo team', async ({ browser }) => {
     basis: 'completion',
     tags: ['greenhouse'],
   });
+  await create('maja', garden.id, gardenGroups, {
+    title: 'Pay the allotment fee',
+    group: 'Today',
+    due: d(-1),
+  });
+
+  // --- Views (ADR 0075): the Juniper & Finch project, shared; a shared view of unassigned
+  // work; Maja's own week, private; and Moss Pebble's project view, archived when it was done.
+  const tagIds = Object.fromEntries(
+    (await api<{ id: string; name: string }[]>(maja, 'GET', `/orgs/${studio.id}/tags`)).map((t) => [
+      t.name,
+      t.id,
+    ]),
+  ) as Record<string, string>;
+  const views: Record<string, string> = {};
+  const view = async (name: string, shared: boolean, query: Record<string, unknown>) => {
+    const created = await api<{ id: string }>(maja, 'POST', `/orgs/${studio.id}/views`, {
+      name,
+      shared,
+      query,
+    });
+    views[name] = created.id;
+    return created.id;
+  };
+  await view('Juniper & Finch', true, { tags: [tagIds.juniper] });
+  await view('Up for grabs', true, { assignee: 'unassigned' });
+  await view('My week', false, { assignee: 'me', due: 'week' });
+  const moss = await view('Moss Pebble Bakery', true, { tags: [tagIds['moss-pebble']] });
+  await api(maja, 'POST', `/views/${moss}/archive`);
 
   // --- Maja's account: a calendar feed, a token, an inbox with some already read. ------------
   await api(maja, 'POST', '/me/ical-feeds', { orgId: null });
@@ -523,6 +600,7 @@ test('seed the Kestrel Lane demo team', async ({ browser }) => {
     ),
     orgs: { personal, studio: studio.id, studioSlug: studio.slug, garden: garden.id },
     tasks,
+    views,
   };
   saveState(state);
   await Promise.all(Object.values(pages).map((p) => p.context().close()));

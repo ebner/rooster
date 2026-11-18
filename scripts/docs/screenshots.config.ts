@@ -67,6 +67,9 @@ const config: PlaywrightTestConfig = {
     locale: 'en-GB',
     timezoneId: DEMO.timezone,
     trace: 'retain-on-failure',
+    // A stuck screen fails its own shot instead of holding the whole run until the test timeout.
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
   },
   projects: [
     { name: 'seed', testMatch: /seed\.setup\.ts$/, use: desktop },

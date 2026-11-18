@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Page, TestInfo } from '@playwright/test';
 import { signInAs } from '../../../apps/web/e2e/support/auth';
@@ -23,6 +23,7 @@ export const test = base.extend<{ demo: DemoState }>({
   },
   demo: async ({ page }, use, testInfo) => {
     const theme = testInfo.project.metadata.theme as string;
+    await waitForRateWindow();
     await page.addInitScript((dark: boolean) => {
       localStorage.setItem('rooster.locale', 'en');
       localStorage.setItem('rooster.list.shortcutHintDismissed', '1');
@@ -47,8 +48,28 @@ export const test = base.extend<{ demo: DemoState }>({
       testInfo.skip(!dark, 'The app has no dark theme yet; dark screenshots are skipped.');
     }
     await use(state);
+    markBurstEnd();
   },
 });
+
+/**
+ * The API allows each user 600 requests in a sliding minute (06 §1), and one form's shots, all
+ * as Maja, come close to that. The next form waits until the last one's minute has passed, or
+ * its first screens get `429`s (a view then reads as "not available").
+ */
+const burstFile = () => resolve(process.env.ROOSTER_DOCS_DATA_DIR ?? '', 'api-burst-end');
+
+function markBurstEnd() {
+  writeFileSync(burstFile(), String(Date.now()));
+}
+
+async function waitForRateWindow() {
+  if (!existsSync(burstFile())) return;
+  const wait = Number(readFileSync(burstFile(), 'utf8')) + 61_000 - Date.now();
+  if (wait <= 0) return;
+  console.log(`  … waiting ${Math.ceil(wait / 1000)} s for the API rate window`);
+  await new Promise((done) => setTimeout(done, wait));
+}
 
 const rawDir = () => {
   const dir = resolve(process.env.ROOSTER_DOCS_DATA_DIR ?? '', 'raw');
@@ -80,15 +101,19 @@ export async function settle(page: Page) {
   await page.evaluate(async () => {
     await document.fonts.ready;
     const images = [...document.images].filter((img) => !img.complete);
-    await Promise.all(
-      images.map(
-        (img) =>
-          new Promise((done) => {
-            img.addEventListener('load', done, { once: true });
-            img.addEventListener('error', done, { once: true });
-          }),
+    // A lazy image below the fold never loads, so the wait is bounded.
+    await Promise.race([
+      Promise.all(
+        images.map(
+          (img) =>
+            new Promise((done) => {
+              img.addEventListener('load', done, { once: true });
+              img.addEventListener('error', done, { once: true });
+            }),
+        ),
       ),
-    );
+      new Promise((done) => setTimeout(done, 5_000)),
+    ]);
   });
   const pending = page.getByTestId('sync-state');
   if ((await pending.count()) > 0) {

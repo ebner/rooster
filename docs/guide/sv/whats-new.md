@@ -4,6 +4,8 @@ Vad som har ändrats för dig i varje version av rooster, med den senaste först
 
 ## Unreleased
 
+- **En vy som inte går att läsa in säger det.** Om en vys lista inte går att läsa in, till exempel utan uppkoppling innan du har öppnat den, säger rooster att den inte gick att läsa in i stället för att vyn är borta.
+- **Nya bilder i den här guiden** för Alla organisationer och vyer.
 - **E-postmeddelandena visar var logotypen hamnar.** Gmail visar logotypen överst i roosters e-post en stund efter texten; tills dess är dess plats lätt skuggad i stället för tom.
 
 ## 1.11.1

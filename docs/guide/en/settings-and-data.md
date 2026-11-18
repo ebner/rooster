@@ -61,6 +61,8 @@ Open them from the **⋯** menu next to an organisation in the sidebar (**Organi
 - **Views:** the organisation's views (shared ones and your own) with **Archive** and **Delete**, and the archived ones with **Restore**. See [Views and projects](./views-and-search.md#views-and-projects).
 - **Danger zone:** **Leave…** the organisation (you need a new invite to come back), or, as an owner, **Delete…** it with all its tasks, groups and tags, after typing its name.
 
+![Organisation settings → Views: three live views with Archive and Delete, and an archived project view with Restore](../../screenshots/org-views-settings.desktop.light.png)
+
 See [Working together](./collaboration.md) for what members share.
 
 ## Sign out

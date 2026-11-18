@@ -173,7 +173,7 @@ export function landingPage(site: SiteContext, lang: Lang): Page {
           <ul class="points">${copy.team.points.map((p) => html`<li>${inline(p)}</li>`)}</ul>
         </div>
         <div class="pair">
-          <figure class="frame">${shot(site, 'everyone.desktop', copy.team.everyoneAlt, { sizes: '(min-width: 1200px) 540px, 94vw' })}</figure>
+          <figure class="frame">${shot(site, 'project-view.desktop', copy.team.projectAlt, { sizes: '(min-width: 1200px) 540px, 94vw' })}</figure>
           <figure class="frame">${shot(site, 'inbox.desktop', copy.team.inboxAlt, { sizes: '(min-width: 1200px) 540px, 94vw' })}</figure>
         </div>`,
     )}

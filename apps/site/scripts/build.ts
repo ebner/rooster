@@ -103,10 +103,10 @@ rmSync(join(dist, 'manifest.json'));
  */
 const crops: Record<string, { left: number; top: number; width: number; height: number }> = {
   'palette.desktop': { left: 290, top: 0, width: 1130, height: 560 },
-  'everyone.desktop': { left: 280, top: 0, width: 1140, height: 640 },
+  'project-view.desktop': { left: 280, top: 0, width: 1140, height: 600 },
   'inbox.desktop': { left: 280, top: 0, width: 1140, height: 640 },
   'device-consent.desktop': { left: 400, top: 40, width: 640, height: 820 },
-  'date-picker.desktop': { left: 730, top: 56, width: 406, height: 820 },
+  'date-picker.desktop': { left: 715, top: 56, width: 397, height: 870 },
 };
 const images = new Map<string, ImageSet>();
 await Promise.all(

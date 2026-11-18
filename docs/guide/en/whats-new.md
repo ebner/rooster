@@ -4,6 +4,8 @@ What changed for you in each version of rooster, newest first. After an update, 
 
 ## Unreleased
 
+- **A view that can't load says so.** If a view's list can't be loaded, for example offline before you've opened it, rooster now says it couldn't load instead of saying the view is gone.
+- **New pictures in this guide** for All organisations and views.
 - **Emails show where the logo goes.** Gmail shows the logo at the top of rooster's emails a moment after the text; until then its place is lightly shaded instead of empty.
 
 ## 1.11.1

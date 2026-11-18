@@ -45,7 +45,7 @@ export const sv: Copy = {
     ],
     keysNote: '⌘ i stället för Ctrl på Mac. Tryck på `?` i appen för att se alla.',
     shotAlt:
-      'Kommandopaletten som söker efter "juniper", med uppgifter, kommentarer och kommandon som matchar',
+      'Kommandopaletten som söker efter "juniper", med uppgifter och avsnitt i guiden som matchar',
   },
   dates: {
     kicker: 'Datum',
@@ -108,10 +108,13 @@ export const sv: Copy = {
     body: 'Varje uppgift hör till en organisation: din personliga, eller en delad för teamet eller familjen. I en delad organisation tilldelar ni uppgifter, kommenterar med @omnämnanden och följer det som händer. Alla behåller sina egna grupper och sin egen ordning.',
     points: [
       '**Allas uppgifter** visar hela organisationen, med ett avsnitt per person.',
+      '**Vyer** samlar uppgifter efter tagg, person och datum. En projektvy samlar en tagg i hela teamet och visar hur långt ni har kommit: ”11 öppna · 3 klara”.',
+      '**Alla organisationer** visar dagens uppgifter från alla dina organisationer i en lista: jobbet, hemmet och föreningen.',
       'En **inkorg** samlar omnämnanden, kommentarer och tilldelningar.',
       'Aviseringar i appen, som **push** på varje enhet och via **e-post**, med en daglig sammanfattning.',
     ],
-    everyoneAlt: 'Allas uppgifter i en delad organisation, med ett avsnitt per medlem',
+    projectAlt:
+      'En projektvy: uppgifterna taggade juniper, grupperade per person, med ”11 öppna · 3 klara” i rubriken',
     inboxAlt: 'Inkorgen med omnämnanden, kommentarer och tilldelningar',
   },
   phone: {
@@ -126,6 +129,10 @@ export const sv: Copy = {
       { name: 'swipe', alt: 'En uppgift som sveps åt sidan för att bli klar' },
       { name: 'task-pane', alt: 'En uppgift i helskärm' },
       { name: 'date-picker', alt: 'Snabbvalen för datum' },
+      {
+        name: 'all-orgs-today',
+        alt: 'Alla organisationer: dagens uppgifter från alla organisationer i en lista',
+      },
     ],
   },
   terminal: {

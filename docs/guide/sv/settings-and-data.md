@@ -61,6 +61,8 @@ Export och papperskorgen kräver en anslutning.
 - **Vyer:** organisationens vyer (de delade och dina egna) med **Arkivera** och **Ta bort**, och de arkiverade med **Återställ**. Se [Vyer och projekt](./views-and-search.md#vyer-och-projekt).
 - **Farozon:** **Lämna…** organisationen (du behöver en ny inbjudan för att komma tillbaka), eller, som ägare, **Ta bort…** den med alla uppgifter, grupper och taggar, efter att du har skrivit dess namn.
 
+![Organisationsinställningar → Vyer: tre aktiva vyer med Arkivera och Ta bort, och en arkiverad projektvy med Återställ](../../screenshots/org-views-settings.desktop.light.png)
+
 I [Samarbete](./collaboration.md) står vad medlemmar delar.
 
 ## Logga ut

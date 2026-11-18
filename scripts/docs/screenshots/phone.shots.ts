@@ -100,6 +100,23 @@ test('phone screens', async ({ page, demo }, testInfo) => {
     });
   }
 
+  await run.take('all-orgs-today', async () => {
+    await reset(page, '/all/today');
+    await expect(row(page, 'Pay the allotment fee')).toBeVisible();
+    await shot(page, testInfo, 'all-orgs-today');
+  });
+
+  await run.take('project-view', async () => {
+    await reset(page, `${org}/v/${demo.views['Juniper & Finch']}`);
+    await expect(row(page, 'Photograph the tea tins')).toBeVisible();
+    await shot(page, testInfo, 'project-view');
+    // The view's query, in a sheet behind the header's filter button.
+    await page.getByTestId('view-filters').tap();
+    await expect(page.getByTestId('view-sheet')).toBeVisible();
+    await page.waitForTimeout(400);
+    await shot(page, testInfo, 'project-view-sheet');
+  });
+
   await run.take('inbox', async () => {
     await page.goto('/inbox');
     await expect(page.getByTestId('inbox')).toBeVisible();

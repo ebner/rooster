@@ -31,6 +31,9 @@ Varje rad visar sin grupp som en liten etikett. I sidofältet räknas öppna upp
 - Utan datum och Mina uppgifter finns kvar i varje organisation: de handlar om var en uppgift är sorterad.
 - Med tangentbordet öppnar du paletten (Ctrl+K) och väljer **Alla organisationer: Idag** (eller Kommande 7 dagar, Försenade). Vill du att rooster startar på Alla organisationer · Idag, se [Beteende](./settings-and-data.md#beteende).
 
+![Alla organisationer · Idag: försenade uppgifter och dagens uppgifter från Kestrel Lane, Personligt och Garden Club, varje rad med en etikett för sin organisation](../../screenshots/all-orgs-today.desktop.light.png)
+![Alla organisationer · Idag på en telefon, varje rad med organisationens avatar](../../screenshots/all-orgs-today.phone.light.png)
+
 ## Vyer och projekt
 
 En **vy** samlar de uppgifter i en organisation som matchar några filter och håller dem ett klick bort i sidofältet: allt som är taggat *juniper*, det som saknar ansvarig, det du gjorde klart den här veckan. Den flyttar aldrig uppgifter: de ligger kvar i var och ens grupper.
@@ -42,6 +45,9 @@ En **vy** samlar de uppgifter i en organisation som matchar några filter och h�
 - **Din egen ordning:** dra vyerna i sidofältet (eller lyft en med handtaget från tangentbordet) för att ordna dem; varje medlem har sin egen ordning. Siffran vid en vy räknar dess öppna uppgifter.
 - **Taggarna ändras, vyerna följer med:** en tagg som byter namn finns kvar i sina vyer, en sammanslagen ersätts av taggen den gick upp i, och en borttagen tagg försvinner ur alla vyer.
 - Med tangentbordet har paletten (Ctrl+K) **Gå till vy**, **Ny vy**, **Spara sökningen som vy** och alla åtgärder för den öppna vyn.
+
+![Projektvyn Juniper & Finch: etiketterna för taggen juniper, Vem som helst, Vilket datum som helst och Öppna under namnet, ”11 öppna · 3 klara”, och uppgifterna grupperade per person, med en deluppgift som visar förälderns namn](../../screenshots/project-view.desktop.light.png)
+![På en telefon öppnar filterknappen i sidhuvudet vyns namn och filter i en panel underifrån](../../screenshots/project-view-sheet.phone.light.png)
 
 ## Allas uppgifter
 

@@ -31,6 +31,9 @@ If you're in more than one organisation, the top of the sidebar has **All organi
 - No date and My tasks stay in each organisation: they're about where a task is filed.
 - To go there from the keyboard, open the palette (Ctrl+K) and choose **All organisations: Today** (or Next 7 days, Overdue). To start rooster on All organisations · Today, see [Behaviour](./settings-and-data.md#behaviour).
 
+![All organisations · Today: overdue and today's tasks from Kestrel Lane, Personal and Garden Club, each row with its organisation's chip](../../screenshots/all-orgs-today.desktop.light.png)
+![All organisations · Today on a phone, each row with its organisation's avatar](../../screenshots/all-orgs-today.phone.light.png)
+
 ## Views and projects
 
 A **view** gathers the tasks of one organisation that match a few filters, and keeps them a click away in the sidebar: everything tagged *juniper*, what's unassigned, what you finished this week. It never moves tasks: they stay in each person's groups.
@@ -42,6 +45,9 @@ A **view** gathers the tasks of one organisation that match a few filters, and k
 - **Your own order:** drag views in the sidebar (or lift one with its grip from the keyboard) to order them; each member has their own order. The number next to a view counts its open tasks.
 - **Tags change, views follow:** a renamed tag stays in its views, a merged one is replaced by the tag it went into, and a deleted tag leaves every view.
 - From the keyboard, the palette (Ctrl+K) has **Go to view**, **New view**, **Save search as view** and every action on the open view.
+
+![The project view Juniper & Finch: the juniper tag, Anyone, Any date and Open chips under the name, "11 open · 3 done", and the tasks grouped by person, a subtask with its parent's name](../../screenshots/project-view.desktop.light.png)
+![On a phone, the header's filter button opens the view's name and filters in a sheet](../../screenshots/project-view-sheet.phone.light.png)
 
 ## Everyone's tasks
 

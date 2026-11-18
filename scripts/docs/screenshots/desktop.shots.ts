@@ -139,6 +139,31 @@ test('desktop screens', async ({ page, demo, request }, testInfo) => {
     await shot(page, testInfo, 'everyone');
   });
 
+  await run.take('all-orgs-today', async () => {
+    // Today across Kestrel Lane, Personal and the garden club, mixed by date.
+    await reset(page, '/all/today');
+    await expect(row(page, 'Pay the allotment fee')).toBeVisible();
+    await expect(row(page, 'Pick up the dry cleaning')).toBeVisible();
+    await shot(page, testInfo, 'all-orgs-today');
+  });
+
+  await run.take('project-view', async () => {
+    await reset(page, `${org}/v/${demo.views['Juniper & Finch']}`);
+    await expect(row(page, 'Photograph the tea tins')).toBeVisible();
+    await expect(page.getByTestId('view-counts')).toContainText('done');
+    await shot(page, testInfo, 'project-view');
+  });
+
+  await run.take('org-views-settings', async () => {
+    await page.goto(`${org}/settings`);
+    const section = page.getByRole('region', { name: 'Views' });
+    await expect(section.getByRole('list', { name: 'Archived' })).toContainText(
+      'Moss Pebble Bakery',
+    );
+    await section.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    await shot(page, testInfo, 'org-views-settings');
+  });
+
   await run.take('palette', async () => {
     await reset(page, `${org}/my`);
     await page.keyboard.press(`${mod}+k`);
@@ -193,6 +218,14 @@ test('desktop screens', async ({ page, demo, request }, testInfo) => {
     await shot(page, testInfo, 'device-consent');
     await page.getByTestId('device-approve').click();
     await expect(page.getByTestId('device-done')).toBeVisible();
+    // The approval's own "device connected" notice would raise the Inbox count in later shots.
+    const notices = await api<{ items: { id: string; type: string }[] }>(
+      page,
+      'GET',
+      '/notifications',
+    );
+    const ids = notices.items.filter((n) => n.type === 'device_connected').map((n) => n.id);
+    if (ids.length > 0) await api(page, 'POST', '/notifications/read', { ids });
   });
 
   await run.take('connected-apps', async () => {

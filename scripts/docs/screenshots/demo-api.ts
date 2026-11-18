@@ -60,6 +60,8 @@ export interface DemoState {
   people: Record<string, { id: string; email: string; name: string }>;
   orgs: { personal: string; studio: string; studioSlug: string; garden: string };
   tasks: Record<string, string>;
+  /** View IDs by name (the archived one included). */
+  views: Record<string, string>;
 }
 
 const statePath = () => {

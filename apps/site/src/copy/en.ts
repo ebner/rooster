@@ -47,7 +47,7 @@ export const en = {
     ],
     keysNote: '⌘ instead of Ctrl on a Mac. Press `?` in the app for all of them.',
     shotAlt:
-      'The command palette searching for "juniper", with matching tasks, comments and actions',
+      'The command palette searching for "juniper", with matching tasks and sections of the guide',
   },
   dates: {
     kicker: 'Dates',
@@ -110,10 +110,13 @@ export const en = {
     body: 'Every task belongs to one organisation: your personal one, or a shared one for your team or your family. In a shared organisation you assign tasks, comment with @mentions and follow along. Everyone keeps their own groups and order.',
     points: [
       "**Everyone's tasks** shows the whole organisation, a section per person.",
+      '**Views** gather tasks by tag, person and date. A project view collects one tag across the team and shows how far it has come: “11 open · 3 done”.',
+      "**All organisations** shows today's tasks from all your organisations in one list: work, home and the club.",
       'An **inbox** collects mentions, comments and assignments.',
       'Notifications in the app, as **push** on each device and by **email**, with a daily digest.',
     ],
-    everyoneAlt: "Everyone's tasks in a shared organisation, with a section per member",
+    projectAlt:
+      'A project view: the tasks tagged juniper, grouped by person, with “11 open · 3 done” in the header',
     inboxAlt: 'The inbox with mentions, comments and assignments',
   },
   phone: {
@@ -128,6 +131,10 @@ export const en = {
       { name: 'swipe', alt: 'Swiping a task to the side to complete it' },
       { name: 'task-pane', alt: 'A task as a full-screen sheet' },
       { name: 'date-picker', alt: 'The quick date sheet' },
+      {
+        name: 'all-orgs-today',
+        alt: "All organisations: today's tasks from every organisation in one list",
+      },
     ],
   },
   terminal: {
