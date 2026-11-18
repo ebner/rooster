@@ -480,7 +480,7 @@ A tiny status label sits in the toolbar's left area:
 | Offline | The header pill "Offline" (neutral). With pending ops: "Offline · 3 pending" (canonical text). After reconnect it shows "Syncing…" and then disappears. |
 | Mutation failed (4xx) | The local change is reverted, with a toast: "Couldn't save 'title' – task was deleted by Anna". |
 | Server error (5xx or timeout) | Retried with backoff (1, 2, 4, 8, 16, 30 s, capped). After 3 failures the pill turns amber: "Sync problem · Retry". |
-| Toasts | Bottom-left on desktop and above the bottom nav on mobile. At most 3 stacked. Default 6 s, paused on hover. Each toast has at most one action. |
+| Toasts | Bottom-left on desktop and above the bottom nav on mobile. At most 3 stacked. Default 6 s, paused while the pointer is over the stack or focus is in it (a toast closed under the pointer or with focus in it does not keep the pause). The "New version available" toast stays until closed (the header's Update chip stays too). Each toast has at most one action. |
 
 ## 15. Accessibility requirements (summary; details in 10)
 

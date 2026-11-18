@@ -24,7 +24,8 @@ export interface ToastOptions {
   tone?: ToastTone;
   /** At most one action per toast (02 §14). */
   action?: ToastAction;
-  durationMs?: number;
+  /** How long it shows; `null`: until closed (the update prompt). Default 6 s. */
+  durationMs?: number | null;
 }
 
 interface ToastRecord {
@@ -32,7 +33,7 @@ interface ToastRecord {
   message: string;
   tone: ToastTone;
   action?: ToastAction;
-  durationMs: number;
+  durationMs: number | null;
 }
 
 interface ToastStore {
@@ -71,15 +72,15 @@ export function clearToasts(): void {
   useToastStore.setState({ toasts: [] });
 }
 
-function useAutoDismiss(id: string, durationMs: number, paused: boolean): void {
+function useAutoDismiss(id: string, durationMs: number | null, paused: boolean): void {
   const remaining = useRef(durationMs);
   useEffect(() => {
-    if (paused) return;
+    if (paused || remaining.current === null) return;
     const startedAt = Date.now();
     const timer = setTimeout(() => dismissToast(id), remaining.current);
     return () => {
       clearTimeout(timer);
-      remaining.current -= Date.now() - startedAt;
+      if (remaining.current !== null) remaining.current -= Date.now() - startedAt;
     };
   }, [id, paused]);
 }
@@ -162,8 +163,18 @@ export function ToastRegion() {
   const toasts = useToastStore((s) => s.toasts);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
+  const region = useRef<HTMLElement>(null);
+  // A toast removed under the pointer or with focus inside it (Undo, ×), and the region hiding
+  // when empty, fire neither mouseleave nor blur: re-read both whenever the stack changes, or
+  // every later toast would stay paused for good.
+  useEffect(() => {
+    const el = region.current;
+    setHovered(el !== null && toasts.length > 0 && isHovered(el));
+    setFocused(el?.contains(document.activeElement) === true);
+  }, [toasts]);
   return (
     <section
+      ref={region}
       data-toast-region
       aria-label={t('toast.region')}
       onMouseEnter={() => setHovered(true)}
@@ -184,4 +195,12 @@ export function ToastRegion() {
       ))}
     </section>
   );
+}
+
+function isHovered(el: Element): boolean {
+  try {
+    return el.matches(':hover');
+  } catch {
+    return false;
+  }
 }

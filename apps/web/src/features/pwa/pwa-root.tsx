@@ -18,7 +18,6 @@ import { createUpdateController, setUpdateController } from './update-controller
 import { isEditingText } from './update-gate';
 
 /** The update toast stays until acted on (the browser caps timers at ~24.8 days). */
-const updateToastMs = 24 * 60 * 60 * 1000;
 const installToastMs = 12_000;
 const resyncDelayMs = 3_000;
 const noUpdateHandlers = { onNeedRefresh: () => {}, onControllerChange: () => {} };
@@ -77,7 +76,8 @@ export function PwaRoot({ navigate }: PwaRootProps) {
         if (promptId) dismissToast(promptId);
         promptId = toast({
           message: tRef.current('update.available'),
-          durationMs: updateToastMs,
+          // Until closed (FR-PWA-6); the header's Update chip stays as well.
+          durationMs: null,
           action: { label: tRef.current('update.reload'), onAction: () => controller.request() },
         });
       },
