@@ -175,7 +175,7 @@ pnpm db:generate               # drizzle-kit generate + STRICT post-processing
 pnpm run ci                    # full pipeline (scripts/ci.sh; plain `pnpm ci` is pnpm's own command); `--with-docker` adds image build, smoke and backup drill
 pnpm run ci unit e2e           # only the named stages (static | unit | build | e2e | e2e-perf); CI runs static, unit and build as parallel jobs, then the image; e2e runs only locally, in `pnpm release` (ADR 0060)
 ROOSTER_E2E_SHARD=1/3 pnpm run ci e2e   # one e2e shard without the timing budgets; `pnpm run ci e2e-perf` runs those alone
-pnpm release X.Y.Z [--check]  # write the CHANGELOG [Unreleased] notes, both What's new "## Unreleased" sections and the AGENTS.md "Latest release" line first; preflight, bump, the whole pipeline with the image and no e2e retries (the timing budgets get one), then a local commit and tag (never pushes)
+pnpm release X.Y.Z [--check]  # go through the docs list in Conventions (guide, screenshots, site, README, checklist) since the last release; write the CHANGELOG [Unreleased] notes, both What's new "## Unreleased" sections and the AGENTS.md "Latest release" line first; preflight, bump, the whole pipeline with the image and no e2e retries (the timing budgets get one), then a local commit and tag (never pushes)
 node apps/web/scripts/render-icons.mjs   # regenerate favicon, logo SVGs, app icons and the emails' logo (apps/server/src/mail/logo.ts) from src/ui/brand.ts
 pnpm docs:keyboard [--check]   # regenerate (or check) docs/guide/{en,sv}/keyboard.md from keymap.ts
 pnpm docs:screenshots          # seed the demo team and capture docs/screenshots (uses the e2e ports and lock; DOCS_SHOTS=a,b limits the shots)
@@ -237,6 +237,15 @@ At least one sign-in provider must be configured, or the server exits with code 
 - Files are kebab-case. React components are PascalCase. Hooks are `useX`.
 - Comments explain *why*, not *what*. Do not write task-history comments.
 - **Release notes have two audiences.** A change users notice gets a CHANGELOG entry (for operators, English) **and** a line under `## Unreleased` in both `docs/guide/en/whats-new.md` and `docs/guide/sv/whats-new.md` (for users: what they see, no operator details, no ADR numbers; ADR 0057). `pnpm release` refuses a release without them.
+- **A user-visible change updates every place that shows it, in the same change** (not at release time; screenshots and the site were missed for several releases until 1.11.2). Go through this list and skip only what doesn't apply:
+  1. **The user guide** in `docs/guide/en` **and** `sv`: the page covering the area (a new page needs its `pages.json` entry).
+  2. **Release notes:** the CHANGELOG and both What's new files (above).
+  3. **Screenshots** (`docs/screenshots/`): a changed screen is re-shot, and a new screen gets a shot that the guide shows. Extend the demo seed (`scripts/docs/screenshots/seed.setup.ts`) so the feature has real data, add the shot to `desktop.shots.ts`/`phone.shots.ts`, run `pnpm docs:screenshots` (`DOCS_SHOTS=…` for some), and look at every image. A change to the shell (sidebar, headers, navigation) shows in nearly every shot: regenerate them all.
+  4. **The product pages:** `apps/site/src/copy/{en,sv}.ts` when a headline feature is added or changes (with a shot where the layout has room), and `README.md`'s feature list.
+  5. **`docs/accessibility-checklist.md`:** steps for new screens, controls and announcements.
+  6. **Agent-facing text** when the API, CLI or MCP changes: the skill (`packages/mcp/src/skill.ts`), tool descriptions, `docs/guide/*/cli-tui-mcp.md`, 07 and 11.
+  7. **Specs and ADRs** for the decisions; `docs/operator.md` for new env vars, limits or operational behaviour; `keyboard.md` is regenerated from the keymap (`pnpm docs:keyboard`).
+  8. **This file** (see "Keeping this file current").
 - **Dependency advisories:** bump direct dependencies in the `pnpm-workspace.yaml` catalog; fix transitive ones with an `overrides` entry scoped to the vulnerable range, with a comment naming the parent and the advisory, and remove it once the parent ships the fix. Mind the minimum release age (pick versions a few days old). Run `pnpm notices` afterwards. Dependabot's npm PRs pass CI (a stale notices file only warns, ADR 0071), so they can be squash-merged once checked. Accepted advisories go in `docs/security/security-review.md`.
 - Commits and PR titles follow Conventional Commits (`feat(list): …`, `fix(sync): …`).
 
@@ -298,4 +307,5 @@ Keep the file concise. Put details in `docs/spec/` or `docs/adr/` and link to th
 
 ## When you finish a WP
 - Run every gate in 10 §1.
+- Go through the list "A user-visible change updates every place that shows it" (Conventions) and say in the PR which items you updated and which don't apply.
 - PR description: WP ID; the FR, AC and D IDs covered; deviations and ADRs; screenshots (UI); and how you verified it (tests plus a manual check).
