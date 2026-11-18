@@ -2,7 +2,9 @@
 
 What changed for you in each version of rooster, newest first. After an update, rooster offers this page once. You can open it at any time from Settings or the guide's page list. The notes for whoever runs rooster (upgrades, settings, security) are in the [changelog](../../../CHANGELOG.md).
 
-## Unreleased
+## 1.11.2
+
+_2026-11-18_
 
 - **A view that can't load says so.** If a view's list can't be loaded, for example offline before you've opened it, rooster now says it couldn't load instead of saying the view is gone.
 - **New pictures in this guide** for All organisations and views.

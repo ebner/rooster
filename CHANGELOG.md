@@ -6,8 +6,19 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.11.2] - 2026-11-18
+
+### Fixed
+- A view whose list can't be loaded (offline without a cached copy, or rate-limited) now says it couldn't load, instead of saying the view was archived or deleted, and the start page keeps it.
+
+### Documentation
+- New and regenerated screenshots (All organisations, project views and their phone sheet, Organisation settings → Views, the new sidebar) in the guide and on the project site; the site and README describe views and All organisations.
+
 ### Changed
 - **Email header logo:** its place is tinted (`bg-muted`, rounded) until the mail app shows it. Gmail loads even inline (`cid:`) images through its image proxy after the text, so the header looked empty for a moment; the logo itself is unchanged and still sent inline.
+
+### Migrations
+- None.
 
 ## [1.11.1] - 2026-11-18
 

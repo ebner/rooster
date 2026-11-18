@@ -2,7 +2,9 @@
 
 Vad som har ändrats för dig i varje version av rooster, med den senaste först. Efter en uppdatering visar rooster den här sidan en gång. Du kan öppna den när du vill från Inställningar eller guidens sidlista. Anteckningarna för den som driftar rooster (uppgraderingar, inställningar, säkerhet) finns i [ändringsloggen](../../../CHANGELOG.md) (på engelska).
 
-## Unreleased
+## 1.11.2
+
+_2026-11-18_
 
 - **En vy som inte går att läsa in säger det.** Om en vys lista inte går att läsa in, till exempel utan uppkoppling innan du har öppnat den, säger rooster att den inte gick att läsa in i stället för att vyn är borta.
 - **Nya bilder i den här guiden** för Alla organisationer och vyer.
