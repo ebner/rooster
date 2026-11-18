@@ -197,8 +197,8 @@ function summary(rendered: string): string {
 
 const pages: Page[] = [];
 const guideImages = new Map(englishGuide.images.map((i) => [i.fileName, i.file]));
+pages.push(landingPage(site));
 for (const lang of languages) {
-  pages.push(landingPage(site, lang));
   pages.push(guideIndexPage(site, lang));
   const guide =
     lang === 'en' ? englishGuide : buildGuide({ guideDir, repoRoot, repoUrl, locale: lang, warn });
@@ -210,6 +210,16 @@ for (const lang of languages) {
 for (const [fileName, file] of guideImages) write(`assets/guide/${fileName}`, readFileSync(file));
 
 for (const page of pages) write(`${page.path}index.html`, layout(site, page));
+
+// The Swedish start page went away when the landing page became English only (ADR 0070,
+// amended 2026-11-18): `/sv/` sends old links and bookmarks to the one start page.
+write(
+  'sv/index.html',
+  `<!doctype html>\n<html lang="sv"><head><meta charset="utf-8"><title>rooster</title>` +
+    `<meta name="robots" content="noindex"><link rel="canonical" href="${url.href}">` +
+    `<meta http-equiv="refresh" content="0; url=${link(site, '')}"></head>` +
+    `<body><p><a href="${link(site, '')}">rooster</a></p></body></html>\n`,
+);
 
 const notFound = (lang: Lang): Page => {
   const copy = copyFor[lang].notFound;

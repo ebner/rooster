@@ -114,10 +114,10 @@ Entries marked *(planned)* do not exist yet. Create them in the phase that intro
   - Strip control and bidi characters from user content before printing (`output/format.ts`).
   - Tests: `apps/cli/test`. Integration tests run against an in-process server (`test/support/rooster-server.ts`). AC-8.1 is the e2e `apps/web/e2e/cli.mobile.spec.ts`.
   - The build bundles everything into `dist/rooster.mjs` plus lazy chunks (the TUI), except the optional `@napi-rs/keyring` (`NATIVE_DEPS` in its `tsdown.config.ts`). Ink's `react-devtools-core` is aliased to a no-op stub: an unresolved external makes Bun-compiled binaries crash at startup. `scripts/build-binaries.sh` (Bun) runs in the release workflow.
-- `apps/site` (ADR 0070): the project site on GitHub Pages (`https://ebner.github.io/rooster/`): the landing page and the user guide in English (`/`) and Swedish (`/sv/`). Not in the image.
+- `apps/site` (ADR 0070): the project site on GitHub Pages (`https://ebner.github.io/rooster/`): the landing page in English (`/`; `/sv/` redirects there) and the user guide in English (`/guide/`) and Swedish (`/sv/guide/`). Not in the image.
   - `scripts/build.ts` renders every page at build time (no framework; `src/html.ts` is an escaping `html` tag), bundles `src/client/` with Vite, converts and crops `docs/screenshots` to WebP with sharp, and **fails on a broken internal link or image** and on any guide renderer warning.
   - The guide goes through the app's own renderer (`apps/web/src/features/help/guide-build.ts`); `rebaseGuideHtml` (`src/guide.ts`) moves its links under the site's base. A new guide page appears on the site with its `pages.json` entry.
-  - Copy is in `src/copy/{en,sv}.ts` (typed: a missing Swedish string fails `tsc`), not in `packages/i18n`. The parser demo (`src/demo/model.ts`) runs core's title parser in the browser and must keep the app's title rules (02 §8.1).
+  - Copy is in `src/copy/en.ts` (the landing page, English only: ADR 0070 amendment) and `src/copy/sv.ts` (only the guide pages' Swedish chrome, `ChromeCopy`; a missing string fails `tsc`), not in `packages/i18n`. The parser demo (`src/demo/model.ts`) runs core's title parser in the browser and must keep the app's title rules (02 §8.1).
   - Coop tokens only; the site's own values are its display sizes and page widths at the top of `src/client/site.css`. Light only.
   - `SITE_URL` sets the address (its path is the base); `SITE_CNAME` writes a `CNAME`.
 - `packages/core`: **pure** TS (no IO, no `Date.now()` inside functions):
@@ -241,7 +241,7 @@ At least one sign-in provider must be configured, or the server exits with code 
   1. **The user guide** in `docs/guide/en` **and** `sv`: the page covering the area (a new page needs its `pages.json` entry).
   2. **Release notes:** the CHANGELOG and both What's new files (above).
   3. **Screenshots** (`docs/screenshots/`): a changed screen is re-shot, and a new screen gets a shot that the guide shows. Extend the demo seed (`scripts/docs/screenshots/seed.setup.ts`) so the feature has real data, add the shot to `desktop.shots.ts`/`phone.shots.ts`, run `pnpm docs:screenshots` (`DOCS_SHOTS=…` for some), and look at every image. A change to the shell (sidebar, headers, navigation) shows in nearly every shot: regenerate them all.
-  4. **The product pages:** `apps/site/src/copy/{en,sv}.ts` when a headline feature is added or changes (with a shot where the layout has room), and `README.md`'s feature list.
+  4. **The product pages:** `apps/site/src/copy/en.ts` (the landing page is English only) when a headline feature is added or changes (with a shot where the layout has room), and `README.md`'s feature list.
   5. **`docs/accessibility-checklist.md`:** steps for new screens, controls and announcements.
   6. **Agent-facing text** when the API, CLI or MCP changes: the skill (`packages/mcp/src/skill.ts`), tool descriptions, `docs/guide/*/cli-tui-mcp.md`, 07 and 11.
   7. **Specs and ADRs** for the decisions; `docs/operator.md` for new env vars, limits or operational behaviour; `keyboard.md` is regenerated from the keymap (`pnpm docs:keyboard`).

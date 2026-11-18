@@ -1,4 +1,4 @@
-import type { Copy } from './copy/en.ts';
+import type { ChromeCopy } from './copy/en.ts';
 import { en } from './copy/en.ts';
 import { sv } from './copy/sv.ts';
 
@@ -17,7 +17,9 @@ export type Lang = 'en' | 'sv';
 
 export const languages: readonly Lang[] = ['en', 'sv'];
 
-export const copyFor: Record<Lang, Copy> = { en, sv };
+/** The chrome of every page; the landing page's own text is `en` (English only). */
+export const copyFor: Record<Lang, ChromeCopy> = { en, sv };
+export { en as landingCopy };
 
 /** The path prefix of a language, relative to the site's base: English is the root. */
 export const langPrefix = (lang: Lang) => (lang === 'en' ? '' : `${lang}/`);

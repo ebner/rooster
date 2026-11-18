@@ -1,6 +1,7 @@
 /**
- * The site's English copy. `sv.ts` has the same shape (`Copy`), so a missing Swedish string is
- * a type error. Inline markup: `code` and **strong** (see `inline()` in html.ts).
+ * The site's English copy. The landing page is English only (ADR 0070, amended 2026-11-18): the
+ * Swedish guide pages need only the chrome (`ChromeCopy`), which `sv.ts` has, so a missing
+ * Swedish string there is a type error. Inline markup: `code` and **strong** (see `inline()`).
  */
 export const en = {
   lang: 'en',
@@ -247,3 +248,9 @@ export const en = {
 };
 
 export type Copy = typeof en;
+
+/** What every page shows besides the landing page's own text: header, footer, guide, 404. */
+export type ChromeCopy = Pick<
+  Copy,
+  'lang' | 'otherLanguage' | 'nav' | 'footer' | 'guide' | 'code' | 'notFound'
+> & { meta: Pick<Copy['meta'], 'ogAlt'> };

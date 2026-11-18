@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { en } from '../src/copy/en.ts';
-import { sv } from '../src/copy/sv.ts';
 import { analyse, reminderText, repeatText } from '../src/demo/model.ts';
 
 // Friday 13 November 2026, 10:00 in Stockholm.
@@ -28,22 +27,12 @@ describe('the parser demo', () => {
     expect(r.reminders).toEqual(['1 h before']);
   });
 
-  it('reads Swedish on the Swedish page', () => {
-    const r = analyse('Ring banken fre kl 14 #ekonomi !1h', ctx('sv'), sv.dates);
-    expect(r.title).toBe('Ring banken');
-    expect(r.due?.label).toBe('20 nov 14:00');
-    expect(r.reminders).toEqual(['1 tim innan']);
-  });
-
   it('describes a recurrence', () => {
     expect(analyse('Water the plants every mon', ctx('en'), en.dates).due).toEqual({
       label: 'Mon',
       state: 'thisWeek',
       repeats: 'Every Monday',
     });
-    expect(analyse('Byt filter var 3:e månad efter klar', ctx('sv'), sv.dates).due?.repeats).toBe(
-      '3 månader efter klar',
-    );
   });
 
   it('leaves reminder tokens as text without a date, as the app does', () => {
@@ -91,13 +80,8 @@ describe('the parser demo', () => {
   });
 
   it('every example on the page parses to a dated task', () => {
-    for (const [copy, locale] of [
-      [en, 'en'],
-      [sv, 'sv'],
-    ] as const) {
-      for (const example of copy.dates.examples) {
-        expect(analyse(example, ctx(locale), copy.dates).due, example).not.toBeNull();
-      }
+    for (const example of en.dates.examples) {
+      expect(analyse(example, ctx('en'), en.dates).due, example).not.toBeNull();
     }
   });
 });
@@ -107,20 +91,13 @@ describe('demo texts', () => {
     expect(reminderText(0, en.dates)).toBe('At the due time');
     expect(reminderText(15, en.dates)).toBe('15 min before');
     expect(reminderText(120, en.dates)).toBe('2 h before');
-    expect(reminderText(1440, sv.dates)).toBe('1 dag innan');
-    expect(reminderText(2880, sv.dates)).toBe('2 dagar innan');
+    expect(reminderText(1440, en.dates)).toBe('1 day before');
   });
 
   it('formats rules', () => {
     expect(repeatText('FREQ=DAILY', 'due', 'en', en.dates)).toBe('Every day');
     expect(repeatText('FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TH', 'due', 'en', en.dates)).toBe(
       'Every 2 weeks on Monday and Thursday',
-    );
-    expect(repeatText('FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', 'due', 'sv', sv.dates)).toBe(
-      'Varje vardag',
-    );
-    expect(repeatText('FREQ=DAILY;INTERVAL=3', 'completion', 'sv', sv.dates)).toBe(
-      '3 dagar efter klar',
     );
     expect(repeatText('FREQ=YEARLY', 'due', 'en', en.dates)).toBe('Every year');
     expect(repeatText('nonsense', 'due', 'en', en.dates)).toBe('');

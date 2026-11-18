@@ -6,6 +6,9 @@ All notable changes to rooster are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Changed
+- **The project site's start page is English only** (ADR 0070 amendment). `/sv/` redirects to `/`; the user guide stays in English and Swedish (`/sv/guide/`).
+
 ## [1.11.3] - 2026-11-18
 
 ### Fixed

@@ -1,4 +1,4 @@
-import { copyFor, type Lang, langPrefix, repoUrl, type SiteContext } from './config.ts';
+import { type Lang, landingCopy, repoUrl, type SiteContext } from './config.ts';
 import { analyse } from './demo/model.ts';
 import { fill, html, inline, raw, type SafeHtml } from './html.ts';
 import { type IconName, icon } from './icons.ts';
@@ -45,7 +45,7 @@ const keyCaps = (keys: readonly string[]) =>
   html`<span class="keys">${keys.map((k, i) => html`${i > 0 ? raw('<span class="plus">+</span>') : ''}<kbd>${k}</kbd>`)}</span>`;
 
 function demo(lang: Lang): SafeHtml {
-  const copy = copyFor[lang].dates;
+  const copy = landingCopy.dates;
   // The highlighted title is rendered here, so it shows without the script; the parsed
   // result needs today's date and appears once the script runs.
   const initial = analyse(
@@ -85,9 +85,11 @@ const moreIcons: readonly IconName[] = [
   'languages',
 ];
 
-export function landingPage(site: SiteContext, lang: Lang): Page {
-  const copy = copyFor[lang];
-  const prefix = langPrefix(lang);
+/** The start page, English only (ADR 0070, amended 2026-11-18). */
+export function landingPage(site: SiteContext): Page {
+  const lang: Lang = 'en';
+  const copy = landingCopy;
+  const prefix = '';
   const tag = `v${site.version}`;
   const raw_ = (path: string) => `https://raw.githubusercontent.com/ebner/rooster/${tag}/${path}`;
   const blob = (path: string) => `${repoUrl}/blob/${tag}/${path}`;
@@ -251,7 +253,7 @@ export function landingPage(site: SiteContext, lang: Lang): Page {
   return {
     path: prefix,
     lang,
-    alternate: langPrefix(lang === 'en' ? 'sv' : 'en'),
+    alternate: null,
     title: copy.meta.title,
     description: copy.meta.description,
     body,

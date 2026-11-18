@@ -21,12 +21,13 @@ export const link = (site: Pick<SiteContext, 'base'>, path: string) => `${site.b
 
 export function layout(site: SiteContext, page: Page): string {
   const copy = copyFor[page.lang];
-  const home = langPrefix(page.lang);
+  // One start page, in English (ADR 0070, amended 2026-11-18); the guide keeps both languages.
+  const home = '';
+  const guideHome = `${langPrefix(page.lang)}guide/`;
   const other: Lang = page.lang === 'en' ? 'sv' : 'en';
   const canonical = new URL(page.path, site.url).href;
   const ogImage = new URL('og.png', site.url).href;
-  const otherHref =
-    page.alternate === null ? link(site, langPrefix(other)) : link(site, page.alternate);
+  const otherHref = page.alternate === null ? '' : link(site, page.alternate);
   const alternates =
     page.alternate === null
       ? ''
@@ -73,9 +74,9 @@ ${html`<html lang="${page.lang}" data-print="site">
           <ul class="nav">
             <li class="nav-wide"><a href="${section('features')}">${copy.nav.features}</a></li>
             <li class="nav-wide"><a href="${section('self-host')}">${copy.nav.selfHost}</a></li>
-            <li><a href="${link(site, `${home}guide/`)}">${copy.nav.guide}</a></li>
+            <li><a href="${link(site, guideHome)}">${copy.nav.guide}</a></li>
             <li><a href="${repoUrl}">${copy.nav.github}</a></li>
-            <li><a class="lang" href="${otherHref}" hreflang="${other}" lang="${other}">${copy.otherLanguage}</a></li>
+            ${page.alternate === null ? '' : html`<li><a class="lang" href="${otherHref}" hreflang="${other}" lang="${other}">${copy.otherLanguage}</a></li>`}
           </ul>
         </nav>
       </div>
@@ -95,7 +96,7 @@ function footer(site: SiteContext, lang: Lang): SafeHtml {
   return html`<footer class="site-footer">
       <div class="wrap footer-grid">
         <div class="footer-brand">
-          <a class="logo" href="${link(site, langPrefix(lang))}" aria-label="rooster">
+          <a class="logo" href="${link(site, '')}" aria-label="rooster">
             ${markSvg({ size: 28, id: 'footer-logo' })}${wordmarkSvg(12.6)}
           </a>
           <p>${copy.tagline}</p>

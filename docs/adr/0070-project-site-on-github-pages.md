@@ -27,3 +27,9 @@ The README carried everything: the pitch, a feature list, a screenshot table, a 
 ## Review
 - Codex (structured and focused, 2026-11-13): no injection, credential or deployment-permission issue. Fixed: the demo now follows the app's `parseTitle` step for step (escape backticks, a lone date phrase keeping its tags; a differential run of 8,404 inputs found no mismatch); the link check resolves every URL against its page (relative and absolute same-site links were skipped) and requires a file, not a directory.
 - Accepted: the link check reads only double-quoted, lower-case attributes, decodes only `&amp;`, and splits `srcset` on every comma. It checks HTML that the site's own templates and the guide renderer write, which never use the other forms; supporting them would mean an HTML parser for a build check.
+
+## Amendment (2026-11-18): the landing page in English only
+The landing page's marketing copy had to be written twice for every feature. The maintainer chose to keep it in English only:
+- One start page at `/`; `/sv/` is a `noindex` redirect to it, so old links and bookmarks keep working, and it left the sitemap. The English start page has no language switch.
+- The user guide stays in both languages (`/guide/`, `/sv/guide/`): it is built from `docs/guide/{en,sv}`, which the app's `/help` needs anyway, so it costs nothing extra. Its Swedish pages keep their header, footer and guide navigation in Swedish (`src/copy/sv.ts` now holds only that chrome, typed as `ChromeCopy`); their logo and the header's Features and Self-host links lead to the English start page.
+- The parser demo is English only; Swedish readers try dates in the app.
